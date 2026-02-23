@@ -15,12 +15,12 @@ import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 
 const PIPELINE_STAGES = [
-  { key: "new", label: "NEW", color: "border-amber bg-amber/10 text-amber" },
-  { key: "contacted", label: "CONTACTED", color: "border-blue-400 bg-blue-50 text-blue-700" },
-  { key: "proposal_sent", label: "PROPOSAL SENT", color: "border-purple-400 bg-purple-50 text-purple-700" },
-  { key: "negotiating", label: "NEGOTIATING", color: "border-orange-400 bg-orange-50 text-orange-700" },
-  { key: "booked", label: "BOOKED", color: "border-green-500 bg-green-50 text-green-700" },
-  { key: "lost", label: "LOST", color: "border-red-400 bg-red-50 text-red-500" },
+  { key: "new", label: "NEW", color: "border-amber bg-amber/20 text-amber-700" },
+  { key: "contacted", label: "CONTACTED", color: "border-sky-400 bg-sky-50 text-sky-700" },
+  { key: "proposal_sent", label: "PROPOSAL SENT", color: "border-violet-400 bg-violet-50 text-violet-700" },
+  { key: "negotiating", label: "NEGOTIATING", color: "border-tomato bg-tomato/10 text-tomato" },
+  { key: "booked", label: "BOOKED", color: "border-emerald-500 bg-emerald-50 text-emerald-700" },
+  { key: "lost", label: "LOST", color: "border-stone-400 bg-stone-50 text-stone-500" },
 ];
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -143,16 +143,16 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] font-dm flex flex-col">
+    <div className="min-h-screen bg-parchment font-dm flex flex-col">
       {/* Top Nav */}
-      <nav className="bg-brown text-cream sticky top-0 z-50 shadow-lg border-b-4 border-tomato h-14 flex items-center">
+      <nav className="bg-ink text-cream sticky top-0 z-50 shadow-lg border-b-4 border-tomato h-14 flex items-center">
         <div className="flex items-center gap-0.5 px-4 w-56 flex-shrink-0 border-r border-cream/10">
           <span className="font-alfa text-2xl text-tomato leading-none">HOST</span>
           <span className="font-pacifico text-xl text-amber leading-none mt-0.5">it</span>
           <span className="font-bebas text-xs text-cream/40 tracking-widest ml-2 mt-1">CRM</span>
         </div>
         <div className="flex-1 px-4 flex items-center justify-between">
-          <div className="font-bebas text-amber tracking-widest text-sm hidden md:block">
+          <div className="font-playfair italic text-amber/90 text-sm hidden md:block">
             {venueSettings?.name ?? "YOUR VENUE"}
           </div>
           <div className="flex items-center gap-3 ml-auto">
@@ -175,7 +175,7 @@ export default function Dashboard() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-14 md:w-52 bg-brown text-cream flex-shrink-0 flex flex-col border-r border-cream/5">
+        <aside className="w-14 md:w-52 bg-linen text-ink flex-shrink-0 flex flex-col border-r border-border">
           {[
             { id: "overview", icon: <LayoutDashboard className="w-5 h-5" />, label: "OVERVIEW" },
             { id: "leads", icon: <MessageSquare className="w-5 h-5" />, label: "LEADS INBOX" },
@@ -185,17 +185,17 @@ export default function Dashboard() {
             { id: "settings", icon: <Settings className="w-5 h-5" />, label: "SETTINGS" },
           ].map(item => (
             <button key={item.id} onClick={() => setTab(item.id as any)}
-              className={`w-full flex items-center gap-3 px-3 md:px-4 py-3.5 text-left transition-all font-bebas tracking-widest text-xs border-l-4 ${tab === item.id ? "bg-tomato/90 text-white border-amber" : "text-cream/50 hover:bg-cream/5 hover:text-cream border-transparent"}`}>
+              className={`w-full flex items-center gap-3 px-3 md:px-4 py-3.5 text-left transition-all font-bebas tracking-widest text-xs border-l-4 ${tab === item.id ? "bg-tomato text-cream border-amber" : "text-muted-foreground hover:bg-border hover:text-ink border-transparent"}`}>
               {item.icon}
               <span className="hidden md:block">{item.label}</span>
             </button>
           ))}
           <div className="mt-auto p-3 hidden md:block">
-            <Link href="/enquire">
-              <Button size="sm" className="w-full bg-tomato/80 hover:bg-tomato text-white font-bebas tracking-widest rounded-none text-xs gap-1">
-                <ExternalLink className="w-3 h-3" /> VIEW LEAD FORM
-              </Button>
-            </Link>
+          <Link href="/enquire">
+            <Button size="sm" className="w-full bg-tomato hover:bg-tomato/90 text-cream font-bebas tracking-widest rounded-none text-xs gap-1">
+              <ExternalLink className="w-3 h-3" /> VIEW LEAD FORM
+            </Button>
+          </Link>
           </div>
         </aside>
 
@@ -207,23 +207,23 @@ export default function Dashboard() {
             <div className="p-6">
               <div className="mb-6">
                 <div className="font-bebas text-xs tracking-widest text-muted-foreground">DASHBOARD</div>
-                <h1 className="font-alfa text-3xl text-brown">GOOD {new Date().getHours() < 12 ? "MORNING" : new Date().getHours() < 17 ? "AFTERNOON" : "EVENING"}</h1>
+                <h1 className="font-alfa text-3xl text-ink">GOOD {new Date().getHours() < 12 ? "MORNING" : new Date().getHours() < 17 ? "AFTERNOON" : "EVENING"}</h1>
               </div>
 
               {/* Stats */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 {[
                   { label: "NEW LEADS", value: stats?.newLeads ?? 0, sub: "awaiting response", color: "bg-amber", icon: <MessageSquare className="w-5 h-5 text-amber" /> },
-                  { label: "TOTAL LEADS", value: stats?.totalLeads ?? 0, sub: "all time", color: "bg-brown", icon: <Users className="w-5 h-5 text-brown" /> },
+                  { label: "TOTAL LEADS", value: stats?.totalLeads ?? 0, sub: "all time", color: "bg-ink", icon: <Users className="w-5 h-5 text-ink" /> },
                   { label: "PROPOSALS SENT", value: stats?.proposalsSent ?? 0, sub: "this period", color: "bg-tomato", icon: <FileText className="w-5 h-5 text-tomato" /> },
-                  { label: "BOOKINGS THIS MONTH", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, color: "bg-green-600", icon: <CheckCircle className="w-5 h-5 text-green-600" /> },
+                  { label: "BOOKINGS THIS MONTH", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, color: "bg-emerald-600", icon: <CheckCircle className="w-5 h-5 text-emerald-600" /> },
                 ].map(s => (
                   <div key={s.label} className="bg-white border-2 border-border p-5 shadow-sm">
                     <div className="flex items-start justify-between mb-3">
                       {s.icon}
                       <div className={`w-1 h-8 ${s.color}`} />
                     </div>
-                    <div className="font-alfa text-4xl text-brown mb-1">{s.value}</div>
+                    <div className="font-alfa text-4xl text-tomato mb-1">{s.value}</div>
                     <div className="font-bebas text-xs tracking-widest text-muted-foreground leading-tight">{s.label}</div>
                     <div className="font-dm text-xs text-muted-foreground/60 mt-0.5">{s.sub}</div>
                   </div>
@@ -231,9 +231,9 @@ export default function Dashboard() {
               </div>
 
               {/* Recent Leads */}
-              <div className="bg-white border-2 border-border shadow-sm mb-6">
+              <div className="bg-cream-card border border-border shadow-sm mb-6">
                 <div className="flex items-center justify-between p-4 border-b border-dashed border-border">
-                  <h2 className="font-alfa text-lg text-brown">RECENT LEADS</h2>
+                  <h2 className="font-alfa text-lg text-ink">RECENT LEADS</h2>
                   <Button size="sm" variant="ghost" onClick={() => setTab("leads")} className="font-bebas tracking-widest text-xs text-tomato">VIEW ALL</Button>
                 </div>
                 {(allLeads ?? []).slice(0, 5).length === 0 ? (
@@ -250,7 +250,7 @@ export default function Dashboard() {
                       <button key={lead.id} onClick={() => { setSelectedLead(lead); setTab("leads"); }}
                         className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
                         <div>
-                          <div className="font-dm font-semibold text-sm text-brown">{lead.firstName} {lead.lastName}</div>
+                          <div className="font-playfair font-semibold text-sm text-ink">{lead.firstName} {lead.lastName}</div>
                           <div className="font-dm text-xs text-muted-foreground">{lead.eventType || "Event"} · {lead.guestCount ? `${lead.guestCount} guests` : ""} {lead.eventDate ? `· ${new Date(lead.eventDate).toLocaleDateString("en-NZ")}` : ""}</div>
                         </div>
                         <div className={`font-bebas text-xs tracking-widest px-2 py-0.5 border rounded-none ${PIPELINE_STAGES.find(s => s.key === lead.status)?.color ?? "bg-muted border-border text-muted-foreground"}`}>
@@ -277,9 +277,9 @@ export default function Dashboard() {
           {tab === "leads" && (
             <div className="flex h-full">
               {/* Lead List */}
-              <div className={`${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-border bg-white flex-shrink-0`}>
+              <div className={`${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-border bg-cream-card flex-shrink-0`}>
                 <div className="p-4 border-b border-dashed border-border">
-                  <h2 className="font-alfa text-xl text-brown mb-3">LEADS INBOX</h2>
+                  <h2 className="font-alfa text-xl text-ink mb-3">LEADS INBOX</h2>
                   <div className="relative mb-2">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
@@ -332,7 +332,7 @@ export default function Dashboard() {
                       <ChevronLeft className="w-4 h-4" /> BACK
                     </Button>
                     <div className="flex-1">
-                      <h2 className="font-alfa text-2xl text-brown">{selectedLead.firstName} {selectedLead.lastName}</h2>
+                      <h2 className="font-alfa text-2xl text-ink">{selectedLead.firstName} {selectedLead.lastName}</h2>
                       <div className="font-dm text-sm text-muted-foreground">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
                     </div>
                     <Button onClick={() => setLocation(`/proposals/new?leadId=${selectedLead.id}`)}
@@ -343,8 +343,8 @@ export default function Dashboard() {
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
-                    <div className="bg-white border-2 border-border p-4">
-                      <h3 className="font-alfa text-sm text-brown mb-3">EVENT DETAILS</h3>
+                    <div className="bg-cream-card border border-border p-4">
+                      <h3 className="font-bebas text-sm tracking-widest text-muted-foreground mb-3">EVENT DETAILS</h3>
                       <div className="space-y-2 text-sm font-dm">
                         {[
                           ["Event Type", selectedLead.eventType],
@@ -363,8 +363,8 @@ export default function Dashboard() {
                     </div>
 
                     {/* Status & Actions */}
-                    <div className="bg-white border-2 border-border p-4">
-                      <h3 className="font-alfa text-sm text-brown mb-3">PIPELINE STATUS</h3>
+                    <div className="bg-cream-card border border-border p-4">
+                      <h3 className="font-bebas text-sm tracking-widest text-muted-foreground mb-3">PIPELINE STATUS</h3>
                       <div className="space-y-2">
                         {PIPELINE_STAGES.map(stage => (
                           <button key={stage.key}
@@ -379,15 +379,15 @@ export default function Dashboard() {
 
                   {/* Message */}
                   {selectedLead.message && (
-                    <div className="bg-white border-2 border-border p-4 mb-6">
-                      <h3 className="font-alfa text-sm text-brown mb-2">CLIENT MESSAGE</h3>
+                  <div className="bg-cream-card border border-border p-4 mb-6">
+                    <h3 className="font-bebas text-sm tracking-widest text-muted-foreground mb-2">CLIENT MESSAGE</h3>
                       <p className="font-dm text-sm text-muted-foreground italic">"{selectedLead.message}"</p>
                     </div>
                   )}
 
                   {/* Activity Log */}
-                  <div className="bg-white border-2 border-border p-4 mb-4">
-                    <h3 className="font-alfa text-sm text-brown mb-3">ACTIVITY LOG</h3>
+                  <div className="bg-cream-card border border-border p-4 mb-4">
+                    <h3 className="font-bebas text-sm tracking-widest text-muted-foreground mb-3">ACTIVITY LOG</h3>
                     <div className="space-y-2 mb-4 max-h-48 overflow-auto">
                       {(selectedLeadActivity ?? []).length === 0 ? (
                         <p className="font-dm text-xs text-muted-foreground">No activity yet</p>
@@ -426,7 +426,7 @@ export default function Dashboard() {
           {/* ── PIPELINE ─────────────────────────────────────────────────────── */}
           {tab === "pipeline" && (
             <div className="p-6 overflow-x-auto">
-              <h1 className="font-alfa text-3xl text-brown mb-6">PIPELINE</h1>
+              <h1 className="font-alfa text-3xl text-ink mb-6">PIPELINE</h1>
               <div className="flex gap-4 min-w-max">
                 {PIPELINE_STAGES.slice(0, 5).map(stage => {
                   const stageLeads = (allLeads ?? []).filter((l: any) => l.status === stage.key);
@@ -439,7 +439,7 @@ export default function Dashboard() {
                         {stageLeads.map((lead: any) => (
                           <div key={lead.id} onClick={() => { setSelectedLead(lead); setTab("leads"); }}
                             className="bg-white border-2 border-border p-3 cursor-pointer hover:border-tomato transition-colors shadow-sm">
-                            <div className="font-dm font-semibold text-sm text-brown">{lead.firstName} {lead.lastName}</div>
+                            <div className="font-playfair font-semibold text-sm text-ink">{lead.firstName} {lead.lastName}</div>
                             <div className="font-dm text-xs text-muted-foreground">{lead.eventType || "Event"}</div>
                             {lead.eventDate && <div className="font-dm text-xs text-muted-foreground/60">{new Date(lead.eventDate).toLocaleDateString("en-NZ")}</div>}
                             {lead.budget && <div className="font-alfa text-sm text-tomato mt-1">${Number(lead.budget).toLocaleString()}</div>}
@@ -461,13 +461,13 @@ export default function Dashboard() {
           {/* ── CALENDAR ─────────────────────────────────────────────────────── */}
           {tab === "calendar" && (
             <div className="p-6">
-              <h1 className="font-alfa text-3xl text-brown mb-6">BOOKINGS CALENDAR</h1>
-              <div className="bg-white border-2 border-border p-6 max-w-2xl shadow-sm">
+              <h1 className="font-alfa text-3xl text-ink mb-6">BOOKINGS CALENDAR</h1>
+              <div className="bg-cream-card border border-border p-6 max-w-2xl shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-2 hover:bg-muted transition-colors">
                     <ChevronLeft className="w-5 h-5" />
                   </button>
-                  <div className="font-alfa text-2xl text-brown">{MONTHS[month]} {year}</div>
+                  <div className="font-alfa text-2xl text-ink">{MONTHS[month]} {year}</div>
                   <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-2 hover:bg-muted transition-colors">
                     <ChevronRight className="w-5 h-5" />
                   </button>
@@ -500,7 +500,7 @@ export default function Dashboard() {
 
               {/* Upcoming bookings list */}
               <div className="mt-6 max-w-2xl">
-                <h2 className="font-alfa text-lg text-brown mb-3">THIS MONTH'S BOOKINGS</h2>
+                <h2 className="font-alfa text-lg text-ink mb-3">THIS MONTH'S BOOKINGS</h2>
                 {(monthBookings ?? []).length === 0 ? (
                   <div className="bg-white border-2 border-dashed border-border p-6 text-center">
                     <p className="font-dm text-muted-foreground text-sm">No bookings this month</p>
@@ -533,7 +533,7 @@ export default function Dashboard() {
           {/* ── CONTACTS ─────────────────────────────────────────────────────── */}
           {tab === "contacts" && (
             <div className="p-6">
-              <h1 className="font-alfa text-3xl text-brown mb-6">CONTACTS</h1>
+              <h1 className="font-alfa text-3xl text-ink mb-6">CONTACTS</h1>
               {(contacts ?? []).length === 0 ? (
                 <div className="bg-white border-2 border-dashed border-border p-12 text-center max-w-md">
                   <Users className="w-12 h-12 text-muted-foreground/20 mx-auto mb-4" />
@@ -541,7 +541,7 @@ export default function Dashboard() {
                   <p className="font-dm text-muted-foreground text-sm">Contacts are created automatically when leads are submitted.</p>
                 </div>
               ) : (
-                <div className="bg-white border-2 border-border shadow-sm max-w-2xl">
+                <div className="bg-cream-card border border-border shadow-sm max-w-2xl">
                   <div className="divide-y divide-dashed divide-border">
                     {(contacts ?? []).map((c: any) => (
                       <div key={c.id} className="p-4 flex items-center justify-between">
@@ -562,12 +562,12 @@ export default function Dashboard() {
           {/* ── SETTINGS ─────────────────────────────────────────────────────── */}
           {tab === "settings" && (
             <div className="p-6 max-w-2xl">
-              <h1 className="font-alfa text-3xl text-brown mb-6">VENUE SETTINGS</h1>
+              <h1 className="font-alfa text-3xl text-ink mb-6">VENUE SETTINGS</h1>
 
               {settingsForm && (
                 <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
-                  <div className="bg-white border-2 border-border p-5 shadow-sm">
-                    <h2 className="font-alfa text-sm text-brown mb-4">VENUE PROFILE</h2>
+                  <div className="bg-cream-card border border-border p-5 shadow-sm">
+                    <h2 className="font-bebas text-sm tracking-widest text-muted-foreground mb-4">VENUE PROFILE</h2>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">VENUE NAME</label>
@@ -597,8 +597,8 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="bg-white border-2 border-border p-5 shadow-sm">
-                    <h2 className="font-alfa text-sm text-brown mb-4">LEAD FORM SETTINGS</h2>
+                  <div className="bg-cream-card border border-border p-5 shadow-sm">
+                    <h2 className="font-bebas text-sm tracking-widest text-muted-foreground mb-4">LEAD FORM SETTINGS</h2>
                     <div className="space-y-3">
                       <div>
                         <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">FORM URL SLUG</label>
@@ -638,7 +638,7 @@ export default function Dashboard() {
               {/* Event Spaces */}
               <div className="mt-8">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-alfa text-lg text-brown">EVENT SPACES</h2>
+                  <h2 className="font-alfa text-lg text-ink">EVENT SPACES</h2>
                   <Button size="sm" onClick={() => setShowAddSpace(true)} className="bg-tomato text-white font-bebas tracking-widest rounded-none text-xs gap-1">
                     <Plus className="w-3 h-3" /> ADD SPACE
                   </Button>
@@ -672,7 +672,7 @@ export default function Dashboard() {
       <Dialog open={showAddSpace} onOpenChange={setShowAddSpace}>
         <DialogContent className="max-w-md rounded-none border-2 border-brown/20">
           <DialogHeader>
-            <div className="bg-brown -mx-6 -mt-6 p-5 mb-4">
+            <div className="bg-ink -mx-6 -mt-6 p-5 mb-4">
               <DialogTitle className="font-alfa text-xl text-cream">ADD EVENT SPACE</DialogTitle>
             </div>
           </DialogHeader>

@@ -2,44 +2,88 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { getLoginUrl } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { ArrowRight, CheckCircle, FileText, Calendar, Users } from "lucide-react";
+import { ArrowRight, CheckCircle, FileText, Calendar, Users, Zap } from "lucide-react";
 
-// Inline SVG waiter character (Campari-style)
-function WaiterIllustration() {
+/* ── Inline SVG illustrations ─────────────────────────────────────────────── */
+
+/** Eden-Roc style: loose ink sketch of a waiter balancing trays */
+function WaiterSketch() {
   return (
-    <svg viewBox="0 0 120 200" className="w-28 h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Tray */}
-      <ellipse cx="85" cy="55" rx="22" ry="5" fill="#C8102E" opacity="0.9"/>
-      {/* Bottle on tray */}
-      <rect x="83" y="38" width="6" height="18" rx="2" fill="#6D1A36"/>
-      <rect x="84" y="35" width="4" height="5" rx="1" fill="#6D1A36"/>
-      {/* Arm holding tray */}
-      <path d="M70 80 Q80 65 85 55" stroke="#2C1810" strokeWidth="5" strokeLinecap="round"/>
-      {/* Body */}
-      <rect x="52" y="90" width="28" height="50" rx="4" fill="#1a1a1a"/>
-      {/* White shirt front */}
-      <rect x="60" y="90" width="12" height="40" rx="2" fill="#FAF7F2"/>
-      {/* Bow tie */}
-      <path d="M62 95 L66 98 L70 95 L66 92 Z" fill="#C8102E"/>
-      {/* Head */}
-      <ellipse cx="66" cy="75" rx="12" ry="13" fill="#C8A882"/>
-      {/* Hair */}
-      <path d="M54 72 Q66 60 78 72" fill="#2C1810"/>
-      {/* Face - nose */}
-      <path d="M70 76 Q73 78 70 80" stroke="#8B6B4A" strokeWidth="1.5" fill="none"/>
-      {/* Left leg */}
-      <path d="M56 140 L52 185" stroke="#1a1a1a" strokeWidth="7" strokeLinecap="round"/>
-      {/* Right leg (forward stride) */}
-      <path d="M72 140 L80 180" stroke="#1a1a1a" strokeWidth="7" strokeLinecap="round"/>
-      {/* Left shoe */}
-      <ellipse cx="50" cy="186" rx="8" ry="4" fill="#1a1a1a"/>
-      {/* Right shoe */}
-      <ellipse cx="82" cy="181" rx="8" ry="4" fill="#1a1a1a"/>
-      {/* Left arm down */}
-      <path d="M52 100 Q40 115 38 130" stroke="#1a1a1a" strokeWidth="5" strokeLinecap="round"/>
-      {/* White glove */}
-      <circle cx="37" cy="132" r="5" fill="#FAF7F2"/>
+    <svg viewBox="0 0 160 240" className="w-36 h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Tray left */}
+      <ellipse cx="30" cy="95" rx="18" ry="4" stroke="#C8421A" strokeWidth="2" fill="none"/>
+      <rect x="27" y="80" width="5" height="16" rx="1.5" fill="#C8421A" opacity="0.7"/>
+      {/* Tray right (flaming dish) */}
+      <ellipse cx="128" cy="88" rx="16" ry="4" stroke="#C8421A" strokeWidth="2" fill="none"/>
+      <path d="M128 75 Q131 68 128 62 Q125 68 128 75Z" fill="#E8852A" opacity="0.8"/>
+      <path d="M124 78 Q127 72 124 67 Q121 72 124 78Z" fill="#C8421A" opacity="0.6"/>
+      {/* Body — striped shirt like Eden-Roc */}
+      <path d="M72 115 Q65 140 62 175" stroke="#8BA8C8" strokeWidth="8" strokeLinecap="round"/>
+      <path d="M88 115 Q95 140 98 175" stroke="#8BA8C8" strokeWidth="8" strokeLinecap="round"/>
+      <path d="M62 120 Q80 130 98 120" stroke="#8BA8C8" strokeWidth="2.5" fill="none"/>
+      <path d="M63 128 Q80 138 97 128" stroke="#8BA8C8" strokeWidth="2" fill="none" opacity="0.6"/>
+      <path d="M64 136 Q80 145 96 136" stroke="#8BA8C8" strokeWidth="2" fill="none" opacity="0.4"/>
+      {/* Neck + head */}
+      <rect x="76" y="100" width="8" height="14" rx="4" fill="#D4A882"/>
+      <ellipse cx="80" cy="92" rx="14" ry="15" fill="#D4A882"/>
+      {/* Hair — loose sketch */}
+      <path d="M66 88 Q70 76 80 74 Q90 76 94 88" stroke="#5C3D2E" strokeWidth="3" fill="none" strokeLinecap="round"/>
+      {/* Face — simple profile nose */}
+      <path d="M88 90 Q93 93 89 97" stroke="#A07050" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+      {/* Left arm reaching out with tray */}
+      <path d="M66 118 Q50 108 30 97" stroke="#D4A882" strokeWidth="6" strokeLinecap="round"/>
+      {/* Right arm reaching out with tray */}
+      <path d="M94 115 Q112 100 128 90" stroke="#D4A882" strokeWidth="6" strokeLinecap="round"/>
+      {/* Legs — dynamic stride */}
+      <path d="M72 175 Q68 200 62 225" stroke="#8BA8C8" strokeWidth="7" strokeLinecap="round"/>
+      <path d="M88 175 Q95 200 105 220" stroke="#8BA8C8" strokeWidth="7" strokeLinecap="round"/>
+      {/* Shoes */}
+      <ellipse cx="60" cy="226" rx="10" ry="4" fill="#3A2A1E"/>
+      <ellipse cx="107" cy="221" rx="10" ry="4" fill="#3A2A1E"/>
     </svg>
+  );
+}
+
+/** Fabiola's style: diner character drinking at a table */
+function DinerCharacter() {
+  return (
+    <svg viewBox="0 0 120 140" className="w-24 h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Table */}
+      <rect x="20" y="90" width="80" height="6" rx="2" fill="#C8421A" opacity="0.8"/>
+      <rect x="35" y="96" width="6" height="30" rx="2" fill="#C8421A" opacity="0.6"/>
+      <rect x="79" y="96" width="6" height="30" rx="2" fill="#C8421A" opacity="0.6"/>
+      {/* Wine glass on table */}
+      <path d="M68 90 Q72 80 70 70 Q68 80 72 80" stroke="#6D1A36" strokeWidth="2" fill="none"/>
+      <ellipse cx="70" cy="70" rx="7" ry="3" stroke="#6D1A36" strokeWidth="1.5" fill="none"/>
+      <rect x="69" y="82" width="2" height="8" fill="#6D1A36"/>
+      <rect x="65" y="88" width="10" height="2" rx="1" fill="#6D1A36"/>
+      {/* Body */}
+      <rect x="40" y="55" width="30" height="35" rx="8" fill="#C8421A" opacity="0.85"/>
+      {/* Apron */}
+      <rect x="48" y="60" width="14" height="28" rx="3" fill="#FAF0E0" opacity="0.9"/>
+      {/* Head */}
+      <ellipse cx="55" cy="42" rx="14" ry="16" fill="#D4A882"/>
+      {/* Chef hat */}
+      <rect x="42" y="26" width="26" height="10" rx="3" fill="#FAF0E0"/>
+      <ellipse cx="55" cy="26" rx="13" ry="5" fill="#FAF0E0"/>
+      {/* Face — looking right, drinking */}
+      <path d="M62 42 Q67 44 64 48" stroke="#A07050" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+      {/* Arm holding glass up */}
+      <path d="M70 65 Q80 55 85 45" stroke="#D4A882" strokeWidth="5" strokeLinecap="round"/>
+      <circle cx="85" cy="43" r="4" fill="#D4A882"/>
+      {/* Glass in hand */}
+      <path d="M85 43 Q89 38 87 32" stroke="#6D1A36" strokeWidth="1.5" fill="none"/>
+      <ellipse cx="87" cy="32" rx="4" ry="2" stroke="#6D1A36" strokeWidth="1.2" fill="none"/>
+    </svg>
+  );
+}
+
+/** Fabiola's style: hourglass badge shape with curved text */
+function HourglassBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative inline-flex flex-col items-center justify-center bg-amber text-ink px-8 py-4 badge-hourglass min-w-[160px]">
+      {children}
+    </div>
   );
 }
 
@@ -47,28 +91,35 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] font-dm overflow-x-hidden">
-      {/* Top Nav */}
-      <nav className="bg-brown text-cream h-14 flex items-center px-6 justify-between sticky top-0 z-50 border-b-4 border-tomato">
-        <div className="flex items-center gap-0.5">
-          <span className="font-alfa text-2xl text-tomato">HOST</span>
-          <span className="font-pacifico text-xl text-amber">it</span>
+    <div className="min-h-screen bg-parchment font-dm overflow-x-hidden">
+
+      {/* ── Top Nav ──────────────────────────────────────────────────────── */}
+      <nav className="bg-parchment border-b-2 border-tomato h-16 flex items-center px-6 justify-between sticky top-0 z-50">
+        {/* Logo */}
+        <div className="flex items-center gap-1">
+          <span className="font-alfa text-3xl text-tomato leading-none">HOST</span>
+          <span className="font-pacifico text-2xl text-amber leading-none -ml-0.5">it</span>
         </div>
-        <div className="flex items-center gap-3">
+
+        {/* Nav links */}
+        <div className="hidden md:flex items-center gap-6">
+          <span className="font-bebas tracking-widest text-sm text-muted-ink hover:text-tomato transition-colors cursor-pointer">FEATURES</span>
+          <span className="font-bebas tracking-widest text-sm text-muted-ink hover:text-tomato transition-colors cursor-pointer">PRICING</span>
           <Link href="/enquire">
-            <Button variant="ghost" size="sm" className="text-cream/60 hover:text-cream font-bebas tracking-widest text-xs">
-              SUBMIT ENQUIRY
-            </Button>
+            <span className="font-bebas tracking-widest text-sm text-muted-ink hover:text-tomato transition-colors">SUBMIT ENQUIRY</span>
           </Link>
+        </div>
+
+        <div className="flex items-center gap-3">
           {isAuthenticated ? (
             <Link href="/dashboard">
-              <Button size="sm" className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none text-xs">
+              <Button className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none text-sm px-5">
                 DASHBOARD
               </Button>
             </Link>
           ) : (
             <a href={getLoginUrl()}>
-              <Button size="sm" className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none text-xs">
+              <Button className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none text-sm px-5">
                 SIGN IN
               </Button>
             </a>
@@ -76,191 +127,210 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Hero */}
-      <section className="bg-brown text-cream relative overflow-hidden">
-        {/* Decorative background text */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none select-none overflow-hidden">
-          <span className="font-alfa text-[20vw] text-cream whitespace-nowrap">HOSTit</span>
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-parchment border-b-2 border-border">
+        {/* Decorative large background text */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
+          <span className="font-alfa text-[22vw] text-tomato/5 leading-none whitespace-nowrap">HOSTit</span>
         </div>
 
-        <div className="max-w-5xl mx-auto px-6 py-16 md:py-24 relative z-10">
+        <div className="container relative py-16 md:py-24">
           <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* Left: copy */}
             <div>
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 border border-amber/40 px-3 py-1 mb-6">
-                <div className="w-1.5 h-1.5 bg-amber rounded-full" />
-                <span className="font-bebas text-xs tracking-widest text-amber">EVENT CRM FOR NZ RESTAURANTS & VENUES</span>
+              {/* Fabiola-style badge label */}
+              <div className="inline-flex items-center gap-2 mb-6">
+                <div className="h-px w-8 bg-tomato"/>
+                <span className="font-bebas tracking-[0.2em] text-xs text-tomato">EVENT CRM FOR NZ RESTAURANTS & VENUES</span>
+                <div className="h-px w-8 bg-tomato"/>
               </div>
 
-              <h1 className="font-alfa text-5xl md:text-6xl text-cream leading-none mb-4">
-                MANAGE YOUR<br />
-                <span className="text-tomato">EVENTS</span><br />
+              <h1 className="font-alfa text-5xl md:text-7xl text-ink leading-[0.95] mb-2">
+                MANAGE<br/>
+                YOUR<br/>
+                <span className="text-tomato">EVENTS</span><br/>
                 BEAUTIFULLY.
               </h1>
 
-              {/* Decorative rule */}
-              <div className="flex items-center gap-3 my-5">
-                <div className="w-12 h-0.5 bg-amber" />
-                <div className="w-1.5 h-1.5 bg-amber rotate-45" />
-                <div className="w-12 h-0.5 bg-amber" />
-              </div>
+              {/* Amber underline accent */}
+              <div className="h-1.5 w-24 bg-amber mt-4 mb-6"/>
 
-              <p className="font-dm text-cream/60 text-base leading-relaxed mb-8 max-w-md">
+              <p className="font-dm text-muted-ink text-base md:text-lg leading-relaxed max-w-md mb-8">
                 HOSTit is the event enquiry and proposal platform built for New Zealand restaurants, bars, and function venues. Capture leads, build stunning proposals, and confirm bookings — all in one place.
               </p>
 
               <div className="flex flex-wrap gap-3">
                 <a href={getLoginUrl()}>
-                  <Button className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none h-12 px-8 text-base gap-2">
-                    GET STARTED FREE <ArrowRight className="w-4 h-4" />
+                  <Button className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none text-base px-7 py-5 h-auto">
+                    GET STARTED FREE <ArrowRight className="ml-2 w-4 h-4"/>
                   </Button>
                 </a>
                 <Link href="/enquire">
-                  <Button variant="outline" className="border-2 border-cream/20 text-cream hover:bg-cream/10 font-bebas tracking-widest rounded-none h-12 px-8 text-base bg-transparent">
+                  <Button variant="outline" className="border-2 border-ink text-ink hover:bg-ink hover:text-cream font-bebas tracking-widest rounded-none text-base px-7 py-5 h-auto bg-transparent">
                     VIEW LEAD FORM
                   </Button>
                 </Link>
               </div>
             </div>
 
-            {/* Illustration */}
-            <div className="flex justify-center items-end">
-              <div className="relative">
-                {/* Background circle */}
-                <div className="w-56 h-56 bg-tomato/20 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                <WaiterIllustration />
-                {/* Floating badge */}
-                <div className="absolute -top-4 -right-8 bg-amber text-brown px-3 py-1.5 shadow-lg rotate-3">
-                  <div className="font-bebas text-xs tracking-widest">NEW ENQUIRY!</div>
-                  <div className="font-dm text-xs font-semibold">Wedding · 80 guests</div>
+            {/* Right: illustration + floating cards */}
+            <div className="relative flex justify-center items-end h-72 md:h-96">
+              {/* Floating enquiry card */}
+              <div className="absolute top-4 right-4 md:right-8 bg-cream-card border border-border shadow-sm rounded-sm px-4 py-3 text-xs font-dm z-10">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-amber"/>
+                  <span className="font-bebas tracking-widest text-tomato text-xs">NEW ENQUIRY!</span>
                 </div>
-                <div className="absolute -bottom-2 -left-8 bg-white border-2 border-border px-3 py-1.5 shadow-lg -rotate-2">
-                  <div className="font-bebas text-xs tracking-widest text-green-600">PROPOSAL ACCEPTED</div>
-                  <div className="font-alfa text-sm text-brown">$4,800 NZD</div>
+                <div className="text-ink font-medium">Wedding · 80 guests</div>
+                <div className="text-muted-ink">15 March · The Grand Hall</div>
+              </div>
+
+              {/* Central illustration */}
+              <div className="relative z-0">
+                <WaiterSketch />
+              </div>
+
+              {/* Floating proposal accepted card */}
+              <div className="absolute bottom-4 left-4 md:left-8 bg-cream-card border border-border shadow-sm rounded-sm px-4 py-3 text-xs font-dm z-10">
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCircle className="w-3 h-3 text-tomato"/>
+                  <span className="font-bebas tracking-widest text-tomato text-xs">PROPOSAL ACCEPTED</span>
                 </div>
+                <div className="text-ink font-medium text-sm">$4,800 NZD</div>
+                <div className="text-muted-ink">Deposit received</div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Red stripe */}
-      <div className="h-3 bg-tomato" />
-
-      {/* How It Works */}
-      <section className="py-16 px-6 max-w-5xl mx-auto">
-        <div className="text-center mb-12">
-          <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">THE WORKFLOW</div>
-          <h2 className="font-alfa text-4xl text-brown">HOW HOSTit WORKS</h2>
-          <div className="flex items-center gap-3 justify-center mt-3">
-            <div className="w-8 h-0.5 bg-tomato" />
-            <div className="w-1.5 h-1.5 bg-tomato rotate-45" />
-            <div className="w-8 h-0.5 bg-tomato" />
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-4 gap-6">
-          {[
-            {
-              num: "01",
-              icon: <Users className="w-6 h-6" />,
-              title: "CAPTURE LEADS",
-              desc: "Share your branded enquiry form link. Clients fill it out with their event details — it lands straight in your inbox.",
-            },
-            {
-              num: "02",
-              icon: <FileText className="w-6 h-6" />,
-              title: "BUILD PROPOSALS",
-              desc: "Create itemised proposals with your pricing, GST, deposit requirements, and T&Cs. Looks professional every time.",
-            },
-            {
-              num: "03",
-              icon: <ArrowRight className="w-6 h-6" />,
-              title: "SEND TO CLIENT",
-              desc: "Send a unique proposal link. Clients can view, accept, or decline online — no printing, no PDFs, no back-and-forth.",
-            },
-            {
-              num: "04",
-              icon: <Calendar className="w-6 h-6" />,
-              title: "CONFIRM BOOKING",
-              desc: "When accepted, the booking is automatically added to your calendar. Track deposits and manage your event pipeline.",
-            },
-          ].map((step) => (
-            <div key={step.num} className="relative">
-              <div className="bg-white border-2 border-border p-6 shadow-sm h-full">
-                <div className="font-alfa text-5xl text-tomato/10 mb-2">{step.num}</div>
-                <div className="text-tomato mb-3">{step.icon}</div>
-                <h3 className="font-alfa text-sm text-brown mb-2">{step.title}</h3>
-                <p className="font-dm text-xs text-muted-foreground leading-relaxed">{step.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="bg-brown text-cream py-16 px-6">
-        <div className="max-w-5xl mx-auto">
+      {/* ── How It Works ─────────────────────────────────────────────────── */}
+      <section className="bg-linen border-b border-border py-16 md:py-20">
+        <div className="container">
           <div className="text-center mb-12">
-            <div className="font-bebas text-xs tracking-widest text-amber mb-2">EVERYTHING YOU NEED</div>
-            <h2 className="font-alfa text-4xl text-cream">BUILT FOR VENUE TEAMS</h2>
+            <div className="retro-divider mb-4">HOW IT WORKS</div>
+            <h2 className="font-alfa text-4xl md:text-5xl text-ink">
+              FROM ENQUIRY TO <span className="text-tomato">BOOKING</span>
+            </h2>
           </div>
-          <div className="grid md:grid-cols-3 gap-4">
+
+          <div className="grid md:grid-cols-3 gap-8">
             {[
-              { title: "LEADS INBOX", desc: "All enquiries in one place. See new leads instantly, with full event details and client contact info." },
-              { title: "PIPELINE VIEW", desc: "Drag leads through your sales pipeline — from New to Contacted to Proposal Sent to Booked." },
-              { title: "PROPOSAL BUILDER", desc: "Build itemised proposals with line items, GST, deposit amounts, and custom T&Cs." },
-              { title: "CLIENT PORTAL", desc: "Clients get a beautiful proposal page they can accept or decline with one click." },
-              { title: "BOOKINGS CALENDAR", desc: "See all confirmed bookings on a monthly calendar. Never double-book again." },
-              { title: "ACTIVITY LOG", desc: "Full history of every note, status change, and proposal sent for each lead." },
-            ].map(f => (
-              <div key={f.title} className="border border-cream/10 p-5 hover:bg-cream/5 transition-colors">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-1.5 h-1.5 bg-tomato rounded-full" />
-                  <h3 className="font-alfa text-sm text-amber">{f.title}</h3>
+              {
+                num: "01",
+                icon: <FileText className="w-6 h-6"/>,
+                title: "CAPTURE LEADS",
+                desc: "Share your custom lead form link or embed it on your website. Clients fill in their event details and it lands straight in your inbox.",
+              },
+              {
+                num: "02",
+                icon: <Zap className="w-6 h-6"/>,
+                title: "SEND PROPOSALS",
+                desc: "Build a beautiful, itemised proposal in minutes. Add packages, line items, deposit requirements, and T&Cs — then send with one click.",
+              },
+              {
+                num: "03",
+                icon: <Calendar className="w-6 h-6"/>,
+                title: "CONFIRM BOOKINGS",
+                desc: "Clients accept online and the booking is confirmed. Syncs automatically to your calendar and Nowbook It — zero double entry.",
+              },
+            ].map((step) => (
+              <div key={step.num} className="bg-cream-card border border-border p-6 relative">
+                {/* Number watermark */}
+                <div className="absolute top-4 right-4 font-alfa text-5xl text-tomato/10 leading-none select-none">{step.num}</div>
+                <div className="w-10 h-10 bg-tomato text-white flex items-center justify-center mb-4 rounded-none">
+                  {step.icon}
                 </div>
-                <p className="font-dm text-xs text-cream/50 leading-relaxed">{f.desc}</p>
+                <h3 className="font-alfa text-xl text-ink mb-2">{step.title}</h3>
+                <p className="font-dm text-muted-ink text-sm leading-relaxed">{step.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-16 px-6 text-center bg-[#FAF7F2]">
-        <div className="max-w-lg mx-auto">
-          <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">GET STARTED TODAY</div>
-          <h2 className="font-alfa text-4xl text-brown mb-4">READY TO HOST BETTER EVENTS?</h2>
-          <p className="font-dm text-muted-foreground text-sm mb-8">
-            Join New Zealand restaurants and venues using HOSTit to streamline their private events business.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <a href={getLoginUrl()}>
-              <Button className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none h-12 px-10 text-base gap-2">
-                START FREE <ArrowRight className="w-4 h-4" />
-              </Button>
-            </a>
-            <Link href="/enquire">
-              <Button variant="outline" className="border-2 border-border hover:border-tomato hover:text-tomato font-bebas tracking-widest rounded-none h-12 px-10 text-base">
-                SEE LEAD FORM
-              </Button>
-            </Link>
+      {/* ── Features ─────────────────────────────────────────────────────── */}
+      <section className="bg-parchment border-b border-border py-16 md:py-20">
+        <div className="container">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* Illustration side */}
+            <div className="flex justify-center">
+              <div className="relative">
+                {/* Fabiola-style badge */}
+                <HourglassBadge>
+                  <span className="font-bebas tracking-[0.15em] text-xs text-center leading-tight">FINE EVENT<br/>MANAGEMENT</span>
+                  <span className="font-pacifico text-2xl text-ink mt-1">HOSTit</span>
+                  <span className="font-bebas tracking-[0.12em] text-xs text-center leading-tight">FOR NZ VENUES</span>
+                </HourglassBadge>
+                <div className="absolute -right-16 -bottom-4">
+                  <DinerCharacter />
+                </div>
+              </div>
+            </div>
+
+            {/* Features list */}
+            <div>
+              <div className="retro-divider mb-4">EVERYTHING YOU NEED</div>
+              <h2 className="font-alfa text-4xl text-ink mb-6">
+                YOUR VENUE'S<br/><span className="text-tomato">COMMAND CENTRE</span>
+              </h2>
+              <div className="space-y-4">
+                {[
+                  { icon: <Users className="w-4 h-4"/>, title: "Leads Inbox & Pipeline", desc: "Track every enquiry from new lead to confirmed booking with a visual pipeline." },
+                  { icon: <FileText className="w-4 h-4"/>, title: "Proposal Builder", desc: "Create itemised proposals with packages, pricing, deposit terms, and your branding." },
+                  { icon: <Calendar className="w-4 h-4"/>, title: "Bookings Calendar", desc: "Monthly calendar view of all confirmed events. Syncs with Nowbook It automatically." },
+                  { icon: <Zap className="w-4 h-4"/>, title: "Nowbook It Integration", desc: "When a proposal is accepted, a booking is created in Nowbook It and the date is blocked." },
+                ].map((f) => (
+                  <div key={f.title} className="flex gap-4 items-start">
+                    <div className="w-8 h-8 bg-linen border border-border flex items-center justify-center text-tomato shrink-0 mt-0.5">
+                      {f.icon}
+                    </div>
+                    <div>
+                      <div className="font-bebas tracking-wider text-ink text-sm">{f.title}</div>
+                      <div className="font-dm text-muted-ink text-xs leading-relaxed">{f.desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-brown text-cream py-8 px-6 text-center border-t-4 border-tomato">
-        <div className="flex items-center justify-center gap-0.5 mb-2">
-          <span className="font-alfa text-2xl text-tomato">HOST</span>
-          <span className="font-pacifico text-xl text-amber">it</span>
+      {/* ── CTA Banner ───────────────────────────────────────────────────── */}
+      <section className="bg-tomato py-14">
+        <div className="container text-center">
+          <div className="retro-divider text-white/60 mb-4">GET STARTED TODAY</div>
+          <h2 className="font-alfa text-4xl md:text-5xl text-white mb-4">
+            READY TO HOST<br/>BETTER EVENTS?
+          </h2>
+          <p className="font-dm text-white/80 text-base mb-8 max-w-md mx-auto">
+            Join New Zealand restaurants and venues using HOSTit to manage their events effortlessly.
+          </p>
+          <a href={getLoginUrl()}>
+            <Button className="bg-white text-tomato hover:bg-linen font-bebas tracking-widest rounded-none text-base px-8 py-5 h-auto">
+              START FOR FREE <ArrowRight className="ml-2 w-4 h-4"/>
+            </Button>
+          </a>
         </div>
-        <div className="font-bebas text-xs tracking-widest text-cream/30 mb-4">EVENT CRM FOR NEW ZEALAND RESTAURANTS & VENUES</div>
-        <div className="flex items-center justify-center gap-6 text-xs font-dm text-cream/30">
-          <Link href="/dashboard"><span className="hover:text-cream/60 cursor-pointer transition-colors">Dashboard</span></Link>
-          <Link href="/enquire"><span className="hover:text-cream/60 cursor-pointer transition-colors">Submit Enquiry</span></Link>
+      </section>
+
+      {/* ── Footer ───────────────────────────────────────────────────────── */}
+      <footer className="bg-ink text-cream/60 py-8">
+        <div className="container flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-1">
+            <span className="font-alfa text-xl text-tomato">HOST</span>
+            <span className="font-pacifico text-lg text-amber">it</span>
+          </div>
+          <p className="font-dm text-xs text-center">
+            © {new Date().getFullYear()} HOSTit · Built for New Zealand hospitality · All rights reserved
+          </p>
+          <div className="flex gap-4 text-xs font-bebas tracking-widest">
+            <span className="hover:text-cream cursor-pointer">PRIVACY</span>
+            <span className="hover:text-cream cursor-pointer">TERMS</span>
+            <Link href="/enquire"><span className="hover:text-cream">ENQUIRY FORM</span></Link>
+          </div>
         </div>
-        <div className="mt-6 font-dm text-xs text-cream/20">© {new Date().getFullYear()} HOSTit. Made in New Zealand.</div>
       </footer>
     </div>
   );

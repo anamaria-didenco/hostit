@@ -67,7 +67,7 @@ export default function LeadForm() {
     setForm(f => ({ ...f, [field]: e.target.value }));
 
   if (isLoading) return (
-    <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center">
+    <div className="min-h-screen bg-parchment flex items-center justify-center">
       <div className="font-alfa text-3xl text-tomato/20 animate-pulse">LOADING...</div>
     </div>
   );
@@ -78,9 +78,9 @@ export default function LeadForm() {
   const formSubtitle = venue?.leadFormSubtitle ?? "Tell us about your event and we'll get back to you within 24 hours.";
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] font-dm">
+    <div className="min-h-screen bg-parchment font-dm">
       {/* Vintage Header */}
-      <div className="bg-brown text-cream">
+      <div className="bg-ink text-cream">
         <div className="max-w-2xl mx-auto px-6 py-10 text-center">
           <div className="flex items-center justify-center gap-0.5 mb-4">
             <span className="font-alfa text-4xl text-tomato">HOST</span>
@@ -95,7 +95,7 @@ export default function LeadForm() {
           </div>
 
           <div className="font-alfa text-3xl md:text-4xl text-cream leading-tight mb-2">{venueName}</div>
-          <h1 className="font-bebas text-xl tracking-widest text-amber mb-3">{formTitle}</h1>
+          <h1 className="font-playfair italic text-amber text-xl mb-3">{formTitle}</h1>
           <p className="font-dm text-sm text-cream/60 max-w-md mx-auto">{formSubtitle}</p>
 
           {/* Venue contact info */}
@@ -126,9 +126,9 @@ export default function LeadForm() {
 
       <div className="max-w-2xl mx-auto px-6 py-10">
         {submitted ? (
-          <div className="bg-white border-2 border-green-400 p-10 text-center shadow-sm">
+          <div className="bg-cream-card border-2 border-emerald-400 p-10 text-center shadow-sm">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-5" />
-            <h2 className="font-alfa text-3xl text-brown mb-3">ENQUIRY RECEIVED!</h2>
+            <h2 className="font-alfa text-3xl text-ink mb-3">ENQUIRY RECEIVED!</h2>
             <p className="font-dm text-muted-foreground mb-2">
               Thank you for your enquiry. The team at <strong>{venueName}</strong> will be in touch within 24 hours.
             </p>
@@ -137,7 +137,7 @@ export default function LeadForm() {
             </p>
             <div className="mt-8 pt-6 border-t border-dashed border-border">
               <div className="flex items-center justify-center gap-0.5">
-                <span className="font-alfa text-lg text-brown">HOST</span>
+                <span className="font-alfa text-lg text-ink">HOST</span>
                 <span className="font-pacifico text-base text-tomato">it</span>
               </div>
               <div className="font-bebas text-xs tracking-widest text-muted-foreground mt-1">EVENT CRM FOR NEW ZEALAND VENUES</div>
@@ -146,8 +146,8 @@ export default function LeadForm() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Personal Details */}
-            <div className="bg-white border-2 border-border p-6 shadow-sm">
-              <h2 className="font-alfa text-sm text-brown mb-4">YOUR DETAILS</h2>
+            <div className="bg-cream-card border border-border p-6 shadow-sm">
+              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">YOUR DETAILS</h2>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">FIRST NAME *</label>
@@ -178,8 +178,8 @@ export default function LeadForm() {
             </div>
 
             {/* Event Details */}
-            <div className="bg-white border-2 border-border p-6 shadow-sm">
-              <h2 className="font-alfa text-sm text-brown mb-4">EVENT DETAILS</h2>
+            <div className="bg-cream-card border border-border p-6 shadow-sm">
+              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">EVENT DETAILS</h2>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
                   <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">TYPE OF EVENT</label>
@@ -216,8 +216,8 @@ export default function LeadForm() {
             </div>
 
             {/* Message */}
-            <div className="bg-white border-2 border-border p-6 shadow-sm">
-              <h2 className="font-alfa text-sm text-brown mb-3">TELL US MORE</h2>
+            <div className="bg-cream-card border border-border p-6 shadow-sm">
+              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">TELL US MORE</h2>
               <Textarea value={form.message} onChange={set("message")}
                 placeholder="Any additional details about your event, special requirements, dietary needs, AV equipment, etc."
                 rows={4} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato resize-none text-sm" />
@@ -237,9 +237,9 @@ export default function LeadForm() {
       </div>
 
       {/* Footer */}
-      <div className="bg-brown text-cream py-6 text-center mt-8">
+      <div className="bg-ink text-cream py-6 text-center mt-8">
         <div className="flex items-center justify-center gap-0.5 mb-1">
-          <span className="font-alfa text-base text-tomato">HOST</span>
+          <span className="font-alfa text-base text-cream">HOST</span>
           <span className="font-pacifico text-sm text-amber">it</span>
         </div>
         <div className="font-bebas text-xs tracking-widest text-cream/30">EVENT CRM · MADE FOR NEW ZEALAND VENUES</div>

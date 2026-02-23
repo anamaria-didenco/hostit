@@ -55,3 +55,22 @@
 - [ ] Stripe deposit payment integration
 - [ ] Image upload for venue profile
 - [ ] Multi-user team access
+
+## Nowbook It Integration
+- [ ] Research Nowbook It API (endpoints, auth, booking creation, availability blocking)
+- [ ] Add NOWBOOKIT_API_KEY and NOWBOOKIT_VENUE_ID secrets
+- [ ] Add nowbookit settings fields to venue_settings table
+- [ ] Build server/nowbookit.ts service layer
+- [ ] Wire booking creation into proposals.respond (on accept)
+- [ ] Wire availability block into proposals.respond (on accept)
+- [ ] Add Nowbook It integration status card in Dashboard Settings tab
+- [ ] Show sync status on confirmed bookings
+- [ ] Tests for Nowbook It service
+
+## Design Overhaul — Light Cream Italian Vintage
+- [x] Update index.css: cream/parchment base, tomato-orange primary, amber gold accent, light not dark
+- [x] Update Home.tsx: light hero, loose watercolour-style SVG illustration, script + slab serif mix
+- [x] Update Dashboard.tsx: cream sidebar (not dark), orange accents, airy card layouts
+- [x] Update LeadForm.tsx: cream form with vintage badge header
+- [x] Update ProposalView.tsx: elegant parchment proposal document style
+- [x] Update ProposalBuilder.tsx: clean cream builder UI

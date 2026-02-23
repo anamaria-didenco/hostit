@@ -149,9 +149,9 @@ export default function ProposalBuilder() {
   );
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] font-dm">
+    <div className="min-h-screen bg-parchment font-dm">
       {/* Header */}
-      <div className="bg-brown text-cream h-14 flex items-center px-6 sticky top-0 z-40 border-b-4 border-tomato">
+      <div className="bg-ink text-cream h-14 flex items-center px-6 sticky top-0 z-40 border-b-4 border-tomato">
         <Link href="/dashboard">
           <Button variant="ghost" size="sm" className="text-cream/60 hover:text-cream font-bebas tracking-widest text-xs gap-1 mr-4">
             <ChevronLeft className="w-4 h-4" /> DASHBOARD
@@ -161,7 +161,7 @@ export default function ProposalBuilder() {
           <span className="font-alfa text-xl text-tomato">HOST</span>
           <span className="font-pacifico text-lg text-amber">it</span>
         </div>
-        <div className="font-bebas text-amber tracking-widest text-sm">PROPOSAL BUILDER</div>
+          <div className="font-playfair italic text-amber/90 text-sm">Proposal Builder</div>
         <div className="ml-auto flex items-center gap-3">
           {!savedProposal ? (
             <Button onClick={handleSave} disabled={createProposal.isPending}
@@ -188,14 +188,14 @@ export default function ProposalBuilder() {
           {lead && (
             <div className="bg-amber/10 border-2 border-amber/40 p-4">
               <div className="font-bebas text-xs tracking-widest text-amber mb-1">CREATING PROPOSAL FOR</div>
-              <div className="font-alfa text-lg text-brown">{lead.firstName} {lead.lastName}</div>
+              <div className="font-alfa text-lg text-ink">{lead.firstName} {lead.lastName}</div>
               <div className="font-dm text-sm text-muted-foreground">{lead.email} · {lead.eventType || "Event"}</div>
             </div>
           )}
 
           {/* Proposal Title & Intro */}
-          <div className="bg-white border-2 border-border p-5 shadow-sm">
-            <h2 className="font-alfa text-sm text-brown mb-4">PROPOSAL DETAILS</h2>
+          <div className="bg-cream-card border border-border p-5 shadow-sm">
+            <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">PROPOSAL DETAILS</h2>
             <div className="space-y-3">
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
@@ -212,8 +212,8 @@ export default function ProposalBuilder() {
           </div>
 
           {/* Event Details */}
-          <div className="bg-white border-2 border-border p-5 shadow-sm">
-            <h2 className="font-alfa text-sm text-brown mb-4">EVENT DETAILS</h2>
+          <div className="bg-cream-card border border-border p-5 shadow-sm">
+            <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">EVENT DETAILS</h2>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT DATE</label>
@@ -235,9 +235,9 @@ export default function ProposalBuilder() {
           </div>
 
           {/* Line Items */}
-          <div className="bg-white border-2 border-border p-5 shadow-sm">
+          <div className="bg-cream-card border border-border p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-alfa text-sm text-brown">PRICING</h2>
+              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">PRICING</h2>
               <Button size="sm" variant="ghost" onClick={() => setLineItems(prev => [...prev, { description: "", qty: 1, unitPrice: 0, total: 0 }])}
                 className="font-bebas tracking-widest text-xs text-tomato gap-1">
                 <Plus className="w-3 h-3" /> ADD ITEM
@@ -268,7 +268,7 @@ export default function ProposalBuilder() {
                     <Input type="number" value={item.unitPrice} onChange={e => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm h-9 text-right" />
                   </div>
-                  <div className="col-span-2 text-right font-dm text-sm font-semibold text-brown">
+                  <div className="col-span-2 text-right font-dm text-sm font-semibold text-ink">
                     ${item.total.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                   </div>
                   <div className="col-span-1 flex justify-center">
@@ -298,7 +298,7 @@ export default function ProposalBuilder() {
                 </div>
                 <span>${taxAmount.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between font-alfa text-lg text-brown border-t-2 border-border pt-2">
+              <div className="flex justify-between font-alfa text-lg text-ink border-t-2 border-border pt-2">
                 <span>TOTAL (NZD)</span>
                 <span className="text-tomato">${total.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
               </div>
@@ -309,21 +309,21 @@ export default function ProposalBuilder() {
                     className="rounded-none border-2 border-amber/40 focus-visible:ring-0 focus-visible:border-amber text-sm h-7 w-16 text-center bg-transparent" />
                   <span className="text-amber text-xs">%</span>
                 </div>
-                <span className="font-alfa text-lg text-brown">${deposit.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span className="font-alfa text-lg text-ink">${deposit.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
           </div>
 
           {/* Terms */}
-          <div className="bg-white border-2 border-border p-5 shadow-sm">
-            <h2 className="font-alfa text-sm text-brown mb-3">TERMS & CONDITIONS</h2>
+          <div className="bg-cream-card border border-border p-5 shadow-sm">
+            <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">TERMS & CONDITIONS</h2>
             <Textarea value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)}
               rows={5} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato resize-none text-sm font-dm" />
           </div>
 
           {/* Internal Notes */}
-          <div className="bg-white border-2 border-dashed border-border p-5">
-            <h2 className="font-alfa text-sm text-brown mb-2">INTERNAL NOTES <span className="font-dm text-xs text-muted-foreground normal-case">(not shown to client)</span></h2>
+          <div className="bg-cream-card border border-dashed border-border p-5">
+            <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">INTERNAL NOTES <span className="font-dm text-xs text-muted-foreground normal-case">(not shown to client)</span></h2>
             <Textarea value={internalNotes} onChange={e => setInternalNotes(e.target.value)}
               placeholder="Notes for your team only..." rows={2}
               className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato resize-none text-sm font-dm" />
@@ -333,15 +333,15 @@ export default function ProposalBuilder() {
         {/* Right: Summary & Actions */}
         <div className="space-y-4">
           {/* Expiry */}
-          <div className="bg-white border-2 border-border p-4 shadow-sm">
-            <h3 className="font-alfa text-sm text-brown mb-3">PROPOSAL EXPIRY</h3>
+          <div className="bg-cream-card border border-border p-4 shadow-sm">
+            <h3 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL EXPIRY</h3>
             <Input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
               className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm" />
             <p className="font-dm text-xs text-muted-foreground mt-2">Client must respond before this date</p>
           </div>
 
           {/* Summary */}
-          <div className="bg-brown text-cream p-5 shadow-sm">
+          <div className="bg-ink text-cream p-5 shadow-sm">
             <div className="font-bebas text-xs tracking-widest text-amber mb-3">PROPOSAL SUMMARY</div>
             <div className="space-y-2 font-dm text-sm">
               <div className="flex justify-between">
@@ -400,9 +400,9 @@ export default function ProposalBuilder() {
               {proposalUrl && (
                 <div className="bg-white border-2 border-border p-3">
                   <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">CLIENT LINK</div>
-                  <div className="font-dm text-xs text-muted-foreground break-all mb-2 bg-muted p-2">{proposalUrl}</div>
+                  <div className="font-dm text-xs text-muted-foreground break-all mb-2 bg-linen p-2 border border-border">{proposalUrl}</div>
                   <Button size="sm" onClick={() => { navigator.clipboard.writeText(proposalUrl); toast.success("Link copied!"); }}
-                    className="w-full bg-brown text-cream font-bebas tracking-widest rounded-none text-xs gap-1">
+                    className="w-full bg-ink text-cream font-bebas tracking-widest rounded-none text-xs gap-1">
                     <Copy className="w-3 h-3" /> COPY LINK
                   </Button>
                 </div>
