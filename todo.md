@@ -74,3 +74,12 @@
 - [x] Update LeadForm.tsx: cream form with vintage badge header
 - [x] Update ProposalView.tsx: elegant parchment proposal document style
 - [x] Update ProposalBuilder.tsx: clean cream builder UI
+
+## Dante NYC Rebrand
+- [x] Update index.css: deep forest green, warm cream, brushed gold, checkerboard motif
+- [x] Update index.html: Cormorant Garamond + Bebas Neue + Pinyon Script + DM Sans fonts
+- [x] Redesign Home.tsx: dark green hero, gold script, candlelit elegance
+- [x] Update Dashboard.tsx: dark green sidebar, gold accents, cream content area
+- [x] Update LeadForm.tsx: elegant cream form with green header
+- [x] Update ProposalView.tsx: dark green header, cream body, gold totals
+- [x] Update ProposalBuilder.tsx: green/cream split layout

@@ -43,64 +43,74 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   HOSTit Design System — Italian Vintage Poster
-   Inspired by: Fabiola's Spaghetti House + Eden-Roc Grill menu
-   Palette: warm parchment cream · tomato-orange · amber gold · ink brown
-   Typography: Alfa Slab One (display) · Playfair Display (editorial) ·
-               Bebas Neue (labels) · Pacifico (script logo) · DM Sans (body)
-───────────────────────────────────────────────────────────────────────────── */
+   HOSTit Design System — Dante NYC Aesthetic
+   Inspired by: Caffe Dante, New York City (Est. 1915)
+   Palette:
+     Forest Green  #2D4A3E  — primary brand, sidebar, headers, awnings
+     Warm Cream    #F5EFE0  — background, menus, cards
+     Brushed Gold  #C9A84C  — accents, script logo, dividers, borders
+     Near-Black    #1C1C1A  — body text, dark elements
+     Warm White    #FDFAF4  — card surfaces
+     Muted Sage    #8FA89E  — secondary text, subtle elements
+   Typography:
+     Cormorant Garamond — primary editorial serif (headings, display)
+     Pinyon Script      — gold script logo / decorative
+     IM Fell English    — vintage italic accent text
+     Bebas Neue         — uppercase label caps
+     DM Sans            — clean body / UI text
+─────────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  --radius: 0.15rem;
+  --radius: 0.1rem;
 
-  /* Parchment / warm cream background */
-  --background:             oklch(0.970 0.016 88);
-  --foreground:             oklch(0.20 0.045 42);
+  /* Warm cream background */
+  --background:             oklch(0.960 0.018 82);
+  --foreground:             oklch(0.155 0.025 40);
 
-  /* Cards: slightly brighter warm white */
-  --card:                   oklch(0.985 0.010 82);
-  --card-foreground:        oklch(0.20 0.045 42);
-  --popover:                oklch(0.985 0.010 82);
-  --popover-foreground:     oklch(0.20 0.045 42);
+  /* Card surfaces: warm white */
+  --card:                   oklch(0.980 0.012 80);
+  --card-foreground:        oklch(0.155 0.025 40);
+  --popover:                oklch(0.980 0.012 80);
+  --popover-foreground:     oklch(0.155 0.025 40);
 
-  /* Primary = Tomato-orange (Fabiola's bold red-orange) */
-  --primary:                oklch(0.555 0.215 30);
-  --primary-foreground:     oklch(0.99 0.004 85);
+  /* Primary = Forest Green */
+  --primary:                oklch(0.345 0.065 162);
+  --primary-foreground:     oklch(0.960 0.018 82);
 
-  /* Secondary = warm ink brown */
-  --secondary:              oklch(0.32 0.055 42);
-  --secondary-foreground:   oklch(0.970 0.016 88);
+  /* Secondary = warm near-black */
+  --secondary:              oklch(0.155 0.025 40);
+  --secondary-foreground:   oklch(0.960 0.018 82);
 
-  /* Muted = warm linen tan */
-  --muted:                  oklch(0.928 0.022 78);
-  --muted-foreground:       oklch(0.50 0.052 50);
+  /* Muted = warm sage / linen */
+  --muted:                  oklch(0.920 0.018 78);
+  --muted-foreground:       oklch(0.480 0.032 155);
 
-  /* Accent = amber / mustard gold (Fabiola's badge yellow) */
-  --accent:                 oklch(0.775 0.145 76);
-  --accent-foreground:      oklch(0.20 0.045 42);
+  /* Accent = Brushed Gold */
+  --accent:                 oklch(0.720 0.105 75);
+  --accent-foreground:      oklch(0.155 0.025 40);
 
-  --destructive:            oklch(0.545 0.225 22);
-  --destructive-foreground: oklch(0.99 0.004 85);
+  --destructive:            oklch(0.540 0.195 22);
+  --destructive-foreground: oklch(0.980 0.012 80);
 
-  --border:                 oklch(0.855 0.025 74);
-  --input:                  oklch(0.900 0.020 76);
-  --ring:                   oklch(0.555 0.215 30);
+  --border:                 oklch(0.870 0.022 76);
+  --input:                  oklch(0.920 0.018 78);
+  --ring:                   oklch(0.345 0.065 162);
 
-  --chart-1: oklch(0.555 0.215 30);
-  --chart-2: oklch(0.775 0.145 76);
-  --chart-3: oklch(0.32 0.055 42);
-  --chart-4: oklch(0.62 0.105 52);
-  --chart-5: oklch(0.70 0.082 62);
+  --chart-1: oklch(0.345 0.065 162);
+  --chart-2: oklch(0.720 0.105 75);
+  --chart-3: oklch(0.155 0.025 40);
+  --chart-4: oklch(0.480 0.032 155);
+  --chart-5: oklch(0.62 0.055 160);
 
-  /* Sidebar = warm linen (light, airy) */
-  --sidebar:                    oklch(0.952 0.022 80);
-  --sidebar-foreground:         oklch(0.20 0.045 42);
-  --sidebar-primary:            oklch(0.555 0.215 30);
-  --sidebar-primary-foreground: oklch(0.99 0.004 85);
-  --sidebar-accent:             oklch(0.928 0.028 76);
-  --sidebar-accent-foreground:  oklch(0.20 0.045 42);
-  --sidebar-border:             oklch(0.855 0.025 74);
-  --sidebar-ring:               oklch(0.555 0.215 30);
+  /* Sidebar = Forest Green (dark, like Dante's awning) */
+  --sidebar:                    oklch(0.285 0.058 162);
+  --sidebar-foreground:         oklch(0.920 0.018 78);
+  --sidebar-primary:            oklch(0.720 0.105 75);
+  --sidebar-primary-foreground: oklch(0.155 0.025 40);
+  --sidebar-accent:             oklch(0.345 0.065 162);
+  --sidebar-accent-foreground:  oklch(0.920 0.018 78);
+  --sidebar-border:             oklch(0.345 0.065 162);
+  --sidebar-ring:               oklch(0.720 0.105 75);
 }
 
 /* ── Base Layer ──────────────────────────────────────────────────────────── */
@@ -120,49 +130,43 @@
     @apply bg-background text-foreground;
     font-family: 'DM Sans', system-ui, sans-serif;
     font-size: 15px;
-    line-height: 1.6;
-    /* Subtle paper grain */
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.022'/%3E%3C/svg%3E");
+    line-height: 1.65;
   }
 
-  /* Display headings — Alfa Slab One (chunky vintage slab serif) */
+  /* Display headings — Cormorant Garamond (refined editorial serif) */
   h1 {
-    font-family: 'Alfa Slab One', Georgia, serif;
-    font-weight: 400;
-    letter-spacing: -0.02em;
-    line-height: 0.93;
-  }
-
-  h2 {
-    font-family: 'Alfa Slab One', Georgia, serif;
-    font-weight: 400;
-    letter-spacing: -0.015em;
+    font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     line-height: 1.0;
   }
 
-  /* Sub-headings — Playfair Display (elegant editorial serif) */
+  h2 {
+    font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    line-height: 1.1;
+  }
+
   h3 {
-    font-family: 'Playfair Display', Georgia, serif;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+    font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif;
+    font-weight: 500;
     line-height: 1.2;
   }
 
   h4, h5 {
-    font-family: 'Playfair Display', Georgia, serif;
-    font-weight: 600;
+    font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif;
+    font-weight: 500;
     line-height: 1.3;
   }
 
   h6 {
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    font-size: 0.75rem;
+    font-family: 'Bebas Neue', Impact, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    font-size: 0.72rem;
   }
 
-  /* Labels / caps — Bebas Neue */
   label {
     font-family: 'DM Sans', sans-serif;
     font-size: 0.8rem;
@@ -173,7 +177,6 @@
     font-family: 'DM Sans', sans-serif;
   }
 
-  /* Interactive cursors */
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),
@@ -182,266 +185,182 @@
   select:not(:disabled) {
     cursor: pointer;
   }
+
+  /* Thin gold horizontal rule */
+  hr {
+    border: none;
+    border-top: 1px solid oklch(0.720 0.105 75 / 0.35);
+    margin: 1.5rem 0;
+  }
 }
 
-/* ── HOSTit Utility Classes ──────────────────────────────────────────────── */
+/* ── HOSTit / Dante Utility Classes ─────────────────────────────────────── */
 @layer utilities {
 
   /* ── Font families ── */
-  .font-alfa     { font-family: 'Alfa Slab One', Georgia, serif; }
-  .font-playfair { font-family: 'Playfair Display', Georgia, serif; }
-  .font-bebas    { font-family: 'Bebas Neue', Impact, sans-serif; }
-  .font-pacifico { font-family: 'Pacifico', cursive; }
-  .font-dm       { font-family: 'DM Sans', system-ui, sans-serif; }
+  .font-cormorant  { font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif; }
+  .font-pinyon     { font-family: 'Pinyon Script', cursive; }
+  .font-fell       { font-family: 'IM Fell English', Georgia, serif; }
+  .font-bebas      { font-family: 'Bebas Neue', Impact, sans-serif; }
+  .font-dm         { font-family: 'DM Sans', system-ui, sans-serif; }
 
   /* ── Brand colours (text) ── */
-  .text-tomato    { color: oklch(0.555 0.215 30); }
-  .text-amber     { color: oklch(0.775 0.145 76); }
-  .text-ink       { color: oklch(0.20 0.045 42); }
-  .text-cream     { color: oklch(0.970 0.016 88); }
-  .text-linen     { color: oklch(0.928 0.022 78); }
-  .text-muted-ink { color: oklch(0.50 0.052 50); }
+  .text-forest     { color: oklch(0.345 0.065 162); }
+  .text-gold       { color: oklch(0.720 0.105 75); }
+  .text-ink        { color: oklch(0.155 0.025 40); }
+  .text-cream      { color: oklch(0.960 0.018 82); }
+  .text-sage       { color: oklch(0.480 0.032 155); }
+  .text-warm-white { color: oklch(0.980 0.012 80); }
 
   /* ── Brand colours (bg) ── */
-  .bg-tomato      { background-color: oklch(0.555 0.215 30); }
-  .bg-amber       { background-color: oklch(0.775 0.145 76); }
-  .bg-ink         { background-color: oklch(0.20 0.045 42); }
-  .bg-parchment   { background-color: oklch(0.970 0.016 88); }
-  .bg-linen       { background-color: oklch(0.928 0.022 78); }
-  .bg-cream-card  { background-color: oklch(0.985 0.010 82); }
+  .bg-forest       { background-color: oklch(0.345 0.065 162); }
+  .bg-forest-dark  { background-color: oklch(0.285 0.058 162); }
+  .bg-gold         { background-color: oklch(0.720 0.105 75); }
+  .bg-cream        { background-color: oklch(0.960 0.018 82); }
+  .bg-warm-white   { background-color: oklch(0.980 0.012 80); }
+  .bg-linen        { background-color: oklch(0.920 0.018 78); }
+  .bg-ink          { background-color: oklch(0.155 0.025 40); }
 
   /* ── Brand colours (border) ── */
-  .border-tomato  { border-color: oklch(0.555 0.215 30); }
-  .border-amber   { border-color: oklch(0.775 0.145 76); }
-  .border-ink     { border-color: oklch(0.20 0.045 42); }
+  .border-forest   { border-color: oklch(0.345 0.065 162); }
+  .border-gold     { border-color: oklch(0.720 0.105 75); }
+  .border-ink      { border-color: oklch(0.155 0.025 40); }
 
-  /* ── Vintage badge shapes ── */
-  /* Fabiola's hourglass / bowtie badge */
-  .badge-hourglass {
-    clip-path: polygon(0% 0%, 100% 0%, 85% 50%, 100% 100%, 0% 100%, 15% 50%);
-  }
-  /* Stamp / octagon */
-  .badge-stamp {
-    clip-path: polygon(8% 0%, 92% 0%, 100% 8%, 100% 92%, 92% 100%, 8% 100%, 0% 92%, 0% 8%);
-  }
-  /* Ribbon banner */
-  .badge-ribbon {
-    clip-path: polygon(0% 0%, 100% 0%, 95% 50%, 100% 100%, 0% 100%, 5% 50%);
-  }
-
-  /* ── Retro divider (· · ·  LABEL  · · ·) ── */
-  .retro-divider {
+  /* ── Gold divider line ── */
+  .gold-rule {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.20em;
-    font-size: 0.62rem;
+    font-size: 0.60rem;
     font-family: 'Bebas Neue', sans-serif;
-    color: oklch(0.50 0.052 50);
+    color: oklch(0.720 0.105 75 / 0.75);
   }
-  .retro-divider::before,
-  .retro-divider::after {
+  .gold-rule::before,
+  .gold-rule::after {
     content: '';
     flex: 1;
     height: 1px;
-    background: linear-gradient(to right, transparent, oklch(0.855 0.025 74), transparent);
+    background: linear-gradient(to right, transparent, oklch(0.720 0.105 75 / 0.55), transparent);
   }
 
-  /* ── Wavy sketch underline ── */
-  .underline-sketch {
-    text-decoration: underline;
-    text-decoration-style: wavy;
-    text-decoration-color: oklch(0.555 0.215 30);
-    text-underline-offset: 5px;
+  /* ── Checkerboard tile accent (Dante's floor) ── */
+  .checkerboard {
+    background-image:
+      repeating-conic-gradient(
+        oklch(0.155 0.025 40 / 0.06) 0% 25%,
+        transparent 0% 50%
+      );
+    background-size: 20px 20px;
   }
 
-  /* ── Tomato button ── */
-  .btn-tomato {
-    background-color: oklch(0.555 0.215 30);
-    color: oklch(0.99 0.004 85);
-    border-radius: 0;
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.14em;
-    transition: background-color 0.15s ease, transform 0.1s ease;
-  }
-  .btn-tomato:hover  { background-color: oklch(0.49 0.21 28); }
-  .btn-tomato:active { transform: scale(0.98); }
-
-  /* ── Ink (dark) button ── */
-  .btn-ink {
-    background-color: oklch(0.20 0.045 42);
-    color: oklch(0.970 0.016 88);
-    border-radius: 0;
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.14em;
-    transition: background-color 0.15s ease;
-  }
-  .btn-ink:hover { background-color: oklch(0.28 0.05 42); }
-
-  /* ── Ghost / outline button ── */
-  .btn-ghost-tomato {
-    background-color: transparent;
-    color: oklch(0.555 0.215 30);
-    border: 2px solid oklch(0.555 0.215 30);
-    border-radius: 0;
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.14em;
-    transition: background-color 0.15s ease, color 0.15s ease;
-  }
-  .btn-ghost-tomato:hover {
-    background-color: oklch(0.555 0.215 30);
-    color: oklch(0.99 0.004 85);
+  /* ── Gold script logo ── */
+  .logo-script {
+    font-family: 'Pinyon Script', cursive;
+    color: oklch(0.720 0.105 75);
+    line-height: 1;
   }
 
-  /* ── Status pill badges ── */
-  .status-new       { background: oklch(0.775 0.145 76 / 0.25); color: oklch(0.42 0.10 60); }
-  .status-quoted    { background: oklch(0.555 0.215 30 / 0.15); color: oklch(0.45 0.18 28); }
-  .status-confirmed { background: oklch(0.55 0.18 155 / 0.15); color: oklch(0.38 0.14 155); }
-  .status-cancelled { background: oklch(0.50 0.052 50 / 0.15); color: oklch(0.40 0.04 50); }
-
-  /* ── Vintage card with top-border accent ── */
-  .vintage-card {
-    background-color: oklch(0.985 0.010 82);
-    border: 1px solid oklch(0.855 0.025 74);
-    border-top: 3px solid oklch(0.555 0.215 30);
+  /* ── Vintage card with gold top border ── */
+  .dante-card {
+    background-color: oklch(0.980 0.012 80);
+    border: 1px solid oklch(0.870 0.022 76);
+    border-top: 2px solid oklch(0.720 0.105 75 / 0.60);
     border-radius: 0;
   }
 
-  /* ── Sidebar nav item ── */
+  /* ── Green sidebar nav item ── */
   .nav-item {
     display: flex;
     align-items: center;
     gap: 0.625rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.5rem 0.875rem;
     font-family: 'Bebas Neue', sans-serif;
     letter-spacing: 0.12em;
-    font-size: 0.82rem;
-    color: oklch(0.50 0.052 50);
+    font-size: 0.80rem;
+    color: oklch(0.720 0.018 155);
     transition: color 0.12s ease, background-color 0.12s ease;
     border-radius: 0;
     cursor: pointer;
   }
   .nav-item:hover {
-    color: oklch(0.555 0.215 30);
-    background-color: oklch(0.928 0.022 78);
+    color: oklch(0.720 0.105 75);
+    background-color: oklch(0.345 0.065 162 / 0.6);
   }
   .nav-item.active {
-    color: oklch(0.555 0.215 30);
-    background-color: oklch(0.555 0.215 30 / 0.10);
-    border-left: 3px solid oklch(0.555 0.215 30);
+    color: oklch(0.720 0.105 75);
+    background-color: oklch(0.345 0.065 162 / 0.5);
+    border-left: 2px solid oklch(0.720 0.105 75);
+    padding-left: calc(0.875rem - 2px);
   }
+
+  /* ── Status pill badges ── */
+  .status-new       { background: oklch(0.720 0.105 75 / 0.18); color: oklch(0.48 0.08 72); }
+  .status-quoted    { background: oklch(0.345 0.065 162 / 0.15); color: oklch(0.345 0.065 162); }
+  .status-confirmed { background: oklch(0.50 0.14 155 / 0.15); color: oklch(0.38 0.12 155); }
+  .status-cancelled { background: oklch(0.480 0.032 155 / 0.15); color: oklch(0.40 0.025 155); }
 
   /* ── Stat card ── */
   .stat-card {
-    background: oklch(0.985 0.010 82);
-    border: 1px solid oklch(0.855 0.025 74);
+    background: oklch(0.980 0.012 80);
+    border: 1px solid oklch(0.870 0.022 76);
+    border-top: 2px solid oklch(0.720 0.105 75 / 0.50);
     padding: 1.25rem;
   }
-  .stat-card-value {
-    font-family: 'Alfa Slab One', serif;
-    font-size: 2rem;
-    line-height: 1;
-    color: oklch(0.555 0.215 30);
-  }
-  .stat-card-label {
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.15em;
-    font-size: 0.65rem;
-    color: oklch(0.50 0.052 50);
-    text-transform: uppercase;
-    margin-top: 0.25rem;
-  }
 
-  /* ── Table styles ── */
-  .vintage-table th {
+  /* ── Forest green primary button ── */
+  .btn-forest {
+    background-color: oklch(0.345 0.065 162);
+    color: oklch(0.960 0.018 82);
+    border-radius: 0;
     font-family: 'Bebas Neue', sans-serif;
     letter-spacing: 0.12em;
-    font-size: 0.72rem;
-    color: oklch(0.50 0.052 50);
-    background: oklch(0.928 0.022 78);
-    border-bottom: 2px solid oklch(0.855 0.025 74);
-    padding: 0.6rem 1rem;
-    text-align: left;
-    text-transform: uppercase;
+    transition: background-color 0.15s ease;
   }
-  .vintage-table td {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.85rem;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid oklch(0.928 0.022 78);
-    color: oklch(0.20 0.045 42);
+  .btn-forest:hover { background-color: oklch(0.285 0.058 162); }
+
+  /* ── Gold outline button ── */
+  .btn-gold-outline {
+    background-color: transparent;
+    color: oklch(0.720 0.105 75);
+    border: 1px solid oklch(0.720 0.105 75 / 0.60);
+    border-radius: 0;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.12em;
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
-  .vintage-table tr:hover td {
-    background: oklch(0.970 0.016 88);
+  .btn-gold-outline:hover {
+    background-color: oklch(0.720 0.105 75 / 0.12);
   }
 
-  /* ── Input overrides ── */
-  .vintage-input {
-    background: oklch(0.985 0.010 82);
-    border: 1.5px solid oklch(0.855 0.025 74);
+  /* ── Brass/gold input focus ── */
+  .input-dante {
+    border: 1px solid oklch(0.870 0.022 76);
     border-radius: 0;
+    background: oklch(0.980 0.012 80);
     font-family: 'DM Sans', sans-serif;
-    font-size: 0.875rem;
-    color: oklch(0.20 0.045 42);
-    padding: 0.5rem 0.75rem;
     transition: border-color 0.15s ease;
   }
-  .vintage-input:focus {
+  .input-dante:focus {
     outline: none;
-    border-color: oklch(0.555 0.215 30);
-    box-shadow: 0 0 0 2px oklch(0.555 0.215 30 / 0.15);
-  }
-  .vintage-input::placeholder {
-    color: oklch(0.65 0.03 60);
+    border-color: oklch(0.720 0.105 75 / 0.70);
+    box-shadow: 0 0 0 2px oklch(0.720 0.105 75 / 0.12);
   }
 
-  /* ── Playfair italic quote ── */
-  .playfair-quote {
-    font-family: 'Playfair Display', serif;
-    font-style: italic;
-    font-size: 1.1rem;
-    color: oklch(0.50 0.052 50);
-    line-height: 1.5;
-  }
-}
+  /* ── Flex defaults ── */
+  .flex { min-width: 0; min-height: 0; }
 
-/* ── Scrollbar ────────────────────────────────────────────────────────────── */
-::-webkit-scrollbar       { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: oklch(0.928 0.022 78); }
-::-webkit-scrollbar-thumb { background: oklch(0.555 0.215 30); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: oklch(0.45 0.18 26); }
-
-/* ── Container & Flex defaults ────────────────────────────────────────────── */
-@layer components {
+  /* ── Container ── */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem;
-    padding-right: 1rem;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
   }
-  @media (min-width: 640px)  { .container { padding-left: 1.5rem; padding-right: 1.5rem; } }
-  @media (min-width: 1024px) { .container { padding-left: 2rem; padding-right: 2rem; max-width: 1280px; } }
-
-  .flex { min-height: 0; min-width: 0; }
-}
-
-/* ── Animations ───────────────────────────────────────────────────────────── */
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.animate-fade-in-up {
-  animation: fadeInUp 0.4s ease forwards;
-}
-
-@keyframes shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
-}
-.skeleton {
-  background: linear-gradient(90deg, oklch(0.928 0.022 78) 25%, oklch(0.950 0.018 80) 50%, oklch(0.928 0.022 78) 75%);
-  background-size: 800px 100%;
-  animation: shimmer 1.4s infinite linear;
+  @media (min-width: 640px)  { .container { max-width: 640px; } }
+  @media (min-width: 768px)  { .container { max-width: 768px; } }
+  @media (min-width: 1024px) { .container { max-width: 1024px; } }
+  @media (min-width: 1280px) { .container { max-width: 1280px; } }
 }
