@@ -94,3 +94,19 @@
 - [x] Map spreadsheet statuses to HOSTit lead statuses
 - [x] Insert 38 contacts and leads into the database
 - [x] Verify data appears in the dashboard enquiries tab
+
+## Send Email Feature
+- [ ] Add email tRPC procedure (sendEmail) to routers.ts using nodemailer/SMTP
+- [ ] Add Send Email button to each enquiry card in Dashboard
+- [ ] Add compose email modal with To, Subject, Body fields
+- [ ] Show sent confirmation toast
+- [ ] Write vitest test for sendEmail procedure
+
+## Menu Options (Food / Food & Beverages)
+- [ ] Add menuPackages table to schema (name, description, pricePerHead, type: food|beverage|package, ownerId)
+- [ ] Add menuItems table (name, description, price, packageId)
+- [ ] Add menu tRPC procedures: list, create, update, delete
+- [ ] Add Food and Food & Beverages tabs to ProposalBuilder
+- [ ] Add menu item builder UI (name, description, price per head)
+- [ ] Show selected menu packages on client-facing ProposalView
+- [ ] Write vitest tests for menu procedures

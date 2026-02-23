@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight,
-  Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy
+  Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
+  ChefHat, UtensilsCrossed, Wine, Trash2, Pencil
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -28,7 +29,7 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<"overview"|"leads"|"pipeline"|"calendar"|"contacts"|"settings">("overview");
+  const [tab, setTab] = useState<"overview"|"leads"|"pipeline"|"calendar"|"contacts"|"menu"|"settings">("overview");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -70,6 +71,25 @@ export default function Dashboard() {
   });
   const createSpace = trpc.spaces.create.useMutation({
     onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
+  });
+
+  // Menu packages
+  const { data: menuPackages, refetch: refetchMenuPackages } = trpc.menu.listPackages.useQuery(undefined, { enabled: !!user?.id });
+  const [menuForm, setMenuForm] = useState({ name: "", type: "food" as "food"|"beverages"|"food_and_beverages", description: "", pricePerHead: "" });
+  const [showMenuForm, setShowMenuForm] = useState(false);
+  const [editingPackageId, setEditingPackageId] = useState<number|null>(null);
+
+  const createMenuPackage = trpc.menu.createPackage.useMutation({
+    onSuccess: () => { refetchMenuPackages(); setShowMenuForm(false); setMenuForm({ name: "", type: "food", description: "", pricePerHead: "" }); toast.success("Menu package added!"); },
+    onError: () => toast.error("Failed to add menu package"),
+  });
+  const updateMenuPackage = trpc.menu.updatePackage.useMutation({
+    onSuccess: () => { refetchMenuPackages(); setEditingPackageId(null); setShowMenuForm(false); setMenuForm({ name: "", type: "food", description: "", pricePerHead: "" }); toast.success("Package updated!"); },
+    onError: () => toast.error("Failed to update package"),
+  });
+  const deleteMenuPackage = trpc.menu.deletePackage.useMutation({
+    onSuccess: () => { refetchMenuPackages(); toast.success("Package deleted"); },
+    onError: () => toast.error("Failed to delete package"),
   });
 
   const [settingsForm, setSettingsForm] = useState<any>(null);
@@ -180,6 +200,7 @@ export default function Dashboard() {
             { id: "pipeline", icon: <TrendingUp className="w-5 h-5" />, label: "PIPELINE" },
             { id: "calendar", icon: <Calendar className="w-5 h-5" />, label: "CALENDAR" },
             { id: "contacts", icon: <Users className="w-5 h-5" />, label: "CONTACTS" },
+            { id: "menu", icon: <ChefHat className="w-5 h-5" />, label: "MENU" },
             { id: "settings", icon: <Settings className="w-5 h-5" />, label: "SETTINGS" },
           ].map(item => (
             <button key={item.id} onClick={() => setTab(item.id as any)}
@@ -560,6 +581,133 @@ export default function Dashboard() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── MENU ─────────────────────────────────────────────────────── */}
+          {tab === "menu" && (
+            <div className="p-6 max-w-3xl">
+              <div className="gold-rule max-w-xs mb-3"><span>CATERING OPTIONS</span></div>
+              <div className="flex items-center justify-between mb-6">
+                <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Menu Packages</h1>
+                <Button onClick={() => { setEditingPackageId(null); setMenuForm({ name: "", type: "food", description: "", pricePerHead: "" }); setShowMenuForm(true); }}
+                  className="btn-forest font-bebas tracking-widest text-xs px-5 py-2.5 text-cream gap-1.5">
+                  <Plus className="w-3.5 h-3.5" /> ADD PACKAGE
+                </Button>
+              </div>
+
+              {showMenuForm && (
+                <div className="dante-card p-5 mb-6 border-2 border-gold/30">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">{editingPackageId ? 'EDIT PACKAGE' : 'NEW PACKAGE'}</h2>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PACKAGE NAME</label>
+                        <Input value={menuForm.name} onChange={e => setMenuForm(f => ({ ...f, name: e.target.value }))}
+                          placeholder="e.g. 3-Course Dinner" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-forest" />
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TYPE</label>
+                        <Select value={menuForm.type} onValueChange={(v: any) => setMenuForm(f => ({ ...f, type: v }))}>
+                          <SelectTrigger className="rounded-none border-2 focus:ring-0 focus:border-forest">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="food">Food</SelectItem>
+                            <SelectItem value="beverages">Beverages</SelectItem>
+                            <SelectItem value="food_and_beverages">Food & Beverages</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+                      <Textarea value={menuForm.description} onChange={e => setMenuForm(f => ({ ...f, description: e.target.value }))}
+                        placeholder="Describe what's included..." rows={2}
+                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-forest resize-none text-sm" />
+                    </div>
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE PER HEAD (NZD)</label>
+                      <Input type="number" value={menuForm.pricePerHead} onChange={e => setMenuForm(f => ({ ...f, pricePerHead: e.target.value }))}
+                        placeholder="65.00" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-forest" />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button type="button" onClick={() => {
+                        if (editingPackageId) {
+                          updateMenuPackage.mutate({ id: editingPackageId, name: menuForm.name, type: menuForm.type, description: menuForm.description || undefined, pricePerHead: menuForm.pricePerHead ? parseFloat(menuForm.pricePerHead) : undefined });
+                        } else {
+                          createMenuPackage.mutate({ name: menuForm.name, type: menuForm.type, description: menuForm.description || undefined, pricePerHead: menuForm.pricePerHead ? parseFloat(menuForm.pricePerHead) : undefined });
+                        }
+                      }} disabled={!menuForm.name || createMenuPackage.isPending || updateMenuPackage.isPending}
+                        className="btn-forest font-bebas tracking-widest text-xs px-6 py-2.5 text-cream">
+                        {editingPackageId ? 'UPDATE PACKAGE' : 'SAVE PACKAGE'}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setShowMenuForm(false)}
+                        className="border-2 border-border font-bebas tracking-widest text-xs rounded-none">
+                        CANCEL
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Food Packages */}
+              {['food', 'beverages', 'food_and_beverages'].map(type => {
+                const pkgs = (menuPackages ?? []).filter(p => p.type === type);
+                if (pkgs.length === 0 && !showMenuForm) return null;
+                const typeLabel = type === 'food' ? 'FOOD' : type === 'beverages' ? 'BEVERAGES' : 'FOOD & BEVERAGES';
+                const TypeIcon = type === 'food' ? UtensilsCrossed : type === 'beverages' ? Wine : ChefHat;
+                const iconColor = type === 'food' ? 'text-tomato' : type === 'beverages' ? 'text-gold' : 'text-forest';
+                return (
+                  <div key={type} className="mb-6">
+                    <div className={`flex items-center gap-2 mb-3`}>
+                      <TypeIcon className={`w-4 h-4 ${iconColor}`} />
+                      <span className={`font-bebas text-xs tracking-widest ${iconColor}`}>{typeLabel} PACKAGES</span>
+                    </div>
+                    {pkgs.length === 0 ? (
+                      <div className="text-center py-4 border border-dashed border-border">
+                        <p className="font-dm text-sm text-muted-foreground">No {typeLabel.toLowerCase()} packages yet.</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3">
+                        {pkgs.map(pkg => (
+                          <div key={pkg.id} className="dante-card p-4 flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="font-bebas text-sm tracking-wide text-ink">{pkg.name}</div>
+                              {pkg.description && <div className="font-dm text-xs text-muted-foreground mt-0.5">{pkg.description}</div>}
+
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              {pkg.pricePerHead && (
+                                <div className="font-alfa text-lg text-forest">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
+                              )}
+                              <button onClick={() => { setEditingPackageId(pkg.id); setMenuForm({ name: pkg.name, type: pkg.type as any, description: pkg.description ?? "", pricePerHead: pkg.pricePerHead ? String(pkg.pricePerHead) : "" }); setShowMenuForm(true); }}
+                                className="text-sage/50 hover:text-forest transition-colors">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => { if (confirm('Delete this package?')) deleteMenuPackage.mutate({ id: pkg.id }); }}
+                                className="text-sage/50 hover:text-tomato transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {(!menuPackages || menuPackages.length === 0) && !showMenuForm && (
+                <div className="text-center py-12 border-2 border-dashed border-border">
+                  <ChefHat className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
+                  <p className="font-cormorant text-xl text-muted-foreground">No menu packages yet</p>
+                  <p className="font-dm text-sm text-muted-foreground/60 mt-1 mb-4">Add Food, Beverages, or Food & Beverages packages to include in your proposals.</p>
+                  <Button onClick={() => setShowMenuForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-6 py-2.5 text-cream gap-1.5">
+                    <Plus className="w-3.5 h-3.5" /> ADD YOUR FIRST PACKAGE
+                  </Button>
                 </div>
               )}
             </div>

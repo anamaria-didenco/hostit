@@ -482,6 +482,152 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Menu Packages & Items ────────────────────────────────────────────────
+  menu: router({
+    // List all packages for the owner
+    listPackages: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { menuPackages } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(menuPackages)
+        .where(eq(menuPackages.ownerId, ctx.user.id))
+        .orderBy(asc(menuPackages.type), asc(menuPackages.name));
+    }),
+    // List items for a specific package
+    listItems: protectedProcedure
+      .input(z.object({ packageId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuItems } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(menuItems)
+          .where(and(eq(menuItems.packageId, input.packageId), eq(menuItems.ownerId, ctx.user.id)))
+          .orderBy(asc(menuItems.sortOrder), asc(menuItems.id));
+      }),
+    // Create a package
+    createPackage: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        type: z.enum(['food', 'beverages', 'food_and_beverages']),
+        pricePerHead: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuPackages } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [result] = await db.insert(menuPackages).values({
+          ownerId: ctx.user.id,
+          name: input.name,
+          description: input.description ?? null,
+          type: input.type,
+          pricePerHead: input.pricePerHead ? String(input.pricePerHead) : null,
+        });
+        return { id: (result as any).insertId };
+      }),
+    // Update a package
+    updatePackage: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        type: z.enum(['food', 'beverages', 'food_and_beverages']).optional(),
+        pricePerHead: z.number().nullable().optional(),
+        isActive: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuPackages } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const updates: Record<string, unknown> = {};
+        if (input.name !== undefined) updates.name = input.name;
+        if (input.description !== undefined) updates.description = input.description;
+        if (input.type !== undefined) updates.type = input.type;
+        if (input.pricePerHead !== undefined) updates.pricePerHead = input.pricePerHead !== null ? String(input.pricePerHead) : null;
+        if (input.isActive !== undefined) updates.isActive = input.isActive;
+        await db.update(menuPackages).set(updates).where(and(eq(menuPackages.id, input.id), eq(menuPackages.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    // Delete a package
+    deletePackage: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuPackages, menuItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(menuItems).where(and(eq(menuItems.packageId, input.id), eq(menuItems.ownerId, ctx.user.id)));
+        await db.delete(menuPackages).where(and(eq(menuPackages.id, input.id), eq(menuPackages.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    // Add an item to a package
+    addItem: protectedProcedure
+      .input(z.object({
+        packageId: z.number(),
+        name: z.string().min(1),
+        description: z.string().optional(),
+        dietaryNotes: z.string().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuItems } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [result] = await db.insert(menuItems).values({
+          packageId: input.packageId,
+          ownerId: ctx.user.id,
+          name: input.name,
+          description: input.description ?? null,
+          dietaryNotes: input.dietaryNotes ?? null,
+          sortOrder: input.sortOrder ?? 0,
+        });
+        return { id: (result as any).insertId };
+      }),
+    // Update an item
+    updateItem: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        dietaryNotes: z.string().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const updates: Record<string, unknown> = {};
+        if (input.name !== undefined) updates.name = input.name;
+        if (input.description !== undefined) updates.description = input.description;
+        if (input.dietaryNotes !== undefined) updates.dietaryNotes = input.dietaryNotes;
+        if (input.sortOrder !== undefined) updates.sortOrder = input.sortOrder;
+        await db.update(menuItems).set(updates).where(and(eq(menuItems.id, input.id), eq(menuItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    // Delete an item
+    deleteItem: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(menuItems).where(and(eq(menuItems.id, input.id), eq(menuItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
   // ─── Dashboard ─────────────────────────────────────────────────────────────
   dashboard: router({
     stats: protectedProcedure.query(async ({ ctx }) => {

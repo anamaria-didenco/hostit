@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle } from "lucide-react";
+import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -50,6 +50,19 @@ export default function ProposalBuilder() {
 
   const [savedProposal, setSavedProposal] = useState<any>(null);
   const [sent, setSent] = useState(false);
+
+  // Menu packages
+  const { data: menuPackages } = trpc.menu.listPackages.useQuery(undefined, { enabled: !!user });
+  const [selectedMenuPackageIds, setSelectedMenuPackageIds] = useState<number[]>([]);
+  const [menuSectionOpen, setMenuSectionOpen] = useState(true);
+
+  const toggleMenuPackage = (id: number) => {
+    setSelectedMenuPackageIds(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
+  };
+
+  const selectedPackages = (menuPackages ?? []).filter(p => selectedMenuPackageIds.includes(p.id));
 
   useEffect(() => {
     if (lead) {
@@ -104,6 +117,18 @@ export default function ProposalBuilder() {
 
   const handleSave = () => {
     if (!leadId) return toast.error("No lead selected");
+    // Build enriched line items: include selected menu packages as line items
+    const menuLineItems = selectedPackages.map(pkg => ({
+      description: `${pkg.type === 'food' ? '🍽 Food Package' : pkg.type === 'beverages' ? '🍷 Beverages Package' : '🍽🍷 Food & Beverages Package'}: ${pkg.name}`,
+      qty: guestCount ? parseInt(guestCount) : 1,
+      unitPrice: pkg.pricePerHead ? Number(pkg.pricePerHead) : 0,
+      total: pkg.pricePerHead ? Number(pkg.pricePerHead) * (guestCount ? parseInt(guestCount) : 1) : 0,
+    }));
+    const allLineItems = [...lineItems, ...menuLineItems];
+    const allSubtotal = allLineItems.reduce((s, i) => s + i.total, 0);
+    const allTax = (allSubtotal * taxPercent) / 100;
+    const allTotal = allSubtotal + allTax;
+    const allDeposit = (allTotal * depositPercent) / 100;
     createProposal.mutate({
       leadId,
       title,
@@ -111,13 +136,13 @@ export default function ProposalBuilder() {
       eventDate: eventDate || undefined,
       guestCount: guestCount ? parseInt(guestCount) : undefined,
       spaceName: spaceName || undefined,
-      lineItems,
-      subtotalNzd: subtotal,
+      lineItems: allLineItems,
+      subtotalNzd: allSubtotal,
       taxPercent,
-      taxNzd: taxAmount,
-      totalNzd: total,
+      taxNzd: allTax,
+      totalNzd: allTotal,
       depositPercent,
-      depositNzd: deposit,
+      depositNzd: allDeposit,
       termsAndConditions,
       internalNotes: internalNotes || undefined,
       expiresAt: expiresAt || undefined,
@@ -232,6 +257,151 @@ export default function ProposalBuilder() {
                   className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
               </div>
             </div>
+          </div>
+
+          {/* Menu Packages */}
+          <div className="bg-cream-card border border-border shadow-sm">
+            <button
+              onClick={() => setMenuSectionOpen(o => !o)}
+              className="w-full flex items-center justify-between p-5 hover:bg-amber/5 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <ChefHat className="w-4 h-4 text-amber" />
+                <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">MENU OPTIONS</h2>
+                {selectedMenuPackageIds.length > 0 && (
+                  <span className="bg-tomato text-white font-bebas text-xs px-2 py-0.5 rounded-full">{selectedMenuPackageIds.length} SELECTED</span>
+                )}
+              </div>
+              {menuSectionOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            </button>
+
+            {menuSectionOpen && (
+              <div className="px-5 pb-5">
+                {!menuPackages || menuPackages.length === 0 ? (
+                  <div className="text-center py-6 border-2 border-dashed border-border">
+                    <ChefHat className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                    <p className="font-dm text-sm text-muted-foreground">No menu packages yet.</p>
+                    <p className="font-dm text-xs text-muted-foreground/60 mt-1">Add Food or Beverage packages in Dashboard → Menu.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Food Packages */}
+                    {menuPackages.filter(p => p.type === 'food').length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <UtensilsCrossed className="w-3.5 h-3.5 text-tomato" />
+                          <span className="font-bebas text-xs tracking-widest text-tomato">FOOD PACKAGES</span>
+                        </div>
+                        <div className="grid gap-2">
+                          {menuPackages.filter(p => p.type === 'food').map(pkg => (
+                            <button
+                              key={pkg.id}
+                              onClick={() => toggleMenuPackage(pkg.id)}
+                              className={`w-full text-left p-3 border-2 transition-all ${
+                                selectedMenuPackageIds.includes(pkg.id)
+                                  ? 'border-tomato bg-tomato/5'
+                                  : 'border-border hover:border-tomato/40'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="font-bebas text-sm tracking-wide text-ink">{pkg.name}</div>
+                                  {pkg.description && <div className="font-dm text-xs text-muted-foreground mt-0.5">{pkg.description}</div>}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  {pkg.pricePerHead && (
+                                    <div className="font-alfa text-sm text-tomato">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
+                                  )}
+                                  {selectedMenuPackageIds.includes(pkg.id) && (
+                                    <div className="font-bebas text-xs text-tomato tracking-widest mt-0.5">✓ SELECTED</div>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Beverages Packages */}
+                    {menuPackages.filter(p => p.type === 'beverages').length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Wine className="w-3.5 h-3.5 text-amber" />
+                          <span className="font-bebas text-xs tracking-widest text-amber">BEVERAGES PACKAGES</span>
+                        </div>
+                        <div className="grid gap-2">
+                          {menuPackages.filter(p => p.type === 'beverages').map(pkg => (
+                            <button
+                              key={pkg.id}
+                              onClick={() => toggleMenuPackage(pkg.id)}
+                              className={`w-full text-left p-3 border-2 transition-all ${
+                                selectedMenuPackageIds.includes(pkg.id)
+                                  ? 'border-amber bg-amber/5'
+                                  : 'border-border hover:border-amber/40'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="font-bebas text-sm tracking-wide text-ink">{pkg.name}</div>
+                                  {pkg.description && <div className="font-dm text-xs text-muted-foreground mt-0.5">{pkg.description}</div>}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  {pkg.pricePerHead && (
+                                    <div className="font-alfa text-sm text-amber">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
+                                  )}
+                                  {selectedMenuPackageIds.includes(pkg.id) && (
+                                    <div className="font-bebas text-xs text-amber tracking-widest mt-0.5">✓ SELECTED</div>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Food & Beverages Packages */}
+                    {menuPackages.filter(p => p.type === 'food_and_beverages').length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <ChefHat className="w-3.5 h-3.5 text-green-700" />
+                          <span className="font-bebas text-xs tracking-widest text-green-700">FOOD & BEVERAGES PACKAGES</span>
+                        </div>
+                        <div className="grid gap-2">
+                          {menuPackages.filter(p => p.type === 'food_and_beverages').map(pkg => (
+                            <button
+                              key={pkg.id}
+                              onClick={() => toggleMenuPackage(pkg.id)}
+                              className={`w-full text-left p-3 border-2 transition-all ${
+                                selectedMenuPackageIds.includes(pkg.id)
+                                  ? 'border-green-600 bg-green-50'
+                                  : 'border-border hover:border-green-600/40'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="font-bebas text-sm tracking-wide text-ink">{pkg.name}</div>
+                                  {pkg.description && <div className="font-dm text-xs text-muted-foreground mt-0.5">{pkg.description}</div>}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  {pkg.pricePerHead && (
+                                    <div className="font-alfa text-sm text-green-700">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
+                                  )}
+                                  {selectedMenuPackageIds.includes(pkg.id) && (
+                                    <div className="font-bebas text-xs text-green-700 tracking-widest mt-0.5">✓ SELECTED</div>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Line Items */}

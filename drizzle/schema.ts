@@ -189,3 +189,32 @@ export const leadActivity = mysqlTable("lead_activity", {
 });
 
 export type LeadActivity = typeof leadActivity.$inferSelect;
+
+// ─── Menu Packages ────────────────────────────────────────────────────────────
+export const menuPackages = mysqlTable("menu_packages", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("ownerId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  type: mysqlEnum("type", ["food", "beverages", "food_and_beverages"]).default("food").notNull(),
+  pricePerHead: decimal("pricePerHead", { precision: 10, scale: 2 }),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type MenuPackage = typeof menuPackages.$inferSelect;
+export type InsertMenuPackage = typeof menuPackages.$inferInsert;
+
+// ─── Menu Items ───────────────────────────────────────────────────────────────
+export const menuItems = mysqlTable("menu_items", {
+  id: int("id").autoincrement().primaryKey(),
+  packageId: int("packageId").notNull(),
+  ownerId: int("ownerId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  dietaryNotes: varchar("dietaryNotes", { length: 255 }),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type MenuItem = typeof menuItems.$inferSelect;
+export type InsertMenuItem = typeof menuItems.$inferInsert;
