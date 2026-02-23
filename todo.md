@@ -89,3 +89,8 @@
 - [ ] Fix Home.tsx — cream/gold text on dark green hero, dark ink on cream sections
 - [ ] Fix Dashboard.tsx — cream text on forest sidebar/nav, dark ink on cream content
 - [ ] Fix LeadForm.tsx, ProposalView.tsx, ProposalBuilder.tsx contrast
+
+## Seed Real Events from events.xlsx
+- [x] Map spreadsheet statuses to HOSTit lead statuses
+- [x] Insert 38 contacts and leads into the database
+- [x] Verify data appears in the dashboard enquiries tab
