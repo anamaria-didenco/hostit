@@ -76,7 +76,7 @@ export default function Home() {
               Managed.
             </h1>
 
-            <p className="font-dm text-cream/90 text-lg leading-relaxed mb-10 max-w-xl">
+            <p className="font-dm text-cream text-lg leading-relaxed mb-10 max-w-xl">
               HOSTit is the event enquiry and proposal platform built for New Zealand restaurants, bars, and function venues. Capture leads, build stunning proposals, and confirm bookings — all in one place.
             </p>
 
