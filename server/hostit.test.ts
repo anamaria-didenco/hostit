@@ -378,3 +378,54 @@ describe("follow-up dates", () => {
     await caller.leads.delete({ id: lead.id });
   });
 });
+
+// ─── Bulk Status Update Tests ─────────────────────────────────────────────────
+describe("bulk status update", () => {
+  it("leads.bulkUpdateStatus > updates multiple leads at once", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    // Create 3 new leads
+    const lead1 = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "Bulk1", email: "bulk1@test.com" });
+    const lead2 = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "Bulk2", email: "bulk2@test.com" });
+    const lead3 = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "Bulk3", email: "bulk3@test.com" });
+    expect(lead1.status).toBe("new");
+    // Bulk update all 3 to "contacted"
+    const result = await caller.leads.bulkUpdateStatus({ ids: [lead1.id, lead2.id, lead3.id], status: "contacted" });
+    expect(result.updated).toBe(3);
+    // Verify each was updated
+    const fetched1 = await caller.leads.get({ id: lead1.id });
+    const fetched2 = await caller.leads.get({ id: lead2.id });
+    expect(fetched1?.status).toBe("contacted");
+    expect(fetched2?.status).toBe("contacted");
+    // Cleanup
+    await caller.leads.delete({ id: lead1.id });
+    await caller.leads.delete({ id: lead2.id });
+    await caller.leads.delete({ id: lead3.id });
+  });
+
+  it("leads.bulkUpdateStatus > rejects empty ids array", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.leads.bulkUpdateStatus({ ids: [], status: "contacted" })).rejects.toThrow();
+  });
+
+  it("leads.bulkUpdateStatus > requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.leads.bulkUpdateStatus({ ids: [1], status: "contacted" })).rejects.toThrow();
+  });
+
+  it("leads.followUpsByMonth > returns leads with followUpDate in the given month", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const now = new Date();
+    const lead = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "CalLead", email: "callead@test.com" });
+    const thisMonthDate = new Date(now.getFullYear(), now.getMonth(), 15);
+    await caller.leads.setFollowUpDate({ id: lead.id, followUpDate: thisMonthDate.toISOString().split("T")[0] });
+    const results = await caller.leads.followUpsByMonth({ year: now.getFullYear(), month: now.getMonth() + 1 });
+    const ids = results.map((l: any) => l.id);
+    expect(ids).toContain(lead.id);
+    // Cleanup
+    await caller.leads.delete({ id: lead.id });
+  });
+});

@@ -134,3 +134,18 @@
 - [x] Show follow-up date badge on lead list items (overdue = red, upcoming = gold)
 - [x] Add overdue follow-ups section to Dashboard Overview tab
 - [x] Write vitest tests for overdue query and setFollowUpDate procedure (5 tests, all passing)
+
+## Bulk Status Update
+- [x] Add leads.bulkUpdateStatus tRPC procedure (accepts array of lead IDs + target status)
+- [x] Add checkbox selection state to Leads Inbox (selectedLeadIds set)
+- [x] Add checkboxes to each lead list item
+- [x] Add "Select All" / "Deselect All" toggle in the list header
+- [x] Add floating bulk-action toolbar when 1+ leads selected (status picker + count + clear)
+- [x] Invalidate leads list and overdue query after bulk update
+- [x] Write vitest tests for bulkUpdateStatus procedure (4 tests, all passing)
+
+## Auto-Advance on Email Reply
+- [x] When email is sent from compose modal: auto-update lead status from "new" → "contacted"
+- [x] Auto-set follow-up date 3 days out if none already set when email is sent
+- [x] Show the replied lead on the Calendar tab (gold dot + This Month's Follow-Ups list)
+- [x] Calendar tab: follow-up dates shown as gold dots alongside booking dots (green)

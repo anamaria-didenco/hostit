@@ -318,6 +318,53 @@ export const appRouter = router({
         )
       ).orderBy(leads.followUpDate);
     }),
+    // Returns leads with a followUpDate in the given month (for calendar display)
+    followUpsByMonth: protectedProcedure
+      .input(z.object({ year: z.number(), month: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { leads } = await import('../drizzle/schema');
+        const { eq, and, gte, lt, isNotNull } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const start = new Date(input.year, input.month - 1, 1);
+        const end = new Date(input.year, input.month, 1);
+        return db.select().from(leads).where(
+          and(
+            eq(leads.ownerId, ctx.user.id),
+            isNotNull(leads.followUpDate),
+            gte(leads.followUpDate, start),
+            lt(leads.followUpDate, end),
+          )
+        ).orderBy(leads.followUpDate);
+      }),
+    // Bulk update status for multiple leads
+    bulkUpdateStatus: protectedProcedure
+      .input(z.object({
+        ids: z.array(z.number()).min(1),
+        status: z.enum(['new', 'contacted', 'proposal_sent', 'negotiating', 'booked', 'lost', 'cancelled']),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb, addLeadActivity } = await import('./db');
+        const { leads } = await import('../drizzle/schema');
+        const { eq, and, inArray } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { updated: 0 };
+        // Only update leads owned by this user
+        await db.update(leads)
+          .set({ status: input.status })
+          .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
+        // Log activity for each lead
+        await Promise.all(input.ids.map(leadId =>
+          addLeadActivity({
+            leadId,
+            ownerId: ctx.user.id,
+            type: 'status_change',
+            content: `Bulk status update: changed to ${input.status}`,
+          })
+        ));
+        return { updated: input.ids.length };
+      }),
   }),
   // ─── Proposals ─────────────────────────────────────────────────────────────
   proposals: router({
@@ -729,8 +776,28 @@ export const appRouter = router({
             type: 'email',
             content: `Email sent to ${input.to}\n\nSubject: ${input.subject}\n\n${input.body}`,
           });
+          // Auto-advance: if lead is still "new", move it to "contacted"
+          const { leads } = await import('../drizzle/schema');
+          const [currentLead] = await db.select({ status: leads.status, followUpDate: leads.followUpDate })
+            .from(leads).where(eq(leads.id, input.leadId)).limit(1);
+          if (currentLead?.status === 'new') {
+            // Set status to contacted and set a default follow-up in 3 days if none set
+            const followUpDate = currentLead.followUpDate ?? (() => {
+              const d = new Date();
+              d.setDate(d.getDate() + 3);
+              return d;
+            })();
+            await db.update(leads)
+              .set({ status: 'contacted', followUpDate })
+              .where(eq(leads.id, input.leadId));
+            await db.insert(leadActivity).values({
+              leadId: input.leadId,
+              ownerId: ctx.user.id,
+              type: 'status_change',
+              content: `Status auto-advanced to contacted after email reply. Follow-up set for ${followUpDate.toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}.`,
+            });
+          }
         }
-
         return { success: true };
       }),
   }),

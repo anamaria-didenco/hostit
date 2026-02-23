@@ -101,6 +101,8 @@ export default function Dashboard() {
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   const [showAddSpace, setShowAddSpace] = useState(false);
@@ -128,9 +130,23 @@ export default function Dashboard() {
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
   );
+  const { data: monthFollowUps } = trpc.leads.followUpsByMonth.useQuery(
+    { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
+    { enabled: !!user?.id }
+  );
 
   const updateStatus = trpc.leads.updateStatus.useMutation({
     onSuccess: () => { refetchLeads(); if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id }); toast.success("Status updated"); },
+  });
+  const bulkUpdateStatus = trpc.leads.bulkUpdateStatus.useMutation({
+    onSuccess: (data) => {
+      refetchLeads();
+      refetchOverdue();
+      setSelectedLeadIds(new Set());
+      setBulkSelectMode(false);
+      toast.success(`${data.updated} lead${data.updated === 1 ? '' : 's'} updated`);
+    },
+    onError: (err) => toast.error(err.message || 'Bulk update failed'),
   });
   const addNote = trpc.leads.addNote.useMutation({
     onSuccess: () => { setNoteText(""); utils.leads.getActivity.invalidate({ leadId: selectedLead?.id }); toast.success("Note added"); },
@@ -159,11 +175,21 @@ export default function Dashboard() {
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [templateForm, setTemplateForm] = useState({ name: "", subject: "", body: "" });
   const sendEmail = trpc.email.send.useMutation({
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       setShowEmailModal(false);
       setEmailForm({ subject: "", body: "" });
-      toast.success("Email sent successfully!");
+      // If lead was "new", it's now "contacted" — update local state and notify
+      if (selectedLead?.status === 'new') {
+        const followUp = new Date();
+        followUp.setDate(followUp.getDate() + 3);
+        setSelectedLead((prev: any) => prev ? { ...prev, status: 'contacted', followUpDate: followUp } : prev);
+        toast.success('Email sent! Lead moved to Contacted — follow-up set for 3 days from now.');
+      } else {
+        toast.success('Email sent successfully!');
+      }
       if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
+      refetchLeads();
+      refetchOverdue();
     },
     onError: (err) => toast.error(err.message || "Failed to send email"),
   });
@@ -211,6 +237,7 @@ export default function Dashboard() {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
   const bookingDays = new Set((monthBookings ?? []).map((b: any) => new Date(b.eventDate).getDate()));
+  const followUpDays = new Set((monthFollowUps ?? []).map((l: any) => new Date(l.followUpDate).getDate()));
 
   const leadFormUrl = venueSettings?.slug
     ? `${window.location.origin}/enquire/${venueSettings.slug}`
@@ -428,7 +455,16 @@ export default function Dashboard() {
               {/* Lead List */}
               <div className={`${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-gold/15 bg-warm-white flex-shrink-0`}>
                 <div className="p-4 border-b border-gold/15">
-                  <h2 className="font-cormorant text-2xl font-semibold text-ink mb-3">Leads Inbox</h2>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="font-cormorant text-2xl font-semibold text-ink">Leads Inbox</h2>
+                    <button
+                      onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
+                      className={`font-bebas text-xs tracking-widest px-2.5 py-1 border transition-colors ${
+                        bulkSelectMode ? 'bg-forest text-cream border-forest' : 'border-gold/40 text-ink/60 hover:border-gold hover:text-ink'
+                      }`}>
+                      {bulkSelectMode ? 'CANCEL' : 'SELECT'}
+                    </button>
+                  </div>
                   <div className="relative mb-2">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/60" />
                     <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
@@ -446,6 +482,20 @@ export default function Dashboard() {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* Select All bar — only visible in bulk mode */}
+                {bulkSelectMode && filteredLeads.length > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2 bg-linen border-b border-gold/15">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox"
+                        checked={selectedLeadIds.size === filteredLeads.length}
+                        onChange={(e) => setSelectedLeadIds(e.target.checked ? new Set(filteredLeads.map((l: any) => l.id)) : new Set())}
+                        className="w-4 h-4 accent-forest cursor-pointer" />
+                      <span className="font-bebas text-xs tracking-widest text-ink/70">
+                        {selectedLeadIds.size > 0 ? `${selectedLeadIds.size} SELECTED` : 'SELECT ALL'}
+                      </span>
+                    </label>
+                  </div>
+                )}
                 <div className="flex-1 overflow-auto divide-y divide-border/40">
                   {filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
@@ -453,8 +503,25 @@ export default function Dashboard() {
                       <p className="font-dm text-sage text-sm">No leads found</p>
                     </div>
                   ) : filteredLeads.map((lead: any) => (
-                    <button key={lead.id} onClick={() => setSelectedLead(lead)}
-                      className={`w-full p-4 text-left hover:bg-linen transition-colors ${selectedLead?.id === lead.id ? "bg-forest/5 border-l-2 border-gold" : "border-l-2 border-transparent"}`}>
+                    <div key={lead.id} className={`flex items-stretch ${
+                      selectedLeadIds.has(lead.id) ? 'bg-forest/5' : ''
+                    }`}>
+                      {bulkSelectMode && (
+                        <label className="flex items-center px-3 cursor-pointer">
+                          <input type="checkbox"
+                            checked={selectedLeadIds.has(lead.id)}
+                            onChange={(e) => {
+                              setSelectedLeadIds(prev => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(lead.id); else next.delete(lead.id);
+                                return next;
+                              });
+                            }}
+                            className="w-4 h-4 accent-forest cursor-pointer" />
+                        </label>
+                      )}
+                    <button onClick={() => { if (!bulkSelectMode) setSelectedLead(lead); }}
+                      className={`flex-1 p-4 text-left hover:bg-linen transition-colors ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5 border-l-2 border-gold" : "border-l-2 border-transparent"}`}>
                       <div className="flex items-start justify-between mb-1">
                         <div className="font-cormorant font-semibold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
                         <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border flex-shrink-0 ml-2 ${PIPELINE_STAGES.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
@@ -483,10 +550,40 @@ export default function Dashboard() {
                         })()}
                       </div>
                     </button>
+                    </div>
                   ))}
                 </div>
               </div>
-
+              {/* Floating Bulk Action Toolbar */}
+              {bulkSelectMode && selectedLeadIds.size > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
+                  <span className="font-bebas tracking-widest text-sm text-gold">{selectedLeadIds.size} LEAD{selectedLeadIds.size !== 1 ? 'S' : ''}</span>
+                  <span className="text-cream/30">|</span>
+                  <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
+                  <div className="flex items-center gap-1.5">
+                    {PIPELINE_STAGES.map(s => (
+                      <button key={s.key}
+                        onClick={() => bulkUpdateStatus.mutate({ ids: Array.from(selectedLeadIds), status: s.key as any })}
+                        disabled={bulkUpdateStatus.isPending}
+                        className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border transition-colors hover:bg-gold hover:text-ink hover:border-gold disabled:opacity-50 ${
+                          s.key === 'new' ? 'border-cream/30 text-cream/80' :
+                          s.key === 'contacted' ? 'border-blue-400/50 text-blue-300' :
+                          s.key === 'proposal_sent' ? 'border-purple-400/50 text-purple-300' :
+                          s.key === 'negotiating' ? 'border-amber-400/50 text-amber-300' :
+                          s.key === 'booked' ? 'border-emerald-400/50 text-emerald-300' :
+                          s.key === 'lost' ? 'border-red-400/50 text-red-300' :
+                          'border-cream/20 text-cream/50'
+                        }`}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => { setSelectedLeadIds(new Set()); setBulkSelectMode(false); }}
+                    className="ml-2 text-cream/50 hover:text-cream font-bebas text-xs tracking-widest">
+                    CLEAR
+                  </button>
+                </div>
+              )}
               {/* Lead Detail */}
               {selectedLead ? (
                 <div className="flex-1 overflow-auto p-6">
@@ -765,19 +862,24 @@ export default function Dashboard() {
                   {[...Array(daysInMonth)].map((_, i) => {
                     const day = i + 1;
                     const hasBooking = bookingDays.has(day);
+                    const hasFollowUp = followUpDays.has(day);
                     const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
                     return (
                       <div key={day} className={`aspect-square flex flex-col items-center justify-center text-sm font-dm border transition-colors
-                        ${hasBooking ? "bg-forest/10 border-forest" : isToday ? "border-gold bg-gold/10" : "border-transparent hover:bg-linen"}`}>
-                        <span className={`${hasBooking ? "text-forest font-bold" : isToday ? "text-ink font-semibold" : "text-foreground"}`}>{day}</span>
-                        {hasBooking && <div className="w-1.5 h-1.5 bg-forest rounded-full mt-0.5" />}
+                        ${hasBooking ? "bg-forest/10 border-forest" : hasFollowUp ? "bg-gold/10 border-gold" : isToday ? "border-gold bg-gold/5" : "border-transparent hover:bg-linen"}`}>
+                        <span className={`${hasBooking ? "text-forest font-bold" : hasFollowUp ? "text-amber-700 font-semibold" : isToday ? "text-ink font-semibold" : "text-foreground"}`}>{day}</span>
+                        <div className="flex gap-0.5 mt-0.5">
+                          {hasBooking && <div className="w-1.5 h-1.5 bg-forest rounded-full" />}
+                          {hasFollowUp && <div className="w-1.5 h-1.5 bg-gold rounded-full" />}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
                 <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gold/15 text-xs font-dm">
                   <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-forest/10 border border-forest" /><span>Booking</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gold/10 border border-gold" /><span>Today</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gold/10 border border-gold" /><span>Follow-Up</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gold/5 border border-gold" /><span>Today</span></div>
                 </div>
               </div>
 
@@ -810,9 +912,39 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+
+              {/* This month's follow-ups */}
+              {(monthFollowUps ?? []).length > 0 && (
+                <div className="mt-6 max-w-2xl">
+                  <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Follow-Ups</h2>
+                  <div className="space-y-2">
+                    {(monthFollowUps ?? []).map((lead: any) => {
+                      const followDate = new Date(lead.followUpDate);
+                      const isPast = followDate <= new Date();
+                      return (
+                        <button key={lead.id}
+                          onClick={() => { setSelectedLead(lead); setTab('leads'); }}
+                          className="w-full dante-card p-4 flex items-center justify-between hover:bg-gold/5 transition-colors text-left">
+                          <div>
+                            <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
+                            <div className="font-dm text-xs text-ink/60">{lead.eventType || 'Enquiry'} · {lead.email}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-bebas text-xs tracking-widest ${isPast ? 'text-red-600' : 'text-amber-700'}`}>
+                              {isPast ? 'OVERDUE' : 'FOLLOW UP'}
+                            </div>
+                            <div className="font-dm text-xs text-ink/50">
+                              {followDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
-
           {/* ── CONTACTS ─────────────────────────────────────────────────────── */}
           {tab === "contacts" && (
             <div className="p-6">
