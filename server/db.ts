@@ -249,12 +249,17 @@ export async function createBooking(data: InsertBooking) {
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 export async function getDashboardStats(ownerId: number) {
   const db = await getDb();
-  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0 };
+  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0 };
   const allLeads = await db.select().from(leads).where(eq(leads.ownerId, ownerId));
   const newLeads = allLeads.filter(l => l.status === "new").length;
+  const now = new Date();
+  const overdueFollowUps = allLeads.filter(l =>
+    l.followUpDate &&
+    new Date(l.followUpDate) <= now &&
+    !['booked', 'lost', 'cancelled'].includes(l.status)
+  ).length;
   const allProposals = await db.select().from(proposals).where(eq(proposals.ownerId, ownerId));
   const proposalsSent = allProposals.filter(p => ["sent", "viewed", "accepted"].includes(p.status)).length;
-  const now = new Date();
   const monthBookings = await getBookingsByMonth(ownerId, now.getFullYear(), now.getMonth() + 1);
   const revenueThisMonth = monthBookings.reduce((sum, b) => sum + Number(b.totalNzd ?? 0), 0);
   return {
@@ -263,5 +268,6 @@ export async function getDashboardStats(ownerId: number) {
     proposalsSent,
     bookingsThisMonth: monthBookings.length,
     revenueThisMonth,
+    overdueFollowUps,
   };
 }

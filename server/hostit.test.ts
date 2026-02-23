@@ -268,3 +268,113 @@ describe("templates", () => {
     expect(stillThere).toBeUndefined();
   });
 });
+
+// ─── Follow-Up Date Tests ─────────────────────────────────────────────────────
+describe("follow-up dates", () => {
+  it("leads.setFollowUpDate > sets a follow-up date on a lead", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const lead = await caller.leads.submit({
+      ownerId: ctx.user!.id,
+      firstName: "FollowUp",
+      lastName: "Test",
+      email: "followup@test.com",
+      eventType: "Conference",
+    });
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 7);
+    const isoDate = futureDate.toISOString().split("T")[0];
+    const result = await caller.leads.setFollowUpDate({ id: lead.id, followUpDate: isoDate });
+    expect(result.success).toBe(true);
+    const fetched = await caller.leads.get({ id: lead.id });
+    expect(fetched?.followUpDate).toBeDefined();
+    await caller.leads.delete({ id: lead.id });
+  });
+
+  it("leads.setFollowUpDate > clears a follow-up date when null is passed", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const lead = await caller.leads.submit({
+      ownerId: ctx.user!.id,
+      firstName: "ClearFollowUp",
+      lastName: "Test",
+      email: "clearfollowup@test.com",
+    });
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 3);
+    await caller.leads.setFollowUpDate({ id: lead.id, followUpDate: futureDate.toISOString().split("T")[0] });
+    const cleared = await caller.leads.setFollowUpDate({ id: lead.id, followUpDate: null });
+    expect(cleared.success).toBe(true);
+    const fetched = await caller.leads.get({ id: lead.id });
+    expect(fetched?.followUpDate).toBeNull();
+    await caller.leads.delete({ id: lead.id });
+  });
+
+  it("leads.overdue > returns only leads with past followUpDate and active status", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const overdueLead = await caller.leads.submit({
+      ownerId: ctx.user!.id,
+      firstName: "Overdue",
+      lastName: "Lead",
+      email: "overdue@test.com",
+      eventType: "Wedding",
+    });
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 2);
+    await caller.leads.setFollowUpDate({ id: overdueLead.id, followUpDate: pastDate.toISOString().split("T")[0] });
+    const upcomingLead = await caller.leads.submit({
+      ownerId: ctx.user!.id,
+      firstName: "Upcoming",
+      lastName: "Lead",
+      email: "upcoming@test.com",
+    });
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 5);
+    await caller.leads.setFollowUpDate({ id: upcomingLead.id, followUpDate: futureDate.toISOString().split("T")[0] });
+    const overdue = await caller.leads.overdue();
+    const overdueIds = overdue.map((l: any) => l.id);
+    expect(overdueIds).toContain(overdueLead.id);
+    expect(overdueIds).not.toContain(upcomingLead.id);
+    await caller.leads.delete({ id: overdueLead.id });
+    await caller.leads.delete({ id: upcomingLead.id });
+  });
+
+  it("leads.overdue > excludes booked/lost/cancelled leads even if past followUpDate", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const lead = await caller.leads.submit({
+      ownerId: ctx.user!.id,
+      firstName: "Booked",
+      lastName: "Lead",
+      email: "booked@test.com",
+    });
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 1);
+    await caller.leads.setFollowUpDate({ id: lead.id, followUpDate: pastDate.toISOString().split("T")[0] });
+    await caller.leads.updateStatus({ id: lead.id, status: "booked" });
+    const overdue = await caller.leads.overdue();
+    const overdueIds = overdue.map((l: any) => l.id);
+    expect(overdueIds).not.toContain(lead.id);
+    await caller.leads.delete({ id: lead.id });
+  });
+
+  it("dashboard.stats > overdueFollowUps count increments when overdue lead added", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const statsBefore = await caller.dashboard.stats();
+    const beforeCount = statsBefore.overdueFollowUps ?? 0;
+    const lead = await caller.leads.submit({
+      ownerId: ctx.user!.id,
+      firstName: "StatOverdue",
+      lastName: "Lead",
+      email: "statoverdue@test.com",
+    });
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 1);
+    await caller.leads.setFollowUpDate({ id: lead.id, followUpDate: pastDate.toISOString().split("T")[0] });
+    const statsAfter = await caller.dashboard.stats();
+    expect(statsAfter.overdueFollowUps).toBe(beforeCount + 1);
+    await caller.leads.delete({ id: lead.id });
+  });
+});

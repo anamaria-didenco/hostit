@@ -16,6 +16,73 @@ import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
 
+// ─── Follow-Up Date Card ────────────────────────────────────────────────────
+function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date | null) => void }) {
+  const utils = trpc.useUtils();
+  const setFollowUpDate = trpc.leads.setFollowUpDate.useMutation({
+    onSuccess: (_, vars) => {
+      onSaved(vars.followUpDate ? new Date(vars.followUpDate) : null);
+      toast.success(vars.followUpDate ? 'Follow-up date saved' : 'Follow-up date cleared');
+    },
+    onError: () => toast.error('Failed to save follow-up date'),
+  });
+
+  const existing = lead.followUpDate ? new Date(lead.followUpDate) : null;
+  const isOverdue = existing && existing <= new Date() && !['booked', 'lost', 'cancelled'].includes(lead.status);
+  const isUpcoming = existing && existing > new Date();
+
+  // Format date as YYYY-MM-DD for the input value
+  const inputValue = existing
+    ? existing.toLocaleDateString('en-CA') // en-CA gives YYYY-MM-DD
+    : '';
+
+  return (
+    <div className="dante-card p-4 mb-4">
+      <h3 className="font-bebas text-xs tracking-widest text-sage mb-3 flex items-center gap-2">
+        FOLLOW-UP DATE
+        {isOverdue && (
+          <span className="bg-red-100 text-red-700 font-bebas text-xs tracking-widest px-2 py-0.5">OVERDUE</span>
+        )}
+        {isUpcoming && (
+          <span className="bg-gold/20 text-amber-700 font-bebas text-xs tracking-widest px-2 py-0.5">SCHEDULED</span>
+        )}
+      </h3>
+      <div className="flex gap-2 items-center">
+        <input
+          type="date"
+          defaultValue={inputValue}
+          key={inputValue} // re-mount when lead changes
+          className="flex-1 border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest"
+          onChange={e => {
+            if (e.target.value) {
+              setFollowUpDate.mutate({ id: lead.id, followUpDate: e.target.value });
+            }
+          }}
+        />
+        {existing && (
+          <button
+            onClick={() => setFollowUpDate.mutate({ id: lead.id, followUpDate: null })}
+            className="border border-border font-bebas tracking-widest text-xs px-3 py-2 text-ink/60 hover:text-tomato hover:border-tomato transition-colors"
+            title="Clear follow-up date"
+          >
+            CLEAR
+          </button>
+        )}
+      </div>
+      {isOverdue && existing && (
+        <p className="font-dm text-xs text-red-600 mt-2">
+          Overdue since {existing.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+        </p>
+      )}
+      {isUpcoming && existing && (
+        <p className="font-dm text-xs text-amber-700 mt-2">
+          Scheduled for {existing.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const PIPELINE_STAGES = [
   { key: "new", label: "NEW", color: "border-gold bg-gold/15 text-amber-800" },
   { key: "contacted", label: "CONTACTED", color: "border-sky-400 bg-sky-50 text-sky-700" },
@@ -42,6 +109,7 @@ export default function Dashboard() {
   const utils = trpc.useUtils();
 
   const { data: stats } = trpc.dashboard.stats.useQuery(undefined, { enabled: !!user?.id });
+  const { data: overdueLeads, refetch: refetchOverdue } = trpc.leads.overdue.useQuery(undefined, { enabled: !!user?.id });
   const { data: allLeads, refetch: refetchLeads } = trpc.leads.list.useQuery(
     { status: leadStatusFilter === "all" ? undefined : leadStatusFilter },
     { enabled: !!user?.id }
@@ -257,12 +325,13 @@ export default function Dashboard() {
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-gold/15 mb-8">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-px bg-gold/15 mb-8">
                 {[
                   { label: "NEW LEADS", value: stats?.newLeads ?? 0, sub: "awaiting response", accent: "text-gold", icon: <MessageSquare className="w-4 h-4 text-gold" /> },
                   { label: "TOTAL LEADS", value: stats?.totalLeads ?? 0, sub: "all time", accent: "text-ink", icon: <Users className="w-4 h-4 text-sage" /> },
                   { label: "PROPOSALS SENT", value: stats?.proposalsSent ?? 0, sub: "this period", accent: "text-forest", icon: <FileText className="w-4 h-4 text-forest" /> },
                   { label: "BOOKINGS THIS MONTH", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, accent: "text-emerald-600", icon: <CheckCircle className="w-4 h-4 text-emerald-600" /> },
+                  { label: "OVERDUE FOLLOW-UPS", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", accent: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-sage", icon: <span className={(stats?.overdueFollowUps ?? 0) > 0 ? "text-red-500 text-base" : "text-sage text-base"}>⏰</span> },
                 ].map(s => (
                   <div key={s.label} className="stat-card">
                     <div className="flex items-start justify-between mb-3">
@@ -307,6 +376,41 @@ export default function Dashboard() {
                 )}
               </div>
 
+              {/* Overdue Follow-Ups */}
+              {(overdueLeads ?? []).length > 0 && (
+                <div className="mt-6 dante-card shadow-sm border-l-4 border-l-red-500">
+                  <div className="flex items-center justify-between p-4 border-b border-gold/15">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
+                      <h2 className="font-cormorant text-xl font-semibold text-ink">Overdue Follow-Ups</h2>
+                      <span className="bg-red-100 text-red-700 font-bebas text-xs tracking-widest px-2 py-0.5">{(overdueLeads ?? []).length}</span>
+                    </div>
+                    <button onClick={() => setTab("leads")} className="font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors">VIEW ALL LEADS</button>
+                  </div>
+                  <div className="divide-y divide-border/40">
+                    {(overdueLeads ?? []).map((lead: any) => {
+                      const daysOverdue = Math.floor((new Date().getTime() - new Date(lead.followUpDate).getTime()) / (1000 * 60 * 60 * 24));
+                      return (
+                        <button key={lead.id} onClick={() => { setSelectedLead(lead); setTab("leads"); }}
+                          className="w-full flex items-center justify-between p-4 hover:bg-red-50/50 transition-colors text-left">
+                          <div>
+                            <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
+                            <div className="font-dm text-xs text-ink/60">{lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bebas text-xs tracking-widest text-red-600">
+                              {daysOverdue === 0 ? 'DUE TODAY' : `${daysOverdue}d OVERDUE`}
+                            </div>
+                            <div className="font-dm text-xs text-ink/40">
+                              {new Date(lead.followUpDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {/* Lead Form CTA */}
               {!venueSettings && (
                 <div className="bg-forest/8 border border-forest/20 border-l-2 border-l-gold p-6">
@@ -361,8 +465,22 @@ export default function Dashboard() {
                       <div className="font-dm text-xs text-ink/60 mt-0.5">
                         {lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}
                       </div>
-                      <div className="font-dm text-xs text-ink/50 mt-1">
-                        {new Date(lead.createdAt).toLocaleDateString("en-NZ")}
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="font-dm text-xs text-ink/50">{new Date(lead.createdAt).toLocaleDateString("en-NZ")}</span>
+                        {lead.followUpDate && (() => {
+                          const d = new Date(lead.followUpDate);
+                          const overdue = d <= new Date() && !['booked','lost','cancelled'].includes(lead.status);
+                          const upcoming = d > new Date();
+                          if (overdue) return (
+                            <span className="font-bebas text-xs tracking-widest px-1.5 py-0.5 bg-red-100 text-red-700 flex-shrink-0">OVERDUE</span>
+                          );
+                          if (upcoming) return (
+                            <span className="font-bebas text-xs tracking-widest px-1.5 py-0.5 bg-gold/20 text-amber-700 flex-shrink-0">
+                              FOLLOW UP {d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}
+                            </span>
+                          );
+                          return null;
+                        })()}
                       </div>
                     </button>
                   ))}
@@ -466,6 +584,12 @@ export default function Dashboard() {
                         className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream disabled:opacity-40">ADD</button>
                     </div>
                   </div>
+                  {/* Follow-Up Date */}
+                  <FollowUpDateCard lead={selectedLead} onSaved={(updated) => {
+                    refetchLeads();
+                    utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
+                    setSelectedLead((prev: any) => prev ? { ...prev, followUpDate: updated } : prev);
+                  }} />
                 </div>
               ) : (
                 <div className="flex-1 hidden md:flex items-center justify-center text-center p-8">

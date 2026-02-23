@@ -277,11 +277,48 @@ export const appRouter = router({
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return;
-        await db.delete(leads).where(and(eq(leads.id, input.id), eq(leads.ownerId, ctx.user.id)));
+         await db.delete(leads).where(and(eq(leads.id, input.id), eq(leads.ownerId, ctx.user.id)));
         return { success: true };
       }),
+    // Dedicated follow-up date setter (convenience wrapper around update)
+    setFollowUpDate: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        followUpDate: z.string().nullable(), // ISO date string or null to clear
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { updateLead, addLeadActivity } = await import('./db');
+        await updateLead(input.id, {
+          followUpDate: input.followUpDate ? new Date(input.followUpDate) : null as any,
+        });
+        await addLeadActivity({
+          leadId: input.id,
+          ownerId: ctx.user.id,
+          type: 'note',
+          content: input.followUpDate
+            ? `Follow-up date set to ${new Date(input.followUpDate).toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}`
+            : 'Follow-up date cleared',
+        });
+        return { success: true };
+      }),
+    // Returns leads where followUpDate is in the past and status is still active
+    overdue: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { leads } = await import('../drizzle/schema');
+      const { eq, and, lte, isNotNull, notInArray } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      const now = new Date();
+      return db.select().from(leads).where(
+        and(
+          eq(leads.ownerId, ctx.user.id),
+          isNotNull(leads.followUpDate),
+          lte(leads.followUpDate, now),
+          notInArray(leads.status, ['booked', 'lost', 'cancelled']),
+        )
+      ).orderBy(leads.followUpDate);
+    }),
   }),
-
   // ─── Proposals ─────────────────────────────────────────────────────────────
   proposals: router({
     list: protectedProcedure.query(async ({ ctx }) => {

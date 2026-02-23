@@ -125,3 +125,12 @@
 - [x] Wire substitution into template picker in compose modal (replace on select)
 - [x] Show variable reference cheatsheet in compose modal and template form
 - [x] Write vitest tests for substituteTemplateVars utility (20 tests, all passing)
+
+## Follow-Up Date Feature
+- [x] Verify followUpDate column exists on leads table (already in schema)
+- [x] Add/verify tRPC procedure: leads.setFollowUpDate (update followUpDate for a lead)
+- [x] Add leads.overdue query (leads where followUpDate <= today and status not booked/lost/cancelled)
+- [x] Add follow-up date picker to lead detail panel in Leads Inbox
+- [x] Show follow-up date badge on lead list items (overdue = red, upcoming = gold)
+- [x] Add overdue follow-ups section to Dashboard Overview tab
+- [x] Write vitest tests for overdue query and setFollowUpDate procedure (5 tests, all passing)
