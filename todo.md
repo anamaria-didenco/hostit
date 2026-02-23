@@ -96,10 +96,10 @@
 - [x] Verify data appears in the dashboard enquiries tab
 
 ## Send Email Feature
-- [ ] Add email tRPC procedure (sendEmail) to routers.ts using nodemailer/SMTP
-- [ ] Add Send Email button to each enquiry card in Dashboard
-- [ ] Add compose email modal with To, Subject, Body fields
-- [ ] Show sent confirmation toast
+- [x] Install nodemailer, add sendEmail tRPC procedure
+- [x] Add SMTP settings fields to Dashboard Settings tab
+- [x] Add Send Email button + compose modal to leads inbox
+- [x] Log sent emails as lead activity entries
 - [ ] Write vitest test for sendEmail procedure
 
 ## Menu Options (Food / Food & Beverages)

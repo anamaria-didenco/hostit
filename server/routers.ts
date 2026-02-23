@@ -52,6 +52,13 @@ export const appRouter = router({
         leadFormSubtitle: z.string().optional(),
         depositPercent: z.number().optional(),
         currency: z.string().optional(),
+        smtpHost: z.string().optional(),
+        smtpPort: z.number().optional(),
+        smtpUser: z.string().optional(),
+        smtpPass: z.string().optional(),
+        smtpFromName: z.string().optional(),
+        smtpFromEmail: z.string().optional(),
+        smtpSecure: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -77,6 +84,13 @@ export const appRouter = router({
         leadFormTitle: z.string().optional(),
         leadFormSubtitle: z.string().optional(),
         depositPercent: z.number().optional(),
+        smtpHost: z.string().optional(),
+        smtpPort: z.number().optional(),
+        smtpUser: z.string().optional(),
+        smtpPass: z.string().optional(),
+        smtpFromName: z.string().optional(),
+        smtpFromEmail: z.string().optional(),
+        smtpSecure: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -628,6 +642,62 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+  // ─── Email ───────────────────────────────────────────────────────────────
+  email: router({
+    send: protectedProcedure
+      .input(z.object({
+        to: z.string().email(),
+        toName: z.string().optional(),
+        subject: z.string().min(1),
+        body: z.string().min(1),
+        leadId: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings, leadActivity } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const nodemailer = await import('nodemailer');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+
+        // Fetch SMTP settings for this venue owner
+        const [settings] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        if (!settings?.smtpHost || !settings?.smtpUser || !settings?.smtpPass) {
+          throw new Error('SMTP not configured. Please add your email settings in Settings → Email.');
+        }
+
+        const transporter = nodemailer.default.createTransport({
+          host: settings.smtpHost,
+          port: settings.smtpPort ?? 587,
+          secure: (settings.smtpSecure ?? 0) === 1,
+          auth: { user: settings.smtpUser, pass: settings.smtpPass },
+        });
+
+        const fromName = settings.smtpFromName ?? settings.name ?? 'HOSTit';
+        const fromEmail = settings.smtpFromEmail ?? settings.smtpUser;
+
+        await transporter.sendMail({
+          from: `"${fromName}" <${fromEmail}>`,
+          to: input.toName ? `"${input.toName}" <${input.to}>` : input.to,
+          subject: input.subject,
+          html: input.body.replace(/\n/g, '<br>'),
+          text: input.body,
+        });
+
+        // Log as lead activity if leadId provided
+        if (input.leadId) {
+          await db.insert(leadActivity).values({
+            leadId: input.leadId,
+            ownerId: ctx.user.id,
+            type: 'email',
+            content: `Email sent to ${input.to}\n\nSubject: ${input.subject}\n\n${input.body}`,
+          });
+        }
+
+        return { success: true };
+      }),
+  }),
+
   // ─── Dashboard ─────────────────────────────────────────────────────────────
   dashboard: router({
     stats: protectedProcedure.query(async ({ ctx }) => {

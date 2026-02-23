@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
-  ChefHat, UtensilsCrossed, Wine, Trash2, Pencil
+  ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -78,6 +78,19 @@ export default function Dashboard() {
   const [menuForm, setMenuForm] = useState({ name: "", type: "food" as "food"|"beverages"|"food_and_beverages", description: "", pricePerHead: "" });
   const [showMenuForm, setShowMenuForm] = useState(false);
   const [editingPackageId, setEditingPackageId] = useState<number|null>(null);
+
+  // Email compose state
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailForm, setEmailForm] = useState({ subject: "", body: "" });
+  const sendEmail = trpc.email.send.useMutation({
+    onSuccess: () => {
+      setShowEmailModal(false);
+      setEmailForm({ subject: "", body: "" });
+      toast.success("Email sent successfully!");
+      if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
+    },
+    onError: (err) => toast.error(err.message || "Failed to send email"),
+  });
 
   const createMenuPackage = trpc.menu.createPackage.useMutation({
     onSuccess: () => { refetchMenuPackages(); setShowMenuForm(false); setMenuForm({ name: "", type: "food", description: "", pricePerHead: "" }); toast.success("Menu package added!"); },
@@ -359,10 +372,21 @@ export default function Dashboard() {
                       <h2 className="font-cormorant text-ink" style={{ fontSize: '1.8rem', fontWeight: 600 }}>{selectedLead.firstName} {selectedLead.lastName}</h2>
                       <div className="font-dm text-sm text-sage">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
                     </div>
-                    <button onClick={() => setLocation(`/proposals/new?leadId=${selectedLead.id}`)}
-                      className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1 flex-shrink-0">
-                      <FileText className="w-3 h-3" /> CREATE PROPOSAL
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {selectedLead.email && (
+                        <button onClick={() => {
+                          setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
+                          setShowEmailModal(true);
+                        }}
+                          className="border-2 border-forest text-forest font-bebas tracking-widest text-xs px-4 py-2 flex items-center gap-1 hover:bg-forest hover:text-cream transition-all">
+                          <Mail className="w-3 h-3" /> EMAIL
+                        </button>
+                      )}
+                      <button onClick={() => setLocation(`/proposals/new?leadId=${selectedLead.id}`)}
+                        className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
+                        <FileText className="w-3 h-3" /> CREATE PROPOSAL
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
@@ -444,6 +468,61 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── EMAIL COMPOSE MODAL ───────────────────────────────────────── */}
+          {showEmailModal && selectedLead && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+              <div className="bg-cream border-2 border-forest w-full max-w-lg shadow-2xl">
+                <div className="bg-forest text-cream px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="font-bebas tracking-widest text-sm">COMPOSE EMAIL</div>
+                    <div className="font-dm text-xs text-cream/70">To: {selectedLead.firstName} {selectedLead.lastName} &lt;{selectedLead.email}&gt;</div>
+                  </div>
+                  <button onClick={() => setShowEmailModal(false)} className="text-cream/60 hover:text-cream text-xl leading-none">&times;</button>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBJECT</label>
+                    <input
+                      value={emailForm.subject}
+                      onChange={e => setEmailForm(f => ({ ...f, subject: e.target.value }))}
+                      className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest"
+                      placeholder="Email subject"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MESSAGE</label>
+                    <textarea
+                      value={emailForm.body}
+                      onChange={e => setEmailForm(f => ({ ...f, body: e.target.value }))}
+                      rows={8}
+                      className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest resize-none"
+                      placeholder="Write your message here..."
+                    />
+                  </div>
+                  <div className="flex gap-3 justify-end pt-2">
+                    <button onClick={() => setShowEmailModal(false)}
+                      className="border border-border font-bebas tracking-widest text-xs px-5 py-2 text-ink/60 hover:text-ink transition-colors">
+                      CANCEL
+                    </button>
+                    <button
+                      onClick={() => sendEmail.mutate({
+                        to: selectedLead.email!,
+                        toName: `${selectedLead.firstName} ${selectedLead.lastName}`,
+                        subject: emailForm.subject,
+                        body: emailForm.body,
+                        leadId: selectedLead.id,
+                      })}
+                      disabled={sendEmail.isPending || !emailForm.subject || !emailForm.body}
+                      className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream flex items-center gap-2 disabled:opacity-50">
+                      <Send className="w-3 h-3" />
+                      {sendEmail.isPending ? 'SENDING...' : 'SEND EMAIL'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -789,6 +868,67 @@ export default function Dashboard() {
                   </button>
                 </form>
               )}
+
+              {/* Email / SMTP Settings */}
+              <div className="mt-8 border-t border-gold/20 pt-8">
+                <h2 className="font-cormorant text-xl font-semibold text-ink mb-1">Email Settings</h2>
+                <p className="font-dm text-xs text-sage mb-4">Configure your SMTP server to send emails directly from the leads inbox. Use Gmail, Outlook, or any SMTP provider.</p>
+                <form onSubmit={e => {
+                  e.preventDefault();
+                  const fd = new FormData(e.currentTarget);
+                  updateSettings.mutate({
+                    smtpHost: fd.get('smtpHost') as string || undefined,
+                    smtpPort: fd.get('smtpPort') ? parseInt(fd.get('smtpPort') as string) : undefined,
+                    smtpUser: fd.get('smtpUser') as string || undefined,
+                    smtpPass: fd.get('smtpPass') as string || undefined,
+                    smtpFromName: fd.get('smtpFromName') as string || undefined,
+                    smtpFromEmail: fd.get('smtpFromEmail') as string || undefined,
+                    smtpSecure: fd.get('smtpSecure') === 'on' ? 1 : 0,
+                  });
+                }} className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP HOST</label>
+                    <Input name="smtpHost" defaultValue={venueSettings?.smtpHost ?? ''} placeholder="smtp.gmail.com"
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP PORT</label>
+                    <Input name="smtpPort" type="number" defaultValue={venueSettings?.smtpPort ?? 587} placeholder="587"
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP USERNAME / EMAIL</label>
+                    <Input name="smtpUser" defaultValue={venueSettings?.smtpUser ?? ''} placeholder="you@gmail.com"
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP PASSWORD / APP PASSWORD</label>
+                    <Input name="smtpPass" type="password" defaultValue={venueSettings?.smtpPass ?? ''} placeholder="••••••••••••"
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM NAME</label>
+                    <Input name="smtpFromName" defaultValue={venueSettings?.smtpFromName ?? ''} placeholder="The Grand Hall"
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM EMAIL ADDRESS</label>
+                    <Input name="smtpFromEmail" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="events@yourvenue.co.nz"
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                  </div>
+                  <div className="md:col-span-2 flex items-center gap-3">
+                    <input type="checkbox" name="smtpSecure" id="smtpSecure" defaultChecked={(venueSettings?.smtpSecure ?? 0) === 1}
+                      className="w-4 h-4 accent-forest" />
+                    <label htmlFor="smtpSecure" className="font-dm text-sm text-ink">Use SSL (port 465) — leave unchecked for STARTTLS (port 587)</label>
+                  </div>
+                  <div className="md:col-span-2">
+                    <button type="submit" disabled={updateSettings.isPending}
+                      className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
+                      {updateSettings.isPending ? "SAVING..." : "SAVE EMAIL SETTINGS"}
+                    </button>
+                  </div>
+                </form>
+              </div>
 
               {/* Event Spaces */}
               <div className="mt-8">

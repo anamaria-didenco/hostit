@@ -39,6 +39,14 @@ export const venueSettings = mysqlTable("venue_settings", {
   leadFormSubtitle: text("leadFormSubtitle"),
   depositPercent: decimal("depositPercent", { precision: 5, scale: 2 }).default("25.00"),
   currency: varchar("currency", { length: 10 }).default("NZD"),
+  // SMTP email settings
+  smtpHost: varchar("smtpHost", { length: 255 }),
+  smtpPort: int("smtpPort").default(587),
+  smtpUser: varchar("smtpUser", { length: 320 }),
+  smtpPass: text("smtpPass"),
+  smtpFromName: varchar("smtpFromName", { length: 255 }),
+  smtpFromEmail: varchar("smtpFromEmail", { length: 320 }),
+  smtpSecure: int("smtpSecure").default(0), // 0=STARTTLS, 1=SSL
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
