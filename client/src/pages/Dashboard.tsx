@@ -14,6 +14,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
+import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
 
 const PIPELINE_STAGES = [
   { key: "new", label: "NEW", color: "border-gold bg-gold/15 text-amber-800" },
@@ -507,7 +508,14 @@ export default function Dashboard() {
                             <button
                               key={t.id}
                               type="button"
-                              onClick={() => { setEmailForm({ subject: t.subject, body: t.body }); setShowTemplateDropdown(false); }}
+                              onClick={() => {
+                                const lead = selectedLead ?? {};
+                                const venue = venueSettings ?? {};
+                                const subject = substituteTemplateVars(t.subject, lead, venue);
+                                const body = substituteTemplateVars(t.body, lead, venue);
+                                setEmailForm({ subject, body });
+                                setShowTemplateDropdown(false);
+                              }}
                               className="w-full text-left px-4 py-3 hover:bg-cream transition-colors border-b border-border/30 last:border-0"
                             >
                               <div className="font-bebas tracking-widest text-xs text-forest">{t.name}</div>
@@ -536,6 +544,17 @@ export default function Dashboard() {
                       className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest resize-none"
                       placeholder="Write your message here..."
                     />
+                    {/* Inline variable hint — shows which {{vars}} are still unreplaced */}
+                    {emailForm.body && /\{\{\w+\}\}/.test(emailForm.body) && (
+                      <div className="mt-1 px-2 py-1 bg-gold/10 border border-gold/30 font-dm text-xs text-amber-800 flex items-start gap-1.5">
+                        <span className="flex-shrink-0 font-bold">!</span>
+                        <span>
+                          Some variables could not be substituted automatically:{" "}
+                          {Array.from(emailForm.body.matchAll(/\{\{(\w+)\}\}/g)).map(m => m[0]).filter((v, i, a) => a.indexOf(v) === i).join(", ")}.
+                          {" "}Please replace them manually before sending.
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-3 justify-end pt-2">
                     <button onClick={() => setShowEmailModal(false)}
@@ -1013,6 +1032,26 @@ export default function Dashboard() {
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MESSAGE BODY</label>
                         <Textarea value={templateForm.body} onChange={e => setTemplateForm(f => ({ ...f, body: e.target.value }))} rows={6} placeholder="Write your template message here..." className="rounded-none border-border font-dm text-sm resize-none" />
                       </div>
+                      {/* Variable cheatsheet */}
+                      <details className="group">
+                        <summary className="font-bebas tracking-widest text-xs text-forest/70 cursor-pointer hover:text-forest select-none list-none flex items-center gap-1">
+                          <span className="group-open:rotate-90 transition-transform inline-block">▶</span> AVAILABLE VARIABLES
+                        </summary>
+                        <div className="mt-2 p-3 bg-cream/60 border border-gold/20 grid grid-cols-2 gap-x-4 gap-y-1">
+                          {TEMPLATE_VARIABLES.map(v => (
+                            <button
+                              key={v.token}
+                              type="button"
+                              onClick={() => setTemplateForm(f => ({ ...f, body: f.body + v.token }))}
+                              title={`Insert ${v.label} — e.g. "${v.example}"`}
+                              className="text-left group/var"
+                            >
+                              <span className="font-mono text-xs text-forest group-hover/var:text-gold transition-colors">{v.token}</span>
+                              <span className="font-dm text-xs text-ink/40 ml-1">{v.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </details>
                       <div className="flex gap-2 pt-1">
                         <button onClick={() => { setShowTemplateForm(false); setTemplateForm({ name: '', subject: '', body: '' }); }}
                           className="border border-border font-bebas tracking-widest text-xs px-4 py-2 text-ink/60 hover:text-ink transition-colors">CANCEL</button>

@@ -118,3 +118,10 @@
 - [x] Add Email Templates management section in Dashboard Settings
 - [ ] Seed 5 default templates (Function Pack Follow-Up, Proposal Reminder, Booking Confirmation, etc.)
 - [x] Write vitest test for templates procedures (24 tests total, all passing)
+
+## Template Variable Substitution
+- [x] Define supported variables: {{contactName}}, {{firstName}}, {{lastName}}, {{email}}, {{phone}}, {{eventType}}, {{guestCount}}, {{budget}}, {{venueName}}, {{spaceName}}, {{notes}}
+- [x] Create substituteTemplateVars() utility function in client/src/lib/templateVars.ts
+- [x] Wire substitution into template picker in compose modal (replace on select)
+- [x] Show variable reference cheatsheet in compose modal and template form
+- [x] Write vitest tests for substituteTemplateVars utility (20 tests, all passing)
