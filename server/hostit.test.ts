@@ -7,9 +7,9 @@ type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 function createAuthContext(role: "user" | "admin" = "user"): { ctx: TrpcContext } {
   const user: AuthenticatedUser = {
     id: 1,
-    openId: "test-user-001",
-    email: "test@hostit.co.nz",
-    name: "Test User",
+    openId: "test-owner-001",
+    email: "owner@venue.co.nz",
+    name: "Test Venue Owner",
     loginMethod: "manus",
     role,
     createdAt: new Date(),
@@ -46,8 +46,7 @@ describe("auth.me", () => {
     const caller = appRouter.createCaller(ctx);
     const result = await caller.auth.me();
     expect(result).not.toBeNull();
-    expect(result?.email).toBe("test@hostit.co.nz");
-    expect(result?.name).toBe("Test User");
+    expect(result?.email).toBe("owner@venue.co.nz");
   });
 });
 
@@ -63,65 +62,92 @@ describe("auth.logout", () => {
   });
 });
 
-describe("venues.list", () => {
-  it("returns an array (even if empty without DB)", async () => {
-    const { ctx } = createPublicContext();
+describe("venue.get", () => {
+  it("returns null for unknown ownerId without DB", async () => {
+    const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
-    // Without a real DB, this should return an empty array gracefully
-    const result = await caller.venues.list({});
-    expect(Array.isArray(result)).toBe(true);
-  });
-
-  it("accepts city filter", async () => {
-    const { ctx } = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-    const result = await caller.venues.list({ city: "Auckland" });
-    expect(Array.isArray(result)).toBe(true);
-  });
-
-  it("accepts venueType filter", async () => {
-    const { ctx } = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-    const result = await caller.venues.list({ venueType: "restaurant" });
-    expect(Array.isArray(result)).toBe(true);
-  });
-});
-
-describe("venues.bySlug", () => {
-  it("returns null for non-existent slug", async () => {
-    const { ctx } = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-    const result = await caller.venues.bySlug({ slug: "non-existent-venue-xyz" });
+    const result = await caller.venue.get({ ownerId: 9999 });
     expect(result).toBeNull();
   });
 });
 
-describe("venues.byOwner", () => {
+describe("venue.getBySlug", () => {
+  it("returns null for non-existent slug", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.venue.getBySlug({ slug: "non-existent-xyz" });
+    expect(result).toBeNull();
+  });
+});
+
+describe("leads.submit", () => {
+  it("rejects invalid email", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.leads.submit({ ownerId: 1, firstName: "Jane", email: "not-valid" })
+    ).rejects.toThrow();
+  });
+
+  it("rejects missing firstName", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.leads.submit({ ownerId: 1, firstName: "", email: "jane@example.com" })
+    ).rejects.toThrow();
+  });
+});
+
+describe("leads.list", () => {
   it("requires authentication", async () => {
     const { ctx } = createPublicContext();
     const caller = appRouter.createCaller(ctx);
-    await expect(caller.venues.byOwner()).rejects.toThrow();
+    await expect(caller.leads.list({})).rejects.toThrow();
   });
 
   it("returns array for authenticated user", async () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
-    const result = await caller.venues.byOwner();
+    const result = await caller.leads.list({});
     expect(Array.isArray(result)).toBe(true);
   });
 });
 
-describe("inquiries.byPlanner", () => {
+describe("proposals.getByToken", () => {
+  it("returns null for unknown token", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.proposals.getByToken({ token: "nonexistent-token-xyz" });
+    expect(result).toBeNull();
+  });
+});
+
+describe("proposals.list", () => {
   it("requires authentication", async () => {
     const { ctx } = createPublicContext();
     const caller = appRouter.createCaller(ctx);
-    await expect(caller.inquiries.byPlanner()).rejects.toThrow();
+    await expect(caller.proposals.list()).rejects.toThrow();
   });
 
   it("returns array for authenticated user", async () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
-    const result = await caller.inquiries.byPlanner();
+    const result = await caller.proposals.list();
+    expect(Array.isArray(result)).toBe(true);
+  });
+});
+
+describe("bookings.list", () => {
+  it("requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.bookings.list()).rejects.toThrow();
+  });
+
+  it("returns array for authenticated user", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.bookings.list();
     expect(Array.isArray(result)).toBe(true);
   });
 });
@@ -130,25 +156,33 @@ describe("dashboard.stats", () => {
   it("requires authentication", async () => {
     const { ctx } = createPublicContext();
     const caller = appRouter.createCaller(ctx);
-    await expect(caller.dashboard.stats({ ownerId: 1 })).rejects.toThrow();
+    await expect(caller.dashboard.stats()).rejects.toThrow();
   });
 
   it("returns stats object for authenticated user", async () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
-    const result = await caller.dashboard.stats({ ownerId: 1 });
-    expect(result).toHaveProperty("venueCount");
-    expect(result).toHaveProperty("inquiryCount");
-    expect(result).toHaveProperty("proposalCount");
-    expect(result).toHaveProperty("bookingCount");
+    const result = await caller.dashboard.stats();
+    expect(result).toHaveProperty("newLeads");
+    expect(result).toHaveProperty("totalLeads");
+    expect(result).toHaveProperty("proposalsSent");
+    expect(result).toHaveProperty("bookingsThisMonth");
+    expect(result).toHaveProperty("revenueThisMonth");
   });
 });
 
-describe("availability.byVenue", () => {
-  it("returns array for any venue ID", async () => {
+describe("contacts.list", () => {
+  it("requires authentication", async () => {
     const { ctx } = createPublicContext();
     const caller = appRouter.createCaller(ctx);
-    const result = await caller.availability.byVenue({ venueId: 999 });
-    expect(Array.isArray(result)).toBe(true);
+    await expect(caller.contacts.list()).rejects.toThrow();
+  });
+});
+
+describe("spaces.list", () => {
+  it("requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.spaces.list()).rejects.toThrow();
   });
 });

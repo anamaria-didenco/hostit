@@ -1,32 +1,23 @@
+import { nanoid } from "nanoid";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
-  listVenues,
-  getVenueBySlug,
-  getVenueById,
-  getVenuesByOwner,
-  createVenue,
-  updateVenue,
-  createInquiry,
-  getInquiriesByVenue,
-  getInquiriesByPlanner,
-  updateInquiryStatus,
-  createProposal,
-  getProposalsByVenue,
-  getProposalsByPlanner,
-  updateProposalStatus,
-  getAvailabilityByVenue,
-  setAvailability,
-  getBookingsByVenue,
+  getVenueSettings, upsertVenueSettings,
+  getEventSpaces, createEventSpace,
+  getContacts, getContactById, createContact,
+  getLeads, getLeadById, createLead, updateLeadStatus, updateLead,
+  getLeadActivity, addLeadActivity,
+  getProposals, getProposalById, getProposalByToken, getProposalsByLead, createProposal, updateProposal,
+  getBookings, getBookingsByMonth, createBooking,
   getDashboardStats,
-  seedVenues,
 } from "./db";
 
 export const appRouter = router({
   system: systemRouter,
+
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -36,205 +27,466 @@ export const appRouter = router({
     }),
   }),
 
-  venues: router({
-    list: publicProcedure
+  // ─── Venue Settings ────────────────────────────────────────────────────────
+  venue: router({
+    get: publicProcedure
+      .input(z.object({ ownerId: z.number().optional() }))
+      .query(async ({ input, ctx }) => {
+        const id = input.ownerId ?? ctx.user?.id;
+        if (!id) return null;
+        return getVenueSettings(id);
+      }),
+
+    update: protectedProcedure
       .input(z.object({
+        name: z.string().optional(),
+        slug: z.string().optional(),
+        tagline: z.string().optional(),
+        description: z.string().optional(),
+        address: z.string().optional(),
         city: z.string().optional(),
-        venueType: z.enum(["restaurant","winery","rooftop_bar","heritage_building","garden","function_centre","hotel","beach","other"]).optional(),
-        minCapacity: z.number().optional(),
-        maxPrice: z.number().optional(),
-      }).optional())
-      .query(({ input }) => listVenues(input)),
+        phone: z.string().optional(),
+        email: z.string().optional(),
+        website: z.string().optional(),
+        leadFormTitle: z.string().optional(),
+        leadFormSubtitle: z.string().optional(),
+        depositPercent: z.number().optional(),
+        currency: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const data: Record<string, any> = { ...input };
+        if (input.depositPercent !== undefined) data.depositPercent = input.depositPercent.toString();
+        return upsertVenueSettings(ctx.user.id, data);
+      }),
 
-    bySlug: publicProcedure
+    getOwn: protectedProcedure.query(async ({ ctx }) => {
+      return getVenueSettings(ctx.user.id);
+    }),
+
+    upsert: protectedProcedure
+      .input(z.object({
+        name: z.string().optional(),
+        slug: z.string().optional(),
+        tagline: z.string().optional(),
+        description: z.string().optional(),
+        address: z.string().optional(),
+        city: z.string().optional(),
+        phone: z.string().optional(),
+        email: z.string().optional(),
+        website: z.string().optional(),
+        leadFormTitle: z.string().optional(),
+        leadFormSubtitle: z.string().optional(),
+        depositPercent: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const data: Record<string, any> = { ...input };
+        if (input.depositPercent !== undefined) data.depositPercent = input.depositPercent.toString();
+        return upsertVenueSettings(ctx.user.id, data);
+      }),
+
+    getBySlug: publicProcedure
       .input(z.object({ slug: z.string() }))
-      .query(({ input }) => getVenueBySlug(input.slug)),
+      .query(async ({ input }) => {
+        // Find venue by slug for public lead form
+        const { getDb } = await import("./db");
+        const { venueSettings } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const db = await getDb();
+        if (!db) return null;
+        const result = await db.select().from(venueSettings).where(eq(venueSettings.slug, input.slug)).limit(1);
+        return result[0] ?? null;
+      }),
+  }),
 
-    byOwner: protectedProcedure
-      .query(({ ctx }) => getVenuesByOwner(ctx.user.id)),
+  // ─── Event Spaces ──────────────────────────────────────────────────────────
+  spaces: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getEventSpaces(ctx.user.id);
+    }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import("./db");
+        const { eventSpaces } = await import("../drizzle/schema");
+        const { eq, and } = await import("drizzle-orm");
+        const db = await getDb();
+        if (!db) return;
+        await db.delete(eventSpaces).where(and(eq(eventSpaces.id, input.id), eq(eventSpaces.ownerId, ctx.user.id)));
+      }),
 
     create: protectedProcedure
       .input(z.object({
-        name: z.string().min(2),
-        slug: z.string().min(2),
+        name: z.string().min(1),
         description: z.string().optional(),
-        shortDescription: z.string().optional(),
-        venueType: z.enum(["restaurant","winery","rooftop_bar","heritage_building","garden","function_centre","hotel","beach","other"]),
-        city: z.enum(["Auckland","Wellington","Christchurch","Queenstown","Hamilton","Dunedin","Tauranga","Napier","Nelson","Rotorua"]),
-        suburb: z.string().optional(),
-        address: z.string().optional(),
-        capacity: z.number().min(1),
         minCapacity: z.number().optional(),
-        minPriceNzd: z.number().optional(),
-        maxPriceNzd: z.number().optional(),
-        pricePerHead: z.number().optional(),
-        amenities: z.array(z.string()).optional(),
-        images: z.array(z.string()).optional(),
-        coverImage: z.string().optional(),
+        maxCapacity: z.number().optional(),
+        minSpend: z.number().optional(),
       }))
-      .mutation(({ ctx, input }) => createVenue({
-        ...input,
-        ownerId: ctx.user.id,
-        minPriceNzd: input.minPriceNzd?.toString() as any,
-        maxPriceNzd: input.maxPriceNzd?.toString() as any,
-        pricePerHead: input.pricePerHead?.toString() as any,
-      })),
+      .mutation(async ({ input, ctx }) => {
+        return createEventSpace({ ownerId: ctx.user.id, ...input });
+      }),
+  }),
+
+  // ─── Contacts ──────────────────────────────────────────────────────────────
+  contacts: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getContacts(ctx.user.id);
+    }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return getContactById(input.id);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        firstName: z.string().min(1),
+        lastName: z.string().optional(),
+        email: z.string().email(),
+        phone: z.string().optional(),
+        company: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return createContact({ ownerId: ctx.user.id, ...input });
+      }),
+  }),
+
+  // ─── Leads ─────────────────────────────────────────────────────────────────
+  leads: router({
+    list: protectedProcedure
+      .input(z.object({ status: z.string().optional() }))
+      .query(async ({ input, ctx }) => {
+        return getLeads(ctx.user.id, input.status);
+      }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return getLeadById(input.id);
+      }),
+
+    // Public: submit from lead form
+    submit: publicProcedure
+      .input(z.object({
+        ownerId: z.number(),
+        firstName: z.string().min(1),
+        lastName: z.string().optional(),
+        email: z.string().email(),
+        phone: z.string().optional(),
+        company: z.string().optional(),
+        eventType: z.string().optional(),
+        eventDate: z.string().optional(),
+        guestCount: z.number().optional(),
+        budget: z.number().optional(),
+        message: z.string().optional(),
+        source: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const lead = await createLead({
+          ownerId: input.ownerId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone,
+          company: input.company,
+          eventType: input.eventType,
+          eventDate: input.eventDate ? new Date(input.eventDate) : undefined,
+          guestCount: input.guestCount,
+          budget: input.budget?.toString() as any,
+          message: input.message,
+          source: input.source ?? "lead_form",
+          status: "new",
+        });
+        return lead;
+      }),
+
+    updateStatus: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"]),
+        note: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await updateLeadStatus(input.id, input.status, undefined);
+        await addLeadActivity({
+          leadId: input.id,
+          ownerId: ctx.user.id,
+          type: "status_change",
+          content: `Status changed to ${input.status}${input.note ? ": " + input.note : ""}`,
+        });
+        return { success: true };
+      }),
+
+    addNote: protectedProcedure
+      .input(z.object({ leadId: z.number(), content: z.string().min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        await addLeadActivity({ leadId: input.leadId, ownerId: ctx.user.id, type: "note", content: input.content });
+        return { success: true };
+      }),
+
+    getActivity: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input }) => {
+        return getLeadActivity(input.leadId);
+      }),
 
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        name: z.string().min(2).optional(),
-        description: z.string().optional(),
-        shortDescription: z.string().optional(),
-        venueType: z.enum(["restaurant","winery","rooftop_bar","heritage_building","garden","function_centre","hotel","beach","other"]).optional(),
-        city: z.enum(["Auckland","Wellington","Christchurch","Queenstown","Hamilton","Dunedin","Tauranga","Napier","Nelson","Rotorua"]).optional(),
-        suburb: z.string().optional(),
-        address: z.string().optional(),
-        capacity: z.number().min(1).optional(),
-        minCapacity: z.number().optional(),
-        minPriceNzd: z.number().optional(),
-        maxPriceNzd: z.number().optional(),
-        pricePerHead: z.number().optional(),
-        amenities: z.array(z.string()).optional(),
-        images: z.array(z.string()).optional(),
-        coverImage: z.string().optional(),
-        isActive: z.boolean().optional(),
+        internalNotes: z.string().optional(),
+        followUpDate: z.string().optional(),
+        assignedTo: z.number().optional(),
       }))
-      .mutation(({ ctx, input }) => updateVenue(input.id, ctx.user.id, {
-        ...input,
-        minPriceNzd: input.minPriceNzd?.toString() as any,
-        maxPriceNzd: input.maxPriceNzd?.toString() as any,
-        pricePerHead: input.pricePerHead?.toString() as any,
-      })),
+      .mutation(async ({ input }) => {
+        const { id, followUpDate, ...rest } = input;
+        await updateLead(id, {
+          ...rest,
+          followUpDate: followUpDate ? new Date(followUpDate) : undefined,
+        });
+        return { success: true };
+      }),
 
-    seed: publicProcedure.mutation(() => seedVenues()),
+    activity: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input }) => {
+        return getLeadActivity(input.leadId);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { leads } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return;
+        await db.delete(leads).where(and(eq(leads.id, input.id), eq(leads.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
   }),
 
-  inquiries: router({
-    submit: publicProcedure
-      .input(z.object({
-        venueId: z.number(),
-        plannerName: z.string().min(2),
-        plannerEmail: z.string().email(),
-        plannerPhone: z.string().optional(),
-        eventType: z.string().optional(),
-        eventDate: z.string().optional(),
-        guestCount: z.number().optional(),
-        message: z.string().optional(),
-        budget: z.number().optional(),
-      }))
-      .mutation(({ ctx, input }) => createInquiry({
-        venueId: input.venueId,
-        plannerName: input.plannerName,
-        plannerEmail: input.plannerEmail,
-        plannerPhone: input.plannerPhone,
-        eventType: input.eventType,
-        eventDate: input.eventDate ? new Date(input.eventDate) : undefined,
-        guestCount: input.guestCount,
-        message: input.message,
-        budget: input.budget?.toString() as any,
-        plannerId: ctx.user?.id,
-      })),
-
-    byVenue: protectedProcedure
-      .input(z.object({ venueId: z.number() }))
-      .query(({ input }) => getInquiriesByVenue(input.venueId)),
-
-    byPlanner: protectedProcedure
-      .query(({ ctx }) => getInquiriesByPlanner(ctx.user.id)),
-
-    updateStatus: protectedProcedure
-      .input(z.object({
-        id: z.number(),
-        status: z.enum(["new","viewed","responded","proposal_sent","booked","declined","cancelled"]),
-      }))
-      .mutation(({ input }) => updateInquiryStatus(input.id, input.status)),
-  }),
-
+  // ─── Proposals ─────────────────────────────────────────────────────────────
   proposals: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getProposals(ctx.user.id);
+    }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return getProposalById(input.id);
+      }),
+
+    byLead: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input }) => {
+        return getProposalsByLead(input.leadId);
+      }),
+
+    // Public: client views proposal by token
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const proposal = await getProposalByToken(input.token);
+        if (!proposal) return null;
+        // Mark as viewed if sent
+        if (proposal.status === "sent") {
+          await updateProposal(proposal.id, { status: "viewed", viewedAt: new Date() });
+        }
+        // Also fetch venue settings for branding
+        const venue = await getVenueSettings(proposal.ownerId);
+        return { proposal, venue };
+      }),
+
     create: protectedProcedure
       .input(z.object({
-        inquiryId: z.number(),
-        venueId: z.number(),
-        title: z.string().min(2),
-        message: z.string().optional(),
+        leadId: z.number(),
+        title: z.string().min(1),
+        introMessage: z.string().optional(),
         eventDate: z.string().optional(),
+        eventEndDate: z.string().optional(),
         guestCount: z.number().optional(),
-        packageName: z.string().optional(),
+        spaceName: z.string().optional(),
         lineItems: z.array(z.object({
           description: z.string(),
-          quantity: z.number(),
+          qty: z.number(),
           unitPrice: z.number(),
           total: z.number(),
         })).optional(),
-        subtotal: z.number().optional(),
-        gstAmount: z.number().optional(),
+        subtotalNzd: z.number().optional(),
+        taxPercent: z.number().optional(),
+        taxNzd: z.number().optional(),
         totalNzd: z.number().optional(),
-        depositRequired: z.number().optional(),
-        validUntil: z.string().optional(),
-        notes: z.string().optional(),
+        depositPercent: z.number().optional(),
+        depositNzd: z.number().optional(),
+        termsAndConditions: z.string().optional(),
+        internalNotes: z.string().optional(),
+        expiresAt: z.string().optional(),
       }))
-      .mutation(({ ctx, input }) => createProposal({
-        inquiryId: input.inquiryId,
-        venueId: input.venueId,
-        ownerId: ctx.user.id,
-        title: input.title,
-        message: input.message,
-        eventDate: input.eventDate ? new Date(input.eventDate) : undefined,
-        guestCount: input.guestCount,
-        packageName: input.packageName,
-        lineItems: input.lineItems,
-        subtotal: input.subtotal?.toString(),
-        gstAmount: input.gstAmount?.toString(),
-        totalNzd: input.totalNzd?.toString(),
-        depositRequired: input.depositRequired?.toString(),
-        validUntil: input.validUntil ? new Date(input.validUntil) : undefined,
-        notes: input.notes,
-      } as any)),
+      .mutation(async ({ input, ctx }) => {
+        const token = nanoid(32);
+        const proposal = await createProposal({
+          ownerId: ctx.user.id,
+          leadId: input.leadId,
+          publicToken: token,
+          title: input.title,
+          status: "draft",
+          introMessage: input.introMessage,
+          eventDate: input.eventDate ? new Date(input.eventDate) : undefined,
+          eventEndDate: input.eventEndDate ? new Date(input.eventEndDate) : undefined,
+          guestCount: input.guestCount,
+          spaceName: input.spaceName,
+          lineItems: input.lineItems ? JSON.stringify(input.lineItems) : undefined,
+          subtotalNzd: input.subtotalNzd?.toString() as any,
+          taxPercent: input.taxPercent?.toString() as any,
+          taxNzd: input.taxNzd?.toString() as any,
+          totalNzd: input.totalNzd?.toString() as any,
+          depositPercent: input.depositPercent?.toString() as any,
+          depositNzd: input.depositNzd?.toString() as any,
+          termsAndConditions: input.termsAndConditions,
+          internalNotes: input.internalNotes,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+        });
+        return proposal;
+      }),
 
-    byVenue: protectedProcedure
-      .input(z.object({ venueId: z.number() }))
-      .query(({ input }) => getProposalsByVenue(input.venueId)),
+    send: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        await updateProposal(input.id, { status: "sent", sentAt: new Date() });
+        const proposal = await getProposalById(input.id);
+        if (proposal) {
+          await updateLeadStatus(proposal.leadId, "proposal_sent");
+          await addLeadActivity({
+            leadId: proposal.leadId,
+            ownerId: ctx.user.id,
+            type: "proposal_sent",
+            content: `Proposal "${proposal.title}" sent to client`,
+          });
+        }
+        return { success: true, token: proposal?.publicToken };
+      }),
 
-    byPlanner: protectedProcedure
-      .query(({ ctx }) => getProposalsByPlanner(ctx.user.id)),
-
-    updateStatus: protectedProcedure
+    update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        status: z.enum(["draft","sent","viewed","accepted","declined","expired"]),
+        title: z.string().optional(),
+        introMessage: z.string().optional(),
+        lineItems: z.array(z.object({
+          description: z.string(),
+          qty: z.number(),
+          unitPrice: z.number(),
+          total: z.number(),
+        })).optional(),
+        subtotalNzd: z.number().optional(),
+        taxPercent: z.number().optional(),
+        taxNzd: z.number().optional(),
+        totalNzd: z.number().optional(),
+        depositPercent: z.number().optional(),
+        depositNzd: z.number().optional(),
+        termsAndConditions: z.string().optional(),
+        spaceName: z.string().optional(),
+        guestCount: z.number().optional(),
+        eventDate: z.string().optional(),
       }))
-      .mutation(({ input }) => updateProposalStatus(input.id, input.status)),
-  }),
+      .mutation(async ({ input }) => {
+        const { id, lineItems, eventDate, subtotalNzd, taxPercent, taxNzd, totalNzd, depositPercent, depositNzd, ...rest } = input;
+        await updateProposal(id, {
+          ...rest,
+          lineItems: lineItems ? JSON.stringify(lineItems) : undefined,
+          eventDate: eventDate ? new Date(eventDate) : undefined,
+          subtotalNzd: subtotalNzd?.toString() as any,
+          taxPercent: taxPercent?.toString() as any,
+          taxNzd: taxNzd?.toString() as any,
+          totalNzd: totalNzd?.toString() as any,
+          depositPercent: depositPercent?.toString() as any,
+          depositNzd: depositNzd?.toString() as any,
+        });
+        return { success: true };
+      }),
 
-  availability: router({
-    byVenue: publicProcedure
-      .input(z.object({ venueId: z.number() }))
-      .query(({ input }) => getAvailabilityByVenue(input.venueId)),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { proposals } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return;
+        await db.delete(proposals).where(and(eq(proposals.id, input.id), eq(proposals.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
 
-    set: protectedProcedure
+    // Public: client responds to proposal
+    respond: publicProcedure
       .input(z.object({
-        venueId: z.number(),
-        date: z.string(),
-        isAvailable: z.boolean(),
-        note: z.string().optional(),
+        token: z.string(),
+        action: z.enum(["accepted", "declined"]),
+        clientMessage: z.string().optional(),
       }))
-      .mutation(({ input }) => setAvailability({
-        ...input,
-        date: new Date(input.date),
-      })),
+      .mutation(async ({ input }) => {
+        const proposal = await getProposalByToken(input.token);
+        if (!proposal) throw new Error("Proposal not found");
+        if (!["sent", "viewed"].includes(proposal.status)) throw new Error("Proposal cannot be responded to");
+        await updateProposal(proposal.id, {
+          status: input.action,
+          respondedAt: new Date(),
+          clientMessage: input.clientMessage,
+        });
+        // If accepted, create a booking
+        if (input.action === "accepted") {
+          const lead = await getLeadById(proposal.leadId);
+          if (lead) {
+            await createBooking({
+              ownerId: proposal.ownerId,
+              leadId: proposal.leadId,
+              proposalId: proposal.id,
+              firstName: lead.firstName,
+              lastName: lead.lastName ?? undefined,
+              email: lead.email,
+              eventType: lead.eventType ?? undefined,
+              eventDate: proposal.eventDate ?? lead.eventDate ?? new Date(),
+              eventEndDate: proposal.eventEndDate ?? undefined,
+              guestCount: proposal.guestCount ?? lead.guestCount ?? undefined,
+              spaceName: proposal.spaceName ?? undefined,
+              totalNzd: proposal.totalNzd as any,
+              depositNzd: proposal.depositNzd as any,
+              status: "confirmed",
+            });
+            await updateLeadStatus(proposal.leadId, "booked");
+            await addLeadActivity({
+              leadId: proposal.leadId,
+              ownerId: proposal.ownerId,
+              type: "booking_created",
+              content: `Client accepted proposal "${proposal.title}" — booking confirmed!`,
+            });
+          }
+        }
+        return { success: true, status: input.action };
+      }),
   }),
 
+  // ─── Bookings ──────────────────────────────────────────────────────────────
   bookings: router({
-    byVenue: protectedProcedure
-      .input(z.object({ venueId: z.number() }))
-      .query(({ input }) => getBookingsByVenue(input.venueId)),
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getBookings(ctx.user.id);
+    }),
+
+    byMonth: protectedProcedure
+      .input(z.object({ year: z.number(), month: z.number() }))
+      .query(async ({ input, ctx }) => {
+        return getBookingsByMonth(ctx.user.id, input.year, input.month);
+      }),
   }),
 
+  // ─── Dashboard ─────────────────────────────────────────────────────────────
   dashboard: router({
-    stats: protectedProcedure
-      .input(z.object({ ownerId: z.number() }))
-      .query(({ input }) => getDashboardStats(input.ownerId)),
+    stats: protectedProcedure.query(async ({ ctx }) => {
+      return getDashboardStats(ctx.user.id);
+    }),
   }),
 });
 

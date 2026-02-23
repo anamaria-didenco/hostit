@@ -1,489 +1,266 @@
-import { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { MapPin, Users, Star, ArrowRight, Calendar, FileText, Search, ChevronRight } from "lucide-react";
-import { trpc } from "@/lib/trpc";
+import { getLoginUrl } from "@/const";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { ArrowRight, CheckCircle, FileText, Calendar, Users } from "lucide-react";
 
-// ── Inline SVG Illustrations (vintage line-art style) ──────────────────────
-const WaiterIllustration = () => (
-  <svg viewBox="0 0 120 160" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Running waiter silhouette - Campari Bar Manero style */}
-    <ellipse cx="72" cy="22" rx="12" ry="13" fill="oklch(0.28 0.08 30)" />
-    {/* Body */}
-    <path d="M60 35 Q55 55 50 70 Q45 80 42 95" stroke="oklch(0.28 0.08 30)" strokeWidth="8" strokeLinecap="round" fill="none"/>
-    {/* Jacket lapels */}
-    <path d="M60 35 L52 50 L60 48 L68 50 L60 35Z" fill="oklch(0.28 0.08 30)"/>
-    <path d="M60 46 L57 52 L63 52Z" fill="white"/>
-    {/* Arm holding tray */}
-    <path d="M60 42 Q80 35 95 30" stroke="oklch(0.28 0.08 30)" strokeWidth="6" strokeLinecap="round" fill="none"/>
-    {/* Tray */}
-    <ellipse cx="95" cy="28" rx="16" ry="4" fill="oklch(0.28 0.08 30)"/>
-    {/* Bottle on tray */}
-    <rect x="93" y="12" width="5" height="16" rx="2" fill="oklch(0.52 0.22 28)"/>
-    <rect x="94" y="8" width="3" height="5" rx="1" fill="oklch(0.52 0.22 28)"/>
-    {/* Other arm */}
-    <path d="M58 48 Q45 55 40 60" stroke="oklch(0.28 0.08 30)" strokeWidth="6" strokeLinecap="round" fill="none"/>
-    <path d="M40 58 L35 68 L45 65Z" fill="oklch(0.965 0.018 88)"/>
-    {/* Legs running */}
-    <path d="M42 95 Q35 115 25 130" stroke="oklch(0.28 0.08 30)" strokeWidth="7" strokeLinecap="round" fill="none"/>
-    <path d="M42 95 Q50 110 55 125" stroke="oklch(0.28 0.08 30)" strokeWidth="7" strokeLinecap="round" fill="none"/>
-    {/* Shoes */}
-    <ellipse cx="22" cy="132" rx="8" ry="4" fill="oklch(0.28 0.08 30)" transform="rotate(-20 22 132)"/>
-    <ellipse cx="57" cy="127" rx="8" ry="4" fill="oklch(0.28 0.08 30)" transform="rotate(15 57 127)"/>
-  </svg>
-);
-
-const DinerLadyIllustration = () => (
-  <svg viewBox="0 0 100 130" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Seated diner - Fabiola's style */}
-    <circle cx="50" cy="20" r="14" fill="oklch(0.52 0.22 28)" opacity="0.15" stroke="oklch(0.52 0.22 28)" strokeWidth="2"/>
-    <ellipse cx="50" cy="16" rx="9" ry="10" fill="oklch(0.76 0.14 75)" opacity="0.5"/>
-    {/* Hair */}
-    <path d="M41 14 Q45 5 50 8 Q55 5 59 14" stroke="oklch(0.28 0.08 30)" strokeWidth="3" fill="none" strokeLinecap="round"/>
-    {/* Face */}
-    <circle cx="46" cy="17" r="1.5" fill="oklch(0.28 0.08 30)"/>
-    <circle cx="54" cy="17" r="1.5" fill="oklch(0.28 0.08 30)"/>
-    <path d="M46 22 Q50 25 54 22" stroke="oklch(0.52 0.22 28)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-    {/* Body/dress */}
-    <path d="M41 30 Q35 50 33 75 Q40 80 50 80 Q60 80 67 75 Q65 50 59 30Z" fill="oklch(0.52 0.22 28)" opacity="0.8"/>
-    {/* Arms raised with wine glass */}
-    <path d="M41 38 Q30 32 25 28" stroke="oklch(0.28 0.08 30)" strokeWidth="4" strokeLinecap="round" fill="none"/>
-    {/* Wine glass */}
-    <path d="M22 20 L28 20 L27 28 L23 28Z" fill="oklch(0.52 0.22 28)" opacity="0.6"/>
-    <rect x="24" y="28" width="2" height="6" fill="oklch(0.28 0.08 30)" opacity="0.5"/>
-    <rect x="21" y="34" width="8" height="2" rx="1" fill="oklch(0.28 0.08 30)" opacity="0.5"/>
-    {/* Other arm */}
-    <path d="M59 38 Q70 35 75 32" stroke="oklch(0.28 0.08 30)" strokeWidth="4" strokeLinecap="round" fill="none"/>
-    {/* Legs */}
-    <path d="M40 78 Q38 95 36 110" stroke="oklch(0.28 0.08 30)" strokeWidth="5" strokeLinecap="round" fill="none"/>
-    <path d="M60 78 Q62 95 64 110" stroke="oklch(0.28 0.08 30)" strokeWidth="5" strokeLinecap="round" fill="none"/>
-  </svg>
-);
-
-const CITIES = ["Auckland", "Wellington", "Christchurch", "Queenstown", "Hamilton", "Dunedin"];
-const VENUE_TYPES = [
-  { value: "restaurant", label: "Restaurants", icon: "🍽️" },
-  { value: "winery", label: "Wineries", icon: "🍷" },
-  { value: "rooftop_bar", label: "Rooftop Bars", icon: "🌆" },
-  { value: "heritage_building", label: "Heritage", icon: "🏛️" },
-  { value: "garden", label: "Gardens", icon: "🌿" },
-  { value: "function_centre", label: "Functions", icon: "🎉" },
-];
+// Inline SVG waiter character (Campari-style)
+function WaiterIllustration() {
+  return (
+    <svg viewBox="0 0 120 200" className="w-28 h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Tray */}
+      <ellipse cx="85" cy="55" rx="22" ry="5" fill="#C8102E" opacity="0.9"/>
+      {/* Bottle on tray */}
+      <rect x="83" y="38" width="6" height="18" rx="2" fill="#6D1A36"/>
+      <rect x="84" y="35" width="4" height="5" rx="1" fill="#6D1A36"/>
+      {/* Arm holding tray */}
+      <path d="M70 80 Q80 65 85 55" stroke="#2C1810" strokeWidth="5" strokeLinecap="round"/>
+      {/* Body */}
+      <rect x="52" y="90" width="28" height="50" rx="4" fill="#1a1a1a"/>
+      {/* White shirt front */}
+      <rect x="60" y="90" width="12" height="40" rx="2" fill="#FAF7F2"/>
+      {/* Bow tie */}
+      <path d="M62 95 L66 98 L70 95 L66 92 Z" fill="#C8102E"/>
+      {/* Head */}
+      <ellipse cx="66" cy="75" rx="12" ry="13" fill="#C8A882"/>
+      {/* Hair */}
+      <path d="M54 72 Q66 60 78 72" fill="#2C1810"/>
+      {/* Face - nose */}
+      <path d="M70 76 Q73 78 70 80" stroke="#8B6B4A" strokeWidth="1.5" fill="none"/>
+      {/* Left leg */}
+      <path d="M56 140 L52 185" stroke="#1a1a1a" strokeWidth="7" strokeLinecap="round"/>
+      {/* Right leg (forward stride) */}
+      <path d="M72 140 L80 180" stroke="#1a1a1a" strokeWidth="7" strokeLinecap="round"/>
+      {/* Left shoe */}
+      <ellipse cx="50" cy="186" rx="8" ry="4" fill="#1a1a1a"/>
+      {/* Right shoe */}
+      <ellipse cx="82" cy="181" rx="8" ry="4" fill="#1a1a1a"/>
+      {/* Left arm down */}
+      <path d="M52 100 Q40 115 38 130" stroke="#1a1a1a" strokeWidth="5" strokeLinecap="round"/>
+      {/* White glove */}
+      <circle cx="37" cy="132" r="5" fill="#FAF7F2"/>
+    </svg>
+  );
+}
 
 export default function Home() {
-  const [selectedCity, setSelectedCity] = useState("");
-  const [selectedType, setSelectedType] = useState("");
-
-  const { data: venues } = trpc.venues.list.useQuery({});
-  const seedMutation = trpc.venues.seed.useMutation({
-    onSuccess: () => window.location.reload(),
-  });
-
-  const featured = venues?.filter(v => v.isFeatured).slice(0, 3) ?? [];
-  const allVenues = venues ?? [];
+  const { isAuthenticated } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background font-dm overflow-x-hidden">
-
-      {/* ── Navigation ─────────────────────────────────────────────────── */}
-      <nav className="bg-brown text-cream sticky top-0 z-50 shadow-lg border-b-4 border-tomato">
-        <div className="container mx-auto px-4 flex items-center justify-between h-16">
-          <Link href="/">
-            <div className="flex items-center gap-0.5 cursor-pointer">
-              <span className="font-alfa text-3xl text-tomato tracking-tight leading-none">HOST</span>
-              <span className="font-pacifico text-2xl text-amber leading-none mt-1">it</span>
-            </div>
+    <div className="min-h-screen bg-[#FAF7F2] font-dm overflow-x-hidden">
+      {/* Top Nav */}
+      <nav className="bg-brown text-cream h-14 flex items-center px-6 justify-between sticky top-0 z-50 border-b-4 border-tomato">
+        <div className="flex items-center gap-0.5">
+          <span className="font-alfa text-2xl text-tomato">HOST</span>
+          <span className="font-pacifico text-xl text-amber">it</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/enquire">
+            <Button variant="ghost" size="sm" className="text-cream/60 hover:text-cream font-bebas tracking-widest text-xs">
+              SUBMIT ENQUIRY
+            </Button>
           </Link>
-          <div className="hidden md:flex items-center gap-6 text-sm">
-            <Link href="/venues" className="text-cream/80 hover:text-amber transition-colors font-dm tracking-wide">Find a Venue</Link>
-            <Link href="/owner/dashboard" className="text-cream/80 hover:text-amber transition-colors font-dm tracking-wide">For Owners</Link>
-            <Link href="/planner/portal" className="text-cream/80 hover:text-amber transition-colors font-dm tracking-wide">My Events</Link>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/venues">
-              <Button size="sm" className="bg-tomato hover:bg-tomato/90 text-white font-dm text-xs px-4 rounded-none border-2 border-tomato">
-                Find a Venue
+          {isAuthenticated ? (
+            <Link href="/dashboard">
+              <Button size="sm" className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none text-xs">
+                DASHBOARD
               </Button>
             </Link>
-            <Link href="/owner/dashboard">
-              <Button size="sm" variant="outline" className="border-2 border-amber text-amber hover:bg-amber hover:text-brown font-dm text-xs px-4 rounded-none bg-transparent">
-                List Venue
+          ) : (
+            <a href={getLoginUrl()}>
+              <Button size="sm" className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none text-xs">
+                SIGN IN
               </Button>
-            </Link>
-          </div>
+            </a>
+          )}
         </div>
       </nav>
 
-      {/* ── Hero ───────────────────────────────────────────────────────── */}
-      <section className="bg-parchment relative overflow-hidden min-h-[90vh] flex items-center">
-        {/* Large decorative background text */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
-          <span className="font-alfa text-[22vw] text-tomato/5 leading-none whitespace-nowrap">HOSTit</span>
+      {/* Hero */}
+      <section className="bg-brown text-cream relative overflow-hidden">
+        {/* Decorative background text */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none select-none overflow-hidden">
+          <span className="font-alfa text-[20vw] text-cream whitespace-nowrap">HOSTit</span>
         </div>
 
-        <div className="container mx-auto px-4 relative z-10 py-12">
-          <div className="grid md:grid-cols-2 gap-8 items-center">
-            {/* Left: Text */}
+        <div className="max-w-5xl mx-auto px-6 py-16 md:py-24 relative z-10">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
-              {/* Stamp badge */}
-              <div className="inline-flex items-center gap-2 mb-6">
-                <div className="bg-amber text-brown font-bebas tracking-[0.2em] text-xs px-4 py-1.5 badge-stamp">
-                  NEW ZEALAND'S VENUE PLATFORM
-                </div>
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 border border-amber/40 px-3 py-1 mb-6">
+                <div className="w-1.5 h-1.5 bg-amber rounded-full" />
+                <span className="font-bebas text-xs tracking-widest text-amber">EVENT CRM FOR NZ RESTAURANTS & VENUES</span>
               </div>
 
-              <h1 className="font-alfa text-5xl md:text-7xl text-brown leading-[0.95] mb-2">
-                FIND YOUR<br/>
-                <span className="text-tomato">PERFECT</span><br/>
-                VENUE
+              <h1 className="font-alfa text-5xl md:text-6xl text-cream leading-none mb-4">
+                MANAGE YOUR<br />
+                <span className="text-tomato">EVENTS</span><br />
+                BEAUTIFULLY.
               </h1>
 
-              <div className="retro-divider text-amber my-5 font-bebas">
-                <span>Auckland · Wellington · Christchurch · Queenstown</span>
+              {/* Decorative rule */}
+              <div className="flex items-center gap-3 my-5">
+                <div className="w-12 h-0.5 bg-amber" />
+                <div className="w-1.5 h-1.5 bg-amber rotate-45" />
+                <div className="w-12 h-0.5 bg-amber" />
               </div>
 
-              <p className="font-dm text-foreground/70 text-lg mb-8 max-w-md leading-relaxed">
-                Discover extraordinary venues across New Zealand for weddings, 
-                corporate events, private dining, and every occasion worth celebrating.
+              <p className="font-dm text-cream/60 text-base leading-relaxed mb-8 max-w-md">
+                HOSTit is the event enquiry and proposal platform built for New Zealand restaurants, bars, and function venues. Capture leads, build stunning proposals, and confirm bookings — all in one place.
               </p>
 
-              {/* Search form */}
-              <div className="bg-card border-2 border-brown/20 p-4 mb-6 shadow-sm">
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">CITY</label>
-                    <select
-                      value={selectedCity}
-                      onChange={e => setSelectedCity(e.target.value)}
-                      className="w-full border-2 border-border bg-background font-dm text-sm px-3 py-2 focus:outline-none focus:border-tomato rounded-none"
-                    >
-                      <option value="">All Cities</option>
-                      {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">VENUE TYPE</label>
-                    <select
-                      value={selectedType}
-                      onChange={e => setSelectedType(e.target.value)}
-                      className="w-full border-2 border-border bg-background font-dm text-sm px-3 py-2 focus:outline-none focus:border-tomato rounded-none"
-                    >
-                      <option value="">All Types</option>
-                      {VENUE_TYPES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <Link href={`/venues${selectedCity || selectedType ? `?city=${selectedCity}&type=${selectedType}` : ''}`}>
-                  <Button className="w-full bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest text-base rounded-none h-11">
-                    <Search className="w-4 h-4 mr-2" />
-                    SEARCH VENUES
+              <div className="flex flex-wrap gap-3">
+                <a href={getLoginUrl()}>
+                  <Button className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none h-12 px-8 text-base gap-2">
+                    GET STARTED FREE <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </a>
+                <Link href="/enquire">
+                  <Button variant="outline" className="border-2 border-cream/20 text-cream hover:bg-cream/10 font-bebas tracking-widest rounded-none h-12 px-8 text-base bg-transparent">
+                    VIEW LEAD FORM
                   </Button>
                 </Link>
               </div>
-
-              <div className="flex items-center gap-6 text-sm font-dm text-muted-foreground">
-                <span><strong className="font-alfa text-tomato text-xl">148+</strong> Venues</span>
-                <span className="text-border">|</span>
-                <span><strong className="font-alfa text-tomato text-xl">10</strong> Cities</span>
-                <span className="text-border">|</span>
-                <span><strong className="font-alfa text-tomato text-xl">2,400+</strong> Events</span>
-              </div>
             </div>
 
-            {/* Right: Illustration */}
-            <div className="relative hidden md:flex items-center justify-center">
-              {/* Large tomato red circle background */}
-              <div className="w-80 h-80 rounded-full bg-tomato flex items-center justify-center relative">
-                {/* Waiter illustration */}
-                <div className="w-48 h-64 absolute -top-8">
-                  <WaiterIllustration />
+            {/* Illustration */}
+            <div className="flex justify-center items-end">
+              <div className="relative">
+                {/* Background circle */}
+                <div className="w-56 h-56 bg-tomato/20 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                <WaiterIllustration />
+                {/* Floating badge */}
+                <div className="absolute -top-4 -right-8 bg-amber text-brown px-3 py-1.5 shadow-lg rotate-3">
+                  <div className="font-bebas text-xs tracking-widest">NEW ENQUIRY!</div>
+                  <div className="font-dm text-xs font-semibold">Wedding · 80 guests</div>
                 </div>
-                {/* Decorative text around circle */}
-                <svg viewBox="0 0 200 200" className="absolute inset-0 w-full h-full">
-                  <path id="circle-text" d="M 100,100 m -75,0 a 75,75 0 1,1 150,0 a 75,75 0 1,1 -150,0" fill="none"/>
-                  <text className="font-bebas" fontSize="10" fill="oklch(0.985 0.010 90)" opacity="0.6" letterSpacing="4">
-                    <textPath href="#circle-text">FIND · ENQUIRE · BOOK · CELEBRATE · FIND · ENQUIRE · BOOK · CELEBRATE · </textPath>
-                  </text>
-                </svg>
-              </div>
-              {/* Floating badge */}
-              <div className="absolute top-4 right-4 bg-amber text-brown p-3 badge-stamp text-center shadow-lg">
-                <div className="font-bebas text-xs tracking-widest leading-tight">EST.</div>
-                <div className="font-alfa text-2xl leading-tight">2025</div>
-                <div className="font-bebas text-xs tracking-widest leading-tight">NZ</div>
+                <div className="absolute -bottom-2 -left-8 bg-white border-2 border-border px-3 py-1.5 shadow-lg -rotate-2">
+                  <div className="font-bebas text-xs tracking-widest text-green-600">PROPOSAL ACCEPTED</div>
+                  <div className="font-alfa text-sm text-brown">$4,800 NZD</div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Venue Types ────────────────────────────────────────────────── */}
-      <section className="bg-tomato py-12 relative overflow-hidden">
-        {/* Decorative stripes */}
-        <div className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'repeating-linear-gradient(45deg, white 0, white 1px, transparent 0, transparent 12px)', backgroundSize: '17px 17px' }}
-        />
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="text-center mb-8">
-            <h2 className="font-alfa text-3xl text-white tracking-wide">BROWSE BY TYPE</h2>
-            <div className="w-16 h-1 bg-amber mx-auto mt-2" />
-          </div>
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-            {VENUE_TYPES.map((type) => (
-              <Link key={type.value} href={`/venues?type=${type.value}`}>
-                <div className="group bg-white/10 hover:bg-amber border-2 border-white/20 hover:border-amber p-4 text-center cursor-pointer transition-all">
-                  <div className="text-3xl mb-2">{type.icon}</div>
-                  <div className="font-bebas text-white group-hover:text-brown text-sm tracking-widest">{type.label}</div>
-                </div>
-              </Link>
-            ))}
+      {/* Red stripe */}
+      <div className="h-3 bg-tomato" />
+
+      {/* How It Works */}
+      <section className="py-16 px-6 max-w-5xl mx-auto">
+        <div className="text-center mb-12">
+          <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">THE WORKFLOW</div>
+          <h2 className="font-alfa text-4xl text-brown">HOW HOSTit WORKS</h2>
+          <div className="flex items-center gap-3 justify-center mt-3">
+            <div className="w-8 h-0.5 bg-tomato" />
+            <div className="w-1.5 h-1.5 bg-tomato rotate-45" />
+            <div className="w-8 h-0.5 bg-tomato" />
           </div>
         </div>
-      </section>
 
-      {/* ── Featured Venues ────────────────────────────────────────────── */}
-      <section className="bg-background py-16">
-        <div className="container mx-auto px-4">
-          <div className="flex items-end justify-between mb-10">
-            <div>
-              <div className="retro-divider text-tomato mb-3 font-bebas max-w-xs">
-                <span>HANDPICKED FOR YOU</span>
+        <div className="grid md:grid-cols-4 gap-6">
+          {[
+            {
+              num: "01",
+              icon: <Users className="w-6 h-6" />,
+              title: "CAPTURE LEADS",
+              desc: "Share your branded enquiry form link. Clients fill it out with their event details — it lands straight in your inbox.",
+            },
+            {
+              num: "02",
+              icon: <FileText className="w-6 h-6" />,
+              title: "BUILD PROPOSALS",
+              desc: "Create itemised proposals with your pricing, GST, deposit requirements, and T&Cs. Looks professional every time.",
+            },
+            {
+              num: "03",
+              icon: <ArrowRight className="w-6 h-6" />,
+              title: "SEND TO CLIENT",
+              desc: "Send a unique proposal link. Clients can view, accept, or decline online — no printing, no PDFs, no back-and-forth.",
+            },
+            {
+              num: "04",
+              icon: <Calendar className="w-6 h-6" />,
+              title: "CONFIRM BOOKING",
+              desc: "When accepted, the booking is automatically added to your calendar. Track deposits and manage your event pipeline.",
+            },
+          ].map((step) => (
+            <div key={step.num} className="relative">
+              <div className="bg-white border-2 border-border p-6 shadow-sm h-full">
+                <div className="font-alfa text-5xl text-tomato/10 mb-2">{step.num}</div>
+                <div className="text-tomato mb-3">{step.icon}</div>
+                <h3 className="font-alfa text-sm text-brown mb-2">{step.title}</h3>
+                <p className="font-dm text-xs text-muted-foreground leading-relaxed">{step.desc}</p>
               </div>
-              <h2 className="font-alfa text-4xl text-brown">FEATURED VENUES</h2>
             </div>
-            <Link href="/venues" className="hidden md:flex items-center gap-2 text-tomato font-bebas tracking-widest text-sm hover:gap-3 transition-all">
-              VIEW ALL <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-
-          {allVenues.length === 0 && (
-            <div className="text-center py-12 border-2 border-dashed border-border">
-              <p className="font-dm text-muted-foreground mb-4">No venues loaded yet.</p>
-              <Button
-                onClick={() => seedMutation.mutate()}
-                disabled={seedMutation.isPending}
-                className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none"
-              >
-                {seedMutation.isPending ? "Loading..." : "LOAD SAMPLE VENUES"}
-              </Button>
-            </div>
-          )}
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {(featured.length > 0 ? featured : allVenues.slice(0, 3)).map((venue) => (
-              <Link key={venue.id} href={`/venues/${venue.slug}`}>
-                <div className="group bg-card border-2 border-border hover:border-tomato overflow-hidden cursor-pointer transition-all hover:shadow-xl">
-                  <div className="relative h-52 overflow-hidden bg-muted">
-                    {venue.coverImage ? (
-                      <img src={venue.coverImage} alt={venue.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-tomato/20 to-amber/20 flex items-center justify-center">
-                        <span className="font-alfa text-4xl text-brown/20">{venue.name[0]}</span>
-                      </div>
-                    )}
-                    {/* Venue type badge */}
-                    <div className="absolute bottom-0 left-0 bg-tomato text-white font-bebas text-xs tracking-widest px-3 py-1">
-                      {venue.venueType.replace("_", " ").toUpperCase()}
-                    </div>
-                    {venue.isFeatured && (
-                      <div className="absolute top-3 right-3 bg-amber text-brown font-bebas text-xs tracking-widest px-2 py-1">
-                        FEATURED
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-start justify-between mb-1">
-                      <h3 className="font-playfair text-xl text-brown font-bold leading-tight">{venue.name}</h3>
-                      {venue.rating && Number(venue.rating) > 0 && (
-                        <div className="flex items-center gap-1 text-xs flex-shrink-0 ml-2 bg-amber/20 px-2 py-0.5">
-                          <Star className="w-3 h-3 fill-amber text-amber" />
-                          <span className="font-dm font-semibold text-brown">{venue.rating}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 text-muted-foreground text-xs mb-3 font-dm">
-                      <MapPin className="w-3 h-3 text-tomato" />
-                      {venue.suburb ? `${venue.suburb}, ` : ""}{venue.city}
-                    </div>
-                    <div className="flex items-center justify-between pt-3 border-t-2 border-dashed border-border">
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground font-dm">
-                        <Users className="w-3 h-3" />
-                        Up to {venue.capacity}
-                      </div>
-                      <div className="text-right">
-                        {venue.minPriceNzd ? (
-                          <span className="font-alfa text-tomato text-lg">${Number(venue.minPriceNzd).toLocaleString()} <span className="font-dm text-xs text-muted-foreground font-normal">NZD</span></span>
-                        ) : (
-                          <span className="font-dm text-xs text-tomato">Enquire for pricing</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-
-          <div className="text-center mt-8 md:hidden">
-            <Link href="/venues">
-              <Button variant="outline" className="border-2 border-tomato text-tomato hover:bg-tomato hover:text-white font-bebas tracking-widest rounded-none">
-                VIEW ALL VENUES <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </Link>
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* ── How It Works ───────────────────────────────────────────────── */}
-      <section className="bg-amber py-16 relative overflow-hidden">
-        <div className="absolute right-0 top-0 h-full w-64 opacity-10 flex items-center">
-          <DinerLadyIllustration />
-        </div>
-        <div className="container mx-auto px-4 relative z-10">
+      {/* Features */}
+      <section className="bg-brown text-cream py-16 px-6">
+        <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="font-alfa text-4xl text-brown tracking-wide">HOW IT WORKS</h2>
-            <div className="w-16 h-1 bg-tomato mx-auto mt-2" />
+            <div className="font-bebas text-xs tracking-widest text-amber mb-2">EVERYTHING YOU NEED</div>
+            <h2 className="font-alfa text-4xl text-cream">BUILT FOR VENUE TEAMS</h2>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 gap-4">
             {[
-              { icon: <Search className="w-8 h-8" />, num: "01", title: "SEARCH & DISCOVER", desc: "Browse hundreds of curated venues across New Zealand, filtered by location, capacity, type, and budget." },
-              { icon: <FileText className="w-8 h-8" />, num: "02", title: "ENQUIRE & PROPOSE", desc: "Submit your event details to shortlisted venues and receive customised proposals with full NZD pricing." },
-              { icon: <Calendar className="w-8 h-8" />, num: "03", title: "BOOK & CELEBRATE", desc: "Confirm your booking, manage all details in one place, and focus on making your event unforgettable." },
-            ].map((item) => (
-              <div key={item.num} className="text-center">
-                <div className="w-16 h-16 bg-tomato flex items-center justify-center mx-auto mb-4 text-white">
-                  {item.icon}
+              { title: "LEADS INBOX", desc: "All enquiries in one place. See new leads instantly, with full event details and client contact info." },
+              { title: "PIPELINE VIEW", desc: "Drag leads through your sales pipeline — from New to Contacted to Proposal Sent to Booked." },
+              { title: "PROPOSAL BUILDER", desc: "Build itemised proposals with line items, GST, deposit amounts, and custom T&Cs." },
+              { title: "CLIENT PORTAL", desc: "Clients get a beautiful proposal page they can accept or decline with one click." },
+              { title: "BOOKINGS CALENDAR", desc: "See all confirmed bookings on a monthly calendar. Never double-book again." },
+              { title: "ACTIVITY LOG", desc: "Full history of every note, status change, and proposal sent for each lead." },
+            ].map(f => (
+              <div key={f.title} className="border border-cream/10 p-5 hover:bg-cream/5 transition-colors">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1.5 h-1.5 bg-tomato rounded-full" />
+                  <h3 className="font-alfa text-sm text-amber">{f.title}</h3>
                 </div>
-                <div className="font-alfa text-5xl text-brown/20 mb-1">{item.num}</div>
-                <h3 className="font-bebas text-xl text-brown tracking-widest mb-3">{item.title}</h3>
-                <p className="font-dm text-brown/70 text-sm leading-relaxed">{item.desc}</p>
+                <p className="font-dm text-xs text-cream/50 leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── For Venue Owners ───────────────────────────────────────────── */}
-      <section className="bg-background py-16">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-2 gap-0 border-2 border-brown/20 overflow-hidden">
-            {/* Left: tomato red panel with illustration */}
-            <div className="bg-tomato relative p-8 flex flex-col justify-between min-h-64">
-              <div className="absolute inset-0 opacity-10"
-                style={{ backgroundImage: 'repeating-linear-gradient(45deg, white 0, white 1px, transparent 0, transparent 12px)', backgroundSize: '17px 17px' }}
-              />
-              <div className="relative z-10">
-                <div className="font-bebas text-white/60 tracking-[0.3em] text-xs mb-2">FOR VENUE OWNERS</div>
-                <h2 className="font-alfa text-4xl text-white leading-tight mb-4">GROW YOUR<br/>EVENTS<br/>BUSINESS</h2>
-              </div>
-              <div className="relative z-10 flex items-end justify-between">
-                <div>
-                  <div className="font-alfa text-6xl text-amber">148+</div>
-                  <div className="font-bebas text-white/70 tracking-widest text-sm">VENUES LISTED</div>
-                </div>
-                <div className="w-32 h-40 opacity-80">
-                  <WaiterIllustration />
-                </div>
-              </div>
-            </div>
-            {/* Right: content */}
-            <div className="bg-card p-8 md:p-10">
-              <p className="font-dm text-muted-foreground mb-6 leading-relaxed">
-                List your venue on HOSTit and connect with thousands of event planners across New Zealand. 
-                Manage bookings, send proposals, and track your revenue — all in one elegant dashboard.
-              </p>
-              <ul className="space-y-3 mb-8">
-                {[
-                  "Centralised booking & inquiry management",
-                  "Custom quotes & proposal builder",
-                  "Calendar & availability control",
-                  "Real-time analytics & reporting",
-                ].map((item) => (
-                  <li key={item} className="flex items-center gap-3 font-dm text-sm">
-                    <div className="w-5 h-5 bg-tomato flex items-center justify-center flex-shrink-0">
-                      <ChevronRight className="w-3 h-3 text-white" />
-                    </div>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/owner/dashboard">
-                <Button className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none px-8 h-11">
-                  LIST YOUR VENUE <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </Link>
-            </div>
+      {/* CTA */}
+      <section className="py-16 px-6 text-center bg-[#FAF7F2]">
+        <div className="max-w-lg mx-auto">
+          <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">GET STARTED TODAY</div>
+          <h2 className="font-alfa text-4xl text-brown mb-4">READY TO HOST BETTER EVENTS?</h2>
+          <p className="font-dm text-muted-foreground text-sm mb-8">
+            Join New Zealand restaurants and venues using HOSTit to streamline their private events business.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <a href={getLoginUrl()}>
+              <Button className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none h-12 px-10 text-base gap-2">
+                START FREE <ArrowRight className="w-4 h-4" />
+              </Button>
+            </a>
+            <Link href="/enquire">
+              <Button variant="outline" className="border-2 border-border hover:border-tomato hover:text-tomato font-bebas tracking-widest rounded-none h-12 px-10 text-base">
+                SEE LEAD FORM
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* ── Cities ─────────────────────────────────────────────────────── */}
-      <section className="bg-brown py-12">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-8">
-            <h2 className="font-alfa text-2xl text-cream tracking-wide">BROWSE BY CITY</h2>
-          </div>
-          <div className="flex flex-wrap justify-center gap-3">
-            {CITIES.map((city) => (
-              <Link key={city} href={`/venues?city=${city}`}>
-                <div className="group flex items-center gap-2 border-2 border-cream/20 hover:border-amber hover:bg-amber/10 px-5 py-3 cursor-pointer transition-all">
-                  <MapPin className="w-4 h-4 text-tomato" />
-                  <span className="font-bebas text-cream group-hover:text-amber tracking-widest text-sm">{city.toUpperCase()}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
+      {/* Footer */}
+      <footer className="bg-brown text-cream py-8 px-6 text-center border-t-4 border-tomato">
+        <div className="flex items-center justify-center gap-0.5 mb-2">
+          <span className="font-alfa text-2xl text-tomato">HOST</span>
+          <span className="font-pacifico text-xl text-amber">it</span>
         </div>
-      </section>
-
-      {/* ── Footer ─────────────────────────────────────────────────────── */}
-      <footer className="bg-brown text-cream border-t-4 border-tomato py-12">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-0.5 mb-4">
-                <span className="font-alfa text-4xl text-tomato tracking-tight">HOST</span>
-                <span className="font-pacifico text-3xl text-amber">it</span>
-              </div>
-              <p className="font-dm text-cream/50 text-sm leading-relaxed">
-                New Zealand's premier venue management platform for extraordinary events.
-              </p>
-              <div className="mt-4 retro-divider text-amber/40 font-bebas max-w-[180px]">
-                <span>NZ MADE</span>
-              </div>
-            </div>
-            <div>
-              <h4 className="font-bebas text-amber tracking-widest mb-4">FOR PLANNERS</h4>
-              <ul className="space-y-2 font-dm text-sm text-cream/50">
-                <li><Link href="/venues" className="hover:text-amber transition-colors">Find a Venue</Link></li>
-                <li><Link href="/planner/portal" className="hover:text-amber transition-colors">My Inquiries</Link></li>
-                <li><Link href="/planner/portal" className="hover:text-amber transition-colors">My Proposals</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bebas text-amber tracking-widest mb-4">FOR VENUES</h4>
-              <ul className="space-y-2 font-dm text-sm text-cream/50">
-                <li><Link href="/owner/dashboard" className="hover:text-amber transition-colors">List Your Venue</Link></li>
-                <li><Link href="/owner/dashboard" className="hover:text-amber transition-colors">Manage Bookings</Link></li>
-                <li><Link href="/owner/dashboard" className="hover:text-amber transition-colors">Proposals</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bebas text-amber tracking-widest mb-4">CONTACT</h4>
-              <ul className="space-y-2 font-dm text-sm text-cream/50">
-                <li>hello@hostit.co.nz</li>
-                <li>+64 9 555 0100</li>
-                <li>Auckland, New Zealand</li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-cream/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="font-dm text-cream/30 text-xs">© 2025 HOSTit. All rights reserved. New Zealand.</p>
-            <div className="retro-divider text-amber/30 font-bebas max-w-xs">
-              <span>L'APERITIVO DEGLI EVENTI</span>
-            </div>
-          </div>
+        <div className="font-bebas text-xs tracking-widest text-cream/30 mb-4">EVENT CRM FOR NEW ZEALAND RESTAURANTS & VENUES</div>
+        <div className="flex items-center justify-center gap-6 text-xs font-dm text-cream/30">
+          <Link href="/dashboard"><span className="hover:text-cream/60 cursor-pointer transition-colors">Dashboard</span></Link>
+          <Link href="/enquire"><span className="hover:text-cream/60 cursor-pointer transition-colors">Submit Enquiry</span></Link>
         </div>
+        <div className="mt-6 font-dm text-xs text-cream/20">© {new Date().getFullYear()} HOSTit. Made in New Zealand.</div>
       </footer>
     </div>
   );

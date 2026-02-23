@@ -1,15 +1,9 @@
 import {
-  boolean,
-  decimal,
-  int,
-  json,
-  mysqlEnum,
-  mysqlTable,
-  text,
-  timestamp,
-  varchar,
+  int, mysqlEnum, mysqlTable, text, timestamp,
+  varchar, decimal, boolean, bigint
 } from "drizzle-orm/mysql-core";
 
+// ─── Users (venue staff / owners) ────────────────────────────────────────────
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
@@ -17,9 +11,6 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  userType: mysqlEnum("userType", ["planner", "owner"]).default("planner").notNull(),
-  phone: varchar("phone", { length: 32 }),
-  company: text("company"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -28,116 +19,131 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-export const venues = mysqlTable("venues", {
+// ─── Venue Settings (single venue per account) ───────────────────────────────
+export const venueSettings = mysqlTable("venue_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("ownerId").notNull(),
+  name: varchar("name", { length: 255 }).notNull().default("My Venue"),
+  slug: varchar("slug", { length: 100 }).notNull().default("my-venue"),
+  tagline: text("tagline"),
+  description: text("description"),
+  address: text("address"),
+  city: varchar("city", { length: 100 }),
+  phone: varchar("phone", { length: 50 }),
+  email: varchar("email", { length: 320 }),
+  website: varchar("website", { length: 500 }),
+  logoUrl: text("logoUrl"),
+  coverImageUrl: text("coverImageUrl"),
+  primaryColor: varchar("primaryColor", { length: 20 }).default("#C8102E"),
+  leadFormTitle: varchar("leadFormTitle", { length: 255 }).default("Book Your Event"),
+  leadFormSubtitle: text("leadFormSubtitle"),
+  depositPercent: decimal("depositPercent", { precision: 5, scale: 2 }).default("25.00"),
+  currency: varchar("currency", { length: 10 }).default("NZD"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VenueSettings = typeof venueSettings.$inferSelect;
+
+// ─── Event Spaces (rooms within the venue) ───────────────────────────────────
+export const eventSpaces = mysqlTable("event_spaces", {
   id: int("id").autoincrement().primaryKey(),
   ownerId: int("ownerId").notNull(),
   name: varchar("name", { length: 255 }).notNull(),
-  slug: varchar("slug", { length: 255 }).notNull().unique(),
   description: text("description"),
-  shortDescription: varchar("shortDescription", { length: 500 }),
-  venueType: mysqlEnum("venueType", [
-    "restaurant",
-    "winery",
-    "rooftop_bar",
-    "heritage_building",
-    "garden",
-    "function_centre",
-    "hotel",
-    "beach",
-    "other",
-  ]).notNull(),
-  city: mysqlEnum("city", [
-    "Auckland",
-    "Wellington",
-    "Christchurch",
-    "Queenstown",
-    "Hamilton",
-    "Dunedin",
-    "Tauranga",
-    "Napier",
-    "Nelson",
-    "Rotorua",
-  ]).notNull(),
-  suburb: varchar("suburb", { length: 100 }),
-  address: text("address"),
-  capacity: int("capacity").notNull(),
-  minCapacity: int("minCapacity").default(10),
-  minPriceNzd: decimal("minPriceNzd", { precision: 10, scale: 2 }),
-  maxPriceNzd: decimal("maxPriceNzd", { precision: 10, scale: 2 }),
-  pricePerHead: decimal("pricePerHead", { precision: 10, scale: 2 }),
-  amenities: json("amenities").$type<string[]>(),
-  images: json("images").$type<string[]>(),
-  coverImage: text("coverImage"),
+  minCapacity: int("minCapacity"),
+  maxCapacity: int("maxCapacity"),
+  minSpend: decimal("minSpend", { precision: 10, scale: 2 }),
   isActive: boolean("isActive").default(true).notNull(),
-  isFeatured: boolean("isFeatured").default(false).notNull(),
-  rating: decimal("rating", { precision: 3, scale: 1 }).default("0.0"),
-  reviewCount: int("reviewCount").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type EventSpace = typeof eventSpaces.$inferSelect;
+
+// ─── Contacts (client CRM) ───────────────────────────────────────────────────
+export const contacts = mysqlTable("contacts", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("ownerId").notNull(),
+  firstName: varchar("firstName", { length: 100 }).notNull(),
+  lastName: varchar("lastName", { length: 100 }),
+  email: varchar("email", { length: 320 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  company: varchar("company", { length: 255 }),
+  notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
-export type Venue = typeof venues.$inferSelect;
-export type InsertVenue = typeof venues.$inferInsert;
+export type Contact = typeof contacts.$inferSelect;
+export type InsertContact = typeof contacts.$inferInsert;
 
-export const inquiries = mysqlTable("inquiries", {
+// ─── Leads (event enquiries) ─────────────────────────────────────────────────
+export const leads = mysqlTable("leads", {
   id: int("id").autoincrement().primaryKey(),
-  venueId: int("venueId").notNull(),
-  plannerId: int("plannerId"),
-  plannerName: varchar("plannerName", { length: 255 }).notNull(),
-  plannerEmail: varchar("plannerEmail", { length: 320 }).notNull(),
-  plannerPhone: varchar("plannerPhone", { length: 32 }),
+  ownerId: int("ownerId").notNull(),
+  contactId: int("contactId"),
+  // Contact info (denormalised for quick access)
+  firstName: varchar("firstName", { length: 100 }).notNull(),
+  lastName: varchar("lastName", { length: 100 }),
+  email: varchar("email", { length: 320 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  company: varchar("company", { length: 255 }),
+  // Event details
   eventType: varchar("eventType", { length: 100 }),
   eventDate: timestamp("eventDate"),
+  eventEndDate: timestamp("eventEndDate"),
   guestCount: int("guestCount"),
-  message: text("message"),
+  spaceId: int("spaceId"),
   budget: decimal("budget", { precision: 10, scale: 2 }),
+  message: text("message"),
+  // Pipeline status
   status: mysqlEnum("status", [
-    "new",
-    "viewed",
-    "responded",
-    "proposal_sent",
-    "booked",
-    "declined",
-    "cancelled",
-  ])
-    .default("new")
-    .notNull(),
+    "new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"
+  ]).default("new").notNull(),
+  assignedTo: int("assignedTo"),
+  source: varchar("source", { length: 100 }).default("lead_form"),
+  internalNotes: text("internalNotes"),
+  followUpDate: timestamp("followUpDate"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
-export type Inquiry = typeof inquiries.$inferSelect;
-export type InsertInquiry = typeof inquiries.$inferInsert;
+export type Lead = typeof leads.$inferSelect;
+export type InsertLead = typeof leads.$inferInsert;
 
+// ─── Proposals ───────────────────────────────────────────────────────────────
 export const proposals = mysqlTable("proposals", {
   id: int("id").autoincrement().primaryKey(),
-  inquiryId: int("inquiryId").notNull(),
-  venueId: int("venueId").notNull(),
   ownerId: int("ownerId").notNull(),
+  leadId: int("leadId").notNull(),
+  contactId: int("contactId"),
+  // Public access token (for client-facing URL)
+  publicToken: varchar("publicToken", { length: 64 }).notNull().unique(),
   title: varchar("title", { length: 255 }).notNull(),
-  message: text("message"),
+  status: mysqlEnum("status", ["draft", "sent", "viewed", "accepted", "declined", "expired"]).default("draft").notNull(),
+  // Event details on proposal
   eventDate: timestamp("eventDate"),
+  eventEndDate: timestamp("eventEndDate"),
   guestCount: int("guestCount"),
-  packageName: varchar("packageName", { length: 255 }),
-  lineItems: json("lineItems").$type<
-    Array<{ description: string; quantity: number; unitPrice: number; total: number }>
-  >(),
-  subtotal: decimal("subtotal", { precision: 10, scale: 2 }),
-  gstAmount: decimal("gstAmount", { precision: 10, scale: 2 }),
+  spaceName: varchar("spaceName", { length: 255 }),
+  // Financial
+  subtotalNzd: decimal("subtotalNzd", { precision: 10, scale: 2 }),
+  taxPercent: decimal("taxPercent", { precision: 5, scale: 2 }).default("15.00"),
+  taxNzd: decimal("taxNzd", { precision: 10, scale: 2 }),
   totalNzd: decimal("totalNzd", { precision: 10, scale: 2 }),
-  depositRequired: decimal("depositRequired", { precision: 10, scale: 2 }),
-  validUntil: timestamp("validUntil"),
-  status: mysqlEnum("status", [
-    "draft",
-    "sent",
-    "viewed",
-    "accepted",
-    "declined",
-    "expired",
-  ])
-    .default("draft")
-    .notNull(),
-  notes: text("notes"),
+  depositPercent: decimal("depositPercent", { precision: 5, scale: 2 }).default("25.00"),
+  depositNzd: decimal("depositNzd", { precision: 10, scale: 2 }),
+  // Content
+  introMessage: text("introMessage"),
+  lineItems: text("lineItems"),   // JSON array of {description, qty, unitPrice, total}
+  termsAndConditions: text("termsAndConditions"),
+  internalNotes: text("internalNotes"),
+  // Timestamps
+  sentAt: timestamp("sentAt"),
+  viewedAt: timestamp("viewedAt"),
+  respondedAt: timestamp("respondedAt"),
+  expiresAt: timestamp("expiresAt"),
+  clientMessage: text("clientMessage"),  // message from client on accept/decline
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -145,38 +151,25 @@ export const proposals = mysqlTable("proposals", {
 export type Proposal = typeof proposals.$inferSelect;
 export type InsertProposal = typeof proposals.$inferInsert;
 
-export const availability = mysqlTable("availability", {
-  id: int("id").autoincrement().primaryKey(),
-  venueId: int("venueId").notNull(),
-  date: timestamp("date").notNull(),
-  isAvailable: boolean("isAvailable").default(true).notNull(),
-  note: varchar("note", { length: 255 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-export type Availability = typeof availability.$inferSelect;
-export type InsertAvailability = typeof availability.$inferInsert;
-
+// ─── Bookings (confirmed events) ─────────────────────────────────────────────
 export const bookings = mysqlTable("bookings", {
   id: int("id").autoincrement().primaryKey(),
-  inquiryId: int("inquiryId").notNull(),
+  ownerId: int("ownerId").notNull(),
+  leadId: int("leadId"),
   proposalId: int("proposalId"),
-  venueId: int("venueId").notNull(),
-  plannerId: int("plannerId"),
-  plannerName: varchar("plannerName", { length: 255 }).notNull(),
-  plannerEmail: varchar("plannerEmail", { length: 320 }).notNull(),
+  contactId: int("contactId"),
+  firstName: varchar("firstName", { length: 100 }).notNull(),
+  lastName: varchar("lastName", { length: 100 }),
+  email: varchar("email", { length: 320 }).notNull(),
+  eventType: varchar("eventType", { length: 100 }),
   eventDate: timestamp("eventDate").notNull(),
+  eventEndDate: timestamp("eventEndDate"),
   guestCount: int("guestCount"),
+  spaceName: varchar("spaceName", { length: 255 }),
   totalNzd: decimal("totalNzd", { precision: 10, scale: 2 }),
-  depositPaid: boolean("depositPaid").default(false),
-  status: mysqlEnum("status", [
-    "confirmed",
-    "pending_deposit",
-    "completed",
-    "cancelled",
-  ])
-    .default("pending_deposit")
-    .notNull(),
+  depositNzd: decimal("depositNzd", { precision: 10, scale: 2 }),
+  depositPaid: boolean("depositPaid").default(false).notNull(),
+  status: mysqlEnum("status", ["confirmed", "tentative", "cancelled"]).default("confirmed").notNull(),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -184,3 +177,15 @@ export const bookings = mysqlTable("bookings", {
 
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = typeof bookings.$inferInsert;
+
+// ─── Lead Activity Log ────────────────────────────────────────────────────────
+export const leadActivity = mysqlTable("lead_activity", {
+  id: int("id").autoincrement().primaryKey(),
+  leadId: int("leadId").notNull(),
+  ownerId: int("ownerId").notNull(),
+  type: mysqlEnum("type", ["note", "status_change", "proposal_sent", "email", "call", "booking_created"]).notNull(),
+  content: text("content"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type LeadActivity = typeof leadActivity.$inferSelect;

@@ -5,19 +5,24 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
-import Venues from "./pages/Venues";
-import VenueDetail from "./pages/VenueDetail";
-import OwnerDashboard from "./pages/OwnerDashboard";
-import PlannerPortal from "./pages/PlannerPortal";
+import Dashboard from "./pages/Dashboard";
+import ProposalBuilder from "./pages/ProposalBuilder";
+import ProposalView from "./pages/ProposalView";
+import LeadForm from "./pages/LeadForm";
 
 function Router() {
   return (
     <Switch>
+      {/* Public pages */}
       <Route path="/" component={Home} />
-      <Route path="/venues" component={Venues} />
-      <Route path="/venues/:slug" component={VenueDetail} />
-      <Route path="/owner/dashboard" component={OwnerDashboard} />
-      <Route path="/planner/portal" component={PlannerPortal} />
+      <Route path="/enquire" component={LeadForm} />
+      <Route path="/enquire/:slug" component={LeadForm} />
+      <Route path="/proposal/:token" component={ProposalView} />
+
+      {/* Venue owner dashboard */}
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/proposals/new" component={ProposalBuilder} />
+
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
