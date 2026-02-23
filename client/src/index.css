@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=Bebas+Neue&family=Alfa+Slab+One&family=Pacifico&display=swap');
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -43,75 +45,50 @@
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --radius: 0.15rem;
+  /* HOSTit: Vintage Italian Diner / Campari Poster */
+  /* Cream parchment base */
+  --background: oklch(0.965 0.018 88);
+  --foreground: oklch(0.20 0.04 30);
+  /* Card = warm white */
+  --card: oklch(0.985 0.010 90);
+  --card-foreground: oklch(0.20 0.04 30);
+  --popover: oklch(0.985 0.010 90);
+  --popover-foreground: oklch(0.20 0.04 30);
+  /* Primary = Tomato / Campari Red */
+  --primary: oklch(0.52 0.22 28);
+  --primary-foreground: oklch(0.985 0.010 90);
+  /* Secondary = Deep Burgundy/Brown */
+  --secondary: oklch(0.28 0.08 30);
+  --secondary-foreground: oklch(0.965 0.018 88);
+  /* Muted = warm tan */
+  --muted: oklch(0.91 0.025 80);
+  --muted-foreground: oklch(0.48 0.05 40);
+  /* Accent = Amber/Mustard Gold */
+  --accent: oklch(0.76 0.14 75);
+  --accent-foreground: oklch(0.20 0.04 30);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.985 0.010 90);
+  --border: oklch(0.83 0.03 75);
+  --input: oklch(0.88 0.025 78);
+  --ring: oklch(0.52 0.22 28);
+  --chart-1: oklch(0.52 0.22 28);
+  --chart-2: oklch(0.76 0.14 75);
+  --chart-3: oklch(0.28 0.08 30);
+  --chart-4: oklch(0.60 0.10 50);
+  --chart-5: oklch(0.70 0.08 60);
+  /* Sidebar = dark brown/burgundy */
+  --sidebar: oklch(0.22 0.06 25);
+  --sidebar-foreground: oklch(0.965 0.018 88);
+  --sidebar-primary: oklch(0.52 0.22 28);
+  --sidebar-primary-foreground: oklch(0.985 0.010 90);
+  --sidebar-accent: oklch(0.30 0.08 28);
+  --sidebar-accent-foreground: oklch(0.965 0.018 88);
+  --sidebar-border: oklch(0.18 0.05 22);
+  --sidebar-ring: oklch(0.52 0.22 28);
 }
 
-.dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
-}
+
 
 @layer base {
   * {
@@ -119,6 +96,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'DM Sans', sans-serif;
+    /* Subtle paper texture */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -132,6 +115,61 @@
     @apply cursor-pointer;
   }
 }
+
+/* HOSTit Custom Utilities */
+@layer utilities {
+  .font-playfair { font-family: 'Playfair Display', serif; }
+  .font-bebas { font-family: 'Bebas Neue', sans-serif; }
+  .font-alfa { font-family: 'Alfa Slab One', serif; }
+  .font-pacifico { font-family: 'Pacifico', cursive; }
+  .font-dm { font-family: 'DM Sans', sans-serif; }
+
+  /* Tomato red = Campari/Fabiola red */
+  .text-tomato { color: oklch(0.52 0.22 28); }
+  .text-amber { color: oklch(0.76 0.14 75); }
+  .text-brown { color: oklch(0.28 0.08 30); }
+  .text-cream { color: oklch(0.965 0.018 88); }
+  .text-parchment { color: oklch(0.91 0.025 80); }
+
+  .bg-tomato { background-color: oklch(0.52 0.22 28); }
+  .bg-amber { background-color: oklch(0.76 0.14 75); }
+  .bg-brown { background-color: oklch(0.28 0.08 30); }
+  .bg-parchment { background-color: oklch(0.965 0.018 88); }
+  .bg-cream-card { background-color: oklch(0.985 0.010 90); }
+
+  .border-tomato { border-color: oklch(0.52 0.22 28); }
+  .border-amber { border-color: oklch(0.76 0.14 75); }
+  .border-brown { border-color: oklch(0.28 0.08 30); }
+
+  /* Vintage stamp/badge shape */
+  .badge-stamp {
+    clip-path: polygon(8% 0%, 92% 0%, 100% 8%, 100% 92%, 92% 100%, 8% 100%, 0% 92%, 0% 8%);
+  }
+
+  /* Retro divider */
+  .retro-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-size: 0.7rem;
+  }
+  .retro-divider::before,
+  .retro-divider::after {
+    content: '';
+    flex: 1;
+    height: 2px;
+    background: currentColor;
+    opacity: 0.3;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: oklch(0.92 0.02 75); }
+::-webkit-scrollbar-thumb { background: oklch(0.42 0.19 22); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: oklch(0.28 0.12 10); }
 
 @layer components {
   /**
