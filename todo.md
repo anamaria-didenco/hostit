@@ -110,3 +110,11 @@
 - [ ] Add menu item builder UI (name, description, price per head)
 - [ ] Show selected menu packages on client-facing ProposalView
 - [ ] Write vitest tests for menu procedures
+
+## Email Templates
+- [x] Add emailTemplates table to schema (id, ownerId, name, subject, body, createdAt)
+- [x] Add tRPC procedures: templates.list, templates.create, templates.update, templates.delete
+- [x] Add "Use Template" dropdown in email compose modal
+- [x] Add Email Templates management section in Dashboard Settings
+- [ ] Seed 5 default templates (Function Pack Follow-Up, Proposal Reminder, Booking Confirmation, etc.)
+- [x] Write vitest test for templates procedures (24 tests total, all passing)

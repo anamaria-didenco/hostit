@@ -698,6 +698,59 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Email Templates ──────────────────────────────────────────────────────
+  templates: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { emailTemplates } = await import('../drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(emailTemplates).where(eq(emailTemplates.ownerId, ctx.user.id)).orderBy(desc(emailTemplates.createdAt));
+    }),
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        subject: z.string().min(1),
+        body: z.string().min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { emailTemplates } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(emailTemplates).values({ ...input, ownerId: ctx.user.id });
+        return { success: true };
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).optional(),
+        subject: z.string().min(1).optional(),
+        body: z.string().min(1).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { emailTemplates } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...data } = input;
+        await db.update(emailTemplates).set(data).where(and(eq(emailTemplates.id, id), eq(emailTemplates.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { emailTemplates } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(emailTemplates).where(and(eq(emailTemplates.id, input.id), eq(emailTemplates.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
   // ─── Dashboard ─────────────────────────────────────────────────────────────
   dashboard: router({
     stats: protectedProcedure.query(async ({ ctx }) => {

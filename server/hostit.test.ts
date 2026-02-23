@@ -186,3 +186,85 @@ describe("spaces.list", () => {
     await expect(caller.spaces.list()).rejects.toThrow();
   });
 });
+
+describe("templates", () => {
+  it("templates.list > requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.templates.list()).rejects.toThrow();
+  });
+
+  it("templates.list > returns empty array when no templates exist for user", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.templates.list();
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("templates.create > creates a template successfully", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.templates.create({
+      name: "Vitest Template",
+      subject: "Hello {{contactName}}",
+      body: "Dear {{contactName}}, thank you for your enquiry about {{eventDate}}.",
+    });
+    expect(result.success).toBe(true);
+
+    // Verify it appears in list
+    const list = await caller.templates.list();
+    const found = list.find((t: any) => t.name === "Vitest Template");
+    expect(found).toBeDefined();
+    expect(found?.subject).toBe("Hello {{contactName}}");
+
+    // Cleanup
+    await caller.templates.delete({ id: found!.id });
+  });
+
+  it("templates.update > updates subject field", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.templates.create({
+      name: "Update Test Template",
+      subject: "Original Subject",
+      body: "Original body.",
+    });
+
+    const list = await caller.templates.list();
+    const t = list.find((x: any) => x.name === "Update Test Template");
+    expect(t).toBeDefined();
+
+    const updated = await caller.templates.update({ id: t!.id, subject: "Updated Subject" });
+    expect(updated.success).toBe(true);
+
+    const listAfter = await caller.templates.list();
+    const tAfter = listAfter.find((x: any) => x.name === "Update Test Template");
+    expect(tAfter?.subject).toBe("Updated Subject");
+
+    // Cleanup
+    await caller.templates.delete({ id: t!.id });
+  });
+
+  it("templates.delete > removes a template", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.templates.create({
+      name: "Delete Test Template",
+      subject: "To be deleted",
+      body: "This will be removed.",
+    });
+
+    const list = await caller.templates.list();
+    const t = list.find((x: any) => x.name === "Delete Test Template");
+    expect(t).toBeDefined();
+
+    const deleted = await caller.templates.delete({ id: t!.id });
+    expect(deleted.success).toBe(true);
+
+    const listAfter = await caller.templates.list();
+    const stillThere = listAfter.find((x: any) => x.name === "Delete Test Template");
+    expect(stillThere).toBeUndefined();
+  });
+});

@@ -82,6 +82,13 @@ export default function Dashboard() {
   // Email compose state
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailForm, setEmailForm] = useState({ subject: "", body: "" });
+  const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
+  // Email Templates
+  const { data: emailTemplates, refetch: refetchTemplates } = trpc.templates.list.useQuery(undefined, { enabled: isAuthenticated });
+  const createTemplate = trpc.templates.create.useMutation({ onSuccess: () => { refetchTemplates(); setShowTemplateForm(false); setTemplateForm({ name: "", subject: "", body: "" }); toast.success("Template saved!"); } });
+  const deleteTemplate = trpc.templates.delete.useMutation({ onSuccess: () => { refetchTemplates(); toast.success("Template deleted"); } });
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [templateForm, setTemplateForm] = useState({ name: "", subject: "", body: "" });
   const sendEmail = trpc.email.send.useMutation({
     onSuccess: () => {
       setShowEmailModal(false);
@@ -483,6 +490,34 @@ export default function Dashboard() {
                   <button onClick={() => setShowEmailModal(false)} className="text-cream/60 hover:text-cream text-xl leading-none">&times;</button>
                 </div>
                 <div className="p-6 space-y-4">
+                  {/* Template picker */}
+                  {(emailTemplates ?? []).length > 0 && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowTemplateDropdown(v => !v)}
+                        className="w-full border border-gold/40 bg-gold/10 px-3 py-2 font-bebas tracking-widest text-xs text-forest hover:bg-gold/20 transition-colors flex items-center justify-between"
+                      >
+                        <span>USE A TEMPLATE</span>
+                        <span className="text-sage/60">▾</span>
+                      </button>
+                      {showTemplateDropdown && (
+                        <div className="absolute z-10 top-full left-0 right-0 bg-white border border-border shadow-lg max-h-48 overflow-y-auto">
+                          {(emailTemplates ?? []).map((t: any) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => { setEmailForm({ subject: t.subject, body: t.body }); setShowTemplateDropdown(false); }}
+                              className="w-full text-left px-4 py-3 hover:bg-cream transition-colors border-b border-border/30 last:border-0"
+                            >
+                              <div className="font-bebas tracking-widest text-xs text-forest">{t.name}</div>
+                              <div className="font-dm text-xs text-sage truncate">{t.subject}</div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBJECT</label>
                     <input
@@ -930,6 +965,66 @@ export default function Dashboard() {
                 </form>
               </div>
 
+              {/* Email Templates */}
+              <div className="mt-8">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="font-cormorant text-xl font-semibold text-ink">Email Templates</h2>
+                    <p className="font-dm text-xs text-sage">Save reusable email templates to one-click populate the compose modal.</p>
+                  </div>
+                  <button onClick={() => setShowTemplateForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
+                    <Plus className="w-3 h-3" /> NEW TEMPLATE
+                  </button>
+                </div>
+                {(emailTemplates ?? []).length === 0 ? (
+                  <div className="border border-dashed border-gold/20 p-6 text-center">
+                    <p className="font-dm text-sage text-sm">No templates yet. Create your first template to speed up email replies.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(emailTemplates ?? []).map((t: any) => (
+                      <div key={t.id} className="dante-card p-4 flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-cormorant font-semibold text-base text-ink">{t.name}</div>
+                          <div className="font-bebas tracking-widest text-xs text-forest mt-0.5">{t.subject}</div>
+                          <div className="font-dm text-xs text-ink/50 mt-1 line-clamp-2">{t.body}</div>
+                        </div>
+                        <button onClick={() => deleteTemplate.mutate({ id: t.id })} className="text-sage/40 hover:text-tomato transition-colors flex-shrink-0 mt-1">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* New Template Form */}
+                {showTemplateForm && (
+                  <div className="mt-4 dante-card p-5 border-2 border-gold/30">
+                    <div className="font-cormorant text-lg font-semibold text-ink mb-4">New Template</div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TEMPLATE NAME</label>
+                        <Input value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Function Pack Follow-Up" className="rounded-none border-border font-dm text-sm" />
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBJECT LINE</label>
+                        <Input value={templateForm.subject} onChange={e => setTemplateForm(f => ({ ...f, subject: e.target.value }))} placeholder="e.g. Following up on your enquiry" className="rounded-none border-border font-dm text-sm" />
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MESSAGE BODY</label>
+                        <Textarea value={templateForm.body} onChange={e => setTemplateForm(f => ({ ...f, body: e.target.value }))} rows={6} placeholder="Write your template message here..." className="rounded-none border-border font-dm text-sm resize-none" />
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => { setShowTemplateForm(false); setTemplateForm({ name: '', subject: '', body: '' }); }}
+                          className="border border-border font-bebas tracking-widest text-xs px-4 py-2 text-ink/60 hover:text-ink transition-colors">CANCEL</button>
+                        <button onClick={() => createTemplate.mutate(templateForm)} disabled={!templateForm.name || !templateForm.subject || !templateForm.body || createTemplate.isPending}
+                          className="btn-forest font-bebas tracking-widest text-xs px-6 py-2 text-cream disabled:opacity-50">
+                          {createTemplate.isPending ? 'SAVING...' : 'SAVE TEMPLATE'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               {/* Event Spaces */}
               <div className="mt-8">
                 <div className="flex items-center justify-between mb-4">
