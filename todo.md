@@ -83,3 +83,9 @@
 - [x] Update LeadForm.tsx: elegant cream form with green header
 - [x] Update ProposalView.tsx: dark green header, cream body, gold totals
 - [x] Update ProposalBuilder.tsx: green/cream split layout
+
+## Text Contrast Fix
+- [ ] Fix CSS variables — ensure foreground/background pairs are always legible
+- [ ] Fix Home.tsx — cream/gold text on dark green hero, dark ink on cream sections
+- [ ] Fix Dashboard.tsx — cream text on forest sidebar/nav, dark ink on cream content
+- [ ] Fix LeadForm.tsx, ProposalView.tsx, ProposalBuilder.tsx contrast

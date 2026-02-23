@@ -124,14 +124,14 @@ export default function Dashboard() {
           <div className="gold-rule max-w-xs mx-auto"><span>EVENT CRM FOR NZ VENUES</span></div>
         </div>
         <h2 className="font-cormorant text-3xl text-cream font-semibold mb-3">Sign in to your dashboard</h2>
-        <p className="font-dm text-cream/55 text-sm mb-8">Manage event enquiries, build proposals, and track bookings — all in one place.</p>
+        <p className="font-dm text-cream/80 text-sm mb-8">Manage event enquiries, build proposals, and track bookings — all in one place.</p>
         <a href={getLoginUrl()}>
           <button className="btn-forest w-full font-bebas tracking-widest text-sm py-3.5 text-cream">
             SIGN IN
           </button>
         </a>
         <div className="mt-6 border-t border-gold/20 pt-6">
-          <p className="font-dm text-xs text-cream/40 mb-3">Looking to enquire about an event?</p>
+          <p className="font-dm text-xs text-cream/70 mb-3">Looking to enquire about an event?</p>
           <Link href="/enquire">
             <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-3">
               SUBMIT AN ENQUIRY
@@ -157,7 +157,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 ml-auto">
             <button
               onClick={() => { navigator.clipboard.writeText(leadFormUrl); toast.success("Lead form link copied!"); }}
-              className="font-bebas tracking-widest text-xs text-cream/50 hover:text-gold transition-colors gap-1.5 hidden md:flex items-center"
+              className="font-bebas tracking-widest text-xs text-cream/80 hover:text-gold transition-colors gap-1.5 hidden md:flex items-center"
             >
               <Copy className="w-3 h-3" /> COPY LEAD FORM LINK
             </button>
@@ -166,7 +166,7 @@ export default function Dashboard() {
                 <ExternalLink className="w-3 h-3" /> LEAD FORM
               </button>
             </Link>
-            <span className="font-dm text-cream/40 text-xs hidden lg:block">{user?.name}</span>
+            <span className="font-dm text-cream/70 text-xs hidden lg:block">{user?.name}</span>
           </div>
         </div>
       </nav>
@@ -186,7 +186,7 @@ export default function Dashboard() {
               className={`w-full flex items-center gap-3 px-3 md:px-4 py-3.5 text-left transition-all font-bebas tracking-widest text-xs ${
                 tab === item.id
                   ? "text-gold bg-forest/60 border-l-2 border-gold pl-[calc(0.75rem-2px)] md:pl-[calc(1rem-2px)]"
-                  : "text-cream/50 hover:text-gold hover:bg-forest/40 border-l-2 border-transparent"
+                  : "text-cream/60 hover:text-gold hover:bg-forest/40 border-l-2 border-transparent"
               }`}>
               {item.icon}
               <span className="hidden md:block">{item.label}</span>
@@ -241,7 +241,7 @@ export default function Dashboard() {
                 </div>
                 {(allLeads ?? []).slice(0, 5).length === 0 ? (
                   <div className="p-8 text-center">
-                    <p className="font-dm text-muted-foreground text-sm mb-3">No leads yet. Share your lead form to start receiving enquiries.</p>
+                    <p className="font-dm text-ink/60 text-sm mb-3">No leads yet. Share your lead form to start receiving enquiries.</p>
                     <Button size="sm" onClick={() => { navigator.clipboard.writeText(leadFormUrl); toast.success("Copied!"); }}
                       className="bg-tomato text-white font-bebas tracking-widest rounded-none text-xs gap-1">
                       <Copy className="w-3 h-3" /> COPY LEAD FORM LINK
@@ -254,9 +254,9 @@ export default function Dashboard() {
                         className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
                         <div>
                           <div className="font-playfair font-semibold text-sm text-ink">{lead.firstName} {lead.lastName}</div>
-                          <div className="font-dm text-xs text-muted-foreground">{lead.eventType || "Event"} · {lead.guestCount ? `${lead.guestCount} guests` : ""} {lead.eventDate ? `· ${new Date(lead.eventDate).toLocaleDateString("en-NZ")}` : ""}</div>
+                          <div className="font-dm text-xs text-ink/60">{lead.eventType || "Event"} · {lead.guestCount ? `${lead.guestCount} guests` : ""} {lead.eventDate ? `· ${new Date(lead.eventDate).toLocaleDateString("en-NZ")}` : ""}</div>
                         </div>
-                        <div className={`font-bebas text-xs tracking-widest px-2 py-0.5 border rounded-none ${PIPELINE_STAGES.find(s => s.key === lead.status)?.color ?? "bg-muted border-border text-muted-foreground"}`}>
+                        <div className={`font-bebas text-xs tracking-widest px-2 py-0.5 border rounded-none ${PIPELINE_STAGES.find(s => s.key === lead.status)?.color ?? "bg-muted border-border text-ink/60"}`}>
                           {lead.status.replace(/_/g, " ").toUpperCase()}
                         </div>
                       </button>
@@ -284,7 +284,7 @@ export default function Dashboard() {
                 <div className="p-4 border-b border-gold/15">
                   <h2 className="font-cormorant text-2xl font-semibold text-ink mb-3">Leads Inbox</h2>
                   <div className="relative mb-2">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/60" />
                     <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
                       placeholder="Search leads..." className="pl-9 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold text-sm" />
                   </div>
@@ -315,11 +315,11 @@ export default function Dashboard() {
                           {lead.status.replace(/_/g, " ").toUpperCase()}
                         </div>
                       </div>
-                      <div className="font-dm text-xs text-muted-foreground truncate">{lead.email}</div>
-                      <div className="font-dm text-xs text-muted-foreground/60 mt-0.5">
+                      <div className="font-dm text-xs text-ink/60 truncate">{lead.email}</div>
+                      <div className="font-dm text-xs text-ink/60 mt-0.5">
                         {lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}
                       </div>
-                      <div className="font-dm text-xs text-muted-foreground/40 mt-1">
+                      <div className="font-dm text-xs text-ink/50 mt-1">
                         {new Date(lead.createdAt).toLocaleDateString("en-NZ")}
                       </div>
                     </button>
@@ -358,7 +358,7 @@ export default function Dashboard() {
                           ["Source", selectedLead.source],
                         ].filter(([, v]) => v).map(([label, value]) => (
                           <div key={label as string} className="flex gap-2">
-                            <span className="text-muted-foreground w-24 flex-shrink-0">{label}:</span>
+                            <span className="text-ink/60 w-24 flex-shrink-0">{label}:</span>
                             <span className="text-foreground font-medium">{String(value)}</span>
                           </div>
                         ))}
@@ -372,7 +372,7 @@ export default function Dashboard() {
                         {PIPELINE_STAGES.map(stage => (
                           <button key={stage.key}
                             onClick={() => updateStatus.mutate({ id: selectedLead.id, status: stage.key as any })}
-                            className={`w-full text-left px-3 py-2 border-2 font-bebas text-xs tracking-widest transition-all ${selectedLead.status === stage.key ? stage.color + " border-current" : "border-border text-muted-foreground hover:border-current hover:" + stage.color}`}>
+                            className={`w-full text-left px-3 py-2 border-2 font-bebas text-xs tracking-widest transition-all ${selectedLead.status === stage.key ? stage.color + " border-current" : "border-border text-ink/60 hover:border-current hover:" + stage.color}`}>
                             {selectedLead.status === stage.key ? "● " : "○ "}{stage.label}
                           </button>
                         ))}
@@ -384,7 +384,7 @@ export default function Dashboard() {
                   {selectedLead.message && (
                   <div className="dante-card p-4 mb-6">
                     <h3 className="font-bebas text-xs tracking-widest text-sage mb-2">CLIENT MESSAGE</h3>
-                      <p className="font-dm text-sm text-muted-foreground italic">"{selectedLead.message}"</p>
+                      <p className="font-dm text-sm text-ink/60 italic">"{selectedLead.message}"</p>
                     </div>
                   )}
 
@@ -393,14 +393,14 @@ export default function Dashboard() {
                     <h3 className="font-bebas text-xs tracking-widest text-sage mb-3">ACTIVITY LOG</h3>
                     <div className="space-y-2 mb-4 max-h-48 overflow-auto">
                       {(selectedLeadActivity ?? []).length === 0 ? (
-                        <p className="font-dm text-xs text-muted-foreground">No activity yet</p>
+                        <p className="font-dm text-xs text-ink/60">No activity yet</p>
                       ) : (selectedLeadActivity ?? []).map((act: any) => (
                         <div key={act.id} className="flex gap-3 text-xs font-dm">
                           <div className="w-2 h-2 bg-tomato rounded-full mt-1.5 flex-shrink-0" />
                           <div>
-                            <span className="font-bebas tracking-widest text-muted-foreground">{act.type.replace(/_/g, " ").toUpperCase()} · </span>
+                            <span className="font-bebas tracking-widest text-ink/60">{act.type.replace(/_/g, " ").toUpperCase()} · </span>
                             <span className="text-foreground">{act.content}</span>
-                            <div className="text-muted-foreground/50 mt-0.5">{new Date(act.createdAt).toLocaleString("en-NZ")}</div>
+                            <div className="text-ink/60/50 mt-0.5">{new Date(act.createdAt).toLocaleString("en-NZ")}</div>
                           </div>
                         </div>
                       ))}
@@ -417,9 +417,9 @@ export default function Dashboard() {
               ) : (
                 <div className="flex-1 hidden md:flex items-center justify-center text-center p-8">
                   <div>
-                    <MessageSquare className="w-12 h-12 text-muted-foreground/20 mx-auto mb-4" />
-                    <div className="font-alfa text-xl text-muted-foreground/30">SELECT A LEAD</div>
-                    <p className="font-dm text-muted-foreground/50 text-sm mt-2">Click a lead from the list to view details</p>
+                    <MessageSquare className="w-12 h-12 text-ink/60/20 mx-auto mb-4" />
+                    <div className="font-alfa text-xl text-ink/60/30">SELECT A LEAD</div>
+                    <p className="font-dm text-ink/60/50 text-sm mt-2">Click a lead from the list to view details</p>
                   </div>
                 </div>
               )}
@@ -479,7 +479,7 @@ export default function Dashboard() {
                 </div>
                 <div className="grid grid-cols-7 mb-2">
                   {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d => (
-                    <div key={d} className="text-center font-bebas text-xs tracking-widest text-muted-foreground py-2">{d}</div>
+                    <div key={d} className="text-center font-bebas text-xs tracking-widest text-ink/60 py-2">{d}</div>
                   ))}
                 </div>
                 <div className="grid grid-cols-7 gap-1">
@@ -516,7 +516,7 @@ export default function Dashboard() {
                       <div key={b.id} className="dante-card p-4 flex items-center justify-between">
                         <div>
                           <div className="font-cormorant font-semibold text-base text-ink">{b.firstName} {b.lastName}</div>
-                          <div className="font-dm text-xs text-muted-foreground">
+                          <div className="font-dm text-xs text-ink/60">
                             {b.eventType || "Event"} · {new Date(b.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })}
                             {b.guestCount ? ` · ${b.guestCount} guests` : ""}
                           </div>
@@ -544,7 +544,7 @@ export default function Dashboard() {
                 <div className="border border-dashed border-gold/20 p-12 text-center max-w-md">
                   <Users className="w-12 h-12 text-sage/20 mx-auto mb-4" />
                   <div className="font-cormorant text-xl text-sage/40 mb-2">No contacts yet</div>
-                  <p className="font-dm text-sage text-sm">Contacts are created automatically when leads are submitted.</p>
+                  <p className="font-dmtext-ink/60 text-xsm">Contacts are created automatically when leads are submitted.</p>
                 </div>
               ) : (
                 <div className="dante-card max-w-2xl">
@@ -553,10 +553,10 @@ export default function Dashboard() {
                       <div key={c.id} className="p-4 flex items-center justify-between">
                         <div>
                           <div className="font-cormorant font-semibold text-base text-ink">{c.firstName} {c.lastName}</div>
-                          <div className="font-dm text-xs text-muted-foreground">{c.email}{c.phone ? ` · ${c.phone}` : ""}</div>
-                          {c.company && <div className="font-dm text-xs text-muted-foreground/60">{c.company}</div>}
+                          <div className="font-dm text-xs text-ink/60">{c.email}{c.phone ? ` · ${c.phone}` : ""}</div>
+                          {c.company && <div className="font-dm text-xs text-ink/60">{c.company}</div>}
                         </div>
-                        <div className="font-dm text-xs text-muted-foreground/40">{new Date(c.createdAt).toLocaleDateString("en-NZ")}</div>
+                        <div className="font-dm text-xs text-ink/50">{new Date(c.createdAt).toLocaleDateString("en-NZ")}</div>
                       </div>
                     ))}
                   </div>
@@ -608,7 +608,7 @@ export default function Dashboard() {
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">LEAD FORM SETTINGS</h2>
                     <div className="space-y-3">
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">FORM URL SLUG</label>
+                        <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">FORM URL SLUG</label>
                         <div className="flex items-center gap-2">
                           <span className="font-dm text-xs text-sage bg-linen px-3 py-2 border border-r-0 border-gold/30">/enquire/</span>
                           <Input value={settingsForm.slug} onChange={e => setSettingsForm((f: any) => ({ ...f, slug: e.target.value.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") }))}
@@ -660,7 +660,7 @@ export default function Dashboard() {
                       <div key={s.id} className="dante-card p-4 flex items-center justify-between">
                         <div>
                           <div className="font-cormorant font-semibold text-base text-ink">{s.name}</div>
-                          <div className="font-dm text-xs text-muted-foreground">
+                          <div className="font-dm text-xs text-ink/60">
                             {s.minCapacity && s.maxCapacity ? `${s.minCapacity}–${s.maxCapacity} guests` : s.maxCapacity ? `Up to ${s.maxCapacity} guests` : ""}
                             {s.minSpend ? ` · Min spend $${Number(s.minSpend).toLocaleString()}` : ""}
                           </div>

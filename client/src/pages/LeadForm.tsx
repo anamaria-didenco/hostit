@@ -96,23 +96,23 @@ export default function LeadForm() {
 
           <div className="font-alfa text-3xl md:text-4xl text-cream leading-tight mb-2">{venueName}</div>
           <h1 className="font-playfair italic text-amber text-xl mb-3">{formTitle}</h1>
-          <p className="font-dm text-sm text-cream/60 max-w-md mx-auto">{formSubtitle}</p>
+          <p className="font-dm text-sm text-cream/90 max-w-md mx-auto">{formSubtitle}</p>
 
           {/* Venue contact info */}
           {(venue?.city || venue?.phone || venue?.email) && (
             <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
               {venue.city && (
-                <div className="flex items-center gap-1.5 text-cream/40 text-xs font-dm">
+                <div className="flex items-center gap-1.5 text-cream/80 text-xs font-dm">
                   <MapPin className="w-3 h-3" /> {venue.city}
                 </div>
               )}
               {venue.phone && (
-                <div className="flex items-center gap-1.5 text-cream/40 text-xs font-dm">
+                <div className="flex items-center gap-1.5 text-cream/80 text-xs font-dm">
                   <Phone className="w-3 h-3" /> {venue.phone}
                 </div>
               )}
               {venue.email && (
-                <div className="flex items-center gap-1.5 text-cream/40 text-xs font-dm">
+                <div className="flex items-center gap-1.5 text-cream/80 text-xs font-dm">
                   <Mail className="w-3 h-3" /> {venue.email}
                 </div>
               )}
@@ -129,10 +129,10 @@ export default function LeadForm() {
           <div className="bg-cream-card border-2 border-emerald-400 p-10 text-center shadow-sm">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-5" />
             <h2 className="font-alfa text-3xl text-ink mb-3">ENQUIRY RECEIVED!</h2>
-            <p className="font-dm text-muted-foreground mb-2">
+            <p className="font-dm text-ink/70 mb-2">
               Thank you for your enquiry. The team at <strong>{venueName}</strong> will be in touch within 24 hours.
             </p>
-            <p className="font-dm text-sm text-muted-foreground/60">
+            <p className="font-dm text-sm text-ink/50">
               A confirmation has been noted. Please check your email for updates.
             </p>
             <div className="mt-8 pt-6 border-t border-dashed border-border">
@@ -140,37 +140,37 @@ export default function LeadForm() {
                 <span className="font-alfa text-lg text-ink">HOST</span>
                 <span className="font-pacifico text-base text-tomato">it</span>
               </div>
-              <div className="font-bebas text-xs tracking-widest text-muted-foreground mt-1">EVENT CRM FOR NEW ZEALAND VENUES</div>
+              <div className="font-bebas text-xs tracking-widest text-ink/55 mt-1">EVENT CRM FOR NEW ZEALAND VENUES</div>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Personal Details */}
             <div className="bg-cream-card border border-border p-6 shadow-sm">
-              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">YOUR DETAILS</h2>
+              <h2 className="font-bebas text-xs tracking-widest text-ink/60 mb-4">YOUR DETAILS</h2>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">FIRST NAME *</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">FIRST NAME *</label>
                   <Input required value={form.firstName} onChange={set("firstName")}
                     placeholder="Jane" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">LAST NAME</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">LAST NAME</label>
                   <Input value={form.lastName} onChange={set("lastName")}
                     placeholder="Smith" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EMAIL *</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">EMAIL *</label>
                   <Input required type="email" value={form.email} onChange={set("email")}
                     placeholder="jane@example.com" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PHONE</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">PHONE</label>
                   <Input type="tel" value={form.phone} onChange={set("phone")}
                     placeholder="+64 21 000 0000" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
                 </div>
                 <div className="col-span-2">
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">COMPANY / ORGANISATION</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">COMPANY / ORGANISATION</label>
                   <Input value={form.company} onChange={set("company")}
                     placeholder="Acme Ltd" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
                 </div>
@@ -179,10 +179,10 @@ export default function LeadForm() {
 
             {/* Event Details */}
             <div className="bg-cream-card border border-border p-6 shadow-sm">
-              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">EVENT DETAILS</h2>
+              <h2 className="font-bebas text-xs tracking-widest text-ink/60 mb-4">EVENT DETAILS</h2>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">TYPE OF EVENT</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">TYPE OF EVENT</label>
                   <Select value={form.eventType} onValueChange={v => setForm(f => ({ ...f, eventType: v }))}>
                     <SelectTrigger className="rounded-none border-2 focus:ring-0 focus:border-tomato">
                       <SelectValue placeholder="Select event type..." />
@@ -195,19 +195,19 @@ export default function LeadForm() {
                   </Select>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PREFERRED DATE</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">PREFERRED DATE</label>
                   <Input type="date" value={form.eventDate} onChange={set("eventDate")}
                     min={new Date().toISOString().split("T")[0]}
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">GUEST COUNT</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">GUEST COUNT</label>
                   <Input type="number" value={form.guestCount} onChange={set("guestCount")}
                     placeholder="50" min="1"
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
                 </div>
                 <div className="col-span-2">
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">APPROXIMATE BUDGET (NZD)</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">APPROXIMATE BUDGET (NZD)</label>
                   <Input type="number" value={form.budget} onChange={set("budget")}
                     placeholder="5000"
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
@@ -217,7 +217,7 @@ export default function LeadForm() {
 
             {/* Message */}
             <div className="bg-cream-card border border-border p-6 shadow-sm">
-              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">TELL US MORE</h2>
+              <h2 className="font-bebas text-xs tracking-widest text-ink/60 mb-3">TELL US MORE</h2>
               <Textarea value={form.message} onChange={set("message")}
                 placeholder="Any additional details about your event, special requirements, dietary needs, AV equipment, etc."
                 rows={4} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato resize-none text-sm" />

@@ -20,9 +20,9 @@ export default function Home() {
 
           {/* Nav links */}
           <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="font-bebas tracking-widest text-xs text-cream/60 hover:text-gold transition-colors">FEATURES</a>
-            <a href="#how-it-works" className="font-bebas tracking-widest text-xs text-cream/60 hover:text-gold transition-colors">HOW IT WORKS</a>
-            <a href="#pricing" className="font-bebas tracking-widest text-xs text-cream/60 hover:text-gold transition-colors">PRICING</a>
+            <a href="#features" className="font-bebas tracking-widest text-xs text-cream/85 hover:text-gold transition-colors">FEATURES</a>
+            <a href="#how-it-works" className="font-bebas tracking-widest text-xs text-cream/85 hover:text-gold transition-colors">HOW IT WORKS</a>
+            <a href="#pricing" className="font-bebas tracking-widest text-xs text-cream/85 hover:text-gold transition-colors">PRICING</a>
           </div>
 
           {/* CTA */}
@@ -35,7 +35,7 @@ export default function Home() {
               </Link>
             ) : (
               <>
-                <a href={getLoginUrl()} className="font-bebas tracking-widest text-xs text-cream/60 hover:text-gold transition-colors">
+                <a href={getLoginUrl()} className="font-bebas tracking-widest text-xs text-cream/85 hover:text-gold transition-colors">
                   SIGN IN
                 </a>
                 <a href={getLoginUrl()}>
@@ -76,7 +76,7 @@ export default function Home() {
               Managed.
             </h1>
 
-            <p className="font-dm text-cream/65 text-lg leading-relaxed mb-10 max-w-xl">
+            <p className="font-dm text-cream/90 text-lg leading-relaxed mb-10 max-w-xl">
               HOSTit is the event enquiry and proposal platform built for New Zealand restaurants, bars, and function venues. Capture leads, build stunning proposals, and confirm bookings — all in one place.
             </p>
 
@@ -97,12 +97,12 @@ export default function Home() {
           {/* Floating notification cards */}
           <div className="absolute right-6 top-20 hidden lg:block space-y-3">
             <div className="bg-warm-white border border-gold/30 border-l-2 border-l-gold p-4 shadow-lg w-64">
-              <div className="font-bebas text-xs tracking-widest text-sage mb-1">NEW ENQUIRY</div>
+              <div className="font-bebas text-xs tracking-widest text-ink/55 mb-1">NEW ENQUIRY</div>
               <div className="font-cormorant text-ink text-lg font-semibold">Wedding Reception</div>
-              <div className="font-dm text-xs text-sage mt-0.5">120 guests · 14 June · The Grand Room</div>
+              <div className="font-dm text-xs text-ink/60 mt-0.5">120 guests · 14 June · The Grand Room</div>
             </div>
             <div className="bg-warm-white border border-gold/30 border-l-2 border-l-forest p-4 shadow-lg w-64">
-              <div className="font-bebas text-xs tracking-widest text-sage mb-1">PROPOSAL ACCEPTED</div>
+              <div className="font-bebas text-xs tracking-widest text-ink/55 mb-1">PROPOSAL ACCEPTED</div>
               <div className="font-cormorant text-ink text-lg font-semibold">Corporate Dinner</div>
               <div className="font-dm text-xs text-forest font-medium mt-0.5">$6,400 NZD · Deposit received ✓</div>
             </div>
@@ -121,7 +121,7 @@ export default function Home() {
           ].map(({ label, value }) => (
             <div key={label} className="text-center">
               <div className="font-cormorant text-3xl font-semibold text-forest">{value}</div>
-              <div className="font-bebas text-xs tracking-widest text-sage mt-0.5">{label}</div>
+              <div className="font-bebas text-xs tracking-widest text-ink/60 mt-0.5">{label}</div>
             </div>
           ))}
         </div>
@@ -135,7 +135,7 @@ export default function Home() {
             <h2 className="font-cormorant text-ink mb-4" style={{ fontSize: 'clamp(2.2rem, 4vw, 3.5rem)', fontWeight: 600 }}>
               Everything your venue needs
             </h2>
-            <p className="font-dm text-sage text-lg max-w-xl mx-auto">
+            <p className="font-dm text-ink/70 text-lg max-w-xl mx-auto">
               From the first enquiry to the final invoice — HOSTit handles the full event lifecycle.
             </p>
           </div>
@@ -178,7 +178,7 @@ export default function Home() {
                   {icon}
                 </div>
                 <h3 className="font-cormorant text-ink text-xl font-semibold mb-2">{title}</h3>
-                <p className="font-dm text-sage text-sm leading-relaxed">{desc}</p>
+                <p className="font-dm text-ink/65 text-sm leading-relaxed">{desc}</p>
               </div>
             ))}
           </div>
@@ -209,7 +209,7 @@ export default function Home() {
               <div key={step} className="text-center">
                 <div className="font-pinyon text-gold text-6xl leading-none mb-4">{step}</div>
                 <h3 className="font-cormorant text-cream text-xl font-semibold mb-2">{title}</h3>
-                <p className="font-dm text-cream/55 text-sm leading-relaxed">{desc}</p>
+                <p className="font-dm text-cream/80 text-sm leading-relaxed">{desc}</p>
               </div>
             ))}
           </div>
@@ -224,18 +224,18 @@ export default function Home() {
             <h2 className="font-cormorant text-ink mb-4" style={{ fontSize: 'clamp(2.2rem, 4vw, 3.5rem)', fontWeight: 600 }}>
               One plan. Everything included.
             </h2>
-            <p className="font-dm text-sage text-lg max-w-md mx-auto">
+            <p className="font-dm text-ink/70 text-lg max-w-md mx-auto">
               No per-booking fees. No hidden charges. Just a flat monthly rate for your whole team.
             </p>
           </div>
 
           <div className="max-w-md mx-auto">
             <div className="dante-card p-10 text-center bg-warm-white">
-              <div className="font-bebas tracking-widest text-xs text-sage mb-4">VENUE PLAN</div>
+              <div className="font-bebas tracking-widest text-xs text-ink/55 mb-4">VENUE PLAN</div>
               <div className="font-cormorant text-ink mb-1" style={{ fontSize: '4rem', fontWeight: 600, lineHeight: 1 }}>
                 $99
               </div>
-              <div className="font-dm text-sage text-sm mb-8">NZD per month + GST</div>
+              <div className="font-dm text-ink/65 text-sm mb-8">NZD per month + GST</div>
               <div className="space-y-3 mb-8 text-left">
                 {[
                   "Unlimited enquiries & leads",
@@ -272,10 +272,10 @@ export default function Home() {
               <span className="font-bebas text-xl tracking-widest text-cream">HOST</span>
               <span className="logo-script text-2xl text-gold leading-none">it</span>
             </div>
-            <div className="font-fell italic text-cream/40 text-sm text-center">
+            <div className="font-fell italic text-cream/70 text-sm text-center">
               Built for New Zealand restaurants, bars &amp; function venues
             </div>
-            <div className="font-dm text-xs text-cream/30">
+            <div className="font-dm text-xs text-cream/60">
               © {new Date().getFullYear()} HOSTit NZ
             </div>
           </div>

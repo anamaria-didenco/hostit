@@ -83,7 +83,7 @@
 
   /* Muted = warm sage / linen */
   --muted:                  oklch(0.920 0.018 78);
-  --muted-foreground:       oklch(0.480 0.032 155);
+  --muted-foreground:       oklch(0.380 0.028 155);
 
   /* Accent = Brushed Gold */
   --accent:                 oklch(0.720 0.105 75);
@@ -104,11 +104,11 @@
 
   /* Sidebar = Forest Green (dark, like Dante's awning) */
   --sidebar:                    oklch(0.285 0.058 162);
-  --sidebar-foreground:         oklch(0.920 0.018 78);
+  --sidebar-foreground:         oklch(0.960 0.018 82);
   --sidebar-primary:            oklch(0.720 0.105 75);
   --sidebar-primary-foreground: oklch(0.155 0.025 40);
   --sidebar-accent:             oklch(0.345 0.065 162);
-  --sidebar-accent-foreground:  oklch(0.920 0.018 78);
+  --sidebar-accent-foreground:  oklch(0.960 0.018 82);
   --sidebar-border:             oklch(0.345 0.065 162);
   --sidebar-ring:               oklch(0.720 0.105 75);
 }
@@ -209,7 +209,7 @@
   .text-gold       { color: oklch(0.720 0.105 75); }
   .text-ink        { color: oklch(0.155 0.025 40); }
   .text-cream      { color: oklch(0.960 0.018 82); }
-  .text-sage       { color: oklch(0.480 0.032 155); }
+  .text-sage       { color: oklch(0.380 0.028 155); }
   .text-warm-white { color: oklch(0.980 0.012 80); }
 
   /* ── Brand colours (bg) ── */
@@ -279,7 +279,7 @@
     font-family: 'Bebas Neue', sans-serif;
     letter-spacing: 0.12em;
     font-size: 0.80rem;
-    color: oklch(0.720 0.018 155);
+    color: oklch(0.900 0.018 82);
     transition: color 0.12s ease, background-color 0.12s ease;
     border-radius: 0;
     cursor: pointer;
@@ -296,10 +296,10 @@
   }
 
   /* ── Status pill badges ── */
-  .status-new       { background: oklch(0.720 0.105 75 / 0.18); color: oklch(0.48 0.08 72); }
-  .status-quoted    { background: oklch(0.345 0.065 162 / 0.15); color: oklch(0.345 0.065 162); }
-  .status-confirmed { background: oklch(0.50 0.14 155 / 0.15); color: oklch(0.38 0.12 155); }
-  .status-cancelled { background: oklch(0.480 0.032 155 / 0.15); color: oklch(0.40 0.025 155); }
+  .status-new       { background: oklch(0.720 0.105 75 / 0.18); color: oklch(0.38 0.08 72); }
+  .status-quoted    { background: oklch(0.345 0.065 162 / 0.15); color: oklch(0.28 0.065 162); }
+  .status-confirmed { background: oklch(0.50 0.14 155 / 0.15); color: oklch(0.30 0.12 155); }
+  .status-cancelled { background: oklch(0.480 0.032 155 / 0.15); color: oklch(0.32 0.025 155); }
 
   /* ── Stat card ── */
   .stat-card {
