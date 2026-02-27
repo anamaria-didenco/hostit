@@ -46,12 +46,12 @@
    HOSTit Design System — Dante NYC Aesthetic
    Inspired by: Caffe Dante, New York City (Est. 1915)
    Palette:
-     Forest Green  #2D4A3E  — primary brand, sidebar, headers, awnings
-     Warm Cream    #F5EFE0  — background, menus, cards
-     Brushed Gold  #C9A84C  — accents, script logo, dividers, borders
-     Near-Black    #1C1C1A  — body text, dark elements
-     Warm White    #FDFAF4  — card surfaces
-     Muted Sage    #8FA89E  — secondary text, subtle elements
+   Sage Green   #6B9E8A  — primary brand, sidebar, headers (lighter)
+   Warm Cream    #F5EFE0  — background, menus, cards
+   Brushed Gold  #C9A84C  — accents, script logo, dividers, borders
+   Warm Taupe    #4A4540  — body text (lighter than before)
+   Warm White    #FDFAF4  — card surfaces
+   Muted Sage    #8FA89E  — secondary text, subtle elements
    Typography:
      Cormorant Garamond — primary editorial serif (headings, display)
      Pinyon Script      — gold script logo / decorative
@@ -65,36 +65,36 @@
 
   /* Warm cream background */
   --background:             oklch(0.960 0.018 82);
-  --foreground:             oklch(0.155 0.025 40);
+  --foreground:             oklch(0.300 0.022 45);
 
   /* Card surfaces: warm white */
   --card:                   oklch(0.980 0.012 80);
-  --card-foreground:        oklch(0.155 0.025 40);
+  --card-foreground:        oklch(0.300 0.022 45);
   --popover:                oklch(0.980 0.012 80);
-  --popover-foreground:     oklch(0.155 0.025 40);
+  --popover-foreground:     oklch(0.300 0.022 45);
 
   /* Primary = Forest Green */
-  --primary:                oklch(0.345 0.065 162);
+  --primary:                oklch(0.520 0.080 162);
   --primary-foreground:     oklch(0.960 0.018 82);
 
   /* Secondary = warm near-black */
-  --secondary:              oklch(0.155 0.025 40);
+  --secondary:              oklch(0.300 0.022 45);
   --secondary-foreground:   oklch(0.960 0.018 82);
 
   /* Muted = warm sage / linen */
   --muted:                  oklch(0.920 0.018 78);
-  --muted-foreground:       oklch(0.380 0.028 155);
+  --muted-foreground:       oklch(0.500 0.040 155);
 
   /* Accent = Brushed Gold */
   --accent:                 oklch(0.720 0.105 75);
-  --accent-foreground:      oklch(0.155 0.025 40);
+  --accent-foreground:      oklch(0.300 0.022 45);
 
   --destructive:            oklch(0.540 0.195 22);
   --destructive-foreground: oklch(0.980 0.012 80);
 
   --border:                 oklch(0.870 0.022 76);
   --input:                  oklch(0.920 0.018 78);
-  --ring:                   oklch(0.345 0.065 162);
+  --ring:                   oklch(0.520 0.080 162);
 
   --chart-1: oklch(0.345 0.065 162);
   --chart-2: oklch(0.720 0.105 75);
@@ -103,13 +103,13 @@
   --chart-5: oklch(0.62 0.055 160);
 
   /* Sidebar = Forest Green (dark, like Dante's awning) */
-  --sidebar:                    oklch(0.285 0.058 162);
+  --sidebar:                    oklch(0.420 0.072 162);
   --sidebar-foreground:         oklch(0.960 0.018 82);
   --sidebar-primary:            oklch(0.720 0.105 75);
-  --sidebar-primary-foreground: oklch(0.155 0.025 40);
-  --sidebar-accent:             oklch(0.345 0.065 162);
+  --sidebar-primary-foreground: oklch(0.300 0.022 45);
+  --sidebar-accent:             oklch(0.520 0.080 162);
   --sidebar-accent-foreground:  oklch(0.960 0.018 82);
-  --sidebar-border:             oklch(0.345 0.065 162);
+  --sidebar-border:             oklch(0.520 0.080 162);
   --sidebar-ring:               oklch(0.720 0.105 75);
 }
 
@@ -205,26 +205,26 @@
   .font-dm         { font-family: 'DM Sans', system-ui, sans-serif; }
 
   /* ── Brand colours (text) ── */
-  .text-forest     { color: oklch(0.345 0.065 162); }
+  .text-forest     { color: oklch(0.520 0.080 162); }
   .text-gold       { color: oklch(0.720 0.105 75); }
-  .text-ink        { color: oklch(0.155 0.025 40); }
+  .text-ink        { color: oklch(0.300 0.022 45); }
   .text-cream      { color: oklch(0.960 0.018 82); }
-  .text-sage       { color: oklch(0.380 0.028 155); }
+  .text-sage       { color: oklch(0.500 0.040 155); }
   .text-warm-white { color: oklch(0.980 0.012 80); }
 
   /* ── Brand colours (bg) ── */
-  .bg-forest       { background-color: oklch(0.345 0.065 162); }
-  .bg-forest-dark  { background-color: oklch(0.285 0.058 162); }
+  .bg-forest       { background-color: oklch(0.520 0.080 162); }
+  .bg-forest-dark  { background-color: oklch(0.420 0.072 162); }
   .bg-gold         { background-color: oklch(0.720 0.105 75); }
   .bg-cream        { background-color: oklch(0.960 0.018 82); }
   .bg-warm-white   { background-color: oklch(0.980 0.012 80); }
   .bg-linen        { background-color: oklch(0.920 0.018 78); }
-  .bg-ink          { background-color: oklch(0.155 0.025 40); }
+  .bg-ink          { background-color: oklch(0.300 0.022 45); }
 
   /* ── Brand colours (border) ── */
-  .border-forest   { border-color: oklch(0.345 0.065 162); }
+  .border-forest   { border-color: oklch(0.520 0.080 162); }
   .border-gold     { border-color: oklch(0.720 0.105 75); }
-  .border-ink      { border-color: oklch(0.155 0.025 40); }
+  .border-ink      { border-color: oklch(0.300 0.022 45); }
 
   /* ── Gold divider line ── */
   .gold-rule {
@@ -249,7 +249,7 @@
   .checkerboard {
     background-image:
       repeating-conic-gradient(
-        oklch(0.155 0.025 40 / 0.06) 0% 25%,
+        oklch(0.300 0.022 45 / 0.06) 0% 25%,
         transparent 0% 50%
       );
     background-size: 20px 20px;
@@ -286,11 +286,11 @@
   }
   .nav-item:hover {
     color: oklch(0.720 0.105 75);
-    background-color: oklch(0.345 0.065 162 / 0.6);
+    background-color: oklch(0.520 0.080 162 / 0.5);
   }
   .nav-item.active {
     color: oklch(0.720 0.105 75);
-    background-color: oklch(0.345 0.065 162 / 0.5);
+    background-color: oklch(0.520 0.080 162 / 0.4);
     border-left: 2px solid oklch(0.720 0.105 75);
     padding-left: calc(0.875rem - 2px);
   }
@@ -311,14 +311,14 @@
 
   /* ── Forest green primary button ── */
   .btn-forest {
-    background-color: oklch(0.345 0.065 162);
+    background-color: oklch(0.520 0.080 162);
     color: oklch(0.960 0.018 82);
     border-radius: 0;
     font-family: 'Bebas Neue', sans-serif;
     letter-spacing: 0.12em;
     transition: background-color 0.15s ease;
   }
-  .btn-forest:hover { background-color: oklch(0.285 0.058 162); }
+  .btn-forest:hover { background-color: oklch(0.420 0.072 162); }
 
   /* ── Gold outline button ── */
   .btn-gold-outline {

@@ -149,3 +149,8 @@
 - [x] Auto-set follow-up date 3 days out if none already set when email is sent
 - [x] Show the replied lead on the Calendar tab (gold dot + This Month's Follow-Ups list)
 - [x] Calendar tab: follow-up dates shown as gold dots alongside booking dots (green)
+
+## Colour Refresh
+- [x] Lighten --ink (black text) to a softer warm taupe (oklch 0.30)
+- [x] Lighten --forest (dark green) to a lighter sage green (oklch 0.52)
+- [x] Updated all utility classes: text-ink, text-forest, text-sage, bg-forest, bg-ink, border-forest, border-ink, sidebar, nav-item states
