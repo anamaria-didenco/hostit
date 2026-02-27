@@ -258,9 +258,13 @@ export default function Dashboard() {
     <div className="min-h-screen bg-forest-dark flex items-center justify-center">
       <div className="text-center max-w-sm px-4">
         <div className="mb-8">
-          <div className="flex items-center justify-center gap-1 mb-3">
-            <span className="font-bebas text-5xl tracking-widest text-cream">HOST</span>
-            <span className="logo-script text-5xl text-gold leading-none mt-1">it</span>
+          <div className="flex items-center justify-center mb-3">
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              alt="HOSTit"
+              className="h-16 w-auto object-contain"
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
           </div>
           <div className="gold-rule max-w-xs mx-auto"><span>EVENT CRM FOR NZ VENUES</span></div>
         </div>
@@ -287,9 +291,13 @@ export default function Dashboard() {
     <div className="min-h-screen bg-cream font-dm flex flex-col">
       {/* Top Nav */}
       <nav className="bg-forest-dark sticky top-0 z-50 border-b border-gold/20 h-14 flex items-center">
-        <div className="flex items-center gap-1 px-5 w-56 flex-shrink-0 border-r border-gold/15">
-          <span className="font-bebas text-xl tracking-widest text-cream">HOST</span>
-          <span className="logo-script text-2xl text-gold leading-none mt-0.5">it</span>
+        <div className="flex items-center px-5 w-56 flex-shrink-0 border-r border-gold/15">
+          <img
+            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+            alt="HOSTit"
+            className="h-8 w-auto object-contain"
+            style={{ filter: 'brightness(0) invert(1)' }}
+          />
         </div>
         <div className="flex-1 px-5 flex items-center justify-between">
           <div className="font-cormorant italic text-gold/80 text-base hidden md:block">

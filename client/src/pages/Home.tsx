@@ -12,9 +12,13 @@ export default function Home() {
       <nav style={{ backgroundColor: 'oklch(0.280 0.065 178)', borderBottom: '1px solid oklch(0.450 0.155 25 / 0.25)' }} className="sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-1.5">
-            <span className="font-bebas text-2xl tracking-widest" style={{ color: 'oklch(0.958 0.020 88)' }}>HOST</span>
-            <span className="logo-script text-3xl leading-none mt-0.5" style={{ color: 'oklch(0.450 0.155 25)', fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic' }}>it</span>
+          <div className="flex items-center">
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              alt="HOSTit"
+              className="h-10 w-auto object-contain"
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
           </div>
           {/* Nav links */}
           <div className="hidden md:flex items-center gap-8">
@@ -61,8 +65,9 @@ export default function Home() {
         {/* Terracotta accent line */}
         <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(to right, transparent, oklch(0.450 0.155 25 / 0.6), transparent)' }} />
 
-        <div className="max-w-6xl mx-auto px-6 pt-24 pb-40 relative z-10">
-          <div className="max-w-3xl">
+        <div className="max-w-6xl mx-auto px-6 pt-24 pb-32 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-end">
+          <div>
             {/* Eyebrow rule */}
             <div className="terra-rule mb-8 max-w-xs">
               <span>EST. NEW ZEALAND</span>
@@ -109,6 +114,16 @@ export default function Home() {
               </div>
               <span className="font-inter text-xs" style={{ color: 'oklch(0.800 0.020 88)' }}>Trusted by NZ venues</span>
             </div>
+          </div>
+          {/* Waiter illustration column */}
+          <div className="hidden lg:flex items-end justify-center relative">
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-waiter-logo-33gBqFRUBLexgnY2LX2rGY.webp"
+              alt="Italian waiter illustration"
+              className="w-auto object-contain"
+              style={{ height: '520px', filter: 'drop-shadow(0 20px 40px oklch(0.180 0.050 178 / 0.5))' }}
+            />
+          </div>
           </div>
         </div>
       </section>
@@ -217,9 +232,13 @@ export default function Home() {
       {/* ── Footer ───────────────────────────────────────────────────── */}
       <footer style={{ backgroundColor: 'oklch(0.220 0.018 45)', borderTop: '2px solid oklch(0.450 0.155 25 / 0.4)' }} className="py-12">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-1.5">
-            <span className="font-bebas text-xl tracking-widest" style={{ color: 'oklch(0.958 0.020 88)' }}>HOST</span>
-            <span className="font-playfair text-2xl italic leading-none mt-0.5" style={{ color: 'oklch(0.450 0.155 25)' }}>it</span>
+          <div className="flex items-center">
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              alt="HOSTit"
+              className="h-9 w-auto object-contain"
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
           </div>
           <p className="font-inter text-xs text-center" style={{ color: 'oklch(0.600 0.020 60)' }}>
             Built for New Zealand venues · © {new Date().getFullYear()} HOSTit

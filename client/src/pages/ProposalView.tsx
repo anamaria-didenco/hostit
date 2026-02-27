@@ -77,9 +77,13 @@ export default function ProposalView() {
       {/* ── Paradiso Header ─────────────────────────────────────────── */}
       <div style={{ backgroundColor: T.teal, color: T.cream }}>
         <div className="max-w-3xl mx-auto px-6 py-8">
-          <div className="flex items-center gap-1 mb-1">
-            <span className="font-bebas text-3xl tracking-widest" style={{ color: T.cream }}>HOST</span>
-            <span className="font-playfair text-3xl italic leading-none mt-0.5" style={{ color: T.terra }}>it</span>
+          <div className="flex items-center mb-1">
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              alt="HOSTit"
+              className="h-12 w-auto object-contain"
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
           </div>
           <div className="font-bebas text-xs tracking-widest mb-4" style={{ color: 'oklch(0.650 0.040 178)' }}>EVENT PROPOSAL</div>
           {venue && (
@@ -251,9 +255,12 @@ export default function ProposalView() {
 
         {/* Footer */}
         <div className="text-center py-8 border-t-2 border-dashed" style={{ borderColor: T.border }}>
-          <div className="flex items-center justify-center gap-1 mb-1">
-            <span className="font-bebas text-lg tracking-widest" style={{ color: T.ink }}>HOST</span>
-            <span className="font-playfair italic text-base" style={{ color: T.terra }}>it</span>
+          <div className="flex items-center justify-center mb-1">
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              alt="HOSTit"
+              className="h-8 w-auto object-contain"
+            />
           </div>
           <div className="font-bebas text-xs tracking-widest" style={{ color: T.stone }}>POWERED BY HOSTit · EVENT CRM FOR NEW ZEALAND VENUES</div>
           {venue?.phone && <div className="font-inter text-xs mt-1" style={{ color: T.stone }}>{venue.phone}</div>}

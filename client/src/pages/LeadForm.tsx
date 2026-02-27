@@ -86,9 +86,13 @@ export default function LeadForm() {
       <div style={{ backgroundColor: T.teal, color: T.cream }}>
         <div className="max-w-2xl mx-auto px-6 py-12 text-center">
           {/* Logo */}
-          <div className="flex items-center justify-center gap-1 mb-5">
-            <span className="font-bebas text-3xl tracking-widest" style={{ color: T.cream }}>HOST</span>
-            <span className="font-playfair text-3xl italic leading-none mt-0.5" style={{ color: T.terra }}>it</span>
+          <div className="flex items-center justify-center mb-5">
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              alt="HOSTit"
+              className="h-14 w-auto object-contain"
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
           </div>
           {/* Terracotta rule */}
           <div className="flex items-center gap-3 justify-center mb-6">
@@ -125,9 +129,12 @@ export default function LeadForm() {
               A confirmation has been noted. Please check your email for updates.
             </p>
             <div className="mt-8 pt-6 border-t border-dashed" style={{ borderColor: T.border }}>
-              <div className="flex items-center justify-center gap-1">
-                <span className="font-bebas text-lg tracking-widest" style={{ color: T.ink }}>HOST</span>
-                <span className="font-playfair italic text-base" style={{ color: T.terra }}>it</span>
+              <div className="flex items-center justify-center">
+                <img
+                  src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+                  alt="HOSTit"
+                  className="h-8 w-auto object-contain"
+                />
               </div>
               <div className="font-bebas text-xs tracking-widest mt-1" style={{ color: T.stone }}>EVENT CRM FOR NEW ZEALAND VENUES</div>
             </div>
@@ -216,9 +223,13 @@ export default function LeadForm() {
 
       {/* Footer */}
       <div className="py-8 text-center mt-4" style={{ backgroundColor: T.ink, borderTop: `2px solid ${T.terra}55` }}>
-        <div className="flex items-center justify-center gap-1 mb-1">
-          <span className="font-bebas text-base tracking-widest" style={{ color: T.cream }}>HOST</span>
-          <span className="font-playfair italic text-sm" style={{ color: T.terra }}>it</span>
+        <div className="flex items-center justify-center mb-1">
+          <img
+            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+            alt="HOSTit"
+            className="h-8 w-auto object-contain"
+            style={{ filter: 'brightness(0) invert(1)' }}
+          />
         </div>
         <div className="font-bebas text-xs tracking-widest" style={{ color: 'oklch(0.500 0.020 60)' }}>EVENT CRM · MADE FOR NEW ZEALAND VENUES</div>
         <div className="mt-3">

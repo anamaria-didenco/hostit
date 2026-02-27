@@ -182,9 +182,13 @@ export default function ProposalBuilder() {
             <ChevronLeft className="w-4 h-4" /> DASHBOARD
           </Button>
         </Link>
-        <div className="flex items-center gap-0.5 mr-4">
-          <span className="font-alfa text-xl text-tomato">HOST</span>
-          <span className="font-pacifico text-lg text-amber">it</span>
+        <div className="flex items-center mr-4">
+          <img
+            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+            alt="HOSTit"
+            className="h-7 w-auto object-contain"
+            style={{ filter: 'brightness(0) invert(1)' }}
+          />
         </div>
           <div className="font-playfair italic text-amber/90 text-sm">Proposal Builder</div>
         <div className="ml-auto flex items-center gap-3">
