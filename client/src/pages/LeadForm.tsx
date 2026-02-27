@@ -14,6 +14,18 @@ const EVENT_TYPES = [
   "Engagement Party", "Baby Shower", "Fundraiser", "Conference", "Other",
 ];
 
+// Paradiso colour tokens
+const T = {
+  teal:      'oklch(0.280 0.065 178)',
+  tealMid:   'oklch(0.400 0.075 178)',
+  terra:     'oklch(0.450 0.155 25)',
+  cream:     'oklch(0.958 0.020 88)',
+  ivory:     'oklch(0.978 0.014 86)',
+  ink:       'oklch(0.220 0.018 45)',
+  stone:     'oklch(0.500 0.025 60)',
+  border:    'oklch(0.875 0.022 80)',
+};
+
 export default function LeadForm() {
   const { slug } = useParams<{ slug?: string }>();
   const [submitted, setSubmitted] = useState(false);
@@ -24,23 +36,12 @@ export default function LeadForm() {
   );
 
   const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    company: "",
-    eventType: "",
-    eventDate: "",
-    guestCount: "",
-    budget: "",
-    message: "",
+    firstName: "", lastName: "", email: "", phone: "",
+    company: "", eventType: "", eventDate: "", guestCount: "", budget: "", message: "",
   });
 
   const submitLead = trpc.leads.submit.useMutation({
-    onSuccess: () => {
-      setSubmitted(true);
-      toast.success("Enquiry submitted! We'll be in touch soon.");
-    },
+    onSuccess: () => { setSubmitted(true); toast.success("Enquiry submitted! We'll be in touch soon."); },
     onError: () => toast.error("Failed to submit. Please try again."),
   });
 
@@ -67,169 +68,146 @@ export default function LeadForm() {
     setForm(f => ({ ...f, [field]: e.target.value }));
 
   if (isLoading) return (
-    <div className="min-h-screen bg-parchment flex items-center justify-center">
-      <div className="font-alfa text-3xl text-tomato/20 animate-pulse">LOADING...</div>
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: T.cream }}>
+      <div className="font-playfair text-2xl italic animate-pulse" style={{ color: T.terra }}>Loading…</div>
     </div>
   );
 
-  // Generic form if no slug/venue found
-  const venueName = venue?.name ?? "HOSTit Venue";
-  const formTitle = venue?.leadFormTitle ?? "Book Your Event";
+  const venueName   = venue?.name ?? "HOSTit Venue";
+  const formTitle   = venue?.leadFormTitle ?? "Book Your Event";
   const formSubtitle = venue?.leadFormSubtitle ?? "Tell us about your event and we'll get back to you within 24 hours.";
 
+  const inputClass = "rounded-none border-2 focus-visible:ring-0 focus-visible:border-[oklch(0.400_0.075_178)] font-inter text-sm";
+
   return (
-    <div className="min-h-screen bg-parchment font-dm">
-      {/* Vintage Header */}
-      <div className="bg-ink text-cream">
-        <div className="max-w-2xl mx-auto px-6 py-10 text-center">
-          <div className="flex items-center justify-center gap-0.5 mb-4">
-            <span className="font-alfa text-4xl text-tomato">HOST</span>
-            <span className="font-pacifico text-3xl text-amber">it</span>
+    <div className="min-h-screen font-inter" style={{ backgroundColor: T.cream }}>
+
+      {/* ── Paradiso Header ─────────────────────────────────────────── */}
+      <div style={{ backgroundColor: T.teal, color: T.cream }}>
+        <div className="max-w-2xl mx-auto px-6 py-12 text-center">
+          {/* Logo */}
+          <div className="flex items-center justify-center gap-1 mb-5">
+            <span className="font-bebas text-3xl tracking-widest" style={{ color: T.cream }}>HOST</span>
+            <span className="font-playfair text-3xl italic leading-none mt-0.5" style={{ color: T.terra }}>it</span>
           </div>
-
-          {/* Decorative rule */}
-          <div className="flex items-center gap-3 justify-center mb-5">
-            <div className="flex-1 h-px bg-cream/20" />
-            <div className="w-1.5 h-1.5 bg-amber rotate-45" />
-            <div className="flex-1 h-px bg-cream/20" />
+          {/* Terracotta rule */}
+          <div className="flex items-center gap-3 justify-center mb-6">
+            <div className="flex-1 h-px" style={{ background: `${T.terra}55` }} />
+            <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: T.terra }} />
+            <div className="flex-1 h-px" style={{ background: `${T.terra}55` }} />
           </div>
-
-          <div className="font-alfa text-3xl md:text-4xl text-cream leading-tight mb-2">{venueName}</div>
-          <h1 className="font-playfair italic text-amber text-xl mb-3">{formTitle}</h1>
-          <p className="font-dm text-sm text-cream/90 max-w-md mx-auto">{formSubtitle}</p>
-
+          <div className="font-playfair text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: T.cream }}>{venueName}</div>
+          <h1 className="font-playfair italic text-xl mb-3" style={{ color: 'oklch(0.750 0.080 25)' }}>{formTitle}</h1>
+          <p className="font-inter text-sm leading-relaxed max-w-md mx-auto" style={{ color: 'oklch(0.850 0.018 88)' }}>{formSubtitle}</p>
           {/* Venue contact info */}
           {(venue?.city || venue?.phone || venue?.email) && (
             <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
-              {venue.city && (
-                <div className="flex items-center gap-1.5 text-cream/80 text-xs font-dm">
-                  <MapPin className="w-3 h-3" /> {venue.city}
-                </div>
-              )}
-              {venue.phone && (
-                <div className="flex items-center gap-1.5 text-cream/80 text-xs font-dm">
-                  <Phone className="w-3 h-3" /> {venue.phone}
-                </div>
-              )}
-              {venue.email && (
-                <div className="flex items-center gap-1.5 text-cream/80 text-xs font-dm">
-                  <Mail className="w-3 h-3" /> {venue.email}
-                </div>
-              )}
+              {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: 'oklch(0.800 0.018 88)' }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
+              {venue.phone && <div className="flex items-center gap-1.5 text-xs" style={{ color: 'oklch(0.800 0.018 88)' }}><Phone className="w-3 h-3" /> {venue.phone}</div>}
+              {venue.email && <div className="flex items-center gap-1.5 text-xs" style={{ color: 'oklch(0.800 0.018 88)' }}><Mail className="w-3 h-3" /> {venue.email}</div>}
             </div>
           )}
         </div>
       </div>
 
-      {/* Red accent stripe */}
-      <div className="h-2 bg-tomato" />
+      {/* Stripe accent band */}
+      <div className="h-3 stripe-pattern" />
 
       <div className="max-w-2xl mx-auto px-6 py-10">
         {submitted ? (
-          <div className="bg-cream-card border-2 border-emerald-400 p-10 text-center shadow-sm">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-5" />
-            <h2 className="font-alfa text-3xl text-ink mb-3">ENQUIRY RECEIVED!</h2>
-            <p className="font-dm text-ink/70 mb-2">
-              Thank you for your enquiry. The team at <strong>{venueName}</strong> will be in touch within 24 hours.
+          <div className="paradiso-card p-10 text-center" style={{ borderTop: `2px solid ${T.tealMid}` }}>
+            <CheckCircle className="w-16 h-16 mx-auto mb-5" style={{ color: T.tealMid }} />
+            <h2 className="font-playfair text-3xl font-bold mb-3" style={{ color: T.ink }}>Enquiry Received!</h2>
+            <p className="font-inter mb-2" style={{ color: T.stone }}>
+              Thank you for your enquiry. The team at <strong style={{ color: T.ink }}>{venueName}</strong> will be in touch within 24 hours.
             </p>
-            <p className="font-dm text-sm text-ink/50">
+            <p className="font-inter text-sm" style={{ color: `${T.stone}99` }}>
               A confirmation has been noted. Please check your email for updates.
             </p>
-            <div className="mt-8 pt-6 border-t border-dashed border-border">
-              <div className="flex items-center justify-center gap-0.5">
-                <span className="font-alfa text-lg text-ink">HOST</span>
-                <span className="font-pacifico text-base text-tomato">it</span>
+            <div className="mt-8 pt-6 border-t border-dashed" style={{ borderColor: T.border }}>
+              <div className="flex items-center justify-center gap-1">
+                <span className="font-bebas text-lg tracking-widest" style={{ color: T.ink }}>HOST</span>
+                <span className="font-playfair italic text-base" style={{ color: T.terra }}>it</span>
               </div>
-              <div className="font-bebas text-xs tracking-widest text-ink/55 mt-1">EVENT CRM FOR NEW ZEALAND VENUES</div>
+              <div className="font-bebas text-xs tracking-widest mt-1" style={{ color: T.stone }}>EVENT CRM FOR NEW ZEALAND VENUES</div>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Personal Details */}
-            <div className="bg-cream-card border border-border p-6 shadow-sm">
-              <h2 className="font-bebas text-xs tracking-widest text-ink/60 mb-4">YOUR DETAILS</h2>
+            <div className="paradiso-card p-6">
+              <h2 className="font-bebas text-xs tracking-widest mb-4" style={{ color: T.stone }}>YOUR DETAILS</h2>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">FIRST NAME *</label>
-                  <Input required value={form.firstName} onChange={set("firstName")}
-                    placeholder="Jane" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>FIRST NAME *</label>
+                  <Input required value={form.firstName} onChange={set("firstName")} placeholder="Jane" className={inputClass} />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">LAST NAME</label>
-                  <Input value={form.lastName} onChange={set("lastName")}
-                    placeholder="Smith" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>LAST NAME</label>
+                  <Input value={form.lastName} onChange={set("lastName")} placeholder="Smith" className={inputClass} />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">EMAIL *</label>
-                  <Input required type="email" value={form.email} onChange={set("email")}
-                    placeholder="jane@example.com" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>EMAIL *</label>
+                  <Input required type="email" value={form.email} onChange={set("email")} placeholder="jane@example.com" className={inputClass} />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">PHONE</label>
-                  <Input type="tel" value={form.phone} onChange={set("phone")}
-                    placeholder="+64 21 000 0000" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>PHONE</label>
+                  <Input type="tel" value={form.phone} onChange={set("phone")} placeholder="+64 21 000 0000" className={inputClass} />
                 </div>
                 <div className="col-span-2">
-                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">COMPANY / ORGANISATION</label>
-                  <Input value={form.company} onChange={set("company")}
-                    placeholder="Acme Ltd" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>COMPANY / ORGANISATION</label>
+                  <Input value={form.company} onChange={set("company")} placeholder="Acme Ltd" className={inputClass} />
                 </div>
               </div>
             </div>
 
             {/* Event Details */}
-            <div className="bg-cream-card border border-border p-6 shadow-sm">
-              <h2 className="font-bebas text-xs tracking-widest text-ink/60 mb-4">EVENT DETAILS</h2>
+            <div className="paradiso-card p-6">
+              <h2 className="font-bebas text-xs tracking-widest mb-4" style={{ color: T.stone }}>EVENT DETAILS</h2>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">TYPE OF EVENT</label>
+                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>TYPE OF EVENT</label>
                   <Select value={form.eventType} onValueChange={v => setForm(f => ({ ...f, eventType: v }))}>
-                    <SelectTrigger className="rounded-none border-2 focus:ring-0 focus:border-tomato">
-                      <SelectValue placeholder="Select event type..." />
+                    <SelectTrigger className="rounded-none border-2 focus:ring-0 font-inter text-sm">
+                      <SelectValue placeholder="Select event type…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {EVENT_TYPES.map(t => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
+                      {EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">PREFERRED DATE</label>
+                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>PREFERRED DATE</label>
                   <Input type="date" value={form.eventDate} onChange={set("eventDate")}
-                    min={new Date().toISOString().split("T")[0]}
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                    min={new Date().toISOString().split("T")[0]} className={inputClass} />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">GUEST COUNT</label>
-                  <Input type="number" value={form.guestCount} onChange={set("guestCount")}
-                    placeholder="50" min="1"
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>GUEST COUNT</label>
+                  <Input type="number" value={form.guestCount} onChange={set("guestCount")} placeholder="50" min="1" className={inputClass} />
                 </div>
                 <div className="col-span-2">
-                  <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">APPROXIMATE BUDGET (NZD)</label>
-                  <Input type="number" value={form.budget} onChange={set("budget")}
-                    placeholder="5000"
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>APPROXIMATE BUDGET (NZD)</label>
+                  <Input type="number" value={form.budget} onChange={set("budget")} placeholder="5000" className={inputClass} />
                 </div>
               </div>
             </div>
 
             {/* Message */}
-            <div className="bg-cream-card border border-border p-6 shadow-sm">
-              <h2 className="font-bebas text-xs tracking-widest text-ink/60 mb-3">TELL US MORE</h2>
+            <div className="paradiso-card p-6">
+              <h2 className="font-bebas text-xs tracking-widest mb-3" style={{ color: T.stone }}>TELL US MORE</h2>
               <Textarea value={form.message} onChange={set("message")}
                 placeholder="Any additional details about your event, special requirements, dietary needs, AV equipment, etc."
-                rows={4} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato resize-none text-sm" />
+                rows={4} className={`${inputClass} resize-none`} />
             </div>
 
             {/* Submit */}
             <Button type="submit" disabled={submitLead.isPending}
-              className="w-full bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none h-14 text-lg shadow-sm">
-              {submitLead.isPending ? "SUBMITTING..." : "SUBMIT ENQUIRY"}
+              className="w-full font-bebas tracking-widest rounded-none h-14 text-lg shadow-sm transition-colors"
+              style={{ backgroundColor: T.terra, color: T.cream }}>
+              {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
             </Button>
 
-            <p className="font-dm text-xs text-muted-foreground text-center">
+            <p className="font-inter text-xs text-center" style={{ color: T.stone }}>
               By submitting this form you agree to be contacted by {venueName} regarding your event enquiry.
             </p>
           </form>
@@ -237,15 +215,15 @@ export default function LeadForm() {
       </div>
 
       {/* Footer */}
-      <div className="bg-ink text-cream py-6 text-center mt-8">
-        <div className="flex items-center justify-center gap-0.5 mb-1">
-          <span className="font-alfa text-base text-cream">HOST</span>
-          <span className="font-pacifico text-sm text-amber">it</span>
+      <div className="py-8 text-center mt-4" style={{ backgroundColor: T.ink, borderTop: `2px solid ${T.terra}55` }}>
+        <div className="flex items-center justify-center gap-1 mb-1">
+          <span className="font-bebas text-base tracking-widest" style={{ color: T.cream }}>HOST</span>
+          <span className="font-playfair italic text-sm" style={{ color: T.terra }}>it</span>
         </div>
-        <div className="font-bebas text-xs tracking-widest text-cream/30">EVENT CRM · MADE FOR NEW ZEALAND VENUES</div>
+        <div className="font-bebas text-xs tracking-widest" style={{ color: 'oklch(0.500 0.020 60)' }}>EVENT CRM · MADE FOR NEW ZEALAND VENUES</div>
         <div className="mt-3">
           <Link href="/dashboard">
-            <span className="font-dm text-xs text-cream/30 hover:text-cream/60 cursor-pointer transition-colors">Venue owner? Sign in →</span>
+            <span className="font-inter text-xs cursor-pointer transition-colors" style={{ color: 'oklch(0.450 0.020 60)' }}>Venue owner? Sign in →</span>
           </Link>
         </div>
       </div>

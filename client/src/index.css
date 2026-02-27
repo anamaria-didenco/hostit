@@ -43,74 +43,73 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   HOSTit Design System — Dante NYC Aesthetic
-   Inspired by: Caffe Dante, New York City (Est. 1915)
+   HOSTit Design System — Paradiso "Taste of Venice"
    Palette:
-   Sage Green   #6B9E8A  — primary brand, sidebar, headers (lighter)
-   Warm Cream    #F5EFE0  — background, menus, cards
-   Brushed Gold  #C9A84C  — accents, script logo, dividers, borders
-   Warm Taupe    #4A4540  — body text (lighter than before)
-   Warm White    #FDFAF4  — card surfaces
-   Muted Sage    #8FA89E  — secondary text, subtle elements
+     Deep Teal     #1A5C55  — sidebar, primary brand, awnings, background accents
+     Terracotta    #C0392B  — headings, accents, stripe motif, CTAs
+     Warm Cream    #F5F0DC  — page background, card surfaces
+     Ivory White   #FDFAF2  — card highlights, inputs
+     Dark Teal     #0F3D38  — sidebar dark, deep backgrounds
+     Muted Stone   #8A8070  — secondary text, subtle elements
+     Stripe Cream  #EDE8CC  — stripe alternate band
    Typography:
-     Cormorant Garamond — primary editorial serif (headings, display)
-     Pinyon Script      — gold script logo / decorative
-     IM Fell English    — vintage italic accent text
-     Bebas Neue         — uppercase label caps
-     DM Sans            — clean body / UI text
+     Playfair Display  — primary editorial serif (headings, display, logo)
+     Cormorant Garamond — elegant secondary serif (subheadings, quotes)
+     Inter             — clean body / UI text
+     Bebas Neue        — uppercase label caps
 ─────────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  --radius: 0.1rem;
+  --radius: 0.25rem;
 
   /* Warm cream background */
-  --background:             oklch(0.960 0.018 82);
-  --foreground:             oklch(0.300 0.022 45);
+  --background:             oklch(0.958 0.020 88);
+  --foreground:             oklch(0.220 0.018 45);
 
-  /* Card surfaces: warm white */
-  --card:                   oklch(0.980 0.012 80);
-  --card-foreground:        oklch(0.300 0.022 45);
-  --popover:                oklch(0.980 0.012 80);
-  --popover-foreground:     oklch(0.300 0.022 45);
+  /* Card surfaces: ivory white */
+  --card:                   oklch(0.978 0.014 86);
+  --card-foreground:        oklch(0.220 0.018 45);
+  --popover:                oklch(0.978 0.014 86);
+  --popover-foreground:     oklch(0.220 0.018 45);
 
-  /* Primary = Forest Green */
-  --primary:                oklch(0.520 0.080 162);
-  --primary-foreground:     oklch(0.960 0.018 82);
+  /* Primary = Deep Teal */
+  --primary:                oklch(0.400 0.075 178);
+  --primary-foreground:     oklch(0.958 0.020 88);
 
-  /* Secondary = warm near-black */
-  --secondary:              oklch(0.300 0.022 45);
-  --secondary-foreground:   oklch(0.960 0.018 82);
+  /* Secondary = Terracotta */
+  --secondary:              oklch(0.450 0.155 25);
+  --secondary-foreground:   oklch(0.958 0.020 88);
 
-  /* Muted = warm sage / linen */
-  --muted:                  oklch(0.920 0.018 78);
-  --muted-foreground:       oklch(0.500 0.040 155);
+  /* Muted = warm stone / linen */
+  --muted:                  oklch(0.920 0.018 82);
+  --muted-foreground:       oklch(0.500 0.025 60);
 
-  /* Accent = Brushed Gold */
-  --accent:                 oklch(0.720 0.105 75);
-  --accent-foreground:      oklch(0.300 0.022 45);
+  /* Accent = Terracotta (same as secondary for consistency) */
+  --accent:                 oklch(0.450 0.155 25);
+  --accent-foreground:      oklch(0.958 0.020 88);
 
   --destructive:            oklch(0.540 0.195 22);
-  --destructive-foreground: oklch(0.980 0.012 80);
+  --destructive-foreground: oklch(0.978 0.014 86);
 
-  --border:                 oklch(0.870 0.022 76);
-  --input:                  oklch(0.920 0.018 78);
-  --ring:                   oklch(0.520 0.080 162);
+  --border:                 oklch(0.875 0.022 80);
+  --input:                  oklch(0.920 0.018 82);
+  --ring:                   oklch(0.400 0.075 178);
 
-  --chart-1: oklch(0.345 0.065 162);
-  --chart-2: oklch(0.720 0.105 75);
-  --chart-3: oklch(0.155 0.025 40);
-  --chart-4: oklch(0.480 0.032 155);
-  --chart-5: oklch(0.62 0.055 160);
+  --chart-1: oklch(0.400 0.075 178);
+  --chart-2: oklch(0.450 0.155 25);
+  --chart-3: oklch(0.220 0.018 45);
+  --chart-4: oklch(0.600 0.080 178);
+  --chart-5: oklch(0.650 0.100 25);
 
-  /* Sidebar = Forest Green (dark, like Dante's awning) */
-  --sidebar:                    oklch(0.420 0.072 162);
-  --sidebar-foreground:         oklch(0.960 0.018 82);
-  --sidebar-primary:            oklch(0.720 0.105 75);
-  --sidebar-primary-foreground: oklch(0.300 0.022 45);
-  --sidebar-accent:             oklch(0.520 0.080 162);
-  --sidebar-accent-foreground:  oklch(0.960 0.018 82);
-  --sidebar-border:             oklch(0.520 0.080 162);
-  --sidebar-ring:               oklch(0.720 0.105 75);
+  /* Sidebar = Deep Teal (dark, like Paradiso awning) */
+  --sidebar:                    oklch(0.280 0.065 178);
+  --sidebar-foreground:         oklch(0.958 0.020 88);
+  --sidebar-primary:            oklch(0.450 0.155 25);
+  --sidebar-primary-foreground: oklch(0.958 0.020 88);
+  --sidebar-accent:             oklch(0.350 0.070 178);
+  --sidebar-accent-foreground:  oklch(0.958 0.020 88);
+  --sidebar-border:             oklch(0.350 0.070 178);
+  --sidebar-ring:               oklch(0.450 0.155 25);
 }
 
 /* ── Base Layer ──────────────────────────────────────────────────────────── */
@@ -128,34 +127,34 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-size: 15px;
     line-height: 1.65;
   }
 
-  /* Display headings — Cormorant Garamond (refined editorial serif) */
+  /* Display headings — Playfair Display (refined editorial serif) */
   h1 {
-    font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif;
-    font-weight: 600;
+    font-family: 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
+    font-weight: 700;
     letter-spacing: -0.01em;
-    line-height: 1.0;
+    line-height: 1.05;
   }
 
   h2 {
-    font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif;
+    font-family: 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
     font-weight: 600;
     letter-spacing: -0.005em;
-    line-height: 1.1;
+    line-height: 1.15;
   }
 
   h3 {
-    font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif;
+    font-family: 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
     font-weight: 500;
-    line-height: 1.2;
+    line-height: 1.25;
   }
 
   h4, h5 {
-    font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif;
+    font-family: 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
     font-weight: 500;
     line-height: 1.3;
   }
@@ -163,18 +162,18 @@
   h6 {
     font-family: 'Bebas Neue', Impact, sans-serif;
     font-weight: 400;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     font-size: 0.72rem;
   }
 
   label {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
     font-size: 0.8rem;
     font-weight: 500;
   }
 
   input, textarea, select {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
   }
 
   button:not(:disabled),
@@ -186,47 +185,109 @@
     cursor: pointer;
   }
 
-  /* Thin gold horizontal rule */
+  /* Thin terracotta horizontal rule */
   hr {
     border: none;
-    border-top: 1px solid oklch(0.720 0.105 75 / 0.35);
+    border-top: 1px solid oklch(0.450 0.155 25 / 0.25);
     margin: 1.5rem 0;
   }
 }
 
-/* ── HOSTit / Dante Utility Classes ─────────────────────────────────────── */
+/* ── Paradiso / Venice Utility Classes ──────────────────────────────────── */
 @layer utilities {
 
   /* ── Font families ── */
-  .font-cormorant  { font-family: 'Cormorant Garamond', 'Cormorant', Georgia, serif; }
-  .font-pinyon     { font-family: 'Pinyon Script', cursive; }
-  .font-fell       { font-family: 'IM Fell English', Georgia, serif; }
+  .font-playfair   { font-family: 'Playfair Display', 'Cormorant Garamond', Georgia, serif; }
+  .font-cormorant  { font-family: 'Cormorant Garamond', Georgia, serif; }
+  .font-inter      { font-family: 'Inter', system-ui, sans-serif; }
   .font-bebas      { font-family: 'Bebas Neue', Impact, sans-serif; }
-  .font-dm         { font-family: 'DM Sans', system-ui, sans-serif; }
+  /* Legacy aliases so existing JSX doesn't break */
+  .font-dm         { font-family: 'Inter', system-ui, sans-serif; }
+  .font-pinyon     { font-family: 'Playfair Display', Georgia, serif; }
+  .font-fell       { font-family: 'Cormorant Garamond', Georgia, serif; }
 
   /* ── Brand colours (text) ── */
-  .text-forest     { color: oklch(0.520 0.080 162); }
-  .text-gold       { color: oklch(0.720 0.105 75); }
-  .text-ink        { color: oklch(0.300 0.022 45); }
-  .text-cream      { color: oklch(0.960 0.018 82); }
-  .text-sage       { color: oklch(0.500 0.040 155); }
-  .text-warm-white { color: oklch(0.980 0.012 80); }
+  .text-teal       { color: oklch(0.400 0.075 178); }
+  .text-terra      { color: oklch(0.450 0.155 25); }
+  .text-cream      { color: oklch(0.958 0.020 88); }
+  .text-stone      { color: oklch(0.500 0.025 60); }
+  .text-ivory      { color: oklch(0.978 0.014 86); }
+  /* Legacy aliases */
+  .text-forest     { color: oklch(0.400 0.075 178); }
+  .text-gold       { color: oklch(0.450 0.155 25); }
+  .text-ink        { color: oklch(0.220 0.018 45); }
+  .text-sage       { color: oklch(0.500 0.025 60); }
+  .text-warm-white { color: oklch(0.978 0.014 86); }
 
   /* ── Brand colours (bg) ── */
-  .bg-forest       { background-color: oklch(0.520 0.080 162); }
-  .bg-forest-dark  { background-color: oklch(0.420 0.072 162); }
-  .bg-gold         { background-color: oklch(0.720 0.105 75); }
-  .bg-cream        { background-color: oklch(0.960 0.018 82); }
-  .bg-warm-white   { background-color: oklch(0.980 0.012 80); }
-  .bg-linen        { background-color: oklch(0.920 0.018 78); }
-  .bg-ink          { background-color: oklch(0.300 0.022 45); }
+  .bg-teal         { background-color: oklch(0.400 0.075 178); }
+  .bg-teal-dark    { background-color: oklch(0.280 0.065 178); }
+  .bg-terra        { background-color: oklch(0.450 0.155 25); }
+  .bg-cream        { background-color: oklch(0.958 0.020 88); }
+  .bg-ivory        { background-color: oklch(0.978 0.014 86); }
+  .bg-linen        { background-color: oklch(0.920 0.018 82); }
+  /* Legacy aliases */
+  .bg-forest       { background-color: oklch(0.400 0.075 178); }
+  .bg-forest-dark  { background-color: oklch(0.280 0.065 178); }
+  .bg-gold         { background-color: oklch(0.450 0.155 25); }
+  .bg-warm-white   { background-color: oklch(0.978 0.014 86); }
+  .bg-ink          { background-color: oklch(0.220 0.018 45); }
 
   /* ── Brand colours (border) ── */
-  .border-forest   { border-color: oklch(0.520 0.080 162); }
-  .border-gold     { border-color: oklch(0.720 0.105 75); }
-  .border-ink      { border-color: oklch(0.300 0.022 45); }
+  .border-teal     { border-color: oklch(0.400 0.075 178); }
+  .border-terra    { border-color: oklch(0.450 0.155 25); }
+  /* Legacy aliases */
+  .border-forest   { border-color: oklch(0.400 0.075 178); }
+  .border-gold     { border-color: oklch(0.450 0.155 25); }
+  .border-ink      { border-color: oklch(0.220 0.018 45); }
 
-  /* ── Gold divider line ── */
+  /* ── Paradiso stripe motif ── */
+  .stripe-pattern {
+    background-image: repeating-linear-gradient(
+      90deg,
+      oklch(0.450 0.155 25) 0px,
+      oklch(0.450 0.155 25) 6px,
+      oklch(0.958 0.020 88) 6px,
+      oklch(0.958 0.020 88) 12px,
+      oklch(0.220 0.018 45 / 0.15) 12px,
+      oklch(0.220 0.018 45 / 0.15) 14px,
+      oklch(0.958 0.020 88) 14px,
+      oklch(0.958 0.020 88) 20px
+    );
+  }
+  .stripe-pattern-v {
+    background-image: repeating-linear-gradient(
+      180deg,
+      oklch(0.450 0.155 25) 0px,
+      oklch(0.450 0.155 25) 6px,
+      oklch(0.958 0.020 88) 6px,
+      oklch(0.958 0.020 88) 12px,
+      oklch(0.220 0.018 45 / 0.15) 12px,
+      oklch(0.220 0.018 45 / 0.15) 14px,
+      oklch(0.958 0.020 88) 14px,
+      oklch(0.958 0.020 88) 20px
+    );
+  }
+
+  /* ── Terracotta divider line ── */
+  .terra-rule {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.20em;
+    font-size: 0.60rem;
+    font-family: 'Bebas Neue', sans-serif;
+    color: oklch(0.450 0.155 25 / 0.75);
+  }
+  .terra-rule::before,
+  .terra-rule::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, transparent, oklch(0.450 0.155 25 / 0.45), transparent);
+  }
+  /* Legacy alias */
   .gold-rule {
     display: flex;
     align-items: center;
@@ -235,42 +296,32 @@
     letter-spacing: 0.20em;
     font-size: 0.60rem;
     font-family: 'Bebas Neue', sans-serif;
-    color: oklch(0.720 0.105 75 / 0.75);
+    color: oklch(0.450 0.155 25 / 0.75);
   }
   .gold-rule::before,
   .gold-rule::after {
     content: '';
     flex: 1;
     height: 1px;
-    background: linear-gradient(to right, transparent, oklch(0.720 0.105 75 / 0.55), transparent);
+    background: linear-gradient(to right, transparent, oklch(0.450 0.155 25 / 0.45), transparent);
   }
 
-  /* ── Checkerboard tile accent (Dante's floor) ── */
-  .checkerboard {
-    background-image:
-      repeating-conic-gradient(
-        oklch(0.300 0.022 45 / 0.06) 0% 25%,
-        transparent 0% 50%
-      );
-    background-size: 20px 20px;
+  /* ── Paradiso card with terracotta top border ── */
+  .paradiso-card {
+    background-color: oklch(0.978 0.014 86);
+    border: 1px solid oklch(0.875 0.022 80);
+    border-top: 2px solid oklch(0.450 0.155 25 / 0.70);
+    border-radius: 0.25rem;
   }
-
-  /* ── Gold script logo ── */
-  .logo-script {
-    font-family: 'Pinyon Script', cursive;
-    color: oklch(0.720 0.105 75);
-    line-height: 1;
-  }
-
-  /* ── Vintage card with gold top border ── */
+  /* Legacy alias */
   .dante-card {
-    background-color: oklch(0.980 0.012 80);
-    border: 1px solid oklch(0.870 0.022 76);
-    border-top: 2px solid oklch(0.720 0.105 75 / 0.60);
-    border-radius: 0;
+    background-color: oklch(0.978 0.014 86);
+    border: 1px solid oklch(0.875 0.022 80);
+    border-top: 2px solid oklch(0.450 0.155 25 / 0.70);
+    border-radius: 0.25rem;
   }
 
-  /* ── Green sidebar nav item ── */
+  /* ── Teal sidebar nav item ── */
   .nav-item {
     display: flex;
     align-items: center;
@@ -279,73 +330,128 @@
     font-family: 'Bebas Neue', sans-serif;
     letter-spacing: 0.12em;
     font-size: 0.80rem;
-    color: oklch(0.900 0.018 82);
+    color: oklch(0.900 0.018 88);
     transition: color 0.12s ease, background-color 0.12s ease;
-    border-radius: 0;
+    border-radius: 0.25rem;
     cursor: pointer;
   }
   .nav-item:hover {
-    color: oklch(0.720 0.105 75);
-    background-color: oklch(0.520 0.080 162 / 0.5);
+    color: oklch(0.958 0.020 88);
+    background-color: oklch(0.400 0.075 178 / 0.5);
   }
   .nav-item.active {
-    color: oklch(0.720 0.105 75);
-    background-color: oklch(0.520 0.080 162 / 0.4);
-    border-left: 2px solid oklch(0.720 0.105 75);
+    color: oklch(0.958 0.020 88);
+    background-color: oklch(0.400 0.075 178 / 0.4);
+    border-left: 2px solid oklch(0.450 0.155 25);
     padding-left: calc(0.875rem - 2px);
   }
 
   /* ── Status pill badges ── */
-  .status-new       { background: oklch(0.720 0.105 75 / 0.18); color: oklch(0.38 0.08 72); }
-  .status-quoted    { background: oklch(0.345 0.065 162 / 0.15); color: oklch(0.28 0.065 162); }
+  .status-new       { background: oklch(0.450 0.155 25 / 0.15); color: oklch(0.35 0.12 25); }
+  .status-quoted    { background: oklch(0.400 0.075 178 / 0.15); color: oklch(0.30 0.065 178); }
   .status-confirmed { background: oklch(0.50 0.14 155 / 0.15); color: oklch(0.30 0.12 155); }
-  .status-cancelled { background: oklch(0.480 0.032 155 / 0.15); color: oklch(0.32 0.025 155); }
+  .status-cancelled { background: oklch(0.480 0.032 60 / 0.15); color: oklch(0.40 0.025 60); }
 
   /* ── Stat card ── */
   .stat-card {
-    background: oklch(0.980 0.012 80);
-    border: 1px solid oklch(0.870 0.022 76);
-    border-top: 2px solid oklch(0.720 0.105 75 / 0.50);
+    background: oklch(0.978 0.014 86);
+    border: 1px solid oklch(0.875 0.022 80);
+    border-top: 2px solid oklch(0.450 0.155 25 / 0.50);
     padding: 1.25rem;
+    border-radius: 0.25rem;
   }
 
-  /* ── Forest green primary button ── */
-  .btn-forest {
-    background-color: oklch(0.520 0.080 162);
-    color: oklch(0.960 0.018 82);
-    border-radius: 0;
+  /* ── Teal primary button ── */
+  .btn-teal {
+    background-color: oklch(0.400 0.075 178);
+    color: oklch(0.958 0.020 88);
+    border-radius: 0.25rem;
     font-family: 'Bebas Neue', sans-serif;
     letter-spacing: 0.12em;
     transition: background-color 0.15s ease;
   }
-  .btn-forest:hover { background-color: oklch(0.420 0.072 162); }
+  .btn-teal:hover { background-color: oklch(0.340 0.068 178); }
+  /* Legacy alias */
+  .btn-forest {
+    background-color: oklch(0.400 0.075 178);
+    color: oklch(0.958 0.020 88);
+    border-radius: 0.25rem;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.12em;
+    transition: background-color 0.15s ease;
+  }
+  .btn-forest:hover { background-color: oklch(0.340 0.068 178); }
 
-  /* ── Gold outline button ── */
+  /* ── Terracotta outline button ── */
+  .btn-terra-outline {
+    background-color: transparent;
+    color: oklch(0.450 0.155 25);
+    border: 1px solid oklch(0.450 0.155 25 / 0.60);
+    border-radius: 0.25rem;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.12em;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .btn-terra-outline:hover {
+    background-color: oklch(0.450 0.155 25 / 0.10);
+  }
+  /* Legacy alias */
   .btn-gold-outline {
     background-color: transparent;
-    color: oklch(0.720 0.105 75);
-    border: 1px solid oklch(0.720 0.105 75 / 0.60);
-    border-radius: 0;
+    color: oklch(0.450 0.155 25);
+    border: 1px solid oklch(0.450 0.155 25 / 0.60);
+    border-radius: 0.25rem;
     font-family: 'Bebas Neue', sans-serif;
     letter-spacing: 0.12em;
     transition: background-color 0.15s ease, color 0.15s ease;
   }
   .btn-gold-outline:hover {
-    background-color: oklch(0.720 0.105 75 / 0.12);
+    background-color: oklch(0.450 0.155 25 / 0.10);
   }
 
-  /* ── Brass/gold input focus ── */
+  /* ── Teal input focus ── */
+  .input-paradiso {
+    border: 1px solid oklch(0.875 0.022 80);
+    border-radius: 0.25rem;
+    background: oklch(0.978 0.014 86);
+    font-family: 'Inter', sans-serif;
+    transition: border-color 0.15s ease;
+  }
+  .input-paradiso:focus {
+    outline: none;
+    border-color: oklch(0.400 0.075 178 / 0.70);
+    box-shadow: 0 0 0 2px oklch(0.400 0.075 178 / 0.12);
+  }
+  /* Legacy alias */
   .input-dante {
-    border: 1px solid oklch(0.870 0.022 76);
-    border-radius: 0;
-    background: oklch(0.980 0.012 80);
-    font-family: 'DM Sans', sans-serif;
+    border: 1px solid oklch(0.875 0.022 80);
+    border-radius: 0.25rem;
+    background: oklch(0.978 0.014 86);
+    font-family: 'Inter', sans-serif;
     transition: border-color 0.15s ease;
   }
   .input-dante:focus {
     outline: none;
-    border-color: oklch(0.720 0.105 75 / 0.70);
-    box-shadow: 0 0 0 2px oklch(0.720 0.105 75 / 0.12);
+    border-color: oklch(0.400 0.075 178 / 0.70);
+    box-shadow: 0 0 0 2px oklch(0.400 0.075 178 / 0.12);
+  }
+
+  /* ── Logo script ── */
+  .logo-script {
+    font-family: 'Playfair Display', Georgia, serif;
+    color: oklch(0.958 0.020 88);
+    line-height: 1;
+    font-style: italic;
+  }
+
+  /* ── Checkerboard tile accent (legacy) ── */
+  .checkerboard {
+    background-image:
+      repeating-conic-gradient(
+        oklch(0.450 0.155 25 / 0.06) 0% 25%,
+        transparent 0% 50%
+      );
+    background-size: 20px 20px;
   }
 
   /* ── Flex defaults ── */

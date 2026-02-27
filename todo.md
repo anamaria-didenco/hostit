@@ -186,8 +186,11 @@
 - [x] Clicking a lead/enquiry item navigates to that lead in the Leads Inbox
 
 ## Paradiso Brand Rebrand
-- [ ] Rewrite index.css: deep teal (#1E5F5A), terracotta (#C0392B), warm cream (#F5F0DC), stripe motifs
-- [ ] Update all CSS tokens: --primary, --background, --foreground, sidebar, nav, buttons
-- [ ] Update Dashboard.tsx hardcoded colour classes (text-forest, bg-forest, text-gold, bg-gold etc.)
-- [ ] Update Home.tsx and public pages to Paradiso aesthetic
-- [ ] Update typography: serif display font for headings, clean sans for body
+- [x] Rewrite index.css: deep teal, terracotta, warm cream, stripe motifs, paradiso-card, terra-rule
+- [x] Update all CSS tokens + legacy aliases: --primary, --background, --foreground, sidebar, nav, buttons
+- [x] Dashboard.tsx uses CSS variable aliases (text-forest→teal, text-gold→terra, bg-forest-dark→teal-dark)
+- [x] Rewrite Home.tsx with Paradiso aesthetic (hero, features, pricing, stripe dividers)
+- [x] Rewrite LeadForm.tsx with Paradiso styling (teal header, stripe band, paradiso-card forms)
+- [x] Rewrite ProposalView.tsx with Paradiso styling (teal header, stripe band, paradiso-card sections)
+- [x] Typography: Playfair Display (headings), Inter (body), Bebas Neue (labels), Cormorant (accent)
+- [x] 53 tests passing, 0 TypeScript errors
