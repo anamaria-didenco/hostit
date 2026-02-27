@@ -134,6 +134,10 @@ export default function Dashboard() {
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
   );
+  const { data: monthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
+    { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
+    { enabled: !!user?.id }
+  );
 
   const updateStatus = trpc.leads.updateStatus.useMutation({
     onSuccess: () => { refetchLeads(); if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id }); toast.success("Status updated"); },
@@ -238,6 +242,7 @@ export default function Dashboard() {
   const firstDay = new Date(year, month, 1).getDay();
   const bookingDays = new Set((monthBookings ?? []).map((b: any) => new Date(b.eventDate).getDate()));
   const followUpDays = new Set((monthFollowUps ?? []).map((l: any) => new Date(l.followUpDate).getDate()));
+  const leadEventDays = new Set((monthLeadEvents ?? []).map((l: any) => new Date(l.eventDate).getDate()));
 
   const leadFormUrl = venueSettings?.slug
     ? `${window.location.origin}/enquire/${venueSettings.slug}`
@@ -863,21 +868,41 @@ export default function Dashboard() {
                     const day = i + 1;
                     const hasBooking = bookingDays.has(day);
                     const hasFollowUp = followUpDays.has(day);
+                    const hasLeadEvent = leadEventDays.has(day);
                     const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
+                    const bgClass = hasBooking
+                      ? "bg-forest/10 border-forest"
+                      : hasLeadEvent
+                      ? "bg-rose-50 border-rose-400"
+                      : hasFollowUp
+                      ? "bg-gold/10 border-gold"
+                      : isToday
+                      ? "border-gold bg-gold/5"
+                      : "border-transparent hover:bg-linen";
+                    const textClass = hasBooking
+                      ? "text-forest font-bold"
+                      : hasLeadEvent
+                      ? "text-rose-700 font-semibold"
+                      : hasFollowUp
+                      ? "text-amber-700 font-semibold"
+                      : isToday
+                      ? "text-ink font-semibold"
+                      : "text-foreground";
                     return (
-                      <div key={day} className={`aspect-square flex flex-col items-center justify-center text-sm font-dm border transition-colors
-                        ${hasBooking ? "bg-forest/10 border-forest" : hasFollowUp ? "bg-gold/10 border-gold" : isToday ? "border-gold bg-gold/5" : "border-transparent hover:bg-linen"}`}>
-                        <span className={`${hasBooking ? "text-forest font-bold" : hasFollowUp ? "text-amber-700 font-semibold" : isToday ? "text-ink font-semibold" : "text-foreground"}`}>{day}</span>
+                      <div key={day} className={`aspect-square flex flex-col items-center justify-center text-sm font-dm border transition-colors ${bgClass}`}>
+                        <span className={textClass}>{day}</span>
                         <div className="flex gap-0.5 mt-0.5">
                           {hasBooking && <div className="w-1.5 h-1.5 bg-forest rounded-full" />}
+                          {hasLeadEvent && <div className="w-1.5 h-1.5 bg-rose-500 rounded-full" />}
                           {hasFollowUp && <div className="w-1.5 h-1.5 bg-gold rounded-full" />}
                         </div>
                       </div>
                     );
                   })}
                 </div>
-                <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gold/15 text-xs font-dm">
+                <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gold/15 text-xs font-dm flex-wrap">
                   <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-forest/10 border border-forest" /><span>Booking</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-rose-50 border border-rose-400" /><span>Enquiry / Lead</span></div>
                   <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gold/10 border border-gold" /><span>Follow-Up</span></div>
                   <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gold/5 border border-gold" /><span>Today</span></div>
                 </div>
@@ -935,6 +960,39 @@ export default function Dashboard() {
                             </div>
                             <div className="font-dm text-xs text-ink/50">
                               {followDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* This month's lead events */}
+              {(monthLeadEvents ?? []).length > 0 && (
+                <div className="mt-6 max-w-2xl">
+                  <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Enquiries &amp; Leads</h2>
+                  <div className="space-y-2">
+                    {(monthLeadEvents ?? []).map((lead: any) => {
+                      const eventDate = new Date(lead.eventDate);
+                      const statusColors: Record<string, string> = {
+                        new: 'text-amber-700', contacted: 'text-sky-700', proposal_sent: 'text-forest',
+                        negotiating: 'text-orange-600', booked: 'text-emerald-700', lost: 'text-stone-500', cancelled: 'text-stone-400',
+                      };
+                      return (
+                        <button key={lead.id}
+                          onClick={() => { setSelectedLead(lead); setTab('leads'); }}
+                          className="w-full dante-card p-4 flex items-center justify-between hover:bg-rose-50/50 transition-colors text-left">
+                          <div>
+                            <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
+                            <div className="font-dm text-xs text-ink/60">{lead.eventType || 'Enquiry'} · {lead.guestCount ? `${lead.guestCount} guests · ` : ''}{lead.email}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-bebas text-xs tracking-widest ${statusColors[lead.status] ?? 'text-ink'}`}>
+                              {lead.status?.replace('_', ' ').toUpperCase()}
+                            </div>
+                            <div className="font-dm text-xs text-ink/50">
+                              {eventDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
                             </div>
                           </div>
                         </button>

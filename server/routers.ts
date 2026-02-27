@@ -338,6 +338,26 @@ export const appRouter = router({
           )
         ).orderBy(leads.followUpDate);
       }),
+    // Leads with eventDate in a given month (for calendar)
+    eventsByMonth: protectedProcedure
+      .input(z.object({ year: z.number(), month: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { leads } = await import('../drizzle/schema');
+        const { eq, and, gte, lt, isNotNull } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const start = new Date(input.year, input.month - 1, 1);
+        const end = new Date(input.year, input.month, 1);
+        return db.select().from(leads).where(
+          and(
+            eq(leads.ownerId, ctx.user.id),
+            isNotNull(leads.eventDate),
+            gte(leads.eventDate, start),
+            lt(leads.eventDate, end),
+          )
+        ).orderBy(leads.eventDate);
+      }),
     // Bulk update status for multiple leads
     bulkUpdateStatus: protectedProcedure
       .input(z.object({

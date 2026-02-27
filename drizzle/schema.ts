@@ -1,6 +1,6 @@
 import {
   int, mysqlEnum, mysqlTable, text, timestamp,
-  varchar, decimal, boolean, bigint
+  varchar, decimal, boolean, bigint, json
 } from "drizzle-orm/mysql-core";
 
 // ─── Users (venue staff / owners) ────────────────────────────────────────────
@@ -238,3 +238,46 @@ export const emailTemplates = mysqlTable("email_templates", {
 });
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertEmailTemplate = typeof emailTemplates.$inferInsert;
+
+// ─── Runsheets ────────────────────────────────────────────────────────────────
+export const runsheets = mysqlTable("runsheets", {
+  id: int("id").autoincrement().primaryKey(),
+  bookingId: int("bookingId").notNull(),
+  ownerId: int("ownerId").notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Runsheet = typeof runsheets.$inferSelect;
+export type InsertRunsheet = typeof runsheets.$inferInsert;
+
+// ─── Runsheet Items ───────────────────────────────────────────────────────────
+export const runsheetItems = mysqlTable("runsheet_items", {
+  id: int("id").autoincrement().primaryKey(),
+  runsheetId: int("runsheetId").notNull(),
+  time: varchar("time", { length: 10 }).notNull(), // e.g. "17:30"
+  duration: int("duration").default(30), // minutes
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  assignedTo: varchar("assignedTo", { length: 255 }),
+  category: mysqlEnum("category", ["setup", "guest", "food", "beverage", "speech", "entertainment", "packdown", "other"]).default("other").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+});
+export type RunsheetItem = typeof runsheetItems.$inferSelect;
+export type InsertRunsheetItem = typeof runsheetItems.$inferInsert;
+
+// ─── Proposal Drinks ──────────────────────────────────────────────────────────
+export const proposalDrinks = mysqlTable("proposal_drinks", {
+  id: int("id").autoincrement().primaryKey(),
+  proposalId: int("proposalId").notNull().unique(),
+  ownerId: int("ownerId").notNull(),
+  barOption: mysqlEnum("barOption", ["bar_tab", "cash_bar", "bar_tab_then_cash", "unlimited"]).default("cash_bar").notNull(),
+  tabAmount: decimal("tabAmount", { precision: 10, scale: 2 }),
+  selectedDrinks: json("selectedDrinks").$type<string[]>().notNull(),
+  customDrinks: json("customDrinks").$type<{ name: string; description?: string; price?: number }[]>().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ProposalDrinks = typeof proposalDrinks.$inferSelect;
+export type InsertProposalDrinks = typeof proposalDrinks.$inferInsert;

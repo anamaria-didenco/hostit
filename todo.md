@@ -154,3 +154,40 @@
 - [x] Lighten --ink (black text) to a softer warm taupe (oklch 0.30)
 - [x] Lighten --forest (dark green) to a lighter sage green (oklch 0.52)
 - [x] Updated all utility classes: text-ink, text-forest, text-sage, bg-forest, bg-ink, border-forest, border-ink, sidebar, nav-item states
+
+## Runsheet Feature
+- [ ] Add runsheets table (id, bookingId, ownerId, token, notes, createdAt, updatedAt)
+- [ ] Add runsheet_items table (id, runsheetId, time, duration, title, description, assignedTo, category, sortOrder)
+- [ ] Push schema migration
+- [ ] Add tRPC procedures: runsheets.generate, runsheets.get, runsheets.updateItem, runsheets.addItem, runsheets.deleteItem, runsheets.getByToken (public)
+- [ ] Auto-generate runsheet from booking event type, date, guest count with NZ venue timeline
+- [ ] Build Runsheet editor UI in Bookings detail panel (editable time slots, add/delete/reorder)
+- [ ] Build public RunsheetView page at /runsheet/:token
+- [ ] PDF print/download on public runsheet page
+- [ ] Write vitest tests for runsheet procedures
+
+## Drinks Selection in Proposals
+- [ ] Add proposal_drinks table (id, proposalId, ownerId, barOption, tabAmount, drinksJson, customDrinksJson)
+- [ ] Push schema migration
+- [ ] Add tRPC procedures: proposals.saveDrinks, proposals.getDrinks
+- [ ] Build drinks selection UI in proposal builder: bar option radio (Bar Tab/Cash Bar/Bar Tab then Cash/Unlimited), tab amount input when applicable
+- [ ] Add Bar Franco drinks menu with checkboxes per item grouped by category (Aperitivo, Vino Spumante, Vino Bianco, Vino Rosato, Vino Rosso, Birra, Non Alcolico)
+- [ ] Add custom drink creation (name, description, price)
+- [ ] Show selected drinks on public proposal view page
+- [ ] Write vitest tests for drinks procedures
+
+## Calendar — Unified View
+- [x] Add leads.eventsByMonth tRPC query (leads with eventDate in given month)
+- [x] Show lead event dates on calendar grid (rose/pink dot)
+- [x] Show bookings on calendar grid (green dot)
+- [x] Show follow-up dates on calendar grid (amber dot)
+- [x] Add combined legend: Booking, Enquiry/Lead, Follow-Up, Today
+- [x] Add This Month's Enquiries & Leads list below calendar
+- [x] Clicking a lead/enquiry item navigates to that lead in the Leads Inbox
+
+## Paradiso Brand Rebrand
+- [ ] Rewrite index.css: deep teal (#1E5F5A), terracotta (#C0392B), warm cream (#F5F0DC), stripe motifs
+- [ ] Update all CSS tokens: --primary, --background, --foreground, sidebar, nav, buttons
+- [ ] Update Dashboard.tsx hardcoded colour classes (text-forest, bg-forest, text-gold, bg-gold etc.)
+- [ ] Update Home.tsx and public pages to Paradiso aesthetic
+- [ ] Update typography: serif display font for headings, clean sans for body
