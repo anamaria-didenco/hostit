@@ -884,6 +884,82 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+  // ─── Bar Menu Items ──────────────────────────────────────────────────────
+  barMenu: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { barMenuItems } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(barMenuItems).where(eq(barMenuItems.ownerId, ctx.user.id)).orderBy(asc(barMenuItems.sortOrder), asc(barMenuItems.name));
+    }),
+    add: protectedProcedure
+      .input(z.object({
+        category: z.string().min(1).default('General'),
+        name: z.string().min(1),
+        description: z.string().optional(),
+        pricePerUnit: z.number().optional(),
+        unit: z.string().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { barMenuItems } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [result] = await db.insert(barMenuItems).values({
+          ownerId: ctx.user.id,
+          category: input.category,
+          name: input.name,
+          description: input.description ?? null,
+          pricePerUnit: input.pricePerUnit != null ? String(input.pricePerUnit) : null,
+          unit: input.unit ?? 'per drink',
+          sortOrder: input.sortOrder ?? 0,
+          createdAt: Date.now(),
+        });
+        return { id: (result as any).insertId };
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        category: z.string().optional(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        pricePerUnit: z.number().nullable().optional(),
+        unit: z.string().optional(),
+        isActive: z.boolean().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { barMenuItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const updates: Record<string, unknown> = {};
+        if (input.category !== undefined) updates.category = input.category;
+        if (input.name !== undefined) updates.name = input.name;
+        if (input.description !== undefined) updates.description = input.description;
+        if (input.pricePerUnit !== undefined) updates.pricePerUnit = input.pricePerUnit != null ? String(input.pricePerUnit) : null;
+        if (input.unit !== undefined) updates.unit = input.unit;
+        if (input.isActive !== undefined) updates.isActive = input.isActive;
+        if (input.sortOrder !== undefined) updates.sortOrder = input.sortOrder;
+        await db.update(barMenuItems).set(updates).where(and(eq(barMenuItems.id, input.id), eq(barMenuItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { barMenuItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(barMenuItems).where(and(eq(barMenuItems.id, input.id), eq(barMenuItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
   // ─── Email ───────────────────────────────────────────────────────────────
   email: router({
     send: protectedProcedure

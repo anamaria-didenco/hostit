@@ -349,3 +349,24 @@
 - [x] Express Book confirmed as enquiry-only (no instant booking)
 - [x] bookings.getById and bookings.update tRPC procedures added
 - [x] menu.addItem, updateItem, deleteItem updated with category and portionSize fields
+
+## Phase 11: Dashboard Redesign + Settings Menus + BEO
+- [ ] Dashboard overview: calendar + new enquiries side-by-side layout
+- [ ] Calendar cells: colour-coded booking status (confirmed=green, tentative=amber, cancelled=red)
+- [ ] Calendar cells: show event name and guest count inline
+- [ ] Settings tab: Floor Plans management (create/edit/delete saved floor plan templates)
+- [ ] Settings tab: Drinks Menu management (add/edit/delete bar items and options)
+- [ ] Settings tab: Food Menu management (packages and items, same as /menu but inline in Settings)
+- [ ] BEO PDF server route (/api/beo/:bookingId) with Puppeteer
+- [ ] Generate BEO button on EventDetail page
+
+## Phase 11: BEO, Dashboard Redesign, Settings Menus
+- [x] Sidebar text all cream, active item sky blue
+- [x] Sidebar burgundy lightened to L=0.420 for readability
+- [x] Dashboard overview redesigned: mini calendar (left) + New Enquiries (right)
+- [x] Calendar cells show colour-coded booking status dots (green=confirmed, amber=tentative, grey=cancelled)
+- [x] Settings tab: Food Menu management (packages + items with category/portion size)
+- [x] Settings tab: Drinks/Bar Menu management (custom bar items with category/price)
+- [x] Settings tab: Floor Plans sub-tab (create/manage floor plan templates)
+- [x] BEO PDF server route (/api/beo/:bookingId) with full event data
+- [x] Generate BEO PDF button on EventDetail page

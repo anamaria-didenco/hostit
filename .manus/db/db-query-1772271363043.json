@@ -1,0 +1,9 @@
+{
+  "query": "\nCREATE TABLE IF NOT EXISTS bar_menu_items (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  ownerId INT NOT NULL DEFAULT 0,\n  category VARCHAR(100) NOT NULL DEFAULT 'General',\n  name VARCHAR(255) NOT NULL,\n  description TEXT,\n  price_per_unit DECIMAL(10,2),\n  unit VARCHAR(50) DEFAULT 'per drink',\n  is_active TINYINT(1) NOT NULL DEFAULT 1,\n  sort_order INT NOT NULL DEFAULT 0,\n  created_at BIGINT NOT NULL DEFAULT 0\n);\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute \nCREATE TABLE IF NOT EXISTS bar_menu_items (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  ownerId INT NOT NULL DEFAULT 0,\n  category VARCHAR(100) NOT NULL DEFAULT 'General',\n  name VARCHAR(255) NOT NULL,\n  description TEXT,\n  price_per_unit DECIMAL(10,2),\n  unit VARCHAR(50) DEFAULT 'per drink',\n  is_active TINYINT(1) NOT NULL DEFAULT 1,\n  sort_order INT NOT NULL DEFAULT 0,\n  created_at BIGINT NOT NULL DEFAULT 0\n);\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1615
+}

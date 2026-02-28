@@ -419,3 +419,19 @@ export const analyticsGoals = mysqlTable("analytics_goals", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type AnalyticsGoal = typeof analyticsGoals.$inferSelect;
+
+// ─── Bar Menu Items ────────────────────────────────────────────────────────
+export const barMenuItems = mysqlTable("bar_menu_items", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("ownerId").notNull(),
+  category: varchar("category", { length: 100 }).notNull().default("General"),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  pricePerUnit: decimal("price_per_unit", { precision: 10, scale: 2 }),
+  unit: varchar("unit", { length: 50 }).default("per drink"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: int("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type BarMenuItem = typeof barMenuItems.$inferSelect;
+export type InsertBarMenuItem = typeof barMenuItems.$inferInsert;

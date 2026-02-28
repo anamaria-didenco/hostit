@@ -236,6 +236,25 @@ export default function Dashboard() {
   const [showChecklistForm, setShowChecklistForm] = useState(false);
   const [checklistForm, setChecklistForm] = useState({ name: "", description: "", items: "" });
 
+  // Bar menu state
+  const { data: barMenuItemsList, refetch: refetchBarMenu } = trpc.barMenu.list.useQuery(undefined, { enabled: isAuthenticated });
+  const [showBarItemForm, setShowBarItemForm] = useState(false);
+  const [barItemForm, setBarItemForm] = useState({ category: "Wine", name: "", description: "", pricePerUnit: "", unit: "per glass" });
+  const [editingBarItemId, setEditingBarItemId] = useState<number|null>(null);
+  const [settingsFoodTab, setSettingsFoodTab] = useState<"food"|"bar"|"floorplans">("food");
+  const addBarItem = trpc.barMenu.add.useMutation({
+    onSuccess: () => { refetchBarMenu(); setShowBarItemForm(false); setBarItemForm({ category: "Wine", name: "", description: "", pricePerUnit: "", unit: "per glass" }); setEditingBarItemId(null); toast.success("Drink added!"); },
+    onError: () => toast.error("Failed to add drink"),
+  });
+  const updateBarItem = trpc.barMenu.update.useMutation({
+    onSuccess: () => { refetchBarMenu(); setShowBarItemForm(false); setEditingBarItemId(null); toast.success("Drink updated!"); },
+    onError: () => toast.error("Failed to update drink"),
+  });
+  const deleteBarItem = trpc.barMenu.delete.useMutation({
+    onSuccess: () => { refetchBarMenu(); toast.success("Drink deleted"); },
+    onError: () => toast.error("Failed to delete drink"),
+  });
+
   const [settingsForm, setSettingsForm] = useState<any>(null);
   useMemo(() => {
     if (venueSettings && !settingsForm) {
@@ -363,8 +382,8 @@ export default function Dashboard() {
             <button key={item.id} onClick={() => setTab(item.id as any)}
               className={`w-full flex items-center gap-3 px-3 md:px-4 py-3.5 text-left transition-all font-bebas tracking-widest text-xs ${
                 tab === item.id
-                  ? "text-gold bg-forest/60 border-l-2 border-gold pl-[calc(0.75rem-2px)] md:pl-[calc(1rem-2px)]"
-                  : "text-cream/60 hover:text-gold hover:bg-forest/40 border-l-2 border-transparent"
+                  ? "text-sky-300 bg-white/10 border-l-2 border-sky-300 pl-[calc(0.75rem-2px)] md:pl-[calc(1rem-2px)]"
+                  : "text-cream hover:text-sky-200 hover:bg-white/10 border-l-2 border-transparent"
               }`}>
               {item.icon}
               <span className="hidden md:block">{item.label}</span>
@@ -372,27 +391,27 @@ export default function Dashboard() {
           ))}
           <div className="mt-auto p-3 hidden md:block space-y-1.5">
             <Link href="/analytics">
-              <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
+              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
                 <BarChart2 className="w-3 h-3" /> ANALYTICS
               </button>
             </Link>
             <Link href="/payments">
-              <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
+              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
                 <DollarSign className="w-3 h-3" /> PAYMENTS
               </button>
             </Link>
             <Link href="/book">
-              <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
+              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
                 <ExternalLink className="w-3 h-3" /> EXPRESS BOOK
               </button>
             </Link>
             <Link href="/menu">
-              <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
+              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
                 <UtensilsCrossed className="w-3 h-3" /> F&B MENU
               </button>
             </Link>
             <Link href="/enquire">
-              <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
+              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
                 <ExternalLink className="w-3 h-3" /> LEAD FORM
               </button>
             </Link>
@@ -405,26 +424,25 @@ export default function Dashboard() {
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
           {tab === "overview" && (
             <div className="p-6">
-              <div className="mb-8">
+              {/* Header */}
+              <div className="mb-6">
                 <div className="gold-rule max-w-xs mb-3"><span>DASHBOARD</span></div>
                 <h1 className="font-cormorant text-ink" style={{ fontSize: '2.5rem', fontWeight: 600 }}>
                   Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 17 ? "Afternoon" : "Evening"}
                 </h1>
               </div>
 
-              {/* Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-px bg-gold/15 mb-8">
+              {/* Stats row */}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-px bg-gold/15 mb-6">
                 {[
-                  { label: "NEW LEADS", value: stats?.newLeads ?? 0, sub: "awaiting response", accent: "text-gold", icon: <MessageSquare className="w-4 h-4 text-gold" /> },
+                  { label: "NEW ENQUIRIES", value: stats?.newLeads ?? 0, sub: "awaiting reply", accent: "text-gold", icon: <MessageSquare className="w-4 h-4 text-gold" /> },
                   { label: "TOTAL LEADS", value: stats?.totalLeads ?? 0, sub: "all time", accent: "text-ink", icon: <Users className="w-4 h-4 text-sage" /> },
                   { label: "PROPOSALS SENT", value: stats?.proposalsSent ?? 0, sub: "this period", accent: "text-forest", icon: <FileText className="w-4 h-4 text-forest" /> },
                   { label: "BOOKINGS THIS MONTH", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, accent: "text-emerald-600", icon: <CheckCircle className="w-4 h-4 text-emerald-600" /> },
                   { label: "OVERDUE FOLLOW-UPS", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", accent: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-sage", icon: <span className={(stats?.overdueFollowUps ?? 0) > 0 ? "text-red-500 text-base" : "text-sage text-base"}>⏰</span> },
                 ].map(s => (
                   <div key={s.label} className="stat-card">
-                    <div className="flex items-start justify-between mb-3">
-                      {s.icon}
-                    </div>
+                    <div className="flex items-start justify-between mb-3">{s.icon}</div>
                     <div className={`font-cormorant text-5xl font-semibold mb-1 ${s.accent}`}>{s.value}</div>
                     <div className="font-bebas text-xs tracking-widest text-sage leading-tight">{s.label}</div>
                     <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
@@ -432,76 +450,131 @@ export default function Dashboard() {
                 ))}
               </div>
 
-              {/* Recent Leads */}
-              <div className="dante-card shadow-sm mb-6">
-                <div className="flex items-center justify-between p-4 border-b border-gold/15">
-                  <h2 className="font-cormorant text-xl font-semibold text-ink">Recent Leads</h2>
-                  <button onClick={() => setTab("leads")} className="font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors">VIEW ALL</button>
-                </div>
-                {(allLeads ?? []).slice(0, 5).length === 0 ? (
-                  <div className="p-8 text-center">
-                    <p className="font-dm text-ink/60 text-sm mb-3">No leads yet. Share your lead form to start receiving enquiries.</p>
-                    <Button size="sm" onClick={() => { navigator.clipboard.writeText(leadFormUrl); toast.success("Copied!"); }}
-                      className="bg-tomato text-white font-bebas tracking-widest rounded-none text-xs gap-1">
-                      <Copy className="w-3 h-3" /> COPY LEAD FORM LINK
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border/50">
-                    {(allLeads ?? []).slice(0, 5).map((lead: any) => (
-                      <button key={lead.id} onClick={() => { setSelectedLead(lead); setTab("leads"); }}
-                        className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
-                        <div>
-                          <div className="font-playfair font-semibold text-sm text-ink">{lead.firstName} {lead.lastName}</div>
-                          <div className="font-dm text-xs text-ink/60">{lead.eventType || "Event"} · {lead.guestCount ? `${lead.guestCount} guests` : ""} {lead.eventDate ? `· ${new Date(lead.eventDate).toLocaleDateString("en-NZ")}` : ""}</div>
-                        </div>
-                        <div className={`font-bebas text-xs tracking-widest px-2 py-0.5 border rounded-none ${PIPELINE_STAGES.find(s => s.key === lead.status)?.color ?? "bg-muted border-border text-ink/60"}`}>
-                          {lead.status.replace(/_/g, " ").toUpperCase()}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* Two-column: Calendar + New Enquiries */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
-              {/* Overdue Follow-Ups */}
-              {(overdueLeads ?? []).length > 0 && (
-                <div className="mt-6 dante-card shadow-sm border-l-4 border-l-red-500">
+                {/* ── Mini Calendar ── */}
+                <div className="dante-card shadow-sm">
+                  <div className="flex items-center justify-between p-4 border-b border-gold/15">
+                    <button onClick={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="p-1 hover:text-gold transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+                    <h2 className="font-cormorant text-lg font-semibold text-ink">{MONTHS[month]} {year}</h2>
+                    <button onClick={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="p-1 hover:text-gold transition-colors"><ChevronRight className="w-4 h-4" /></button>
+                  </div>
+                  {/* Legend */}
+                  <div className="flex items-center gap-4 px-4 pt-3 pb-1 flex-wrap">
+                    <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />Confirmed</span>
+                    <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Tentative</span>
+                    <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-stone-400 inline-block" />Cancelled</span>
+                    <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />Enquiry</span>
+                  </div>
+                  <div className="p-3">
+                    <div className="grid grid-cols-7 mb-1">
+                      {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d => (
+                        <div key={d} className="text-center font-bebas text-[10px] tracking-widest text-ink/50 py-1">{d}</div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-0.5">
+                      {[...Array(firstDay)].map((_, i) => <div key={`e-${i}`} />)}
+                      {[...Array(daysInMonth)].map((_, i) => {
+                        const day = i + 1;
+                        const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
+                        const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
+                        const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
+                        const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
+                        const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
+                        const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
+                        const hasEnquiry = dayLeads.length > 0;
+                        const cellBg = hasConfirmed ? 'bg-emerald-50 border-emerald-300' : hasTentative ? 'bg-amber-50 border-amber-300' : hasCancelled ? 'bg-stone-50 border-stone-300' : hasEnquiry ? 'bg-rose-50 border-rose-300' : isToday ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-linen';
+                        return (
+                          <div
+                            key={day}
+                            onClick={() => {
+                              if (dayBookings.length > 0) { setTab('calendar'); }
+                              else if (dayLeads.length > 0) { setSelectedLead(dayLeads[0]); setTab('leads'); }
+                            }}
+                            className={`relative min-h-[44px] flex flex-col p-1 border transition-colors ${cellBg} ${(dayBookings.length > 0 || dayLeads.length > 0) ? 'cursor-pointer' : ''}`}
+                          >
+                            <span className={`text-[11px] font-dm leading-none mb-0.5 ${isToday ? 'font-bold text-gold' : 'text-ink/70'}`}>{day}</span>
+                            {/* Status dots */}
+                            <div className="flex flex-wrap gap-0.5 mt-auto">
+                              {dayBookings.slice(0, 3).map((b: any) => (
+                                <span key={b.id} title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} (${b.status})`}
+                                  className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                    b.status === 'confirmed' ? 'bg-emerald-500' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'
+                                  }`} />
+                              ))}
+                              {dayLeads.slice(0, 2).map((l: any) => (
+                                <span key={l.id} title={`${l.firstName} ${l.lastName ?? ''} — Enquiry`} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
+                              ))}
+                            </div>
+                            {/* Event name on larger cells */}
+                            {dayBookings.slice(0, 1).map((b: any) => (
+                              <div key={b.id} className={`text-[9px] leading-tight font-dm truncate w-full mt-0.5 ${
+                                b.status === 'confirmed' ? 'text-emerald-700' : b.status === 'tentative' ? 'text-amber-700' : 'text-stone-500'
+                              }`}>{b.firstName}</div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="p-3 border-t border-gold/15">
+                    <button onClick={() => setTab('calendar')} className="w-full font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors py-1">VIEW FULL CALENDAR →</button>
+                  </div>
+                </div>
+
+                {/* ── New Enquiries Panel ── */}
+                <div className="dante-card shadow-sm flex flex-col">
                   <div className="flex items-center justify-between p-4 border-b border-gold/15">
                     <div className="flex items-center gap-3">
-                      <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
-                      <h2 className="font-cormorant text-xl font-semibold text-ink">Overdue Follow-Ups</h2>
-                      <span className="bg-red-100 text-red-700 font-bebas text-xs tracking-widest px-2 py-0.5">{(overdueLeads ?? []).length}</span>
+                      <h2 className="font-cormorant text-lg font-semibold text-ink">New Enquiries</h2>
+                      {newEnquiries.length > 0 && (
+                        <span className="bg-gold/20 text-amber-800 font-bebas text-xs tracking-widest px-2 py-0.5 border border-gold/30">{newEnquiries.length}</span>
+                      )}
                     </div>
-                    <button onClick={() => setTab("leads")} className="font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors">VIEW ALL LEADS</button>
+                    <button onClick={() => { setLeadsSubTab('new'); setTab('leads'); }} className="font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors">VIEW ALL</button>
                   </div>
-                  <div className="divide-y divide-border/40">
-                    {(overdueLeads ?? []).map((lead: any) => {
-                      const daysOverdue = Math.floor((new Date().getTime() - new Date(lead.followUpDate).getTime()) / (1000 * 60 * 60 * 24));
-                      return (
-                        <button key={lead.id} onClick={() => { setSelectedLead(lead); setTab("leads"); }}
-                          className="w-full flex items-center justify-between p-4 hover:bg-red-50/50 transition-colors text-left">
-                          <div>
-                            <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
-                            <div className="font-dm text-xs text-ink/60">{lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}</div>
+                  {newEnquiries.length === 0 ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                      <CheckCircle className="w-10 h-10 text-emerald-400 mb-3" />
+                      <p className="font-cormorant text-lg text-ink/60 italic">All caught up!</p>
+                      <p className="font-dm text-xs text-ink/40 mt-1">No new enquiries waiting for a reply.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/40 overflow-y-auto max-h-[420px]">
+                      {newEnquiries.slice(0, 8).map((lead: any) => (
+                        <button key={lead.id} onClick={() => { setSelectedLead(lead); setLeadsSubTab('new'); setTab('leads'); }}
+                          className="w-full flex items-start gap-3 p-4 hover:bg-gold/5 transition-colors text-left">
+                          <div className="w-2 h-2 rounded-full bg-gold mt-1.5 flex-shrink-0 animate-pulse" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-cormorant font-semibold text-sm text-ink">{lead.firstName} {lead.lastName}</div>
+                            <div className="font-dm text-xs text-ink/60 truncate">{lead.eventType || 'Event'}{lead.guestCount ? ` · ${lead.guestCount} guests` : ''}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : ''}</div>
+                            {lead.message && <div className="font-dm text-xs text-ink/40 truncate mt-0.5 italic">"{lead.message}"</div>}
                           </div>
-                          <div className="text-right">
-                            <div className="font-bebas text-xs tracking-widest text-red-600">
-                              {daysOverdue === 0 ? 'DUE TODAY' : `${daysOverdue}d OVERDUE`}
-                            </div>
-                            <div className="font-dm text-xs text-ink/40">
-                              {new Date(lead.followUpDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}
-                            </div>
+                          <div className="font-dm text-xs text-ink/40 flex-shrink-0">
+                            {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''}
                           </div>
                         </button>
-                      );
-                    })}
-                  </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Overdue follow-ups below */}
+                  {(overdueLeads ?? []).length > 0 && (
+                    <div className="border-t border-red-200 bg-red-50/50">
+                      <div className="flex items-center gap-2 px-4 py-2">
+                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                        <span className="font-bebas text-xs tracking-widest text-red-700">{(overdueLeads ?? []).length} OVERDUE FOLLOW-UP{(overdueLeads ?? []).length > 1 ? 'S' : ''}</span>
+                        <button onClick={() => setTab('leads')} className="ml-auto font-bebas text-xs tracking-widest text-red-600 hover:text-red-800 transition-colors">VIEW →</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+
+              </div>{/* end two-column */}
+
               {/* Lead Form CTA */}
               {!venueSettings && (
-                <div className="bg-forest/8 border border-forest/20 border-l-2 border-l-gold p-6">
+                <div className="mt-6 bg-forest/8 border border-forest/20 border-l-2 border-l-gold p-6">
                   <h3 className="font-cormorant text-xl font-semibold text-ink mb-2">Set up your venue</h3>
                   <p className="font-dm text-sm text-sage mb-4">Configure your venue details and lead form to start receiving enquiries.</p>
                   <button onClick={() => setTab("settings")} className="btn-forest font-bebas tracking-widest text-xs px-6 py-2.5 text-cream">CONFIGURE VENUE</button>
@@ -1720,6 +1793,169 @@ export default function Dashboard() {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </div>
+
+              {/* ─── Menus & Floor Plans ─────────────────────────────── */}
+              <div className="mt-10">
+                <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Menus &amp; Floor Plans</h2>
+                {/* Sub-tabs */}
+                <div className="flex gap-0 mb-6 border-b border-gold/20">
+                  {(["food","bar","floorplans"] as const).map(t => (
+                    <button key={t} onClick={() => setSettingsFoodTab(t)}
+                      className={`font-bebas tracking-widest text-xs px-5 py-2 border-b-2 transition-colors ${
+                        settingsFoodTab === t ? "border-forest text-forest" : "border-transparent text-ink/50 hover:text-ink"
+                      }`}>
+                      {t === "food" ? "FOOD MENU" : t === "bar" ? "DRINKS MENU" : "FLOOR PLANS"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Food Menu */}
+                {settingsFoodTab === "food" && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-dm text-sm text-ink/60">Manage your food packages and items. Full editor available in <button onClick={() => setLocation('/menu')} className="text-forest underline">Menu Management</button>.</p>
+                    </div>
+                    {(menuPackages ?? []).length === 0 ? (
+                      <div className="border border-dashed border-gold/20 p-6 text-center">
+                        <p className="font-dm text-sage text-sm">No food packages yet.</p>
+                        <button onClick={() => setLocation('/menu')} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream mt-3 inline-block">CREATE FOOD PACKAGE</button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {(menuPackages ?? []).map((pkg: any) => (
+                          <div key={pkg.id} className="dante-card p-4 flex items-center justify-between">
+                            <div>
+                              <div className="font-cormorant font-semibold text-base text-ink">{pkg.name}</div>
+                              <div className="font-dm text-xs text-ink/60">
+                                {pkg.type} {pkg.pricePerHead ? `· $${Number(pkg.pricePerHead).toFixed(0)}/head` : ""}
+                                {pkg.items?.length ? ` · ${pkg.items.length} items` : ""}
+                              </div>
+                            </div>
+                            <button onClick={() => setLocation('/menu')} className="font-bebas tracking-widest text-xs text-forest hover:underline">EDIT</button>
+                          </div>
+                        ))}
+                        <button onClick={() => setLocation('/menu')} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream mt-2 flex items-center gap-1">
+                          <Plus className="w-3 h-3" /> ADD PACKAGE
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Bar / Drinks Menu */}
+                {settingsFoodTab === "bar" && (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="font-dm text-sm text-ink/60">{(barMenuItemsList ?? []).length} drink{(barMenuItemsList ?? []).length !== 1 ? "s" : ""} on your menu</p>
+                      <button onClick={() => { setEditingBarItemId(null); setBarItemForm({ category: "Wine", name: "", description: "", pricePerUnit: "", unit: "per glass" }); setShowBarItemForm(true); }}
+                        className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
+                        <Plus className="w-3 h-3" /> ADD DRINK
+                      </button>
+                    </div>
+
+                    {showBarItemForm && (
+                      <div className="dante-card p-5 mb-4">
+                        <h3 className="font-bebas tracking-widest text-sm text-ink mb-3">{editingBarItemId ? "EDIT DRINK" : "ADD DRINK"}</h3>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CATEGORY</label>
+                            <select value={barItemForm.category} onChange={e => setBarItemForm(f => ({ ...f, category: e.target.value }))}
+                              className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white">
+                              {["Wine","Beer","Spirits","Cocktails","Non-Alcoholic","Champagne","Other"].map(c => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NAME *</label>
+                            <Input value={barItemForm.name} onChange={e => setBarItemForm(f => ({ ...f, name: e.target.value }))}
+                              placeholder="Sauvignon Blanc" className="rounded-none border border-gold/30" />
+                          </div>
+                        </div>
+                        <div className="mb-3">
+                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+                          <Input value={barItemForm.description} onChange={e => setBarItemForm(f => ({ ...f, description: e.target.value }))}
+                            placeholder="Marlborough, NZ" className="rounded-none border border-gold/30" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div>
+                            <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE</label>
+                            <Input type="number" value={barItemForm.pricePerUnit} onChange={e => setBarItemForm(f => ({ ...f, pricePerUnit: e.target.value }))}
+                              placeholder="12.00" className="rounded-none border border-gold/30" />
+                          </div>
+                          <div>
+                            <label className="font-bebas text-xs tracking-widest text-sage block mb-1">UNIT</label>
+                            <select value={barItemForm.unit} onChange={e => setBarItemForm(f => ({ ...f, unit: e.target.value }))}
+                              className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white">
+                              {["per glass","per bottle","per jug","per person","per hour"].map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => {
+                            if (!barItemForm.name.trim()) return toast.error("Name required");
+                            if (editingBarItemId) {
+                              updateBarItem.mutate({ id: editingBarItemId, category: barItemForm.category, name: barItemForm.name, description: barItemForm.description || undefined, pricePerUnit: barItemForm.pricePerUnit ? parseFloat(barItemForm.pricePerUnit) : undefined, unit: barItemForm.unit });
+                            } else {
+                              addBarItem.mutate({ category: barItemForm.category, name: barItemForm.name, description: barItemForm.description || undefined, pricePerUnit: barItemForm.pricePerUnit ? parseFloat(barItemForm.pricePerUnit) : undefined, unit: barItemForm.unit });
+                            }
+                          }} className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream">
+                            {editingBarItemId ? "UPDATE" : "ADD"}
+                          </button>
+                          <button onClick={() => { setShowBarItemForm(false); setEditingBarItemId(null); }} className="font-bebas tracking-widest text-xs px-4 py-2 border border-border text-ink/60 hover:text-ink">CANCEL</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {(barMenuItemsList ?? []).length === 0 && !showBarItemForm ? (
+                      <div className="border border-dashed border-gold/20 p-6 text-center">
+                        <Wine className="w-8 h-8 text-gold/40 mx-auto mb-2" />
+                        <p className="font-dm text-sage text-sm">No drinks on your menu yet.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {Object.entries(
+                          (barMenuItemsList ?? []).reduce((acc: Record<string, any[]>, item: any) => {
+                            (acc[item.category] = acc[item.category] || []).push(item);
+                            return acc;
+                          }, {})
+                        ).map(([cat, items]) => (
+                          <div key={cat}>
+                            <div className="font-bebas tracking-widest text-xs text-sage mb-1 mt-3">{cat}</div>
+                            {(items as any[]).map((item: any) => (
+                              <div key={item.id} className="dante-card p-3 flex items-center justify-between mb-1">
+                                <div>
+                                  <div className="font-cormorant font-semibold text-sm text-ink">{item.name}</div>
+                                  {item.description && <div className="font-dm text-xs text-ink/50">{item.description}</div>}
+                                  {item.pricePerUnit && <div className="font-dm text-xs text-forest">${Number(item.pricePerUnit).toFixed(2)} {item.unit}</div>}
+                                </div>
+                                <div className="flex gap-2">
+                                  <button onClick={() => { setEditingBarItemId(item.id); setBarItemForm({ category: item.category, name: item.name, description: item.description ?? "", pricePerUnit: item.pricePerUnit ? String(item.pricePerUnit) : "", unit: item.unit ?? "per glass" }); setShowBarItemForm(true); }}
+                                    className="text-ink/40 hover:text-forest"><Pencil className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => deleteBarItem.mutate({ id: item.id })} className="text-ink/40 hover:text-tomato"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Floor Plans */}
+                {settingsFoodTab === "floorplans" && (
+                  <div>
+                    <p className="font-dm text-sm text-ink/60 mb-4">Create and manage reusable floor plan layouts for your spaces. Open the full floor plan builder to design a new layout.</p>
+                    <button onClick={() => setLocation('/floor-plan')} className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream flex items-center gap-2">
+                      <LayoutGrid className="w-4 h-4" /> OPEN FLOOR PLAN BUILDER
+                    </button>
+                    <p className="font-dm text-xs text-ink/40 mt-3">Floor plans are saved per event in the Floor Plan Builder. You can access them from any booking's Event Detail page.</p>
                   </div>
                 )}
               </div>

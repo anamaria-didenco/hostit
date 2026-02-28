@@ -420,10 +420,18 @@ export default function EventDetail() {
                 OPEN PROPOSAL BUILDER
               </button>
               <button
-                onClick={() => toast.info("BEO generation coming soon")}
-                className="w-full flex items-center gap-3 px-4 py-3 border border-gold/30 text-amber-700 hover:bg-gold/10 transition-colors font-bebas tracking-widest text-xs">
+                onClick={() => {
+                  const a = document.createElement('a');
+                  a.href = `/api/beo/${booking.id}`;
+                  a.download = `BEO-${booking.id}-${booking.firstName}-${booking.lastName ?? ''}.pdf`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  toast.success('Generating BEO PDF...');
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-amber-700 text-white hover:bg-amber-800 transition-colors font-bebas tracking-widest text-xs">
                 <Printer className="w-4 h-4" />
-                GENERATE BEO
+                GENERATE BEO PDF
               </button>
             </div>
           </div>

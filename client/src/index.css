@@ -102,14 +102,14 @@
   --chart-4: oklch(0.500 0.060 10);
   --chart-5: oklch(0.580 0.035 220);
 
-  /* Sidebar = Deep Burgundy */
-  --sidebar:                    oklch(0.220 0.075 10);
+  /* Sidebar = Mid Burgundy (lightened for text legibility) */
+  --sidebar:                    oklch(0.420 0.090 10);
   --sidebar-foreground:         oklch(0.960 0.012 68);
   --sidebar-primary:            oklch(0.720 0.045 220);
   --sidebar-primary-foreground: oklch(0.185 0.025 30);
-  --sidebar-accent:             oklch(0.280 0.080 10);
+  --sidebar-accent:             oklch(0.480 0.090 10);
   --sidebar-accent-foreground:  oklch(0.960 0.012 68);
-  --sidebar-border:             oklch(0.280 0.080 10);
+  --sidebar-border:             oklch(0.480 0.090 10);
   --sidebar-ring:               oklch(0.720 0.045 220);
 }
 
@@ -232,16 +232,16 @@
 
   /* ── Brand colours (bg) ── */
   .bg-burgundy    { background-color: oklch(0.310 0.095 10); }
-  .bg-burg-dark   { background-color: oklch(0.220 0.075 10); }
+  .bg-burg-dark   { background-color: oklch(0.420 0.090 10); }
   .bg-blue        { background-color: oklch(0.720 0.045 220); }
   .bg-cream       { background-color: oklch(0.960 0.012 68); }
   .bg-ivory       { background-color: oklch(0.978 0.008 68); }
   .bg-linen       { background-color: oklch(0.930 0.010 65); }
   /* Legacy aliases */
   .bg-forest      { background-color: oklch(0.310 0.095 10); }
-  .bg-forest-dark { background-color: oklch(0.220 0.075 10); }
+  .bg-forest-dark { background-color: oklch(0.420 0.090 10); }
   .bg-teal        { background-color: oklch(0.310 0.095 10); }
-  .bg-teal-dark   { background-color: oklch(0.220 0.075 10); }
+  .bg-teal-dark   { background-color: oklch(0.420 0.090 10); }
   .bg-gold        { background-color: oklch(0.720 0.045 220); }
   .bg-terra       { background-color: oklch(0.310 0.095 10); }
   .bg-warm-white  { background-color: oklch(0.978 0.008 68); }

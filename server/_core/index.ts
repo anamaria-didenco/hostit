@@ -5,6 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
+import { handleBeoPdf } from "../beoPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -39,6 +40,15 @@ async function startServer() {
 
   // Proposal PDF download (public — uses publicToken for auth)
   app.get("/api/proposal-pdf/:token", handleProposalPdf);
+
+  // BEO PDF download (requires session auth)
+  app.get("/api/beo/:bookingId", (req, res, next) => {
+    // Inject user from tRPC context for auth check
+    createContext({ req: req as any, res: res as any, info: {} as any }).then(ctx => {
+      (req as any).user = ctx.user;
+      handleBeoPdf(req, res);
+    }).catch(next);
+  });
 
   // tRPC API
   app.use(
