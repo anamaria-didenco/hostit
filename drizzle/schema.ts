@@ -448,3 +448,37 @@ export const userPreferences = mysqlTable("user_preferences", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type UserPreferences = typeof userPreferences.$inferSelect;
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+export const tasks = mysqlTable("tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  dueDate: bigint("due_date", { mode: "number" }),
+  completed: boolean("completed").notNull().default(false),
+  completedAt: bigint("completed_at", { mode: "number" }),
+  linkedLeadId: int("linked_lead_id"),
+  linkedBookingId: int("linked_booking_id"),
+  assignedTo: varchar("assigned_to", { length: 255 }),
+  priority: varchar("priority", { length: 20 }).default("normal"), // low | normal | high
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = typeof tasks.$inferInsert;
+
+// ─── Taxes & Fees ─────────────────────────────────────────────────────────────
+export const taxesFees = mysqlTable("taxes_fees", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  type: varchar("type", { length: 20 }).notNull().default("tax"), // tax | fee
+  rate: varchar("rate", { length: 20 }).notNull(), // e.g. "15" for 15% or "25.00" for flat fee
+  rateType: varchar("rate_type", { length: 20 }).notNull().default("percentage"), // percentage | flat
+  appliesTo: varchar("applies_to", { length: 50 }).notNull().default("all"), // all | food | beverage
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type TaxFee = typeof taxesFees.$inferSelect;
+export type InsertTaxFee = typeof taxesFees.$inferInsert;

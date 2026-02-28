@@ -1892,6 +1892,165 @@ export const appRouter = router({
       return getDashboardStats(ctx.user.id);
     }),
   }),
+  // ─── Tasks ────────────────────────────────────────────────────────────────
+  tasks: router({
+    list: protectedProcedure
+      .input(z.object({ filter: z.enum(['all', 'mine', 'overdue', 'upcoming', 'completed']).optional() }).optional())
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { tasks } = await import('../drizzle/schema');
+        const { eq, and, lte, gte, desc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const now = Date.now();
+        const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+        let rows = await db.select().from(tasks).where(eq(tasks.ownerId, ctx.user.id)).orderBy(desc(tasks.createdAt));
+        const filter = input?.filter ?? 'all';
+        if (filter === 'overdue') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate < now);
+        else if (filter === 'upcoming') rows = rows.filter(t => !t.completed && t.dueDate && t.dueDate >= now);
+        else if (filter === 'completed') rows = rows.filter(t => t.completed);
+        else if (filter === 'mine') rows = rows.filter(t => !t.completed);
+        else rows = rows.filter(t => !t.completed);
+        return rows;
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        dueDate: z.number().optional(),
+        linkedLeadId: z.number().optional(),
+        linkedBookingId: z.number().optional(),
+        assignedTo: z.string().optional(),
+        priority: z.enum(['low', 'normal', 'high']).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { tasks } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        const result = await db.insert(tasks).values({
+          ownerId: ctx.user.id,
+          title: input.title,
+          description: input.description,
+          dueDate: input.dueDate,
+          linkedLeadId: input.linkedLeadId,
+          linkedBookingId: input.linkedBookingId,
+          assignedTo: input.assignedTo,
+          priority: input.priority ?? 'normal',
+          completed: false,
+          createdAt: now,
+          updatedAt: now,
+        });
+        return { success: true, id: (result as any).insertId };
+      }),
+    complete: protectedProcedure
+      .input(z.object({ id: z.number(), completed: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { tasks } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.update(tasks).set({
+          completed: input.completed,
+          completedAt: input.completed ? Date.now() : null,
+          updatedAt: Date.now(),
+        }).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { tasks } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(tasks).where(and(eq(tasks.id, input.id), eq(tasks.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        dueDate: z.number().nullable().optional(),
+        priority: z.enum(['low', 'normal', 'high']).optional(),
+        linkedLeadId: z.number().nullable().optional(),
+        linkedBookingId: z.number().nullable().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { tasks } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        await db.update(tasks).set({ ...rest, updatedAt: Date.now() }).where(and(eq(tasks.id, id), eq(tasks.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Taxes & Fees ──────────────────────────────────────────────────────────
+  taxesFees: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { taxesFees } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(taxesFees).where(eq(taxesFees.ownerId, ctx.user.id));
+    }),
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        type: z.enum(['tax', 'fee']),
+        rate: z.string(),
+        rateType: z.enum(['percentage', 'flat']),
+        appliesTo: z.enum(['all', 'food', 'beverage']),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { taxesFees } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const result = await db.insert(taxesFees).values({ ...input, ownerId: ctx.user.id, createdAt: Date.now() });
+        return { success: true, id: (result as any).insertId };
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        type: z.enum(['tax', 'fee']).optional(),
+        rate: z.string().optional(),
+        rateType: z.enum(['percentage', 'flat']).optional(),
+        appliesTo: z.enum(['all', 'food', 'beverage']).optional(),
+        isActive: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { taxesFees } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        await db.update(taxesFees).set(rest).where(and(eq(taxesFees.id, id), eq(taxesFees.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { taxesFees } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(taxesFees).where(and(eq(taxesFees.id, input.id), eq(taxesFees.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
   // ─── User Preferences (dashboard layout) ──────────────────────────────────
   userPreferences: router({
     get: protectedProcedure.query(async ({ ctx }) => {

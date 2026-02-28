@@ -17,6 +17,8 @@ import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
+import TasksPage from "@/pages/Tasks";
+import ReportsPage from "@/pages/Reports";
 
 // ─── Follow-Up Date Card ────────────────────────────────────────────────────
 function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date | null) => void }) {
@@ -247,10 +249,45 @@ function PipelineSnapshotWidget({ allLeads, onViewLeads }: { allLeads: any; onVi
   );
 }
 
+// ── Settings Sidebar (Perfect Venue style) ─────────────────────────────────
+function SettingsSidebar({ settingsSubTab, setSettingsSubTab }: {
+  settingsSubTab: string;
+  setSettingsSubTab: (t: any) => void;
+}) {
+  const items = [
+    { id: "venue", label: "Venue Profile" },
+    { id: "lead-form", label: "Contact Form" },
+    { id: "email", label: "Email" },
+    { id: "templates", label: "Proposal" },
+    { id: "taxes", label: "Taxes & Fees" },
+    { id: "team", label: "Team" },
+    { id: "integrations", label: "Integrations" },
+    { id: "spaces", label: "Event Spaces" },
+  ];
+  return (
+    <aside className="w-52 bg-linen border-r border-gold/20 flex-shrink-0 flex flex-col py-4">
+      {items.map(item => (
+        <button
+          key={item.id}
+          onClick={() => setSettingsSubTab(item.id as any)}
+          className={`w-full text-left px-5 py-2.5 font-dm text-sm transition-colors ${
+            settingsSubTab === item.id
+              ? "bg-burgundy/10 text-burgundy font-semibold border-l-2 border-burgundy pl-[calc(1.25rem-2px)]"
+              : "text-ink/70 hover:text-ink hover:bg-gold/10 border-l-2 border-transparent"
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </aside>
+  );
+}
+
 export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<"overview"|"leads"|"pipeline"|"calendar"|"contacts"|"menu"|"settings">("overview");
+  const [tab, setTab] = useState<"overview"|"leads"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook">("overview");
+  const [settingsSubTab, setSettingsSubTab] = useState<"venue"|"lead-form"|"email"|"templates"|"taxes"|"team"|"integrations"|"spaces">("venue");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
@@ -528,87 +565,62 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-cream font-dm flex flex-col">
-      {/* Top Nav */}
-      <nav className="bg-forest-dark sticky top-0 z-50 border-b border-gold/20 h-14 flex items-center">
-        <div className="flex items-center px-5 w-56 flex-shrink-0 border-r border-gold/15">
+      {/* ── TOP NAVIGATION BAR (Perfect Venue layout) ──────────────────────── */}
+      <nav className="bg-burgundy sticky top-0 z-50 border-b border-white/10 h-14 flex items-center px-4">
+        {/* Logo */}
+        <div className="flex items-center pr-5 border-r border-white/20 mr-4 flex-shrink-0">
           <img
             src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
             alt="HOSTit"
-            className="h-8 w-auto object-contain"
+            className="h-7 w-auto object-contain"
             style={{ filter: 'brightness(0) invert(1)' }}
           />
         </div>
-        <div className="flex-1 px-5 flex items-center justify-between">
-          <div className="font-cormorant italic text-gold/80 text-base hidden md:block">
-            {venueSettings?.name ?? "Your Venue"}
-          </div>
-          <div className="flex items-center gap-3 ml-auto">
-            <button
-              onClick={() => { navigator.clipboard.writeText(leadFormUrl); toast.success("Lead form link copied!"); }}
-              className="font-bebas tracking-widest text-xs text-cream/80 hover:text-gold transition-colors gap-1.5 hidden md:flex items-center"
-            >
-              <Copy className="w-3 h-3" /> COPY LEAD FORM LINK
-            </button>
-            <Link href={leadFormUrl}>
-              <button className="btn-gold-outline font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1">
-                <ExternalLink className="w-3 h-3" /> LEAD FORM
-              </button>
-            </Link>
-            <span className="font-dm text-cream/70 text-xs hidden lg:block">{user?.name}</span>
+        {/* Primary nav tabs */}
+        {[
+          { id: "overview", label: "Home" },
+          { id: "leads", label: "Inbox" },
+          { id: "calendar", label: "Calendar" },
+          { id: "tasks", label: "Tasks" },
+          { id: "expressbook", label: "Express Book" },
+          { id: "reports", label: "Reports" },
+        ].map(item => (
+          <button
+            key={item.id}
+            onClick={() => setTab(item.id as any)}
+            className={`h-14 px-4 font-dm text-sm transition-colors border-b-2 flex-shrink-0 ${
+              tab === item.id
+                ? "text-white border-white font-semibold"
+                : "text-white/70 border-transparent hover:text-white hover:border-white/50"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+        {/* Settings */}
+        <button
+          onClick={() => setTab("settings" as any)}
+          className={`h-14 px-4 font-dm text-sm transition-colors border-b-2 flex-shrink-0 ${
+            tab === "settings"
+              ? "text-white border-white font-semibold"
+              : "text-white/70 border-transparent hover:text-white hover:border-white/50"
+          }`}
+        >
+          Settings
+        </button>
+        {/* Spacer */}
+        <div className="flex-1" />
+        {/* Right: venue name + avatar */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <span className="font-dm text-white/80 text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-dm text-white text-sm font-semibold">
+            {(user?.name ?? "U").charAt(0).toUpperCase()}
           </div>
         </div>
       </nav>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar — forest green like Dante's awning */}
-        <aside className="w-14 md:w-52 bg-forest-dark flex-shrink-0 flex flex-col border-r border-gold/15">
-          {[
-            { id: "overview", icon: <LayoutDashboard className="w-5 h-5" />, label: "OVERVIEW" },
-            { id: "leads", icon: <MessageSquare className="w-5 h-5" />, label: "LEADS INBOX" },
-            { id: "pipeline", icon: <TrendingUp className="w-5 h-5" />, label: "PIPELINE" },
-            { id: "calendar", icon: <Calendar className="w-5 h-5" />, label: "CALENDAR" },
-            { id: "contacts", icon: <Users className="w-5 h-5" />, label: "CONTACTS" },
-            { id: "menu", icon: <ChefHat className="w-5 h-5" />, label: "MENU" },
-            { id: "settings", icon: <Settings className="w-5 h-5" />, label: "SETTINGS" },
-          ].map(item => (
-            <button key={item.id} onClick={() => setTab(item.id as any)}
-              className={`w-full flex items-center gap-3 px-3 md:px-4 py-3.5 text-left transition-all font-bebas tracking-widest text-xs ${
-                tab === item.id
-                  ? "text-sky-300 bg-white/10 border-l-2 border-sky-300 pl-[calc(0.75rem-2px)] md:pl-[calc(1rem-2px)]"
-                  : "text-cream hover:text-sky-200 hover:bg-white/10 border-l-2 border-transparent"
-              }`}>
-              {item.icon}
-              <span className="hidden md:block">{item.label}</span>
-            </button>
-          ))}
-          <div className="mt-auto p-3 hidden md:block space-y-1.5">
-            <Link href="/analytics">
-              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
-                <BarChart2 className="w-3 h-3" /> ANALYTICS
-              </button>
-            </Link>
-            <Link href="/payments">
-              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
-                <DollarSign className="w-3 h-3" /> PAYMENTS
-              </button>
-            </Link>
-            <Link href="/book">
-              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
-                <ExternalLink className="w-3 h-3" /> EXPRESS BOOK
-              </button>
-            </Link>
-            <Link href="/menu">
-              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
-                <UtensilsCrossed className="w-3 h-3" /> F&B MENU
-              </button>
-            </Link>
-            <Link href="/enquire">
-              <button className="w-full border border-cream/30 text-cream hover:bg-white/10 hover:border-cream/60 transition-colors font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
-                <ExternalLink className="w-3 h-3" /> LEAD FORM
-              </button>
-            </Link>
-          </div>
-        </aside>
+        {/* No sidebar — full-width main content */}
 
         {/* Main Content */}
         <main className="flex-1 overflow-auto">
@@ -1646,12 +1658,62 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* ── TASKS ─────────────────────────────────────────────────────── */}
+          {tab === "tasks" && (
+            <div className="flex-1">
+              <TasksPage />
+            </div>
+          )}
+
+          {/* ── REPORTS ─────────────────────────────────────────────────────── */}
+          {tab === "reports" && (
+            <div className="flex-1">
+              <ReportsPage />
+            </div>
+          )}
+
+          {/* ── EXPRESS BOOK ─────────────────────────────────────────────────── */}
+          {tab === "expressbook" && (
+            <div className="p-6 max-w-2xl">
+              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-2">Express Book</h1>
+              <p className="font-dm text-sm text-sage mb-6">Allow clients to book directly without going through the enquiry process.</p>
+              <div className="dante-card p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <ExternalLink className="w-5 h-5 text-burgundy" />
+                  <h2 className="font-cormorant text-xl font-semibold text-ink">Your Express Book Link</h2>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <input readOnly value={`${window.location.origin}/book`}
+                    className="flex-1 border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-linen" />
+                  <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/book`); toast.success("Link copied!"); }}
+                    className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-4 py-2 hover:bg-burg-dark transition-colors flex items-center gap-1">
+                    <Copy className="w-3 h-3" /> COPY
+                  </button>
+                </div>
+                <p className="font-dm text-xs text-sage">Share this link on your website, social media, or in emails to let clients book directly.</p>
+              </div>
+              <div className="mt-4 dante-card p-5">
+                <h2 className="font-bebas text-xs tracking-widest text-sage mb-3">PREVIEW</h2>
+                <Link href="/book">
+                  <button className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-6 py-2.5 hover:bg-burg-dark transition-colors flex items-center gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5" /> VIEW EXPRESS BOOK FORM
+                  </button>
+                </Link>
+              </div>
+            </div>
+          )}
+
           {/* ── SETTINGS ─────────────────────────────────────────────────────── */}
           {tab === "settings" && (
-            <div className="p-6 max-w-2xl">
-              <div className="gold-rule max-w-xs mb-3"><span>CONFIGURATION</span></div>
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Settings</h1>
+            <div className="flex h-full">
+              {/* Settings sidebar — like Perfect Venue */}
+              <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} />
+              <div className="flex-1 overflow-auto p-6 max-w-3xl">
 
+              {/* ── VENUE PROFILE ────────────────────────────────── */}
+              {settingsSubTab === "venue" && (
+              <div>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Profile</h1>
               {settingsForm && (
                 <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
                   <div className="dante-card p-5">
@@ -1722,9 +1784,15 @@ export default function Dashboard() {
                   </button>
                 </form>
               )}
+              </div>
+              )}
 
+              {/* ── EMAIL SUB-TAB ────────────────────────────── */}
+              {settingsSubTab === "email" && (
+              <div>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Email</h1>
               {/* Email / SMTP Settings */}
-              <div className="mt-8 border-t border-gold/20 pt-8">
+              <div className="border-gold/20">
                 <h2 className="font-cormorant text-xl font-semibold text-ink mb-1">Email Settings</h2>
                 <p className="font-dm text-xs text-sage mb-4">Configure your SMTP server to send emails directly from the leads inbox. Use Gmail, Outlook, or any SMTP provider.</p>
                 <form onSubmit={e => {
@@ -1864,8 +1932,15 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-              {/* Checklist Templates */}
-              <div className="mt-8">
+              </div>
+              )}
+
+              {/* ── PROPOSAL/TEMPLATES SUB-TAB ────────────────── */}
+              {settingsSubTab === "templates" && (
+              <div>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Proposal & Templates</h1>
+              {/* Email Templates */}
+              <div className="mt-0">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-cormorant text-xl font-semibold text-ink">Staff Checklist Templates</h2>
                   <button onClick={() => setShowChecklistForm(v => !v)}
@@ -1943,7 +2018,91 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+              </div>
+              )}
 
+              {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
+              {settingsSubTab === "lead-form" && (
+              <div>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Contact Form</h1>
+              <div className="dante-card p-5">
+                <p className="font-dm text-sm text-ink/70">Your public enquiry form is available at <span className="text-forest font-semibold">/enquire/{venueSettings?.slug || 'your-venue'}</span>. Customise the form title, subtitle, and slug in Venue Profile settings.</p>
+                <div className="mt-4 flex gap-3">
+                  <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
+                    className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream">OPEN FORM</a>
+                  <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Form link copied!'); }}
+                    className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink hover:bg-gold/10">COPY LINK</button>
+                </div>
+              </div>
+              </div>
+              )}
+
+              {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
+              {settingsSubTab === "integrations" && (
+              <div>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Integrations</h1>
+              <div className="space-y-4">
+                {[{name:'Google Calendar',desc:'Sync bookings to your Google Calendar automatically.',icon:'📅'},{name:'Xero',desc:'Export invoices and payments to Xero accounting.',icon:'💼'},{name:'Mailchimp',desc:'Add new contacts to your Mailchimp mailing list.',icon:'📧'},{name:'Zapier',desc:'Connect HOSTit to 5,000+ apps via Zapier webhooks.',icon:'⚡'}].map(i => (
+                  <div key={i.name} className="dante-card p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{i.icon}</span>
+                      <div>
+                        <div className="font-cormorant font-semibold text-base text-ink">{i.name}</div>
+                        <div className="font-dm text-xs text-ink/60">{i.desc}</div>
+                      </div>
+                    </div>
+                    <button onClick={() => toast.info('Integration coming soon')} className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink hover:bg-gold/10">CONNECT</button>
+                  </div>
+                ))}
+              </div>
+              </div>
+              )}
+
+              {/* ── TAXES & FEES SUB-TAB ───────────────────────── */}
+              {settingsSubTab === "taxes" && (
+              <div>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Taxes & Fees</h1>
+              <div className="dante-card p-5">
+                <p className="font-dm text-sm text-ink/70 mb-4">Configure GST/VAT and service fees that apply to your proposals and invoices.</p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between py-3 border-b border-gold/10">
+                    <div>
+                      <div className="font-cormorant font-semibold text-ink">GST (New Zealand)</div>
+                      <div className="font-dm text-xs text-ink/60">15% applied to all taxable items</div>
+                    </div>
+                    <span className="font-bebas text-sm text-forest bg-forest/10 px-3 py-1">15%</span>
+                  </div>
+                  <div className="flex items-center justify-between py-3">
+                    <div>
+                      <div className="font-cormorant font-semibold text-ink">Service Fee</div>
+                      <div className="font-dm text-xs text-ink/60">Optional service charge added to proposals</div>
+                    </div>
+                    <button onClick={() => toast.info('Custom fees coming soon')} className="font-bebas tracking-widest text-xs px-3 py-1 border border-gold/30 text-ink hover:bg-gold/10">CONFIGURE</button>
+                  </div>
+                </div>
+              </div>
+              </div>
+              )}
+
+              {/* ── TEAM SUB-TAB ───────────────────────────────── */}
+              {settingsSubTab === "team" && (
+              <div>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Team</h1>
+              <div className="dante-card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="font-dm text-sm text-ink/70">Manage team members who can access your HOSTit account.</p>
+                  <button onClick={() => toast.info('Team invites coming soon')} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1"><Plus className="w-3 h-3" /> INVITE</button>
+                </div>
+                <div className="border border-dashed border-gold/20 p-6 text-center">
+                  <p className="font-dm text-sage text-sm">No team members yet. Invite staff to collaborate on events.</p>
+                </div>
+              </div>
+              </div>
+              )}
+
+              {/* ── MENU (Menus & Floor Plans) ───────────────────── */}
+              {(settingsSubTab === "venue") && (
+              <div>
               {/* ─── Menus & Floor Plans ─────────────────────────────── */}
               <div className="mt-10">
                 <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Menus &amp; Floor Plans</h2>
@@ -2105,10 +2264,15 @@ export default function Dashboard() {
                     <p className="font-dm text-xs text-ink/40 mt-3">Floor plans are saved per event in the Floor Plan Builder. You can access them from any booking's Event Detail page.</p>
                   </div>
                 )}
+               </div>
               </div>
+              )}
 
-              {/* Event Spaces */}
-              <div className="mt-8">
+              {/* ── EVENT SPACES SUB-TAB ───────────────────────── */}
+              {settingsSubTab === "spaces" && (
+              <div>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Event Spaces</h1>
+              <div className="mt-0">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-cormorant text-xl font-semibold text-ink">Event Spaces</h2>
                   <button onClick={() => setShowAddSpace(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
@@ -2134,6 +2298,10 @@ export default function Dashboard() {
                     ))}
                   </div>
                 )}
+              </div>
+              </div>
+              )}
+
               </div>
             </div>
           )}

@@ -409,3 +409,25 @@
 - [x] userPreferences.save and userPreferences.get tRPC procedures
 - [x] Dashboard layout (order + hidden) persisted per user via tRPC
 - [x] 77 vitest tests passing, 0 TypeScript errors
+
+## Phase 13: Perfect Venue Layout Parity + Full Feature Set
+- [ ] Replace left sidebar with top navigation bar (Home, Inbox, Calendar, Tasks, Express Book, Reports, Settings)
+- [ ] Top nav: burgundy background, cream text, blue active highlight, venue name + avatar on right
+- [ ] Home tab: Active Events table with pipeline status bar (Lead, Qualified, Proposal Sent, Confirmed, Balance Due, Completed)
+- [ ] Inbox tab: lead list (left) + lead detail with horizontal pipeline steps (right)
+- [ ] Tasks tab: task list with create/complete/delete, due dates, linked event
+- [ ] Reports tab: sub-tabs (Overview, Events, Leads, Revenue, Proposals)
+- [ ] Settings page: own left sidebar with all PV sub-sections
+- [ ] Settings > Group Contact Form: logo upload, banner upload, form background color, fields toggle, connect tab
+- [ ] Settings > Taxes & Fees: add/edit/delete tax rates and service fees
+- [ ] Settings > Automated Tasks: task templates with triggers
+- [ ] Settings > Team: invite/manage team members with roles
+- [ ] Settings > Proposal: deposit %, payment terms, T&Cs, expiry
+- [ ] Settings > Email: SMTP config + email signature
+- [ ] Settings > Integrations: placeholder cards (Zapier, etc.)
+- [ ] Add "Qualified" and "Balance Due" pipeline stages
+- [ ] tasks table in DB (id, ownerId, title, dueDate, linkedLeadId, linkedBookingId, completed, createdAt)
+- [ ] tRPC tasks router (list, create, update, complete, delete)
+- [ ] taxes_fees table in DB (id, ownerId, name, type, rate, appliesto, active)
+- [ ] tRPC taxesFees router (list, create, update, delete)
+- [ ] 0 TypeScript errors, all tests passing
