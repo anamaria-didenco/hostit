@@ -470,6 +470,23 @@ export default function RunsheetBuilder() {
           >
             <Printer className="w-4 h-4" /> PRINT
           </button>
+          {sheetId ? (
+            <a
+              href={`/api/staff-sheet/${sheetId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bebas tracking-widest text-xs bg-forest/80 hover:bg-forest text-cream px-3 py-1.5 flex items-center gap-1.5 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" /> STAFF SHEET PDF
+            </a>
+          ) : (
+            <button
+              onClick={() => toast.error('Save the runsheet first to generate a Staff Sheet PDF')}
+              className="font-bebas tracking-widest text-xs text-cream/40 flex items-center gap-1.5 cursor-not-allowed"
+            >
+              <FileText className="w-3.5 h-3.5" /> STAFF SHEET PDF
+            </button>
+          )}
           <Button
             onClick={handleSave}
             disabled={saving}

@@ -5,35 +5,20 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ArrowLeft, TrendingUp, Target, DollarSign, Users, Calendar, BarChart2 } from "lucide-react";
+import { ArrowLeft, TrendingUp, Target, DollarSign, Users, Calendar, BarChart2, Radio } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function BarChart({ data, maxValue, color = "bg-burgundy" }: {
-  data: { label: string; value: number }[];
-  maxValue: number;
-  color?: string;
-}) {
-  return (
-    <div className="flex items-end gap-1 h-32">
-      {data.map((d, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-1">
-          <div className="text-xs font-dm text-ink/50 leading-none">
-            {d.value > 0 ? `$${Math.round(d.value / 1000)}k` : ""}
-          </div>
-          <div className="w-full flex items-end" style={{ height: "80px" }}>
-            <div
-              className={`w-full ${color} transition-all`}
-              style={{ height: maxValue > 0 ? `${Math.max(2, (d.value / maxValue) * 80)}px` : "2px" }}
-            />
-          </div>
-          <div className="text-xs font-bebas tracking-widest text-ink/40">{d.label}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
+// Colour palette for source breakdown
+const SOURCE_COLORS = [
+  "bg-burgundy", "bg-amber-500", "bg-blue-500", "bg-emerald-500",
+  "bg-purple-500", "bg-rose-500", "bg-teal-500", "bg-orange-500",
+];
+const SOURCE_COLORS_HEX = [
+  "#6b2737", "#f59e0b", "#3b82f6", "#10b981",
+  "#8b5cf6", "#f43f5e", "#14b8a6", "#f97316",
+];
 
 function StatCard({ icon, label, value, sub, color = "text-burgundy" }: {
   icon: React.ReactNode; label: string; value: string; sub?: string; color?: string;
@@ -60,6 +45,8 @@ export default function Analytics() {
   const { data: revenueData } = trpc.analytics.revenueByMonth.useQuery({ year: selectedYear });
   const { data: pipelineData } = trpc.analytics.pipeline.useQuery();
   const { data: goalsData, refetch: refetchGoal } = trpc.analytics.getGoals.useQuery({ year: selectedYear });
+  const { data: topEventTypesData } = trpc.analytics.topEventTypes.useQuery();
+  const { data: sourceData } = trpc.analytics.sourceBreakdown.useQuery();
 
   const analyticsData = {
     totalRevenue: revenueData?.reduce((s, r) => s + r.revenue, 0) ?? 0,
@@ -70,8 +57,7 @@ export default function Analytics() {
       ? Math.round(((pipelineData.confirmed ?? 0) / pipelineData.enquiries) * 100)
       : 0,
     monthlyRevenue: revenueData?.map(r => r.revenue) ?? [],
-    prevYearRevenue: [] as number[],
-    byEventType: [] as any[],
+    byEventType: topEventTypesData ?? [],
   };
   const currentGoal = goalsData?.find((g: any) => g.month === new Date().getMonth() + 1);
 
@@ -92,7 +78,7 @@ export default function Analytics() {
   }, [analyticsData]);
 
   const prevYearRevenue = useMemo(() => {
-    return MONTHS.map((label, i) => ({ label, value: 0 }));
+    return MONTHS.map((label) => ({ label, value: 0 }));
   }, []);
 
   const maxRevenue = Math.max(
@@ -105,6 +91,9 @@ export default function Analytics() {
   const currentMonthRevenue = monthlyRevenue[currentMonth]?.value ?? 0;
   const goalAmount = currentGoal ? Number(currentGoal.targetRevenue) : 0;
   const goalProgress = goalAmount > 0 ? Math.min(100, (currentMonthRevenue / goalAmount) * 100) : 0;
+
+  // Source breakdown totals
+  const totalSourceLeads = (sourceData ?? []).reduce((s: number, r: any) => s + r.count, 0);
 
   if (authLoading) return null;
   if (!user) { window.location.href = getLoginUrl(); return null; }
@@ -272,29 +261,73 @@ export default function Analytics() {
           </div>
         </div>
 
-        {/* Lead funnel */}
-        <div className="bg-white border border-border p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Users className="w-4 h-4 text-amber-700" />
-            <span className="font-bebas tracking-widest text-sm text-ink">LEAD CONVERSION FUNNEL</span>
-          </div>
-          <div className="space-y-2">
-            {[
-              { label: "Enquiries Received", value: analyticsData?.totalLeads ?? 0, color: "bg-amber-400", pct: 100 },
-              { label: "Proposals Sent", value: analyticsData?.proposalsSent ?? 0, color: "bg-amber-500",
-                pct: analyticsData?.totalLeads ? Math.round((analyticsData.proposalsSent / analyticsData.totalLeads) * 100) : 0 },
-              { label: "Bookings Confirmed", value: analyticsData?.totalBookings ?? 0, color: "bg-burgundy",
-                pct: analyticsData?.totalLeads ? Math.round((analyticsData.totalBookings / analyticsData.totalLeads) * 100) : 0 },
-            ].map((row, i) => (
-              <div key={i} className="flex items-center gap-4">
-                <div className="w-44 font-dm text-sm text-ink/70 shrink-0">{row.label}</div>
-                <div className="flex-1 h-7 bg-cream border border-border overflow-hidden">
-                  <div className={`h-full ${row.color} transition-all`} style={{ width: `${row.pct}%` }} />
+        {/* Two-column: Funnel + Source Breakdown */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Lead funnel */}
+          <div className="bg-white border border-border p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="w-4 h-4 text-amber-700" />
+              <span className="font-bebas tracking-widest text-sm text-ink">LEAD CONVERSION FUNNEL</span>
+            </div>
+            <div className="space-y-2">
+              {[
+                { label: "Enquiries Received", value: analyticsData?.totalLeads ?? 0, color: "bg-amber-400", pct: 100 },
+                { label: "Proposals Sent", value: analyticsData?.proposalsSent ?? 0, color: "bg-amber-500",
+                  pct: analyticsData?.totalLeads ? Math.round((analyticsData.proposalsSent / analyticsData.totalLeads) * 100) : 0 },
+                { label: "Bookings Confirmed", value: analyticsData?.totalBookings ?? 0, color: "bg-burgundy",
+                  pct: analyticsData?.totalLeads ? Math.round((analyticsData.totalBookings / analyticsData.totalLeads) * 100) : 0 },
+              ].map((row, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-36 font-dm text-sm text-ink/70 shrink-0">{row.label}</div>
+                  <div className="flex-1 h-7 bg-cream border border-border overflow-hidden">
+                    <div className={`h-full ${row.color} transition-all`} style={{ width: `${row.pct}%` }} />
+                  </div>
+                  <div className="w-10 text-right font-dm text-sm font-semibold text-ink">{row.value}</div>
+                  <div className="w-8 text-right font-dm text-xs text-ink/50">{row.pct}%</div>
                 </div>
-                <div className="w-16 text-right font-dm text-sm font-semibold text-ink">{row.value}</div>
-                <div className="w-10 text-right font-dm text-xs text-ink/50">{row.pct}%</div>
+              ))}
+            </div>
+          </div>
+
+          {/* Enquiry Source Breakdown */}
+          <div className="bg-white border border-border p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Radio className="w-4 h-4 text-purple-700" />
+              <span className="font-bebas tracking-widest text-sm text-ink">ENQUIRY SOURCE BREAKDOWN</span>
+            </div>
+            {(!sourceData || sourceData.length === 0) ? (
+              <div className="text-sm font-dm text-ink/40 py-4 text-center">No source data yet. Sources are tracked when enquiries are submitted.</div>
+            ) : (
+              <div className="space-y-2">
+                {/* Visual donut-style horizontal bars */}
+                {(sourceData as Array<{ source: string; count: number }>).map((row, i) => {
+                  const pct = totalSourceLeads > 0 ? Math.round((row.count / totalSourceLeads) * 100) : 0;
+                  const colorClass = SOURCE_COLORS[i % SOURCE_COLORS.length];
+                  const colorHex = SOURCE_COLORS_HEX[i % SOURCE_COLORS_HEX.length];
+                  const label = row.source
+                    .replace(/_/g, " ")
+                    .replace(/\b\w/g, c => c.toUpperCase());
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: colorHex }} />
+                      <div className="w-28 font-dm text-sm text-ink/70 shrink-0 truncate">{label}</div>
+                      <div className="flex-1 h-6 bg-cream border border-border overflow-hidden">
+                        <div
+                          className={`h-full ${colorClass} transition-all`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="w-8 text-right font-dm text-sm font-semibold text-ink">{row.count}</div>
+                      <div className="w-8 text-right font-dm text-xs text-ink/50">{pct}%</div>
+                    </div>
+                  );
+                })}
+                <div className="pt-2 border-t border-border/40 flex justify-between font-dm text-xs text-ink/50">
+                  <span>Total enquiries tracked</span>
+                  <span className="font-semibold text-ink">{totalSourceLeads}</span>
+                </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -310,7 +343,7 @@ export default function Analytics() {
                 const maxEv = Math.max(...analyticsData.byEventType.map((r: any) => r.revenue), 1);
                 return (
                   <div key={i} className="flex items-center gap-4">
-                    <div className="w-36 font-dm text-sm text-ink/70 capitalize shrink-0">{row.eventType}</div>
+                    <div className="w-36 font-dm text-sm text-ink/70 capitalize shrink-0">{row.type}</div>
                     <div className="flex-1 h-6 bg-cream border border-border overflow-hidden">
                       <div
                         className="h-full bg-blue-500 transition-all"

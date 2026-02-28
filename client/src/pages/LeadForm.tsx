@@ -37,7 +37,7 @@ export default function LeadForm() {
 
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "",
-    company: "", eventType: "", eventDate: "", guestCount: "", budget: "", message: "",
+    company: "", eventType: "", eventDate: "", guestCount: "", budget: "", message: "", source: "",
   });
 
   const submitLead = trpc.leads.submit.useMutation({
@@ -60,7 +60,7 @@ export default function LeadForm() {
       guestCount: form.guestCount ? parseInt(form.guestCount) : undefined,
       budget: form.budget ? parseFloat(form.budget) : undefined,
       message: form.message || undefined,
-      source: "lead_form",
+      source: form.source || "lead_form",
     });
   };
 
@@ -199,6 +199,20 @@ export default function LeadForm() {
               </div>
             </div>
 
+            {/* How did you hear */}
+            <div className="paradiso-card p-6">
+              <h2 className="font-bebas text-xs tracking-widest mb-3" style={{ color: T.stone }}>HOW DID YOU HEAR ABOUT US?</h2>
+              <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v }))}>
+                <SelectTrigger className="rounded-none border-2 focus:ring-0 font-inter text-sm">
+                  <SelectValue placeholder="Select an option…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Instagram","Facebook","Google Search","Website","Word of Mouth / Referral","Walk-In","Event Directory","Previous Client","Other"].map(s => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {/* Message */}
             <div className="paradiso-card p-6">
               <h2 className="font-bebas text-xs tracking-widest mb-3" style={{ color: T.stone }}>TELL US MORE</h2>

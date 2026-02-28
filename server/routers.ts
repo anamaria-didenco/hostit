@@ -253,6 +253,7 @@ export const appRouter = router({
         internalNotes: z.string().optional(),
         followUpDate: z.string().optional(),
         assignedTo: z.number().optional(),
+        source: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, followUpDate, ...rest } = input;
@@ -1787,6 +1788,22 @@ export const appRouter = router({
         return db.select().from(analyticsGoals)
           .where(and(eq(analyticsGoals.ownerId, ctx.user.id), eq(analyticsGoals.year, input.year)));
       }),
+    sourceBreakdown: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { leads } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db.select().from(leads).where(eq(leads.ownerId, ctx.user.id));
+      const map: Record<string, number> = {};
+      for (const lead of rows) {
+        const src = lead.source ?? 'Unknown';
+        map[src] = (map[src] ?? 0) + 1;
+      }
+      return Object.entries(map)
+        .map(([source, count]) => ({ source, count }))
+        .sort((a, b) => b.count - a.count);
+    }),
   }),
 
   // ─── Express Book (public enquiry form with availability) ─────────────────
@@ -1869,12 +1886,43 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── Dashboard ─────────────────────────────────────────────────────────────
+   // ─── Dashboard ─────────────────────────────────────────────────────────────
   dashboard: router({
     stats: protectedProcedure.query(async ({ ctx }) => {
       return getDashboardStats(ctx.user.id);
     }),
   }),
+  // ─── User Preferences (dashboard layout) ──────────────────────────────────
+  userPreferences: router({
+    get: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { userPreferences } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return null;
+      const rows = await db.select().from(userPreferences).where(eq(userPreferences.ownerId, ctx.user.id));
+      return rows[0] ?? null;
+    }),
+    save: protectedProcedure
+      .input(z.object({
+        widgetOrder: z.array(z.string()),
+        hiddenWidgets: z.array(z.string()),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { userPreferences } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const layout = { widgetOrder: input.widgetOrder, hiddenWidgets: input.hiddenWidgets };
+        const existing = await db.select().from(userPreferences).where(eq(userPreferences.ownerId, ctx.user.id));
+        if (existing.length > 0) {
+          await db.update(userPreferences).set({ dashboardLayout: layout }).where(eq(userPreferences.ownerId, ctx.user.id));
+        } else {
+          await db.insert(userPreferences).values({ ownerId: ctx.user.id, dashboardLayout: layout });
+        }
+        return { success: true };
+      }),
+  }),
 });
-
 export type AppRouter = typeof appRouter;

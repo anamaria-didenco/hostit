@@ -370,3 +370,42 @@
 - [x] Settings tab: Floor Plans sub-tab (create/manage floor plan templates)
 - [x] BEO PDF server route (/api/beo/:bookingId) with full event data
 - [x] Generate BEO PDF button on EventDetail page
+
+## Phase 12: Staff Sheet PDF + Source Tracking + Customisable Dashboard
+- [ ] Source field editable in lead detail panel (dropdown: Instagram, Website, Referral, Walk-in, Phone, Email, Other)
+- [ ] Source "How did you hear about us?" dropdown on public LeadForm
+- [ ] Source "How did you hear about us?" dropdown on ExpressBook form
+- [ ] analytics.sourceBreakdown tRPC procedure
+- [ ] Source Breakdown chart in Analytics page
+- [ ] Staff Sheet PDF server route (/api/staff-sheet/:runsheetId)
+- [ ] Print Staff Sheet button in RunsheetBuilder header
+- [ ] Dashboard widget system: drag-to-reorder, show/hide panels
+- [ ] user_preferences table in schema for storing dashboard layout
+- [ ] Dashboard layout persisted per user via tRPC
+
+## Phase 12: Perfect Venue Parity + Cream/Blue/Burgundy Branding
+- [ ] Add "Qualified" pipeline stage between Contacted and Proposal Sent
+- [ ] Add "Balance Due" pipeline stage for payment tracking
+- [ ] Add Tasks tab to Dashboard sidebar
+- [ ] Add source dropdown (editable) to lead detail panel in Dashboard
+- [ ] Add "How did you hear about us?" source dropdown to public LeadForm
+- [ ] Add source dropdown to ExpressBook form
+- [x] Source Breakdown chart in Analytics
+- [x] Staff Sheet PDF button in RunsheetBuilder
+- [ ] Customisable dashboard: drag-to-reorder widgets, show/hide panels
+- [ ] Reports page: Events / Payments / Proposals / Contacts / Sales sub-tabs
+- [ ] Verify cream/blue/burgundy colour scheme consistent globally
+
+## Phase 12: Completed This Session
+- [x] Source field editable in lead detail panel (dropdown in Dashboard)
+- [x] "How did you hear about us?" source dropdown on public LeadForm
+- [x] analytics.sourceBreakdown tRPC procedure
+- [x] Source Breakdown chart in Analytics page
+- [x] Staff Sheet PDF server route (/api/staff-sheet/:runsheetId)
+- [x] Print Staff Sheet button in RunsheetBuilder header
+- [x] Dashboard widget system: MiniCalendarWidget, NewEnquiriesWidget, PipelineSnapshotWidget
+- [x] DashboardWidgets component with drag-to-reorder (@dnd-kit) and show/hide
+- [x] user_preferences table created in DB
+- [x] userPreferences.save and userPreferences.get tRPC procedures
+- [x] Dashboard layout (order + hidden) persisted per user via tRPC
+- [x] 77 vitest tests passing, 0 TypeScript errors

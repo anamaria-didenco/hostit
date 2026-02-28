@@ -435,3 +435,16 @@ export const barMenuItems = mysqlTable("bar_menu_items", {
 });
 export type BarMenuItem = typeof barMenuItems.$inferSelect;
 export type InsertBarMenuItem = typeof barMenuItems.$inferInsert;
+
+// ─── User Preferences (dashboard layout, widget order/visibility) ─────────────
+export const userPreferences = mysqlTable("user_preferences", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("ownerId").notNull().unique(),
+  dashboardLayout: json("dashboardLayout").$type<{
+    widgetOrder: string[];
+    hiddenWidgets: string[];
+  }>(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type UserPreferences = typeof userPreferences.$inferSelect;

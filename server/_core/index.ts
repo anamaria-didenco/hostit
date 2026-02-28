@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
 import { handleBeoPdf } from "../beoPdf";
+import { handleStaffSheetPdf } from "../staffSheetPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -43,10 +44,17 @@ async function startServer() {
 
   // BEO PDF download (requires session auth)
   app.get("/api/beo/:bookingId", (req, res, next) => {
-    // Inject user from tRPC context for auth check
     createContext({ req: req as any, res: res as any, info: {} as any }).then(ctx => {
       (req as any).user = ctx.user;
       handleBeoPdf(req, res);
+    }).catch(next);
+  });
+
+  // Staff Sheet PDF download (requires session auth)
+  app.get("/api/staff-sheet/:runsheetId", (req, res, next) => {
+    createContext({ req: req as any, res: res as any, info: {} as any }).then(ctx => {
+      (req as any).user = ctx.user;
+      handleStaffSheetPdf(req, res);
     }).catch(next);
   });
 

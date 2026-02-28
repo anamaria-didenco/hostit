@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
+import { DashboardWidgets } from "@/components/DashboardWidgets";
 
 // ─── Follow-Up Date Card ────────────────────────────────────────────────────
 function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date | null) => void }) {
@@ -95,6 +96,157 @@ const PIPELINE_STAGES = [
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+// ── Overview Widget Sub-Components ──────────────────────────────────────────────
+
+function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings, monthLeadEvents, onPrev, onNext, onDayClick, onViewCalendar }: {
+  month: number; year: number; firstDay: number; daysInMonth: number;
+  monthBookings: any; monthLeadEvents: any;
+  onPrev: () => void; onNext: () => void;
+  onDayClick: (dayBookings: any[], dayLeads: any[]) => void;
+  onViewCalendar: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="dante-card shadow-sm">
+        <div className="flex items-center justify-between p-4 border-b border-gold/15">
+          <button onClick={onPrev} className="p-1 hover:text-gold transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+          <h2 className="font-cormorant text-lg font-semibold text-ink">{MONTHS[month]} {year}</h2>
+          <button onClick={onNext} className="p-1 hover:text-gold transition-colors"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+        <div className="flex items-center gap-4 px-4 pt-3 pb-1 flex-wrap">
+          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />Confirmed</span>
+          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Tentative</span>
+          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-stone-400 inline-block" />Cancelled</span>
+          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />Enquiry</span>
+        </div>
+        <div className="p-3">
+          <div className="grid grid-cols-7 mb-1">
+            {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d => (
+              <div key={d} className="text-center font-bebas text-[10px] tracking-widest text-ink/50 py-1">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-0.5">
+            {[...Array(firstDay)].map((_, i) => <div key={`e-${i}`} />)}
+            {[...Array(daysInMonth)].map((_, i) => {
+              const day = i + 1;
+              const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
+              const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
+              const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
+              const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
+              const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
+              const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
+              const hasEnquiry = dayLeads.length > 0;
+              const cellBg = hasConfirmed ? 'bg-emerald-50 border-emerald-300' : hasTentative ? 'bg-amber-50 border-amber-300' : hasCancelled ? 'bg-stone-50 border-stone-300' : hasEnquiry ? 'bg-rose-50 border-rose-300' : isToday ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-linen';
+              return (
+                <div key={day} onClick={() => onDayClick(dayBookings, dayLeads)}
+                  className={`relative min-h-[44px] flex flex-col p-1 border transition-colors ${cellBg} ${(dayBookings.length > 0 || dayLeads.length > 0) ? 'cursor-pointer' : ''}`}
+                >
+                  <span className={`text-[11px] font-dm leading-none mb-0.5 ${isToday ? 'font-bold text-gold' : 'text-ink/70'}`}>{day}</span>
+                  <div className="flex flex-wrap gap-0.5 mt-auto">
+                    {dayBookings.slice(0, 3).map((b: any) => (
+                      <span key={b.id} className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === 'confirmed' ? 'bg-emerald-500' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'}`} />
+                    ))}
+                    {dayLeads.slice(0, 2).map((l: any) => (
+                      <span key={l.id} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
+                    ))}
+                  </div>
+                  {dayBookings.slice(0, 1).map((b: any) => (
+                    <div key={b.id} className={`text-[9px] leading-tight font-dm truncate w-full mt-0.5 ${b.status === 'confirmed' ? 'text-emerald-700' : b.status === 'tentative' ? 'text-amber-700' : 'text-stone-500'}`}>{b.firstName}</div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="p-3 border-t border-gold/15">
+          <button onClick={onViewCalendar} className="w-full font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors py-1">VIEW FULL CALENDAR →</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewEnquiriesWidget({ newEnquiries, overdueLeads, onSelectLead, onViewAll, onViewOverdue }: {
+  newEnquiries: any[]; overdueLeads: any;
+  onSelectLead: (lead: any) => void; onViewAll: () => void; onViewOverdue: () => void;
+}) {
+  return (
+    <div className="dante-card shadow-sm flex flex-col">
+      <div className="flex items-center justify-between p-4 border-b border-gold/15">
+        <div className="flex items-center gap-3">
+          <h2 className="font-cormorant text-lg font-semibold text-ink">New Enquiries</h2>
+          {newEnquiries.length > 0 && (
+            <span className="bg-gold/20 text-amber-800 font-bebas text-xs tracking-widest px-2 py-0.5 border border-gold/30">{newEnquiries.length}</span>
+          )}
+        </div>
+        <button onClick={onViewAll} className="font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors">VIEW ALL</button>
+      </div>
+      {newEnquiries.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <CheckCircle className="w-10 h-10 text-emerald-400 mb-3" />
+          <p className="font-cormorant text-lg text-ink/60 italic">All caught up!</p>
+          <p className="font-dm text-xs text-ink/40 mt-1">No new enquiries waiting for a reply.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border/40 overflow-y-auto max-h-[420px]">
+          {newEnquiries.slice(0, 8).map((lead: any) => (
+            <button key={lead.id} onClick={() => onSelectLead(lead)}
+              className="w-full flex items-start gap-3 p-4 hover:bg-gold/5 transition-colors text-left">
+              <div className="w-2 h-2 rounded-full bg-gold mt-1.5 flex-shrink-0 animate-pulse" />
+              <div className="flex-1 min-w-0">
+                <div className="font-cormorant font-semibold text-sm text-ink">{lead.firstName} {lead.lastName}</div>
+                <div className="font-dm text-xs text-ink/60 truncate">{lead.eventType || 'Event'}{lead.guestCount ? ` · ${lead.guestCount} guests` : ''}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : ''}</div>
+                {lead.message && <div className="font-dm text-xs text-ink/40 truncate mt-0.5 italic">"{lead.message}"</div>}
+              </div>
+              <div className="font-dm text-xs text-ink/40 flex-shrink-0">
+                {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {(overdueLeads ?? []).length > 0 && (
+        <div className="border-t border-red-200 bg-red-50/50">
+          <div className="flex items-center gap-2 px-4 py-2">
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <span className="font-bebas text-xs tracking-widest text-red-700">{(overdueLeads ?? []).length} OVERDUE FOLLOW-UP{(overdueLeads ?? []).length > 1 ? 'S' : ''}</span>
+            <button onClick={onViewOverdue} className="ml-auto font-bebas text-xs tracking-widest text-red-600 hover:text-red-800 transition-colors">VIEW →</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PipelineSnapshotWidget({ allLeads, onViewLeads }: { allLeads: any; onViewLeads: () => void }) {
+  const counts = PIPELINE_STAGES.map(s => ({
+    ...s,
+    count: (allLeads ?? []).filter((l: any) => l.status === s.key).length,
+  }));
+  const total = (allLeads ?? []).length;
+  return (
+    <div className="dante-card shadow-sm p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-cormorant text-lg font-semibold text-ink">Pipeline Snapshot</h2>
+        <button onClick={onViewLeads} className="font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors">VIEW ALL</button>
+      </div>
+      <div className="space-y-2">
+        {counts.map(s => (
+          <div key={s.key} className="flex items-center gap-3">
+            <span className={`font-bebas text-xs tracking-widest w-28 flex-shrink-0 ${s.color.split(' ').find(c => c.startsWith('text-')) ?? 'text-ink'}`}>{s.label}</span>
+            <div className="flex-1 bg-gold/10 h-2 overflow-hidden">
+              <div className={`h-2 transition-all ${s.color.split(' ').find(c => c.startsWith('bg-')) ?? 'bg-gold'}`}
+                style={{ width: total > 0 ? `${(s.count / total) * 100}%` : '0%' }} />
+            </div>
+            <span className="font-dm text-xs text-ink/60 w-6 text-right">{s.count}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 pt-3 border-t border-gold/15 font-dm text-xs text-ink/50">{total} total leads</div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
@@ -110,6 +262,9 @@ export default function Dashboard() {
   const [showAddSpace, setShowAddSpace] = useState(false);
   const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [widgetEditMode, setWidgetEditMode] = useState(false);
+  const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
+  const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
 
   const utils = trpc.useUtils();
 
@@ -142,6 +297,43 @@ export default function Dashboard() {
     { enabled: !!user?.id }
   );
 
+  // ── Widget layout preferences ──────────────────────────────────────────
+  const { data: userPrefs } = trpc.userPreferences.get.useQuery(undefined, {
+    enabled: !!user?.id,
+  });
+  // Load saved layout when prefs arrive
+  const prefsLoaded = useRef(false);
+  useEffect(() => {
+    if (userPrefs && !prefsLoaded.current) {
+      prefsLoaded.current = true;
+      const layout = userPrefs.dashboardLayout as any;
+      if (layout?.widgetOrder?.length) setWidgetOrder(layout.widgetOrder);
+      if (layout?.hiddenWidgets?.length) setHiddenWidgets(new Set(layout.hiddenWidgets));
+    }
+  }, [userPrefs]);
+  const saveLayout = trpc.userPreferences.save.useMutation();
+
+  function handleWidgetOrderChange(newOrder: string[]) {
+    setWidgetOrder(newOrder);
+    saveLayout.mutate({ widgetOrder: newOrder, hiddenWidgets: Array.from(hiddenWidgets) });
+  }
+  function handleToggleHidden(id: string) {
+    setHiddenWidgets(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      saveLayout.mutate({ widgetOrder: widgetOrder, hiddenWidgets: Array.from(next) });
+      return next;
+    });
+  }
+
+  const updateLeadSource = trpc.leads.update.useMutation({
+    onSuccess: (_data, vars) => {
+      refetchLeads();
+      setSelectedLead((prev: any) => prev ? { ...prev, source: vars.source } : prev);
+      toast.success("Source updated");
+    },
+    onError: () => toast.error("Failed to update source"),
+  });
   const updateStatus = trpc.leads.updateStatus.useMutation({
     onSuccess: () => { refetchLeads(); if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id }); toast.success("Status updated"); },
   });
@@ -425,14 +617,33 @@ export default function Dashboard() {
           {tab === "overview" && (
             <div className="p-6">
               {/* Header */}
-              <div className="mb-6">
-                <div className="gold-rule max-w-xs mb-3"><span>DASHBOARD</span></div>
-                <h1 className="font-cormorant text-ink" style={{ fontSize: '2.5rem', fontWeight: 600 }}>
-                  Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 17 ? "Afternoon" : "Evening"}
-                </h1>
+              <div className="mb-6 flex items-end justify-between">
+                <div>
+                  <div className="gold-rule max-w-xs mb-3"><span>DASHBOARD</span></div>
+                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.5rem', fontWeight: 600 }}>
+                    Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 17 ? "Afternoon" : "Evening"}
+                  </h1>
+                </div>
+                <button
+                  onClick={() => setWidgetEditMode(v => !v)}
+                  className={`flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border transition-colors ${
+                    widgetEditMode
+                      ? "bg-forest-dark text-cream border-forest-dark"
+                      : "border-gold/40 text-sage hover:border-forest hover:text-forest"
+                  }`}
+                  title="Customise dashboard layout"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  {widgetEditMode ? "DONE" : "CUSTOMISE"}
+                </button>
               </div>
+              {widgetEditMode && (
+                <div className="mb-4 px-4 py-3 bg-gold/10 border border-gold/30 font-dm text-xs text-ink/70">
+                  <strong className="font-bebas tracking-widest text-ink">EDIT MODE</strong> — Drag the <span className="font-semibold">⠿</span> handle to reorder widgets, or toggle visibility. Changes are saved automatically.
+                </div>
+              )}
 
-              {/* Stats row */}
+              {/* Stats row — always visible, not draggable */}
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-px bg-gold/15 mb-6">
                 {[
                   { label: "NEW ENQUIRIES", value: stats?.newLeads ?? 0, sub: "awaiting reply", accent: "text-gold", icon: <MessageSquare className="w-4 h-4 text-gold" /> },
@@ -450,127 +661,47 @@ export default function Dashboard() {
                 ))}
               </div>
 
-              {/* Two-column: Calendar + New Enquiries */}
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-                {/* ── Mini Calendar ── */}
-                <div className="dante-card shadow-sm">
-                  <div className="flex items-center justify-between p-4 border-b border-gold/15">
-                    <button onClick={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="p-1 hover:text-gold transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-                    <h2 className="font-cormorant text-lg font-semibold text-ink">{MONTHS[month]} {year}</h2>
-                    <button onClick={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="p-1 hover:text-gold transition-colors"><ChevronRight className="w-4 h-4" /></button>
-                  </div>
-                  {/* Legend */}
-                  <div className="flex items-center gap-4 px-4 pt-3 pb-1 flex-wrap">
-                    <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />Confirmed</span>
-                    <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Tentative</span>
-                    <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-stone-400 inline-block" />Cancelled</span>
-                    <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />Enquiry</span>
-                  </div>
-                  <div className="p-3">
-                    <div className="grid grid-cols-7 mb-1">
-                      {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d => (
-                        <div key={d} className="text-center font-bebas text-[10px] tracking-widest text-ink/50 py-1">{d}</div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-7 gap-0.5">
-                      {[...Array(firstDay)].map((_, i) => <div key={`e-${i}`} />)}
-                      {[...Array(daysInMonth)].map((_, i) => {
-                        const day = i + 1;
-                        const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
-                        const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                        const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
-                        const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
-                        const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
-                        const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
-                        const hasEnquiry = dayLeads.length > 0;
-                        const cellBg = hasConfirmed ? 'bg-emerald-50 border-emerald-300' : hasTentative ? 'bg-amber-50 border-amber-300' : hasCancelled ? 'bg-stone-50 border-stone-300' : hasEnquiry ? 'bg-rose-50 border-rose-300' : isToday ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-linen';
-                        return (
-                          <div
-                            key={day}
-                            onClick={() => {
-                              if (dayBookings.length > 0) { setTab('calendar'); }
-                              else if (dayLeads.length > 0) { setSelectedLead(dayLeads[0]); setTab('leads'); }
-                            }}
-                            className={`relative min-h-[44px] flex flex-col p-1 border transition-colors ${cellBg} ${(dayBookings.length > 0 || dayLeads.length > 0) ? 'cursor-pointer' : ''}`}
-                          >
-                            <span className={`text-[11px] font-dm leading-none mb-0.5 ${isToday ? 'font-bold text-gold' : 'text-ink/70'}`}>{day}</span>
-                            {/* Status dots */}
-                            <div className="flex flex-wrap gap-0.5 mt-auto">
-                              {dayBookings.slice(0, 3).map((b: any) => (
-                                <span key={b.id} title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} (${b.status})`}
-                                  className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                    b.status === 'confirmed' ? 'bg-emerald-500' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'
-                                  }`} />
-                              ))}
-                              {dayLeads.slice(0, 2).map((l: any) => (
-                                <span key={l.id} title={`${l.firstName} ${l.lastName ?? ''} — Enquiry`} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
-                              ))}
-                            </div>
-                            {/* Event name on larger cells */}
-                            {dayBookings.slice(0, 1).map((b: any) => (
-                              <div key={b.id} className={`text-[9px] leading-tight font-dm truncate w-full mt-0.5 ${
-                                b.status === 'confirmed' ? 'text-emerald-700' : b.status === 'tentative' ? 'text-amber-700' : 'text-stone-500'
-                              }`}>{b.firstName}</div>
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className="p-3 border-t border-gold/15">
-                    <button onClick={() => setTab('calendar')} className="w-full font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors py-1">VIEW FULL CALENDAR →</button>
-                  </div>
-                </div>
-
-                {/* ── New Enquiries Panel ── */}
-                <div className="dante-card shadow-sm flex flex-col">
-                  <div className="flex items-center justify-between p-4 border-b border-gold/15">
-                    <div className="flex items-center gap-3">
-                      <h2 className="font-cormorant text-lg font-semibold text-ink">New Enquiries</h2>
-                      {newEnquiries.length > 0 && (
-                        <span className="bg-gold/20 text-amber-800 font-bebas text-xs tracking-widest px-2 py-0.5 border border-gold/30">{newEnquiries.length}</span>
-                      )}
-                    </div>
-                    <button onClick={() => { setLeadsSubTab('new'); setTab('leads'); }} className="font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors">VIEW ALL</button>
-                  </div>
-                  {newEnquiries.length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                      <CheckCircle className="w-10 h-10 text-emerald-400 mb-3" />
-                      <p className="font-cormorant text-lg text-ink/60 italic">All caught up!</p>
-                      <p className="font-dm text-xs text-ink/40 mt-1">No new enquiries waiting for a reply.</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-border/40 overflow-y-auto max-h-[420px]">
-                      {newEnquiries.slice(0, 8).map((lead: any) => (
-                        <button key={lead.id} onClick={() => { setSelectedLead(lead); setLeadsSubTab('new'); setTab('leads'); }}
-                          className="w-full flex items-start gap-3 p-4 hover:bg-gold/5 transition-colors text-left">
-                          <div className="w-2 h-2 rounded-full bg-gold mt-1.5 flex-shrink-0 animate-pulse" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-cormorant font-semibold text-sm text-ink">{lead.firstName} {lead.lastName}</div>
-                            <div className="font-dm text-xs text-ink/60 truncate">{lead.eventType || 'Event'}{lead.guestCount ? ` · ${lead.guestCount} guests` : ''}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : ''}</div>
-                            {lead.message && <div className="font-dm text-xs text-ink/40 truncate mt-0.5 italic">"{lead.message}"</div>}
-                          </div>
-                          <div className="font-dm text-xs text-ink/40 flex-shrink-0">
-                            {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {/* Overdue follow-ups below */}
-                  {(overdueLeads ?? []).length > 0 && (
-                    <div className="border-t border-red-200 bg-red-50/50">
-                      <div className="flex items-center gap-2 px-4 py-2">
-                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                        <span className="font-bebas text-xs tracking-widest text-red-700">{(overdueLeads ?? []).length} OVERDUE FOLLOW-UP{(overdueLeads ?? []).length > 1 ? 'S' : ''}</span>
-                        <button onClick={() => setTab('leads')} className="ml-auto font-bebas text-xs tracking-widest text-red-600 hover:text-red-800 transition-colors">VIEW →</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-              </div>{/* end two-column */}
+              {/* Draggable two-column widgets */}
+              <DashboardWidgets
+                order={widgetOrder}
+                hidden={hiddenWidgets}
+                editMode={widgetEditMode}
+                onOrderChange={handleWidgetOrderChange}
+                onToggleHidden={handleToggleHidden}
+                widgets={[
+                  {
+                    id: "calendar",
+                    label: "MINI CALENDAR",
+                    content: <MiniCalendarWidget
+                      month={month} year={year} firstDay={firstDay} daysInMonth={daysInMonth}
+                      monthBookings={monthBookings} monthLeadEvents={monthLeadEvents}
+                      onPrev={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+                      onNext={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+                      onDayClick={(dayBookings: any[], dayLeads: any[]) => {
+                        if (dayBookings.length > 0) setTab('calendar');
+                        else if (dayLeads.length > 0) { setSelectedLead(dayLeads[0]); setTab('leads'); }
+                      }}
+                      onViewCalendar={() => setTab('calendar')}
+                    />,
+                  },
+                  {
+                    id: "enquiries",
+                    label: "NEW ENQUIRIES",
+                    content: <NewEnquiriesWidget
+                      newEnquiries={newEnquiries}
+                      overdueLeads={overdueLeads}
+                      onSelectLead={(lead: any) => { setSelectedLead(lead); setLeadsSubTab('new'); setTab('leads'); }}
+                      onViewAll={() => { setLeadsSubTab('new'); setTab('leads'); }}
+                      onViewOverdue={() => setTab('leads')}
+                    />,
+                  },
+                  {
+                    id: "pipeline",
+                    label: "PIPELINE SNAPSHOT",
+                    content: <PipelineSnapshotWidget allLeads={allLeads} onViewLeads={() => setTab('leads')} />,
+                  },
+                ]}
+              />
 
               {/* Lead Form CTA */}
               {!venueSettings && (
@@ -795,7 +926,6 @@ export default function Dashboard() {
                           ["Guests", selectedLead.guestCount],
                           ["Budget", selectedLead.budget ? `$${Number(selectedLead.budget).toLocaleString()} NZD` : null],
                           ["Company", selectedLead.company],
-                          ["Source", selectedLead.source],
                         ].filter(([, v]) => v).map(([label, value]) => (
                           <div key={label as string} className="flex gap-2">
                             <span className="text-ink/60 w-24 flex-shrink-0">{label}:</span>
@@ -852,6 +982,23 @@ export default function Dashboard() {
                         disabled={!noteText.trim() || addNote.isPending}
                         className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream disabled:opacity-40">ADD</button>
                     </div>
+                  </div>
+                  {/* Enquiry Source */}
+                  <div className="dante-card p-4 mb-4">
+                    <h3 className="font-bebas text-xs tracking-widest text-sage mb-3">ENQUIRY SOURCE</h3>
+                    <Select
+                      value={selectedLead.source ?? ""}
+                      onValueChange={(v) => updateLeadSource.mutate({ id: selectedLead.id, source: v })}
+                    >
+                      <SelectTrigger className="rounded-none border border-gold/30 focus:ring-0 font-dm text-sm">
+                        <SelectValue placeholder="Select source…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["Instagram","Facebook","Google Search","Website","Word of Mouth / Referral","Walk-In","Event Directory","Previous Client","lead_form","express_book","Other"].map(s => (
+                          <SelectItem key={s} value={s}>{s === "lead_form" ? "Lead Form" : s === "express_book" ? "Express Book" : s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   {/* Follow-Up Date */}
                   <FollowUpDateCard lead={selectedLead} onSaved={(updated) => {
