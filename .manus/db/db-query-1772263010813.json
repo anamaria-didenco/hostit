@@ -1,0 +1,9 @@
+{
+  "query": "\nALTER TABLE runsheets\n  ADD COLUMN IF NOT EXISTS dietaries JSON,\n  ADD COLUMN IF NOT EXISTS venueSetup TEXT,\n  ADD COLUMN IF NOT EXISTS proposalId INT;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute \nALTER TABLE runsheets\n  ADD COLUMN IF NOT EXISTS dietaries JSON,\n  ADD COLUMN IF NOT EXISTS venueSetup TEXT,\n  ADD COLUMN IF NOT EXISTS proposalId INT;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2858
+}

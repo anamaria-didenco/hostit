@@ -269,3 +269,13 @@
 - [x] Delete enquiry button in leads inbox detail panel
 - [x] Sidebar nav text and icons updated to cream (#f7f1e9) colour
 - [x] 71 tests passing (5 new runsheet tests added)
+
+## Phase 8: Runsheet Enhancements + PDF Export
+
+- [x] Add dietaries section to RunsheetBuilder (quick-add chips, count, notes, print-ready)
+- [x] Add venue setup section to RunsheetBuilder (layout templates + freetext, print-ready)
+- [x] Integrate proposal data into RunsheetBuilder (link proposal, show pricing/bar/drinks)
+- [x] Auto-populate runsheet from linked proposal (date, guests, space)
+- [x] Download PDF button on ProposalBuilder (server-side Puppeteer PDF generation)
+- [x] Fix proposal PDF test assertion (getByToken returns { proposal, venue })
+- [x] 74 tests passing

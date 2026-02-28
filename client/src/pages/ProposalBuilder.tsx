@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp, Download } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -50,6 +50,30 @@ export default function ProposalBuilder() {
 
   const [savedProposal, setSavedProposal] = useState<any>(null);
   const [sent, setSent] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!savedProposal?.publicToken) return toast.error("Save the proposal first, then download the PDF.");
+    setPdfLoading(true);
+    try {
+      const res = await fetch(`/api/proposal-pdf/${savedProposal.publicToken}`);
+      if (!res.ok) throw new Error("PDF generation failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(savedProposal.title ?? "proposal").replace(/[^a-z0-9]/gi, "_").toLowerCase()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("PDF downloaded!");
+    } catch {
+      toast.error("Failed to generate PDF. Please try again.");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   // Menu packages
   const { data: menuPackages } = trpc.menu.listPackages.useQuery(undefined, { enabled: !!user });
@@ -315,7 +339,19 @@ export default function ProposalBuilder() {
           />
         </div>
           <div className="font-playfair italic text-amber/90 text-sm">Proposal Builder</div>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2">
+          {savedProposal?.publicToken && (
+            <Button
+              onClick={handleDownloadPdf}
+              disabled={pdfLoading}
+              variant="ghost"
+              size="sm"
+              className="text-cream/70 hover:text-cream hover:bg-cream/10 font-bebas tracking-widest text-xs gap-1"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {pdfLoading ? "PDF..." : "PDF"}
+            </Button>
+          )}
           {!savedProposal ? (
             <Button onClick={handleSave} disabled={createProposal.isPending}
               variant="outline" className="border-amber/40 text-amber hover:bg-amber/10 font-bebas tracking-widest rounded-none text-xs bg-transparent">
@@ -999,6 +1035,20 @@ export default function ProposalBuilder() {
                 <FileText className="w-3 h-3" /> PREVIEW CLIENT VIEW
               </Button>
             </a>
+          )}
+
+          {/* Download PDF */}
+          {savedProposal?.publicToken && (
+            <Button
+              onClick={handleDownloadPdf}
+              disabled={pdfLoading}
+              variant="outline"
+              size="sm"
+              className="w-full border-2 border-ink/30 text-ink hover:bg-ink hover:text-cream font-bebas tracking-widest rounded-none text-xs gap-1.5 transition-all"
+            >
+              <Download className="w-3 h-3" />
+              {pdfLoading ? "GENERATING PDF..." : "DOWNLOAD PDF"}
+            </Button>
           )}
         </div>
       </div>

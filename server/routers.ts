@@ -1244,12 +1244,15 @@ export const appRouter = router({
         title: z.string(),
         leadId: z.number().optional(),
         bookingId: z.number().optional(),
+        proposalId: z.number().optional(),
         eventDate: z.string().optional(),
         venueName: z.string().optional(),
         spaceName: z.string().optional(),
         guestCount: z.number().optional(),
         eventType: z.string().optional(),
         notes: z.string().optional(),
+        dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
+        venueSetup: z.string().optional(),
         items: z.array(z.object({
           time: z.string(),
           duration: z.number().optional(),
@@ -1278,6 +1281,9 @@ export const appRouter = router({
           guestCount: input.guestCount ?? null,
           eventType: input.eventType ?? null,
           notes: input.notes ?? null,
+          dietaries: input.dietaries ?? null,
+          venueSetup: input.venueSetup ?? null,
+          proposalId: input.proposalId ?? null,
           publicToken: token,
         });
         const id = (result as any).insertId as number;
@@ -1309,6 +1315,9 @@ export const appRouter = router({
         guestCount: z.number().optional(),
         eventType: z.string().optional(),
         notes: z.string().optional(),
+        dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
+        venueSetup: z.string().optional(),
+        proposalId: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1325,6 +1334,9 @@ export const appRouter = router({
         if (fields.eventType !== undefined) updateData.eventType = fields.eventType;
         if (fields.notes !== undefined) updateData.notes = fields.notes;
         if (fields.eventDate !== undefined) updateData.eventDate = fields.eventDate ? new Date(fields.eventDate) : null;
+        if (fields.dietaries !== undefined) updateData.dietaries = fields.dietaries;
+        if (fields.venueSetup !== undefined) updateData.venueSetup = fields.venueSetup;
+        if (fields.proposalId !== undefined) updateData.proposalId = fields.proposalId;
         await db.update(runsheets).set(updateData)
           .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)));
         return { success: true };
