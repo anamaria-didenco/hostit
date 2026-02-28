@@ -279,3 +279,53 @@
 - [x] Download PDF button on ProposalBuilder (server-side Puppeteer PDF generation)
 - [x] Fix proposal PDF test assertion (getByToken returns { proposal, venue })
 - [x] 74 tests passing
+
+## Phase 9: Perfect Venue Feature Parity + FOH/Kitchen Runsheet
+
+### BEO Generator
+- [ ] BEO (Banquet Event Order) auto-PDF from booking/proposal data
+- [ ] BEO includes: event details, contact info, menu selections, bar package, dietary requirements, venue setup, timeline, pricing summary
+- [ ] Generate BEO button on confirmed bookings in Dashboard
+- [ ] BEO accessible from RunsheetBuilder as well
+
+### Runsheet — FOH & Kitchen Sections
+- [ ] Add Food and Beverage tab to RunsheetBuilder
+- [ ] FOH section: service style, courses, timing per course, staff assignments
+- [ ] Kitchen section: prep timeline, dish names, quantities per dietary, plating notes
+- [ ] Pull menu selections from linked proposal automatically
+- [ ] Print-ready FOH sheet and separate Kitchen sheet
+
+### Payment & Deposit Tracking
+- [ ] Add payments table to DB (amount, type, date, method, notes)
+- [ ] Payment tracking panel on each booking (record payment, show outstanding balance)
+- [ ] Payment status badge on booking cards (Unpaid / Deposit Paid / Paid in Full)
+- [ ] Revenue pipeline on analytics (confirmed vs pipeline vs outstanding)
+
+### Analytics Dashboard Enhancements
+- [ ] Revenue by month chart (bar chart, current year)
+- [ ] Year-over-year comparison
+- [ ] Goal tracking (set monthly revenue target, show progress)
+- [ ] Lead conversion funnel (enquiries to proposals to bookings)
+- [ ] Top event types by revenue
+
+### Automated Follow-Up and Reminders
+- [ ] Follow-up email scheduler (send template email at a set date/time)
+- [ ] Automated reminder: 7 days before event
+- [ ] Overdue follow-up indicator on leads inbox
+- [ ] Send reminder quick action on leads
+
+### Express Book Public Form
+- [ ] Public-facing enquiry + availability check page (/book)
+- [ ] Guest selects date, event type, guest count, space
+- [ ] Shows available spaces and menu packages
+- [ ] Guest can select menu items and submit deposit request
+- [ ] Owner receives notification and can Accept/Decline
+
+## Phase 9: Perfect Venue Feature Set
+
+- [x] FOH & Kitchen F&B tab in RunsheetBuilder (course-by-course, staff assignments, bar notes, kitchen prep)
+- [x] Payment & deposit tracking page (/payments) — record payments, outstanding balance, status badges
+- [x] Analytics dashboard (/analytics) — monthly revenue chart, YoY comparison, conversion funnel, goal tracking
+- [x] Express Book public enquiry form (/book) — availability check, space/menu selection, owner notification
+- [x] Analytics and Payments quick-links added to Dashboard sidebar
+- [x] Express Book link added to Dashboard sidebar

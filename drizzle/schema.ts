@@ -369,3 +369,51 @@ export const checklistInstances = mysqlTable("checklist_instances", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type ChecklistInstance = typeof checklistInstances.$inferSelect;
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+export const payments = mysqlTable("payments", {
+  id: int("id").autoincrement().primaryKey(),
+  bookingId: int("bookingId").notNull(),
+  ownerId: int("ownerId").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  type: mysqlEnum("type", ["deposit", "final", "partial", "refund", "other"]).default("deposit").notNull(),
+  method: mysqlEnum("method", ["bank_transfer", "cash", "credit_card", "eftpos", "other"]).default("bank_transfer").notNull(),
+  paidAt: timestamp("paidAt").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = typeof payments.$inferInsert;
+
+// ─── FOH/Kitchen F&B Items (linked to runsheets) ─────────────────────────────
+export const fnbItems = mysqlTable("fnb_items", {
+  id: int("id").autoincrement().primaryKey(),
+  runsheetId: int("runsheetId").notNull(),
+  ownerId: int("ownerId").notNull(),
+  section: mysqlEnum("section", ["foh", "kitchen"]).default("foh").notNull(),
+  course: varchar("course", { length: 100 }), // e.g. "Canapes", "Entree", "Main", "Dessert"
+  dishName: varchar("dishName", { length: 255 }).notNull(),
+  description: text("description"),
+  qty: int("qty").default(1).notNull(),
+  dietary: varchar("dietary", { length: 255 }), // e.g. "GF:10, V:5, VG:3"
+  serviceTime: varchar("serviceTime", { length: 10 }), // e.g. "18:30"
+  prepNotes: text("prepNotes"),
+  platingNotes: text("platingNotes"),
+  staffAssigned: varchar("staffAssigned", { length: 255 }),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type FnbItem = typeof fnbItems.$inferSelect;
+export type InsertFnbItem = typeof fnbItems.$inferInsert;
+
+// ─── Analytics Goals ──────────────────────────────────────────────────────────
+export const analyticsGoals = mysqlTable("analytics_goals", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("ownerId").notNull(),
+  year: int("year").notNull(),
+  month: int("month").notNull(), // 1-12, or 0 for annual goal
+  targetRevenue: decimal("targetRevenue", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AnalyticsGoal = typeof analyticsGoals.$inferSelect;

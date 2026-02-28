@@ -1423,6 +1423,315 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Payments ──────────────────────────────────────────────────────────────
+  payments: router({
+    list: protectedProcedure
+      .input(z.object({ bookingId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { payments } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(payments)
+          .where(and(eq(payments.bookingId, input.bookingId), eq(payments.ownerId, ctx.user.id)))
+          .orderBy(payments.paidAt);
+      }),
+    add: protectedProcedure
+      .input(z.object({
+        bookingId: z.number(),
+        amount: z.number().positive(),
+        type: z.enum(['deposit', 'final', 'partial', 'refund', 'other']).default('deposit'),
+        method: z.enum(['bank_transfer', 'cash', 'credit_card', 'eftpos', 'other']).default('bank_transfer'),
+        paidAt: z.string(), // ISO date string
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { payments } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [result] = await db.insert(payments).values({
+          bookingId: input.bookingId,
+          ownerId: ctx.user.id,
+          amount: String(input.amount),
+          type: input.type,
+          method: input.method,
+          paidAt: new Date(input.paidAt),
+          notes: input.notes,
+        });
+        return { id: (result as any).insertId, success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { payments } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(payments).where(and(eq(payments.id, input.id), eq(payments.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    summary: protectedProcedure
+      .input(z.object({ bookingId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { payments, bookings } = await import('../drizzle/schema');
+        const { eq, and, sum } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { totalPaid: 0, outstanding: 0, status: 'unpaid' as const };
+        const [booking] = await db.select().from(bookings)
+          .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
+        if (!booking) return { totalPaid: 0, outstanding: 0, status: 'unpaid' as const };
+        const pmts = await db.select().from(payments)
+          .where(and(eq(payments.bookingId, input.bookingId), eq(payments.ownerId, ctx.user.id)));
+        const totalPaid = pmts.filter(p => p.type !== 'refund').reduce((s, p) => s + Number(p.amount), 0);
+        const refunds = pmts.filter(p => p.type === 'refund').reduce((s, p) => s + Number(p.amount), 0);
+        const netPaid = totalPaid - refunds;
+        const total = Number(booking.totalNzd ?? 0);
+        const outstanding = Math.max(0, total - netPaid);
+        const status = netPaid <= 0 ? 'unpaid' : outstanding <= 0 ? 'paid_in_full' : netPaid >= Number(booking.depositNzd ?? 0) ? 'deposit_paid' : 'partial';
+        return { totalPaid: netPaid, outstanding, status, total };
+      }),
+  }),
+
+  // ─── F&B Items (FOH / Kitchen) ────────────────────────────────────────────
+  fnb: router({
+    list: protectedProcedure
+      .input(z.object({ runsheetId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { fnbItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(fnbItems)
+          .where(and(eq(fnbItems.runsheetId, input.runsheetId), eq(fnbItems.ownerId, ctx.user.id)))
+          .orderBy(fnbItems.sortOrder, fnbItems.serviceTime);
+      }),
+    save: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        items: z.array(z.object({
+          id: z.number().optional(),
+          section: z.enum(['foh', 'kitchen']),
+          course: z.string().optional(),
+          dishName: z.string(),
+          description: z.string().optional(),
+          qty: z.number().int().default(1),
+          dietary: z.string().optional(),
+          serviceTime: z.string().optional(),
+          prepNotes: z.string().optional(),
+          platingNotes: z.string().optional(),
+          staffAssigned: z.string().optional(),
+          sortOrder: z.number().int().default(0),
+        })),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { fnbItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        // Delete all existing items for this runsheet owned by user, then re-insert
+        await db.delete(fnbItems).where(and(eq(fnbItems.runsheetId, input.runsheetId), eq(fnbItems.ownerId, ctx.user.id)));
+        if (input.items.length > 0) {
+          await db.insert(fnbItems).values(input.items.map((item, idx) => ({
+            runsheetId: input.runsheetId,
+            ownerId: ctx.user.id,
+            section: item.section,
+            course: item.course,
+            dishName: item.dishName,
+            description: item.description,
+            qty: item.qty,
+            dietary: item.dietary,
+            serviceTime: item.serviceTime,
+            prepNotes: item.prepNotes,
+            platingNotes: item.platingNotes,
+            staffAssigned: item.staffAssigned,
+            sortOrder: item.sortOrder ?? idx,
+          })));
+        }
+        return { success: true };
+      }),
+  }),
+
+  // ─── Analytics ────────────────────────────────────────────────────────────
+  analytics: router({
+    revenueByMonth: protectedProcedure
+      .input(z.object({ year: z.number().int() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and, gte, lt } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const start = new Date(input.year, 0, 1);
+        const end = new Date(input.year + 1, 0, 1);
+        const rows = await db.select().from(bookings)
+          .where(and(eq(bookings.ownerId, ctx.user.id), gte(bookings.eventDate, start), lt(bookings.eventDate, end)));
+        const byMonth = Array.from({ length: 12 }, (_, i) => ({
+          month: i + 1,
+          label: new Date(input.year, i, 1).toLocaleString('en-NZ', { month: 'short' }),
+          revenue: 0,
+          count: 0,
+        }));
+        for (const b of rows) {
+          if (b.status === 'cancelled') continue;
+          const m = new Date(b.eventDate).getMonth();
+          byMonth[m].revenue += Number(b.totalNzd ?? 0);
+          byMonth[m].count += 1;
+        }
+        return byMonth;
+      }),
+    pipeline: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { leads, proposals, bookings } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return { enquiries: 0, proposals: 0, confirmed: 0, pipeline: 0, confirmed_revenue: 0 };
+      const allLeads = await db.select().from(leads).where(eq(leads.ownerId, ctx.user.id));
+      const allProposals = await db.select().from(proposals).where(eq(proposals.ownerId, ctx.user.id));
+      const allBookings = await db.select().from(bookings).where(eq(bookings.ownerId, ctx.user.id));
+      const confirmedRevenue = allBookings.filter(b => b.status !== 'cancelled').reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);
+      const pipelineRevenue = allProposals.filter(p => p.status === 'sent' || p.status === 'viewed').reduce((s, p) => s + Number(p.totalNzd ?? 0), 0);
+      return {
+        enquiries: allLeads.length,
+        proposals: allProposals.filter(p => ['sent','viewed'].includes(p.status)).length,
+        confirmed: allBookings.filter(b => b.status !== 'cancelled').length,
+        pipeline: pipelineRevenue,
+        confirmed_revenue: confirmedRevenue,
+      };
+    }),
+    topEventTypes: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { bookings } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db.select().from(bookings).where(eq(bookings.ownerId, ctx.user.id));
+      const map: Record<string, { count: number; revenue: number }> = {};
+      for (const b of rows) {
+        if (b.status === 'cancelled') continue;
+        const k = b.eventType ?? 'Other';
+        if (!map[k]) map[k] = { count: 0, revenue: 0 };
+        map[k].count += 1;
+        map[k].revenue += Number(b.totalNzd ?? 0);
+      }
+      return Object.entries(map).map(([type, v]) => ({ type, ...v })).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
+    }),
+    setGoal: protectedProcedure
+      .input(z.object({ year: z.number().int(), month: z.number().int().min(0).max(12), targetRevenue: z.number().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { analyticsGoals } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const existing = await db.select().from(analyticsGoals)
+          .where(and(eq(analyticsGoals.ownerId, ctx.user.id), eq(analyticsGoals.year, input.year), eq(analyticsGoals.month, input.month)));
+        if (existing.length > 0) {
+          await db.update(analyticsGoals).set({ targetRevenue: String(input.targetRevenue) })
+            .where(and(eq(analyticsGoals.ownerId, ctx.user.id), eq(analyticsGoals.year, input.year), eq(analyticsGoals.month, input.month)));
+        } else {
+          await db.insert(analyticsGoals).values({ ownerId: ctx.user.id, year: input.year, month: input.month, targetRevenue: String(input.targetRevenue) });
+        }
+        return { success: true };
+      }),
+    getGoals: protectedProcedure
+      .input(z.object({ year: z.number().int() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { analyticsGoals } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(analyticsGoals)
+          .where(and(eq(analyticsGoals.ownerId, ctx.user.id), eq(analyticsGoals.year, input.year)));
+      }),
+  }),
+
+  // ─── Express Book (public enquiry form with availability) ─────────────────
+  expressBook: router({
+    checkAvailability: publicProcedure
+      .input(z.object({ date: z.string(), ownerId: z.number() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and, gte, lt } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { available: true, bookedSpaces: [] };
+        const day = new Date(input.date);
+        const nextDay = new Date(day);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const dayBookings = await db.select().from(bookings)
+          .where(and(eq(bookings.ownerId, input.ownerId), gte(bookings.eventDate, day), lt(bookings.eventDate, nextDay)));
+        const bookedSpaces = dayBookings.filter(b => b.status !== 'cancelled').map(b => b.spaceName).filter(Boolean);
+        return { available: bookedSpaces.length === 0, bookedSpaces };
+      }),
+    getVenueInfo: publicProcedure
+      .input(z.object({ ownerId: z.number() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings, eventSpaces, menuPackages } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [venue] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId));
+        const spaces = await db.select().from(eventSpaces).where(eq(eventSpaces.ownerId, input.ownerId));
+        const packages = await db.select().from(menuPackages).where(eq(menuPackages.ownerId, input.ownerId));
+        return { venue, spaces, packages };
+      }),
+    submit: publicProcedure
+      .input(z.object({
+        ownerId: z.number(),
+        firstName: z.string().min(1),
+        lastName: z.string().optional(),
+        email: z.string().email(),
+        phone: z.string().optional(),
+        eventType: z.string().min(1),
+        eventDate: z.string(),
+        guestCount: z.number().int().positive(),
+        spaceName: z.string().optional(),
+        selectedPackageIds: z.array(z.number()).optional(),
+        dietaryNotes: z.string().optional(),
+        budget: z.string().optional(),
+        notes: z.string().optional(),
+        origin: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { leads } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [result] = await db.insert(leads).values({
+          ownerId: input.ownerId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone,
+          eventType: input.eventType,
+          eventDate: input.eventDate ? new Date(input.eventDate) : undefined,
+          guestCount: input.guestCount,
+          budget: input.budget,
+          message: (input.dietaryNotes ? `Dietary: ${input.dietaryNotes}\n` : '') + (input.notes ?? ''),
+          internalNotes: input.spaceName ? `Space preference: ${input.spaceName}` : undefined,
+          status: 'new',
+          source: 'express_book',
+        });
+        // Notify owner
+        try {
+          const { notifyOwner } = await import('./_core/notification');
+          await notifyOwner({
+            title: `New Express Book Request — ${input.firstName} ${input.lastName ?? ''}`,
+            content: `${input.eventType} on ${input.eventDate} for ${input.guestCount} guests. Email: ${input.email}`,
+          });
+        } catch {}
+        return { success: true, leadId: (result as any).insertId };
+      }),
+  }),
+
   // ─── Dashboard ─────────────────────────────────────────────────────────────
   dashboard: router({
     stats: protectedProcedure.query(async ({ ctx }) => {

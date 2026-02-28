@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
-  ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send
+  ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
+  BarChart2, DollarSign
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -364,10 +365,25 @@ export default function Dashboard() {
               <span className="hidden md:block">{item.label}</span>
             </button>
           ))}
-          <div className="mt-auto p-3 hidden md:block">
+          <div className="mt-auto p-3 hidden md:block space-y-1.5">
+            <Link href="/analytics">
+              <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
+                <BarChart2 className="w-3 h-3" /> ANALYTICS
+              </button>
+            </Link>
+            <Link href="/payments">
+              <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
+                <DollarSign className="w-3 h-3" /> PAYMENTS
+              </button>
+            </Link>
+            <Link href="/book">
+              <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
+                <ExternalLink className="w-3 h-3" /> EXPRESS BOOK
+              </button>
+            </Link>
             <Link href="/enquire">
               <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
-                <ExternalLink className="w-3 h-3" /> VIEW LEAD FORM
+                <ExternalLink className="w-3 h-3" /> LEAD FORM
               </button>
             </Link>
           </div>

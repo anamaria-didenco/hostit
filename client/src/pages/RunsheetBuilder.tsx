@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
+  UtensilsCrossed, ChefHat,
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
@@ -59,6 +60,22 @@ type Item = {
 };
 
 type Dietary = { name: string; count: number; notes?: string };
+type FnbItem = {
+  id?: number;
+  section: 'foh' | 'kitchen';
+  course?: string;
+  dishName: string;
+  description?: string;
+  qty: number;
+  dietary?: string;
+  serviceTime?: string;
+  prepNotes?: string;
+  platingNotes?: string;
+  staffAssigned?: string;
+  sortOrder: number;
+  _tempId?: string;
+};
+const COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Other'];
 
 export default function RunsheetBuilder() {
   const [, navigate] = useLocation();
@@ -88,6 +105,15 @@ export default function RunsheetBuilder() {
   const [newDietary, setNewDietary] = useState({ name: "", count: "1", notes: "" });
   const [dietarySectionOpen, setDietarySectionOpen] = useState(true);
 
+  // F&B
+  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb'>('timeline');
+  const [fnbSection, setFnbSection] = useState<'foh' | 'kitchen'>('foh');
+  const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
+  const [fnbSaving, setFnbSaving] = useState(false);
+  const [newFnbItem, setNewFnbItem] = useState<Partial<FnbItem>>({
+    section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '',
+  });
+
   // Venue setup
   const [venueSetup, setVenueSetup] = useState("");
   const [setupSectionOpen, setSetupSectionOpen] = useState(true);
@@ -95,6 +121,72 @@ export default function RunsheetBuilder() {
   // Proposal link
   const [linkedProposalId, setLinkedProposalId] = useState<number | undefined>(proposalIdParam);
   const [proposalSectionOpen, setProposalSectionOpen] = useState(true);
+
+  // F&B mutations
+  const saveFnbMutation = trpc.fnb.save.useMutation({
+    onSuccess: () => toast.success('F&B sheet saved'),
+    onError: () => toast.error('Failed to save F&B sheet'),
+  });
+  const { data: existingFnb, refetch: refetchFnb } = trpc.fnb.list.useQuery(
+    { runsheetId: sheetId! },
+    { enabled: !!sheetId }
+  );
+  useEffect(() => {
+    if (existingFnb) {
+      setFnbItems(existingFnb.map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
+    }
+  }, [existingFnb]);
+
+  async function saveFnb() {
+    if (!sheetId) { toast.error('Save the runsheet first'); return; }
+    setFnbSaving(true);
+    try {
+      await saveFnbMutation.mutateAsync({
+        runsheetId: sheetId,
+        items: fnbItems.map((item, i) => ({
+          section: item.section,
+          course: item.course,
+          dishName: item.dishName,
+          description: item.description,
+          qty: item.qty ?? 1,
+          dietary: item.dietary,
+          serviceTime: item.serviceTime,
+          prepNotes: item.prepNotes,
+          platingNotes: item.platingNotes,
+          staffAssigned: item.staffAssigned,
+          sortOrder: i,
+        })),
+      });
+      await refetchFnb();
+    } finally {
+      setFnbSaving(false);
+    }
+  }
+
+  function addFnbItem() {
+    if (!newFnbItem.dishName?.trim()) { toast.error('Enter a dish name'); return; }
+    const item: FnbItem = {
+      section: (newFnbItem.section ?? 'foh') as 'foh' | 'kitchen',
+      course: newFnbItem.course,
+      dishName: newFnbItem.dishName.trim(),
+      qty: newFnbItem.qty ?? 1,
+      dietary: newFnbItem.dietary,
+      serviceTime: newFnbItem.serviceTime,
+      staffAssigned: newFnbItem.staffAssigned,
+      sortOrder: fnbItems.length,
+      _tempId: String(Date.now()),
+    };
+    setFnbItems(prev => [...prev, item]);
+    setNewFnbItem({ section: fnbSection, course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '' });
+  }
+
+  function updateFnbItem(idx: number, field: keyof FnbItem, value: any) {
+    setFnbItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+  }
+
+  function removeFnbItem(idx: number) {
+    setFnbItems(prev => prev.filter((_, i) => i !== idx));
+  }
 
   // Queries
   const { data: existing } = trpc.runsheets.get.useQuery({ id: sheetId! }, { enabled: !!sheetId });
@@ -713,7 +805,277 @@ export default function RunsheetBuilder() {
           )}
         </div>
 
+        {/* ── Main Tab Navigation ─────────────────────────────────────────── */}
+        <div className="no-print flex border-b-2 border-border gap-0 mb-0">
+          <button
+            onClick={() => setActiveMainTab('timeline')}
+            className={`flex items-center gap-2 px-5 py-2.5 font-bebas tracking-widest text-sm border-b-2 transition-colors ${
+              activeMainTab === 'timeline'
+                ? 'border-burgundy text-burgundy bg-white'
+                : 'border-transparent text-ink/50 hover:text-ink hover:bg-cream'
+            }`}
+          >
+            <Clock className="w-4 h-4" /> TIMELINE
+          </button>
+          <button
+            onClick={() => setActiveMainTab('fnb')}
+            className={`flex items-center gap-2 px-5 py-2.5 font-bebas tracking-widest text-sm border-b-2 transition-colors ${
+              activeMainTab === 'fnb'
+                ? 'border-amber text-amber bg-white'
+                : 'border-transparent text-ink/50 hover:text-ink hover:bg-cream'
+            }`}
+          >
+            <UtensilsCrossed className="w-4 h-4" /> F&amp;B SHEET
+            {fnbItems.length > 0 && (
+              <span className="bg-amber text-ink text-xs font-bebas px-1.5 py-0.5 rounded-sm">{fnbItems.length}</span>
+            )}
+          </button>
+        </div>
+
+        {/* ── F&B Sheet ────────────────────────────────────────────────────── */}
+        {activeMainTab === 'fnb' && (
+          <div className="space-y-4">
+            {/* FOH / Kitchen toggle */}
+            <div className="flex items-center justify-between">
+              <div className="flex gap-0 border-2 border-border">
+                <button
+                  onClick={() => { setFnbSection('foh'); setNewFnbItem(p => ({ ...p, section: 'foh' })); }}
+                  className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors ${
+                    fnbSection === 'foh' ? 'bg-amber text-ink' : 'text-ink/50 hover:bg-cream'
+                  }`}
+                >
+                  <UtensilsCrossed className="w-3.5 h-3.5" /> FOH SHEET
+                  <span className="ml-1 text-xs">
+                    ({fnbItems.filter(i => i.section === 'foh').length})
+                  </span>
+                </button>
+                <button
+                  onClick={() => { setFnbSection('kitchen'); setNewFnbItem(p => ({ ...p, section: 'kitchen' })); }}
+                  className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors ${
+                    fnbSection === 'kitchen' ? 'bg-burgundy text-cream' : 'text-ink/50 hover:bg-cream'
+                  }`}
+                >
+                  <ChefHat className="w-3.5 h-3.5" /> KITCHEN SHEET
+                  <span className="ml-1 text-xs">
+                    ({fnbItems.filter(i => i.section === 'kitchen').length})
+                  </span>
+                </button>
+              </div>
+              <Button
+                onClick={saveFnb}
+                disabled={fnbSaving}
+                className="bg-amber hover:bg-amber/90 text-ink font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5 no-print"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {fnbSaving ? 'SAVING...' : 'SAVE F&B'}
+              </Button>
+            </div>
+
+            {/* Add new item form */}
+            <div className="bg-white border-2 border-border p-4 space-y-3 no-print">
+              <div className="font-bebas tracking-widest text-xs text-ink/50 mb-2">
+                ADD {fnbSection === 'foh' ? 'FOH' : 'KITCHEN'} ITEM
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">COURSE</label>
+                  <select
+                    value={newFnbItem.course ?? 'Canapes'}
+                    onChange={e => setNewFnbItem(p => ({ ...p, course: e.target.value }))}
+                    className="w-full border-2 border-border rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy bg-white"
+                  >
+                    {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">DISH NAME *</label>
+                  <Input
+                    value={newFnbItem.dishName ?? ''}
+                    onChange={e => setNewFnbItem(p => ({ ...p, dishName: e.target.value }))}
+                    placeholder="e.g. Beef Wellington"
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                    onKeyDown={e => e.key === 'Enter' && addFnbItem()}
+                  />
+                </div>
+                <div>
+                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">QTY</label>
+                  <Input
+                    type="number" min={1}
+                    value={newFnbItem.qty ?? 1}
+                    onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">SERVICE TIME</label>
+                  <Input
+                    type="time"
+                    value={newFnbItem.serviceTime ?? ''}
+                    onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">DIETARY</label>
+                  <Input
+                    value={newFnbItem.dietary ?? ''}
+                    onChange={e => setNewFnbItem(p => ({ ...p, dietary: e.target.value }))}
+                    placeholder="GF, VG, DF..."
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                  />
+                </div>
+                {fnbSection === 'foh' && (
+                  <div>
+                    <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">STAFF ASSIGNED</label>
+                    <Input
+                      value={newFnbItem.staffAssigned ?? ''}
+                      onChange={e => setNewFnbItem(p => ({ ...p, staffAssigned: e.target.value }))}
+                      placeholder="Name or section..."
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+              <Button
+                onClick={addFnbItem}
+                className="bg-ink hover:bg-ink/90 text-cream font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> ADD TO {fnbSection === 'foh' ? 'FOH' : 'KITCHEN'} SHEET
+              </Button>
+            </div>
+
+            {/* F&B items table */}
+            {fnbItems.filter(i => i.section === fnbSection).length === 0 ? (
+              <div className="text-center py-12 text-ink/30 font-dm text-sm border-2 border-dashed border-border">
+                No {fnbSection === 'foh' ? 'FOH' : 'kitchen'} items yet. Add dishes above.
+              </div>
+            ) : (
+              <div className="border-2 border-border">
+                {/* Header */}
+                <div className={`grid gap-2 px-4 py-2 text-xs font-bebas tracking-widest text-cream ${
+                  fnbSection === 'foh' ? 'bg-amber/90' : 'bg-burgundy'
+                } ${
+                  fnbSection === 'foh'
+                    ? 'grid-cols-[80px_1fr_60px_80px_100px_80px_32px]'
+                    : 'grid-cols-[80px_1fr_60px_80px_1fr_1fr_32px]'
+                }`}>
+                  <div>COURSE</div>
+                  <div>DISH</div>
+                  <div>QTY</div>
+                  <div>TIME</div>
+                  {fnbSection === 'foh' ? (
+                    <><div>DIETARY</div><div>STAFF</div></>
+                  ) : (
+                    <><div>PREP NOTES</div><div>PLATING</div></>
+                  )}
+                  <div className="no-print"></div>
+                </div>
+                {/* Group by course */}
+                {COURSES.filter(course =>
+                  fnbItems.some(i => i.section === fnbSection && (i.course ?? 'Other') === course)
+                ).map(course => (
+                  <div key={course}>
+                    <div className={`px-4 py-1.5 font-bebas tracking-widest text-xs ${
+                      fnbSection === 'foh' ? 'bg-amber/10 text-amber/80' : 'bg-burgundy/10 text-burgundy'
+                    }`}>
+                      {course}
+                    </div>
+                    {fnbItems
+                      .map((item, originalIdx) => ({ item, originalIdx }))
+                      .filter(({ item }) => item.section === fnbSection && (item.course ?? 'Other') === course)
+                      .map(({ item, originalIdx }) => (
+                        <div
+                          key={item._tempId ?? originalIdx}
+                          className={`grid gap-2 px-4 py-2 items-center border-t border-border text-sm font-dm hover:bg-cream/50 ${
+                            fnbSection === 'foh'
+                              ? 'grid-cols-[80px_1fr_60px_80px_100px_80px_32px]'
+                              : 'grid-cols-[80px_1fr_60px_80px_1fr_1fr_32px]'
+                          }`}
+                        >
+                          <div className="text-xs text-ink/50">{item.course}</div>
+                          <div>
+                            <input
+                              value={item.dishName}
+                              onChange={e => updateFnbItem(originalIdx, 'dishName', e.target.value)}
+                              className="w-full font-dm text-sm text-ink bg-transparent border-0 focus:outline-none font-medium"
+                            />
+                            {item.description && <div className="text-xs text-ink/50">{item.description}</div>}
+                          </div>
+                          <div>
+                            <input
+                              type="number" min={1}
+                              value={item.qty}
+                              onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
+                              className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center"
+                            />
+                          </div>
+                          <div className="text-xs text-ink/60">{item.serviceTime}</div>
+                          {fnbSection === 'foh' ? (
+                            <>
+                              <div>
+                                {item.dietary && (
+                                  <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 font-bebas">{item.dietary}</span>
+                                )}
+                              </div>
+                              <div className="text-xs text-ink/60">{item.staffAssigned}</div>
+                            </>
+                          ) : (
+                            <>
+                              <div>
+                                <input
+                                  value={item.prepNotes ?? ''}
+                                  onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)}
+                                  placeholder="Prep notes..."
+                                  className="w-full font-dm text-xs text-ink bg-transparent border-0 focus:outline-none text-ink/70"
+                                />
+                              </div>
+                              <div>
+                                <input
+                                  value={item.platingNotes ?? ''}
+                                  onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)}
+                                  placeholder="Plating notes..."
+                                  className="w-full font-dm text-xs text-ink bg-transparent border-0 focus:outline-none text-ink/70"
+                                />
+                              </div>
+                            </>
+                          )}
+                          <div className="no-print">
+                            <button
+                              onClick={() => removeFnbItem(originalIdx)}
+                              className="text-ink/30 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Dietary summary for kitchen */}
+            {fnbSection === 'kitchen' && dietaries.length > 0 && (
+              <div className="bg-green-50 border border-green-200 p-4">
+                <div className="font-bebas tracking-widest text-sm text-green-700 mb-2">DIETARY SUMMARY</div>
+                <div className="flex flex-wrap gap-2">
+                  {dietaries.map((d, i) => (
+                    <div key={i} className="bg-white border border-green-200 px-3 py-1.5 text-sm font-dm">
+                      <span className="font-semibold">{d.count}×</span> {d.name}
+                      {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Timeline ────────────────────────────────────────────────────── */}
+        {activeMainTab === 'timeline' && (
+        <>
         <div className="space-y-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bebas tracking-widest text-ink/70 text-sm">TIMELINE</h2>
@@ -827,7 +1189,6 @@ export default function RunsheetBuilder() {
             );
           })}
         </div>
-
         {/* Notes */}
         <div>
           <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">GENERAL NOTES</label>
@@ -839,7 +1200,8 @@ export default function RunsheetBuilder() {
             className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy font-dm text-sm"
           />
         </div>
-
+        </>
+        )}
         {/* Print footer */}
         <div className="hidden print:block mt-8 pt-4 border-t border-ink/20 text-xs text-ink/40 font-dm text-center">
           Prepared by HOSTit — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}

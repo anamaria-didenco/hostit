@@ -12,6 +12,9 @@ import LeadForm from "./pages/LeadForm";
 import FloorPlanBuilder from "./pages/FloorPlanBuilder";
 import Checklist from "./pages/Checklist";
 import RunsheetBuilder from "./pages/RunsheetBuilder";
+import PaymentTracker from "./pages/PaymentTracker";
+import Analytics from "./pages/Analytics";
+import ExpressBook from "./pages/ExpressBook";
 
 function Router() {
   return (
@@ -28,6 +31,9 @@ function Router() {
       <Route path="/floor-plan" component={FloorPlanBuilder} />
       <Route path="/checklist" component={Checklist} />
       <Route path="/runsheet" component={RunsheetBuilder} />
+      <Route path="/payments" component={PaymentTracker} />
+      <Route path="/analytics" component={Analytics} />
+      <Route path="/book" component={ExpressBook} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
