@@ -329,3 +329,23 @@
 - [x] Express Book public enquiry form (/book) — availability check, space/menu selection, owner notification
 - [x] Analytics and Payments quick-links added to Dashboard sidebar
 - [x] Express Book link added to Dashboard sidebar
+
+## Phase 10: Event Management & UX Improvements
+
+- [ ] Calendar booking slide-out panel (event details, deposit status, quick-launch links)
+- [ ] Full F&B menu management (categories, items, packages with pricing per head)
+- [ ] Separate New Enquiries inbox (unread/unreplied leads auto-move once replied or booked)
+- [ ] Event Detail page (/event/:id) — full edit, generate runsheet/proposal/BEO, status management
+- [ ] Disable Express Book instant booking (replace with contact-only enquiry form)
+- [ ] Click event name on calendar to open Event Detail page
+
+## Phase 10: Event Management & Inbox Separation
+- [x] Calendar booking slide-out panel (event details, deposit status, quick-launch links)
+- [x] EventDetail page (/event/:id) — full edit form, generate runsheet/proposal buttons
+- [x] F&B Menu Management page (/menu) — packages, items, categories, portion sizes
+- [x] F&B Menu link added to Dashboard sidebar
+- [x] New Enquiries / All Leads sub-tab toggle in Leads Inbox
+- [x] Auto-move lead from New Enquiries to All Leads on email send
+- [x] Express Book confirmed as enquiry-only (no instant booking)
+- [x] bookings.getById and bookings.update tRPC procedures added
+- [x] menu.addItem, updateItem, deleteItem updated with category and portionSize fields

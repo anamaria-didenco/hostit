@@ -669,7 +669,60 @@ export const appRouter = router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return getBookings(ctx.user.id);
     }),
-
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const result = await db.select().from(bookings)
+          .where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)))
+          .limit(1);
+        return result[0] ?? null;
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+        email: z.string().optional(),
+        eventType: z.string().optional(),
+        eventDate: z.string().optional(),
+        eventEndDate: z.string().nullable().optional(),
+        guestCount: z.number().nullable().optional(),
+        spaceName: z.string().nullable().optional(),
+        totalNzd: z.number().nullable().optional(),
+        depositNzd: z.number().nullable().optional(),
+        depositPaid: z.boolean().optional(),
+        status: z.enum(['confirmed', 'tentative', 'cancelled']).optional(),
+        notes: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        const updates: Record<string, unknown> = {};
+        if (rest.firstName !== undefined) updates.firstName = rest.firstName;
+        if (rest.lastName !== undefined) updates.lastName = rest.lastName;
+        if (rest.email !== undefined) updates.email = rest.email;
+        if (rest.eventType !== undefined) updates.eventType = rest.eventType;
+        if (rest.eventDate !== undefined) updates.eventDate = new Date(rest.eventDate);
+        if (rest.eventEndDate !== undefined) updates.eventEndDate = rest.eventEndDate ? new Date(rest.eventEndDate) : null;
+        if (rest.guestCount !== undefined) updates.guestCount = rest.guestCount;
+        if (rest.spaceName !== undefined) updates.spaceName = rest.spaceName;
+        if (rest.totalNzd !== undefined) updates.totalNzd = rest.totalNzd !== null ? String(rest.totalNzd) : null;
+        if (rest.depositNzd !== undefined) updates.depositNzd = rest.depositNzd !== null ? String(rest.depositNzd) : null;
+        if (rest.depositPaid !== undefined) updates.depositPaid = rest.depositPaid;
+        if (rest.status !== undefined) updates.status = rest.status;
+        if (rest.notes !== undefined) updates.notes = rest.notes;
+        await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
     byMonth: protectedProcedure
       .input(z.object({ year: z.number(), month: z.number() }))
       .query(async ({ input, ctx }) => {
@@ -770,6 +823,8 @@ export const appRouter = router({
         name: z.string().min(1),
         description: z.string().optional(),
         dietaryNotes: z.string().optional(),
+        category: z.string().optional(),
+        portionSize: z.string().optional(),
         sortOrder: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -783,6 +838,8 @@ export const appRouter = router({
           name: input.name,
           description: input.description ?? null,
           dietaryNotes: input.dietaryNotes ?? null,
+          category: input.category ?? null,
+          portionSize: input.portionSize ?? null,
           sortOrder: input.sortOrder ?? 0,
         });
         return { id: (result as any).insertId };
@@ -794,6 +851,8 @@ export const appRouter = router({
         name: z.string().min(1).optional(),
         description: z.string().optional(),
         dietaryNotes: z.string().optional(),
+        category: z.string().optional(),
+        portionSize: z.string().optional(),
         sortOrder: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -806,6 +865,8 @@ export const appRouter = router({
         if (input.name !== undefined) updates.name = input.name;
         if (input.description !== undefined) updates.description = input.description;
         if (input.dietaryNotes !== undefined) updates.dietaryNotes = input.dietaryNotes;
+        if (input.category !== undefined) updates.category = input.category;
+        if (input.portionSize !== undefined) updates.portionSize = input.portionSize;
         if (input.sortOrder !== undefined) updates.sortOrder = input.sortOrder;
         await db.update(menuItems).set(updates).where(and(eq(menuItems.id, input.id), eq(menuItems.ownerId, ctx.user.id)));
         return { success: true };

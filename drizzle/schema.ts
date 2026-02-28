@@ -221,6 +221,8 @@ export const menuItems = mysqlTable("menu_items", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   dietaryNotes: varchar("dietaryNotes", { length: 255 }),
+  category: varchar("category", { length: 100 }),
+  portionSize: varchar("portionSize", { length: 100 }),
   sortOrder: int("sortOrder").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

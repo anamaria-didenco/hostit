@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
-  BarChart2, DollarSign
+  BarChart2, DollarSign, X, MapPin, LayoutGrid
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -101,6 +101,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState<"overview"|"leads"|"pipeline"|"calendar"|"contacts"|"menu"|"settings">("overview");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
+  const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
@@ -108,6 +109,7 @@ export default function Dashboard() {
   const [calDate, setCalDate] = useState(new Date());
   const [showAddSpace, setShowAddSpace] = useState(false);
   const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
 
   const utils = trpc.useUtils();
 
@@ -254,7 +256,10 @@ export default function Dashboard() {
     }
   }, [venueSettings]);
 
-  const filteredLeads = (allLeads ?? []).filter(l =>
+  const newEnquiries = (allLeads ?? []).filter((l: any) => l.status === "new");
+  const repliedLeads = (allLeads ?? []).filter((l: any) => l.status !== "new");
+  const leadsToShow = leadsSubTab === "new" ? newEnquiries : repliedLeads;
+  const filteredLeads = leadsToShow.filter((l: any) =>
     !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
   );
 
@@ -379,6 +384,11 @@ export default function Dashboard() {
             <Link href="/book">
               <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
                 <ExternalLink className="w-3 h-3" /> EXPRESS BOOK
+              </button>
+            </Link>
+            <Link href="/menu">
+              <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1">
+                <UtensilsCrossed className="w-3 h-3" /> F&B MENU
               </button>
             </Link>
             <Link href="/enquire">
@@ -506,8 +516,33 @@ export default function Dashboard() {
               {/* Lead List */}
               <div className={`${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-gold/15 bg-warm-white flex-shrink-0`}>
                 <div className="p-4 border-b border-gold/15">
+                  {/* Sub-tab toggle */}
+                  <div className="flex mb-3 border border-gold/30">
+                    <button
+                      onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
+                      className={`flex-1 font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1.5 transition-colors ${
+                        leadsSubTab === "new" ? "bg-forest-dark text-cream" : "text-ink/60 hover:bg-gold/10"
+                      }`}>
+                      NEW ENQUIRIES
+                      {newEnquiries.length > 0 && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-dm font-semibold ${
+                          leadsSubTab === "new" ? "bg-gold text-forest-dark" : "bg-forest/20 text-forest"
+                        }`}>{newEnquiries.length}</span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
+                      className={`flex-1 font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1.5 transition-colors ${
+                        leadsSubTab === "all" ? "bg-forest-dark text-cream" : "text-ink/60 hover:bg-gold/10"
+                      }`}>
+                      ALL LEADS
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-dm font-semibold ${
+                        leadsSubTab === "all" ? "bg-gold text-forest-dark" : "bg-forest/20 text-forest"
+                      }`}>{repliedLeads.length}</span>
+                    </button>
+                  </div>
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className="font-cormorant text-2xl font-semibold text-ink">Leads Inbox</h2>
+                    <h2 className="font-cormorant text-2xl font-semibold text-ink">{leadsSubTab === "new" ? "New Enquiries" : "Leads"}</h2>
                     <button
                       onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
                       className={`font-bebas text-xs tracking-widest px-2.5 py-1 border transition-colors ${
@@ -1006,9 +1041,14 @@ export default function Dashboard() {
                 ) : (
                   <div className="space-y-2">
                     {(monthBookings ?? []).map((b: any) => (
-                      <div id={`booking-${b.id}`} key={b.id} className="dante-card p-4 flex items-center justify-between">
+                      <div id={`booking-${b.id}`} key={b.id} className="dante-card p-4 flex items-center justify-between hover:bg-gold/5 transition-colors cursor-pointer"
+                        onClick={() => setSelectedBooking(b)}>
                         <div>
-                          <div className="font-cormorant font-semibold text-base text-ink">{b.firstName} {b.lastName}</div>
+                          <button
+                            onClick={e => { e.stopPropagation(); setLocation(`/event/${b.id}`); }}
+                            className="font-cormorant font-semibold text-base text-ink hover:text-forest hover:underline text-left">
+                            {b.firstName} {b.lastName}
+                          </button>
                           <div className="font-dm text-xs text-ink/60">
                             {b.eventType || "Event"} · {new Date(b.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })}
                             {b.guestCount ? ` · ${b.guestCount} guests` : ""}
@@ -1022,11 +1062,18 @@ export default function Dashboard() {
                           <div className={`font-bebas text-xs tracking-widest ${b.depositPaid ? "text-emerald-600" : "text-gold"}`}>
                             {b.depositPaid ? "DEPOSIT PAID" : "DEPOSIT PENDING"}
                           </div>
-                          <button
-                            onClick={() => setLocation(`/runsheet?bookingId=${b.id}`)}
-                            className="font-bebas tracking-widest text-xs border border-burgundy/40 text-burgundy px-2 py-1 hover:bg-burgundy hover:text-cream transition-all flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> RUNSHEET
-                          </button>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={e => { e.stopPropagation(); setLocation(`/event/${b.id}`); }}
+                              className="font-bebas tracking-widest text-xs border border-forest/40 text-forest px-2 py-1 hover:bg-forest hover:text-cream transition-all flex items-center gap-1">
+                              OPEN
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); setLocation(`/runsheet?bookingId=${b.id}`); }}
+                              className="font-bebas tracking-widest text-xs border border-burgundy/40 text-burgundy px-2 py-1 hover:bg-burgundy hover:text-cream transition-all flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> RUNSHEET
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1097,6 +1144,129 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+          {/* ── BOOKING SLIDE-OUT PANEL ─────────────────────────────────────── */}
+          {selectedBooking && (
+            <div className="fixed inset-0 z-50 flex">
+              {/* Backdrop */}
+              <div className="flex-1 bg-black/40" onClick={() => setSelectedBooking(null)} />
+              {/* Drawer */}
+              <div className="w-full max-w-md bg-cream border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl">
+                {/* Header */}
+                <div className="bg-forest-dark px-5 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="font-bebas tracking-widest text-xs text-gold mb-0.5">EVENT DETAILS</div>
+                    <div className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</div>
+                  </div>
+                  <button onClick={() => setSelectedBooking(null)} className="text-cream/60 hover:text-cream">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                {/* Body */}
+                <div className="p-5 space-y-5 flex-1">
+                  {/* Status + Type */}
+                  <div className="flex items-center gap-2">
+                    <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${
+                      selectedBooking.status === 'confirmed' ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                      : selectedBooking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
+                      : 'text-stone-500 bg-stone-50 border-stone-200'
+                    }`}>{selectedBooking.status?.toUpperCase()}</span>
+                    {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60">{selectedBooking.eventType}</span>}
+                  </div>
+                  {/* Key Details */}
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-bebas text-xs tracking-widest text-ink/40">DATE</div>
+                        <div className="font-dm text-sm text-ink">
+                          {new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                        </div>
+                        {selectedBooking.eventEndDate && (
+                          <div className="font-dm text-xs text-ink/50">
+                            until {new Date(selectedBooking.eventEndDate).toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {selectedBooking.guestCount && (
+                      <div className="flex items-start gap-3">
+                        <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="font-bebas text-xs tracking-widest text-ink/40">GUESTS</div>
+                          <div className="font-dm text-sm text-ink">{selectedBooking.guestCount}</div>
+                        </div>
+                      </div>
+                    )}
+                    {selectedBooking.spaceName && (
+                      <div className="flex items-start gap-3">
+                        <MapPin className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="font-bebas text-xs tracking-widest text-ink/40">SPACE</div>
+                          <div className="font-dm text-sm text-ink">{selectedBooking.spaceName}</div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-start gap-3">
+                      <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-bebas text-xs tracking-widest text-ink/40">EMAIL</div>
+                        <div className="font-dm text-sm text-ink">{selectedBooking.email}</div>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Financials */}
+                  <div className="bg-forest-dark/5 border border-gold/20 p-4">
+                    <div className="font-bebas text-xs tracking-widest text-ink/40 mb-3">FINANCIALS</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="font-bebas text-xs tracking-widest text-ink/40">TOTAL</div>
+                        <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                      </div>
+                      <div>
+                        <div className="font-bebas text-xs tracking-widest text-ink/40">DEPOSIT</div>
+                        <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.depositNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    </div>
+                    <div className={`mt-2 font-bebas text-xs tracking-widest ${
+                      selectedBooking.depositPaid ? 'text-emerald-600' : 'text-amber-600'
+                    }`}>{selectedBooking.depositPaid ? '✓ DEPOSIT PAID' : '⚠ DEPOSIT PENDING'}</div>
+                  </div>
+                  {/* Quick Actions */}
+                  <div>
+                    <div className="font-bebas text-xs tracking-widest text-ink/40 mb-2">QUICK ACTIONS</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                        <FileText className="w-3 h-3 text-gold" /> OPEN EVENT
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                        <Clock className="w-3 h-3 text-gold" /> RUNSHEET
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <LayoutGrid className="w-3 h-3" /> FLOOR PLAN
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/checklist?bookingId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <CheckCircle className="w-3 h-3" /> CHECKLIST
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/payments?bookingId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs col-span-2">
+                        <DollarSign className="w-3 h-3" /> PAYMENTS
+                      </button>
+                    </div>
+                  </div>
+                  {selectedBooking.notes && (
+                    <div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">NOTES</div>
+                      <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap bg-cream border border-gold/20 p-3">{selectedBooking.notes}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
           {/* ── CONTACTS ─────────────────────────────────────────────────────── */}

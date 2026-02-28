@@ -15,6 +15,8 @@ import RunsheetBuilder from "./pages/RunsheetBuilder";
 import PaymentTracker from "./pages/PaymentTracker";
 import Analytics from "./pages/Analytics";
 import ExpressBook from "./pages/ExpressBook";
+import MenuManagement from "./pages/MenuManagement";
+import EventDetail from "./pages/EventDetail";
 
 function Router() {
   return (
@@ -34,6 +36,8 @@ function Router() {
       <Route path="/payments" component={PaymentTracker} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/book" component={ExpressBook} />
+      <Route path="/event/:id" component={EventDetail} />
+      <Route path="/menu" component={MenuManagement} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
