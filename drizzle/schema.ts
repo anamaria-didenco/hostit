@@ -281,3 +281,80 @@ export const proposalDrinks = mysqlTable("proposal_drinks", {
 });
 export type ProposalDrinks = typeof proposalDrinks.$inferSelect;
 export type InsertProposalDrinks = typeof proposalDrinks.$inferInsert;
+
+// ─── Quote Items ──────────────────────────────────────────────────────────────
+export const quoteItems = mysqlTable("quote_items", {
+  id: int("id").autoincrement().primaryKey(),
+  proposalId: int("proposalId").notNull(),
+  ownerId: int("ownerId").notNull(),
+  type: varchar("type", { length: 50 }).default("custom").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  qty: decimal("qty", { precision: 10, scale: 2 }).default("1").notNull(),
+  unitPrice: decimal("unitPrice", { precision: 10, scale: 2 }).default("0").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type QuoteItem = typeof quoteItems.$inferSelect;
+export type InsertQuoteItem = typeof quoteItems.$inferInsert;
+
+// ─── Quote Settings (per proposal) ───────────────────────────────────────────
+export const quoteSettings = mysqlTable("quote_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  proposalId: int("proposalId").notNull().unique(),
+  ownerId: int("ownerId").notNull(),
+  minimumSpend: decimal("minimumSpend", { precision: 10, scale: 2 }),
+  foodTotal: decimal("foodTotal", { precision: 10, scale: 2 }),
+  autoBarTab: boolean("autoBarTab").default(true).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type QuoteSettings = typeof quoteSettings.$inferSelect;
+
+// ─── Floor Plans ──────────────────────────────────────────────────────────────
+export const floorPlans = mysqlTable("floor_plans", {
+  id: int("id").autoincrement().primaryKey(),
+  bookingId: int("bookingId"),
+  ownerId: int("ownerId").notNull(),
+  name: varchar("name", { length: 255 }).default("Floor Plan").notNull(),
+  bgImageUrl: text("bgImageUrl"),
+  canvasData: json("canvasData").$type<{
+    width: number; height: number;
+    elements: Array<{
+      id: string; type: string; x: number; y: number;
+      width: number; height: number; rotation: number;
+      label?: string; color?: string;
+    }>;
+  }>(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type FloorPlan = typeof floorPlans.$inferSelect;
+
+// ─── Checklist Templates ──────────────────────────────────────────────────────
+export const checklistTemplates = mysqlTable("checklist_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("ownerId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  items: json("items").$type<Array<{ id: string; text: string; category?: string; required?: boolean }>>().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ChecklistTemplate = typeof checklistTemplates.$inferSelect;
+
+// ─── Checklist Instances (assigned to bookings) ───────────────────────────────
+export const checklistInstances = mysqlTable("checklist_instances", {
+  id: int("id").autoincrement().primaryKey(),
+  templateId: int("templateId"),
+  bookingId: int("bookingId"),
+  ownerId: int("ownerId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  items: json("items").$type<Array<{ id: string; text: string; category?: string; required?: boolean; checked: boolean; checkedAt?: string; notes?: string }>>().notNull(),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ChecklistInstance = typeof checklistInstances.$inferSelect;

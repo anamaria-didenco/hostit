@@ -209,3 +209,41 @@
 - [x] Replace all logo instances across Dashboard, Home, LeadForm, ProposalView, ProposalBuilder
 - [x] Rewrite Home.tsx with Manhattan Modern aesthetic
 - [x] 53 tests passing, 0 TypeScript errors
+
+## Drinks Selection in Proposal Builder
+- [ ] Add tRPC procedures: proposals.saveDrinks, proposals.getDrinks
+- [ ] Build drinks selection section in ProposalBuilder (bar option picker + menu checkboxes + custom drinks)
+- [ ] Display selected drinks on public ProposalView page
+- [ ] Write vitest tests for drinks procedures
+
+## Quote Section in Proposals
+- [ ] Add quoteItems table (id, proposalId, ownerId, type, name, description, qty, unitPrice, createdAt)
+- [ ] Add tRPC: proposals.saveQuote, proposals.getQuote, proposals.getQuoteByToken
+- [ ] Build Quote section in ProposalBuilder: min-spend input, food subtotal from line items, auto bar tab remainder
+- [ ] Add hire/styling line items (customisable name, qty, unit price)
+- [ ] Display quote section on public ProposalView page
+
+## 2D Floor Plan Builder
+- [ ] Add floorPlans table (id, bookingId, ownerId, name, bgImageUrl, canvasData JSON, createdAt)
+- [ ] Add tRPC: floorPlans.save, floorPlans.get, floorPlans.list, floorPlans.delete
+- [ ] Build drag-and-drop canvas UI with element palette (table-round, table-rect, chair, bar, stage, dance-floor, door, window)
+- [ ] Allow background image upload (existing floor plan underlay)
+- [ ] Link floor plan to a booking from the Bookings detail panel
+- [ ] Print/export floor plan as image
+
+## Staff Workflow Checklists
+- [ ] Add checklistTemplates table (id, ownerId, name, items JSON, createdAt)
+- [ ] Add checklistInstances table (id, templateId, bookingId, ownerId, items JSON, completedAt, createdAt)
+- [ ] Add tRPC: checklists.createTemplate, checklists.listTemplates, checklists.updateTemplate, checklists.deleteTemplate
+- [ ] Add tRPC: checklists.assignToBooking, checklists.getForBooking, checklists.updateInstance
+- [ ] Build checklist template manager in Settings tab
+- [ ] Build checklist instance view in Bookings detail panel (checkboxes, assign template)
+- [ ] Print view for checklist (clean printable layout)
+
+## Phase 7: HOSTit v5.0 — Completed This Session
+- [x] Quote section in ProposalBuilder: min-spend calculator, food subtotal, auto bar tab remainder, hire/styling line items
+- [x] 2D floor plan builder page (/floor-plan): drag-and-drop canvas, 11 element types, resize handles, print view, save/load
+- [x] Staff checklist templates in Settings: create/delete templates, one-per-line items
+- [x] Printable event checklist page (/checklist?bookingId=X): assign templates, toggle items, print view
+- [x] Fixed drinks selection test (saveDrinks returns success:true, getDrinks returns the saved record)
+- [x] 66 vitest tests passing, zero TypeScript errors

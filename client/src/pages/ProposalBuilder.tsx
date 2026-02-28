@@ -56,6 +56,130 @@ export default function ProposalBuilder() {
   const [selectedMenuPackageIds, setSelectedMenuPackageIds] = useState<number[]>([]);
   const [menuSectionOpen, setMenuSectionOpen] = useState(true);
 
+  // ── Drinks selection state ─────────────────────────────────────────────────
+  const [drinksSectionOpen, setDrinksSectionOpen] = useState(false);
+  const [barOption, setBarOption] = useState<"bar_tab" | "cash_bar" | "bar_tab_then_cash" | "unlimited">("cash_bar");
+  const [tabAmount, setTabAmount] = useState("");
+  const [selectedDrinks, setSelectedDrinks] = useState<string[]>([]);
+  const [customDrinks, setCustomDrinks] = useState<{ name: string; description?: string; price?: number }[]>([]);
+  const [newCustomDrink, setNewCustomDrink] = useState({ name: "", description: "", price: "" });
+
+  const DRINKS_MENU = [
+    { category: "Aperitivo", items: [
+      { key: "aperol_spritz", name: "Aperol Spritz", description: "Aperol, Prosecco, Soda", price: 20 },
+      { key: "campari_spritz", name: "Campari Spritz", description: "Campari, Prosecco, Soda", price: 20 },
+      { key: "limoncello_spritz", name: "Limoncello Spritz", description: "Limoncello, Prosecco, Soda", price: 20 },
+      { key: "hugo_spritz", name: "Hugo Spritz", description: "Elderflower, Prosecco, Soda", price: 20 },
+      { key: "classic_negroni", name: "Classic Negroni", description: "Campari, Rosso Vermouth, Gin", price: 24 },
+      { key: "negroni_sbagliato", name: "Negroni Sbagliato", description: "Campari, Rosso Vermouth, Prosecco", price: 23 },
+      { key: "cherry_negroni", name: "Cherry Negroni", description: "Campari, Amaro, Rosso Vermouth, Gin", price: 25 },
+      { key: "americano", name: "Americano", description: "Campari, Rosso Vermouth, Soda", price: 23 },
+    ]},
+    { category: "Vino Spumante", items: [
+      { key: "tallero_prosecco", name: "Tallero Prosecco Extra Dry", description: "Veneto", priceGlass: 17, priceBottle: 85 },
+      { key: "lambrusco", name: "Paltrinieri Lambrusco Di Soraba Radice", description: "Emiglia Romagna", priceBottle: 105 },
+    ]},
+    { category: "Vino Bianco", items: [
+      { key: "sauvignon_blanc", name: "Mezzacorona Castel Firmian Sauvignon Blanc", description: "Trentino", priceGlass: 17, priceBottle: 85 },
+      { key: "malvasia_chardonnay", name: "Fantini Primo Malvasia Chardonnay", description: "Abruzzo", priceGlass: 16, priceBottle: 80 },
+      { key: "pinot_grigio", name: "Vigneti Romio Pinot Grigio Rubione IGT", description: "Friuli", priceGlass: 16, priceBottle: 80 },
+      { key: "grillo", name: "Parthenium Grillo", description: "Sicilia", priceBottle: 85 },
+      { key: "pipoli_bianco", name: "Pipoli Bianco Basilicata IGT", description: "Basilicata", priceBottle: 90 },
+    ]},
+    { category: "Vino Rosato", items: [
+      { key: "rosato", name: "Fattoria Di Basciano Rosato", description: "Toscana", priceGlass: 17, priceBottle: 85 },
+    ]},
+    { category: "Vino Rosso", items: [
+      { key: "sangiovese_merlot", name: "Primo Sangiovese Merlot", description: "Puglia", priceGlass: 16, priceBottle: 80 },
+      { key: "chianti", name: "Renzo Masi Chianti Cornioletta", description: "Toscana", priceGlass: 17, priceBottle: 85 },
+      { key: "montepulciano", name: "Fantini Montepulciano", description: "Abruzzo", priceGlass: 17, priceBottle: 85 },
+      { key: "nebbiolo", name: "Ascheri Langhe Nebbiolo San Giacomo", description: "Piemonte", priceBottle: 110 },
+      { key: "barbaresco", name: "Fontanabianca Barbaresco DOCG", description: "Piemonte", priceBottle: 165 },
+    ]},
+    { category: "Birra", items: [
+      { key: "peroni_tap", name: "Peroni Tap", description: "Italia", price: 14 },
+      { key: "peroni_330", name: "Peroni 330ml", description: "Italia", price: 12 },
+      { key: "peroni_0", name: "Peroni 0%", description: "Italia", price: 12 },
+    ]},
+    { category: "Non Alcolico", items: [
+      { key: "ginger_ale", name: "Fever Tree Ginger Ale", price: 8 },
+      { key: "cola", name: "Fever Tree Cola", price: 8 },
+      { key: "blood_orange", name: "Fever Tree Italian Blood Orange", price: 8 },
+      { key: "lemonade", name: "Fever Tree Italian Lemonade", price: 8 },
+    ]},
+  ] as const;
+
+  const BAR_OPTIONS = [
+    { key: "bar_tab" as const, label: "Bar Tab", description: "Set a fixed dollar amount" },
+    { key: "cash_bar" as const, label: "Cash Bar", description: "Guests pay for their own drinks" },
+    { key: "bar_tab_then_cash" as const, label: "Bar Tab then Cash Bar", description: "Tab runs until set amount, then guests pay" },
+    { key: "unlimited" as const, label: "Unlimited Bar Tab", description: "Unlimited drinks for the event" },
+  ];
+
+  const toggleDrink = (key: string) => {
+    setSelectedDrinks(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  };
+  const addCustomDrink = () => {
+    if (!newCustomDrink.name.trim()) return;
+    setCustomDrinks(prev => [...prev, {
+      name: newCustomDrink.name.trim(),
+      description: newCustomDrink.description.trim() || undefined,
+      price: newCustomDrink.price ? parseFloat(newCustomDrink.price) : undefined,
+    }]);
+    setNewCustomDrink({ name: "", description: "", price: "" });
+  };
+  const removeCustomDrink = (i: number) => setCustomDrinks(prev => prev.filter((_, idx) => idx !== i));
+
+  const saveDrinks = trpc.proposals.saveDrinks.useMutation({
+    onSuccess: () => toast.success("Drinks selection saved!"),
+    onError: () => toast.error("Failed to save drinks selection"),
+  });
+  const handleSaveDrinks = () => {
+    if (!savedProposal) return toast.error("Save the proposal first, then save drinks.");
+    saveDrinks.mutate({
+      proposalId: savedProposal.id,
+      barOption,
+      tabAmount: tabAmount ? parseFloat(tabAmount) : undefined,
+      selectedDrinks: [...selectedDrinks],
+      customDrinks,
+    });
+  };
+
+  // ── Quote / Min-Spend state ───────────────────────────────────────────────
+  const [quoteSectionOpen, setQuoteSectionOpen] = useState(false);
+  const [minimumSpend, setMinimumSpend] = useState("");
+  const [foodTotalOverride, setFoodTotalOverride] = useState("");
+  const [autoBarTab, setAutoBarTab] = useState(true);
+  const [quoteNotes, setQuoteNotes] = useState("");
+  const [hireItems, setHireItems] = useState<{ name: string; description: string; qty: number; unitPrice: number }[]>([]);
+
+  const addHireItem = () => setHireItems(prev => [...prev, { name: "", description: "", qty: 1, unitPrice: 0 }]);
+  const updateHireItem = (i: number, field: string, value: string | number) =>
+    setHireItems(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
+  const removeHireItem = (i: number) => setHireItems(prev => prev.filter((_, idx) => idx !== i));
+
+  const saveQuote = trpc.quote.save.useMutation({
+    onSuccess: () => toast.success("Quote saved!"),
+    onError: () => toast.error("Failed to save quote"),
+  });
+  const handleSaveQuote = () => {
+    if (!savedProposal) return toast.error("Save the proposal first, then save the quote.");
+    saveQuote.mutate({
+      proposalId: savedProposal.id,
+      minimumSpend: minimumSpend ? parseFloat(minimumSpend) : undefined,
+      foodTotal: foodTotalOverride ? parseFloat(foodTotalOverride) : undefined,
+      autoBarTab,
+      notes: quoteNotes,
+      items: hireItems.map((item, i) => ({ type: 'hire', name: item.name, description: item.description, qty: item.qty, unitPrice: item.unitPrice, sortOrder: i })),
+    });
+  };
+
+  // Derived: auto bar tab amount (computed after subtotal is declared below)
+  const _lineSubtotal = () => lineItems.reduce((sum, item) => sum + item.total, 0);
+  const _foodBase = () => foodTotalOverride ? parseFloat(foodTotalOverride) : _lineSubtotal();
+  const _minSpendNum = () => minimumSpend ? parseFloat(minimumSpend) : 0;
+  const autoBarTabAmount = autoBarTab && _minSpendNum() > _foodBase() ? _minSpendNum() - _foodBase() : 0;
+
   const toggleMenuPackage = (id: number) => {
     setSelectedMenuPackageIds(prev =>
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
@@ -486,6 +610,285 @@ export default function ProposalBuilder() {
                 <span className="font-alfa text-lg text-ink">${deposit.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
+          </div>
+
+          {/* Drinks Selection */}
+          <div className="bg-cream-card border border-border shadow-sm">
+            <button
+              onClick={() => setDrinksSectionOpen(o => !o)}
+              className="w-full flex items-center justify-between p-5 hover:bg-black/5 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Wine className="w-4 h-4 text-tomato" />
+                <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">DRINKS SELECTION</h2>
+                {selectedDrinks.length > 0 && (
+                  <span className="bg-tomato text-white font-bebas text-xs px-2 py-0.5 tracking-widest">
+                    {selectedDrinks.length + customDrinks.length} SELECTED
+                  </span>
+                )}
+              </div>
+              {drinksSectionOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            </button>
+
+            {drinksSectionOpen && (
+              <div className="px-5 pb-5 space-y-5 border-t border-border">
+                {/* Bar Option */}
+                <div className="pt-4">
+                  <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">BAR ARRANGEMENT</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {BAR_OPTIONS.map(opt => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setBarOption(opt.key)}
+                        className={`p-3 border-2 text-left transition-colors ${
+                          barOption === opt.key
+                            ? 'border-tomato bg-tomato/5'
+                            : 'border-border hover:border-tomato/40'
+                        }`}
+                      >
+                        <div className="font-bebas text-xs tracking-widest text-ink">{opt.label}</div>
+                        <div className="font-dm text-xs text-muted-foreground mt-0.5">{opt.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                  {(barOption === 'bar_tab' || barOption === 'bar_tab_then_cash') && (
+                    <div className="mt-3 flex items-center gap-3">
+                      <label className="font-bebas text-xs tracking-widest text-muted-foreground">TAB AMOUNT (NZD)</label>
+                      <Input
+                        type="number"
+                        value={tabAmount}
+                        onChange={e => setTabAmount(e.target.value)}
+                        placeholder="e.g. 1500"
+                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm w-36"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Drinks Menu */}
+                {DRINKS_MENU.map(cat => (
+                  <div key={cat.category}>
+                    <div className="font-playfair italic text-sm text-tomato mb-2 border-b border-tomato/20 pb-1">{cat.category}</div>
+                    <div className="space-y-1.5">
+                      {cat.items.map((item: any) => (
+                        <label
+                          key={item.key}
+                          className={`flex items-start gap-3 p-2 cursor-pointer rounded-sm transition-colors ${
+                            selectedDrinks.includes(item.key) ? 'bg-tomato/5 border border-tomato/20' : 'hover:bg-black/5 border border-transparent'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedDrinks.includes(item.key)}
+                            onChange={() => toggleDrink(item.key)}
+                            className="mt-0.5 accent-[oklch(0.45_0.18_25)]"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-dm text-sm text-ink">{item.name}</div>
+                            {item.description && <div className="font-dm text-xs text-muted-foreground">{item.description}</div>}
+                          </div>
+                          <div className="font-dm text-xs text-muted-foreground shrink-0 text-right">
+                            {item.price ? `$${item.price}` : ''}
+                            {item.priceGlass ? `$${item.priceGlass}/glass` : ''}
+                            {item.priceBottle ? ` · $${item.priceBottle}/btl` : ''}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Custom Drinks */}
+                <div>
+                  <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">CUSTOM DRINKS</div>
+                  {customDrinks.map((d, i) => (
+                    <div key={i} className="flex items-center gap-2 mb-2 p-2 bg-amber/5 border border-amber/20">
+                      <div className="flex-1 min-w-0">
+                        <span className="font-dm text-sm text-ink">{d.name}</span>
+                        {d.description && <span className="font-dm text-xs text-muted-foreground ml-2">{d.description}</span>}
+                        {d.price && <span className="font-dm text-xs text-amber ml-2">${d.price}</span>}
+                      </div>
+                      <button onClick={() => removeCustomDrink(i)} className="text-muted-foreground/40 hover:text-tomato transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <Input
+                      value={newCustomDrink.name}
+                      onChange={e => setNewCustomDrink(p => ({ ...p, name: e.target.value }))}
+                      placeholder="Drink name"
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm"
+                    />
+                    <Input
+                      value={newCustomDrink.description}
+                      onChange={e => setNewCustomDrink(p => ({ ...p, description: e.target.value }))}
+                      placeholder="Description (optional)"
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        value={newCustomDrink.price}
+                        onChange={e => setNewCustomDrink(p => ({ ...p, price: e.target.value }))}
+                        placeholder="Price"
+                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm"
+                      />
+                      <Button size="sm" onClick={addCustomDrink} className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none px-3">
+                        <Plus className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save Drinks Button */}
+                <Button
+                  onClick={handleSaveDrinks}
+                  disabled={saveDrinks.isPending}
+                  className="w-full bg-ink hover:bg-ink/90 text-cream font-bebas tracking-widest rounded-none h-10 gap-2"
+                >
+                  <Wine className="w-4 h-4" />
+                  {saveDrinks.isPending ? "SAVING DRINKS..." : "SAVE DRINKS SELECTION"}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Quote / Min-Spend Calculator */}
+          <div className="bg-cream-card border border-border shadow-sm">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-5 text-left"
+              onClick={() => setQuoteSectionOpen(o => !o)}
+            >
+              <div className="flex items-center gap-3">
+                <span className="font-bebas text-xs tracking-widest text-muted-foreground">QUOTE &amp; MINIMUM SPEND</span>
+                {minimumSpend && (
+                  <span className="font-bebas text-xs tracking-widest bg-burgundy text-cream px-2 py-0.5">
+                    MIN ${parseFloat(minimumSpend).toLocaleString("en-NZ")}
+                  </span>
+                )}
+              </div>
+              {quoteSectionOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            </button>
+            {quoteSectionOpen && (
+              <div className="px-5 pb-5 space-y-5">
+                {/* Min Spend + Food Total */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">MINIMUM SPEND (NZD)</label>
+                    <Input
+                      type="number" min="0" placeholder="e.g. 5000"
+                      value={minimumSpend} onChange={e => setMinimumSpend(e.target.value)}
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">FOOD TOTAL OVERRIDE (NZD)</label>
+                    <Input
+                      type="number" min="0" placeholder={`Auto: $${_lineSubtotal().toLocaleString("en-NZ")}`}
+                      value={foodTotalOverride} onChange={e => setFoodTotalOverride(e.target.value)}
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                    />
+                    <p className="font-dm text-xs text-muted-foreground mt-1">Leave blank to use line items total</p>
+                  </div>
+                </div>
+
+                {/* Auto Bar Tab Toggle */}
+                <div className="flex items-center gap-3 p-3 bg-powder/30 border border-border">
+                  <input
+                    type="checkbox" id="autoBarTab"
+                    checked={autoBarTab} onChange={e => setAutoBarTab(e.target.checked)}
+                    className="w-4 h-4 accent-burgundy"
+                  />
+                  <label htmlFor="autoBarTab" className="font-dm text-sm cursor-pointer">
+                    Auto-calculate bar tab as remainder of minimum spend
+                  </label>
+                </div>
+
+                {/* Min Spend Breakdown */}
+                {minimumSpend && (
+                  <div className="bg-ink text-cream p-4 space-y-2">
+                    <div className="font-bebas text-xs tracking-widest text-amber mb-2">MINIMUM SPEND BREAKDOWN</div>
+                    <div className="flex justify-between font-dm text-sm">
+                      <span className="text-cream/60">Food &amp; Beverage</span>
+                      <span>${_foodBase().toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {hireItems.map((item, i) => (
+                      <div key={i} className="flex justify-between font-dm text-sm">
+                        <span className="text-cream/60">{item.name || `Hire Item ${i + 1}`}</span>
+                        <span>${(item.qty * item.unitPrice).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    ))}
+                    {autoBarTab && autoBarTabAmount > 0 && (
+                      <div className="flex justify-between font-dm text-sm text-amber">
+                        <span>Bar Tab (auto remainder)</span>
+                        <span>${autoBarTabAmount.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-cream/20 pt-2 flex justify-between font-bebas text-sm">
+                      <span>TOTAL vs MINIMUM SPEND</span>
+                      <span className={(_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount) >= parseFloat(minimumSpend) ? "text-green-400" : "text-red-400"}>
+                        ${(_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })} / ${parseFloat(minimumSpend).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Hire & Styling Items */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bebas text-xs tracking-widest text-muted-foreground">HIRE &amp; STYLING ITEMS</span>
+                    <button type="button" onClick={addHireItem}
+                      className="flex items-center gap-1 font-bebas text-xs tracking-widest text-burgundy hover:text-burgundy/70">
+                      <Plus className="w-3 h-3" /> ADD ITEM
+                    </button>
+                  </div>
+                  {hireItems.length === 0 && (
+                    <p className="font-dm text-xs text-muted-foreground italic">No hire items yet. Add styling, AV, linen, centrepieces, etc.</p>
+                  )}
+                  {hireItems.map((item, i) => (
+                    <div key={i} className="grid grid-cols-12 gap-2 mb-2 items-start">
+                      <div className="col-span-4">
+                        <Input placeholder="Item name" value={item.name} onChange={e => updateHireItem(i, 'name', e.target.value)}
+                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
+                      </div>
+                      <div className="col-span-3">
+                        <Input placeholder="Description" value={item.description} onChange={e => updateHireItem(i, 'description', e.target.value)}
+                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
+                      </div>
+                      <div className="col-span-2">
+                        <Input type="number" min="1" placeholder="Qty" value={item.qty} onChange={e => updateHireItem(i, 'qty', parseInt(e.target.value) || 1)}
+                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
+                      </div>
+                      <div className="col-span-2">
+                        <Input type="number" min="0" placeholder="Price" value={item.unitPrice} onChange={e => updateHireItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
+                      </div>
+                      <div className="col-span-1 flex justify-end">
+                        <button type="button" onClick={() => removeHireItem(i)}
+                          className="text-muted-foreground hover:text-destructive h-8 flex items-center">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quote Notes */}
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">QUOTE NOTES (shown to client)</label>
+                  <Textarea value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)}
+                    placeholder="Any additional notes about this quote..." rows={2}
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy resize-none text-sm font-dm" />
+                </div>
+
+                <Button onClick={handleSaveQuote} disabled={saveQuote.isPending}
+                  className="w-full bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest rounded-none h-10">
+                  {saveQuote.isPending ? "SAVING QUOTE..." : "SAVE QUOTE"}
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Terms */}

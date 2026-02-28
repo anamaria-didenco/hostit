@@ -9,6 +9,8 @@ import Dashboard from "./pages/Dashboard";
 import ProposalBuilder from "./pages/ProposalBuilder";
 import ProposalView from "./pages/ProposalView";
 import LeadForm from "./pages/LeadForm";
+import FloorPlanBuilder from "./pages/FloorPlanBuilder";
+import Checklist from "./pages/Checklist";
 
 function Router() {
   return (
@@ -22,6 +24,8 @@ function Router() {
       {/* Venue owner dashboard */}
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/proposals/new" component={ProposalBuilder} />
+      <Route path="/floor-plan" component={FloorPlanBuilder} />
+      <Route path="/checklist" component={Checklist} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

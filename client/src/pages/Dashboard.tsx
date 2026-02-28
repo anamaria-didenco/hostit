@@ -211,6 +211,19 @@ export default function Dashboard() {
     onError: () => toast.error("Failed to delete package"),
   });
 
+  // Checklist templates
+  const { data: checklistTemplates, refetch: refetchChecklistTemplates } = trpc.checklists.listTemplates.useQuery(undefined, { enabled: isAuthenticated });
+  const createChecklistTemplate = trpc.checklists.createTemplate.useMutation({
+    onSuccess: () => { refetchChecklistTemplates(); setShowChecklistForm(false); setChecklistForm({ name: "", description: "", items: "" }); toast.success("Checklist template saved!"); },
+    onError: () => toast.error("Failed to save checklist template"),
+  });
+  const deleteChecklistTemplate = trpc.checklists.deleteTemplate.useMutation({
+    onSuccess: () => { refetchChecklistTemplates(); toast.success("Template deleted"); },
+    onError: () => toast.error("Failed to delete template"),
+  });
+  const [showChecklistForm, setShowChecklistForm] = useState(false);
+  const [checklistForm, setChecklistForm] = useState({ name: "", description: "", items: "" });
+
   const [settingsForm, setSettingsForm] = useState<any>(null);
   useMemo(() => {
     if (venueSettings && !settingsForm) {
@@ -1386,6 +1399,86 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+              {/* Checklist Templates */}
+              <div className="mt-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-cormorant text-xl font-semibold text-ink">Staff Checklist Templates</h2>
+                  <button onClick={() => setShowChecklistForm(v => !v)}
+                    className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
+                    <Plus className="w-3 h-3" /> {showChecklistForm ? 'CANCEL' : 'NEW TEMPLATE'}
+                  </button>
+                </div>
+                <p className="font-dm text-xs text-sage mb-4">Create reusable event-day checklists. Assign them to bookings to generate event-specific task lists for your staff.</p>
+
+                {showChecklistForm && (
+                  <div className="dante-card p-5 mb-4 space-y-3">
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TEMPLATE NAME *</label>
+                      <Input required value={checklistForm.name} onChange={e => setChecklistForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="e.g. Wedding Reception Setup" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                    </div>
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+                      <Input value={checklistForm.description} onChange={e => setChecklistForm(f => ({ ...f, description: e.target.value }))}
+                        placeholder="Brief description of when to use this template" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                    </div>
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CHECKLIST ITEMS (one per line) *</label>
+                      <Textarea value={checklistForm.items} onChange={e => setChecklistForm(f => ({ ...f, items: e.target.value }))}
+                        placeholder={"Set up tables and chairs\nPrepare bar station\nCheck AV equipment\nBriefing with staff\nWelcome guests"}
+                        rows={6} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm font-dm" />
+                      <p className="font-dm text-xs text-sage mt-1">Each line becomes a separate checkbox item.</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (!checklistForm.name || !checklistForm.items.trim()) { toast.error('Name and items are required'); return; }
+                        const items = checklistForm.items.split('\n').map(s => s.trim()).filter(Boolean).map((text, i) => ({ id: String(i + 1), text }));
+                        createChecklistTemplate.mutate({ name: checklistForm.name, description: checklistForm.description || undefined, items });
+                      }}
+                      disabled={createChecklistTemplate.isPending}
+                      className="btn-forest font-bebas tracking-widest text-xs px-6 py-2 text-cream disabled:opacity-50">
+                      {createChecklistTemplate.isPending ? 'SAVING...' : 'SAVE TEMPLATE'}
+                    </button>
+                  </div>
+                )}
+
+                {(checklistTemplates ?? []).length === 0 && !showChecklistForm ? (
+                  <div className="border border-dashed border-gold/20 p-6 text-center">
+                    <p className="font-dm text-sage text-sm">No checklist templates yet. Create one to assign to bookings.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(checklistTemplates ?? []).map((t: any) => {
+                      const items = Array.isArray(t.items) ? t.items : [];
+                      return (
+                        <div key={t.id} className="dante-card p-4">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="font-cormorant font-semibold text-base text-ink">{t.name}</div>
+                              {t.description && <div className="font-dm text-xs text-ink/60 mt-0.5">{t.description}</div>}
+                              <div className="font-dm text-xs text-sage mt-1">{items.length} item{items.length !== 1 ? 's' : ''}</div>
+                              <div className="mt-2 space-y-1">
+                                {items.slice(0, 5).map((item: any, i: number) => (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <div className="w-3.5 h-3.5 border border-sage/40 flex-shrink-0" />
+                                    <span className="font-dm text-xs text-ink/70">{item.text}</span>
+                                  </div>
+                                ))}
+                                {items.length > 5 && <div className="font-dm text-xs text-sage">+{items.length - 5} more items...</div>}
+                              </div>
+                            </div>
+                            <button onClick={() => { if (confirm('Delete this template?')) deleteChecklistTemplate.mutate({ id: t.id }); }}
+                              className="text-sage hover:text-tomato transition-colors ml-4 flex-shrink-0">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Event Spaces */}
               <div className="mt-8">
                 <div className="flex items-center justify-between mb-4">

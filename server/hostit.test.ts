@@ -429,3 +429,192 @@ describe("bulk status update", () => {
     await caller.leads.delete({ id: lead.id });
   });
 });
+
+// ─── Drinks Selection Tests ───────────────────────────────────────────────────
+describe("drinks selection", () => {
+  it("proposals.saveDrinks > saves a drinks selection for a proposal", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const lead = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "DrinksTest", email: "drinks@test.com" });
+    const proposal = await caller.proposals.create({ leadId: lead.id, title: "Drinks Test Proposal", status: "draft" });
+    const result = await caller.proposals.saveDrinks({
+      proposalId: proposal.id,
+      barOption: "bar_tab",
+      tabAmount: 1500,
+      selectedDrinks: ["aperol_spritz", "classic_negroni", "tallero_prosecco"],
+      customDrinks: [{ name: "House Limoncello", description: "House made", price: 15 }],
+    });
+    expect(result).toBeDefined();
+    expect(result.success).toBe(true);
+    // Verify saved by fetching
+    const saved = await caller.proposals.getDrinks({ proposalId: proposal.id });
+    expect(saved).toBeDefined();
+    expect(saved?.barOption).toBe("bar_tab");
+    // Cleanup
+    await caller.leads.delete({ id: lead.id });
+  });
+
+  it("proposals.saveDrinks > requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.proposals.saveDrinks({
+      proposalId: 1,
+      barOption: "cash_bar",
+      selectedDrinks: [],
+      customDrinks: [],
+    })).rejects.toThrow();
+  });
+
+  it("proposals.saveDrinks > validates barOption enum", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.proposals.saveDrinks({
+      proposalId: 1,
+      barOption: "invalid_option" as any,
+      selectedDrinks: [],
+      customDrinks: [],
+    })).rejects.toThrow();
+  });
+
+  it("proposals.getDrinks > returns null for proposal with no drinks saved", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const lead = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "NoDrinks", email: "nodrinks@test.com" });
+    const proposal = await caller.proposals.create({ leadId: lead.id, title: "No Drinks Proposal", status: "draft" });
+    const result = await caller.proposals.getDrinks({ proposalId: proposal.id });
+    expect(result).toBeNull();
+    // Cleanup
+    await caller.leads.delete({ id: lead.id });
+  });
+});
+
+// ─── Quote Tests ──────────────────────────────────────────────────────────────
+describe("quote", () => {
+  it("quote.save > saves minimum spend settings for a proposal", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const lead = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "QuoteTest", email: "quotetest@test.com" });
+    const proposal = await caller.proposals.create({ leadId: lead.id, title: "Quote Test Proposal", status: "draft" });
+    const result = await caller.quote.save({
+      proposalId: proposal.id,
+      minimumSpend: 5000,
+      autoBarTab: true,
+      notes: "Min spend includes food and bar tab",
+      items: [
+        { type: "hire", name: "Centrepieces", description: "Floral centrepieces", qty: 10, unitPrice: 50, sortOrder: 0 },
+        { type: "styling", name: "Fairy Lights", description: "Ceiling installation", qty: 1, unitPrice: 300, sortOrder: 1 },
+      ],
+    });
+    expect(result).toBeDefined();
+    expect(result.success).toBe(true);
+    // Cleanup
+    await caller.leads.delete({ id: lead.id });
+  });
+
+  it("quote.get > returns saved quote for a proposal", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const lead = await caller.leads.submit({ ownerId: ctx.user!.id, firstName: "QuoteGet", email: "quoteget@test.com" });
+    const proposal = await caller.proposals.create({ leadId: lead.id, title: "Quote Get Proposal", status: "draft" });
+    await caller.quote.save({
+      proposalId: proposal.id,
+      minimumSpend: 3000,
+      autoBarTab: false,
+      items: [],
+    });
+    const result = await caller.quote.get({ proposalId: proposal.id });
+    expect(result).toBeDefined();
+    expect(result?.settings).not.toBeNull();
+    expect(Number(result?.settings?.minimumSpend)).toBe(3000);
+    // Cleanup
+    await caller.leads.delete({ id: lead.id });
+  });
+
+  it("quote.save > requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.quote.save({
+      proposalId: 1,
+      items: [],
+    })).rejects.toThrow();
+  });
+});
+
+// ─── Floor Plan Tests ─────────────────────────────────────────────────────────
+describe("floorPlans", () => {
+  it("floorPlans.save > creates a new floor plan", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.floorPlans.save({
+      name: "Test Floor Plan",
+      canvasData: { elements: [{ id: "abc", type: "round_table", x: 100, y: 100, w: 80, h: 80 }] },
+    });
+    expect(result).toBeDefined();
+    expect(result.id).toBeGreaterThan(0);
+    // Cleanup
+    await caller.floorPlans.delete({ id: result.id });
+  });
+
+  it("floorPlans.list > returns floor plans for authenticated user", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const plan = await caller.floorPlans.save({ name: "List Test Plan", canvasData: {} });
+    const list = await caller.floorPlans.list({});
+    expect(Array.isArray(list)).toBe(true);
+    const ids = list.map((p: any) => p.id);
+    expect(ids).toContain(plan.id);
+    // Cleanup
+    await caller.floorPlans.delete({ id: plan.id });
+  });
+
+  it("floorPlans.save > requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.floorPlans.save({ name: "Unauth Plan", canvasData: {} })).rejects.toThrow();
+  });
+});
+
+// ─── Checklist Tests ──────────────────────────────────────────────────────────
+describe("checklists", () => {
+  it("checklists.createTemplate > creates a checklist template", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.checklists.createTemplate({
+      name: "Wedding Setup",
+      description: "Standard wedding reception setup",
+      items: [
+        { id: "1", text: "Set up tables and chairs" },
+        { id: "2", text: "Prepare bar station" },
+        { id: "3", text: "Check AV equipment" },
+      ],
+    });
+    expect(result).toBeDefined();
+    expect(result.id).toBeGreaterThan(0);
+    // Cleanup
+    await caller.checklists.deleteTemplate({ id: result.id });
+  });
+
+  it("checklists.listTemplates > returns templates for authenticated user", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const template = await caller.checklists.createTemplate({
+      name: "List Test Template",
+      items: [{ id: "1", text: "Task 1" }],
+    });
+    const list = await caller.checklists.listTemplates();
+    expect(Array.isArray(list)).toBe(true);
+    const ids = list.map((t: any) => t.id);
+    expect(ids).toContain(template.id);
+    // Cleanup
+    await caller.checklists.deleteTemplate({ id: template.id });
+  });
+
+  it("checklists.createTemplate > requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.checklists.createTemplate({
+      name: "Unauth Template",
+      items: [],
+    })).rejects.toThrow();
+  });
+});

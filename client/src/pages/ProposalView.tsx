@@ -36,6 +36,48 @@ export default function ProposalView() {
     { token: token ?? "" },
     { enabled: !!token }
   );
+  const { data: drinksData } = trpc.proposals.getDrinksByToken.useQuery(
+    { token: token ?? "" },
+    { enabled: !!token }
+  );
+
+  const DRINKS_MENU_MAP: Record<string, { name: string; description?: string; price?: number; priceGlass?: number; priceBottle?: number }> = {
+    aperol_spritz: { name: "Aperol Spritz", description: "Aperol, Prosecco, Soda", price: 20 },
+    campari_spritz: { name: "Campari Spritz", description: "Campari, Prosecco, Soda", price: 20 },
+    limoncello_spritz: { name: "Limoncello Spritz", description: "Limoncello, Prosecco, Soda", price: 20 },
+    hugo_spritz: { name: "Hugo Spritz", description: "Elderflower, Prosecco, Soda", price: 20 },
+    classic_negroni: { name: "Classic Negroni", description: "Campari, Rosso Vermouth, Gin", price: 24 },
+    negroni_sbagliato: { name: "Negroni Sbagliato", description: "Campari, Rosso Vermouth, Prosecco", price: 23 },
+    cherry_negroni: { name: "Cherry Negroni", description: "Campari, Amaro, Rosso Vermouth, Gin", price: 25 },
+    americano: { name: "Americano", description: "Campari, Rosso Vermouth, Soda", price: 23 },
+    tallero_prosecco: { name: "Tallero Prosecco Extra Dry", description: "Veneto", priceGlass: 17, priceBottle: 85 },
+    lambrusco: { name: "Paltrinieri Lambrusco Di Soraba Radice", description: "Emiglia Romagna", priceBottle: 105 },
+    sauvignon_blanc: { name: "Mezzacorona Castel Firmian Sauvignon Blanc", description: "Trentino", priceGlass: 17, priceBottle: 85 },
+    malvasia_chardonnay: { name: "Fantini Primo Malvasia Chardonnay", description: "Abruzzo", priceGlass: 16, priceBottle: 80 },
+    pinot_grigio: { name: "Vigneti Romio Pinot Grigio Rubione IGT", description: "Friuli", priceGlass: 16, priceBottle: 80 },
+    grillo: { name: "Parthenium Grillo", description: "Sicilia", priceBottle: 85 },
+    pipoli_bianco: { name: "Pipoli Bianco Basilicata IGT", description: "Basilicata", priceBottle: 90 },
+    rosato: { name: "Fattoria Di Basciano Rosato", description: "Toscana", priceGlass: 17, priceBottle: 85 },
+    sangiovese_merlot: { name: "Primo Sangiovese Merlot", description: "Puglia", priceGlass: 16, priceBottle: 80 },
+    chianti: { name: "Renzo Masi Chianti Cornioletta", description: "Toscana", priceGlass: 17, priceBottle: 85 },
+    montepulciano: { name: "Fantini Montepulciano", description: "Abruzzo", priceGlass: 17, priceBottle: 85 },
+    nebbiolo: { name: "Ascheri Langhe Nebbiolo San Giacomo", description: "Piemonte", priceBottle: 110 },
+    barbaresco: { name: "Fontanabianca Barbaresco DOCG", description: "Piemonte", priceBottle: 165 },
+    peroni_tap: { name: "Peroni Tap", description: "Italia", price: 14 },
+    peroni_330: { name: "Peroni 330ml", description: "Italia", price: 12 },
+    peroni_0: { name: "Peroni 0%", description: "Italia", price: 12 },
+    ginger_ale: { name: "Fever Tree Ginger Ale", price: 8 },
+    cola: { name: "Fever Tree Cola", price: 8 },
+    blood_orange: { name: "Fever Tree Italian Blood Orange", price: 8 },
+    lemonade: { name: "Fever Tree Italian Lemonade", price: 8 },
+  };
+
+  const BAR_OPTION_LABELS: Record<string, string> = {
+    bar_tab: "Bar Tab",
+    cash_bar: "Cash Bar",
+    bar_tab_then_cash: "Bar Tab followed by Cash Bar",
+    unlimited: "Unlimited Bar Tab",
+  };
 
   const respond = trpc.proposals.respond.useMutation({
     onSuccess: (result) => {
@@ -217,6 +259,73 @@ export default function ProposalView() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Drinks Selection */}
+        {drinksData && (
+          <div className="paradiso-card mb-6 overflow-hidden">
+            <div className="px-6 py-3" style={{ backgroundColor: T.teal }}>
+              <div className="font-bebas text-sm tracking-widest" style={{ color: T.cream }}>DRINKS & BAR ARRANGEMENT</div>
+            </div>
+            <div className="p-6">
+              {/* Bar Option */}
+              <div className="mb-4 p-3 rounded-sm" style={{ backgroundColor: 'oklch(0.970 0.018 88)', border: `1px solid ${T.border}` }}>
+                <div className="font-bebas text-xs tracking-widest mb-0.5" style={{ color: T.stone }}>BAR ARRANGEMENT</div>
+                <div className="font-playfair font-semibold text-base" style={{ color: T.ink }}>
+                  {BAR_OPTION_LABELS[drinksData.barOption] ?? drinksData.barOption}
+                </div>
+                {drinksData.tabAmount && (
+                  <div className="font-inter text-sm mt-0.5" style={{ color: T.terra }}>
+                    Bar Tab Amount: ${Number(drinksData.tabAmount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })} NZD
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Drinks */}
+              {drinksData.selectedDrinks && drinksData.selectedDrinks.length > 0 && (
+                <div className="mb-4">
+                  <div className="font-bebas text-xs tracking-widest mb-2" style={{ color: T.stone }}>SELECTED DRINKS</div>
+                  <div className="space-y-1.5">
+                    {(drinksData.selectedDrinks as string[]).map((key: string) => {
+                      const drink = DRINKS_MENU_MAP[key];
+                      if (!drink) return null;
+                      return (
+                        <div key={key} className="flex items-center justify-between py-1.5 border-b border-dashed last:border-0" style={{ borderColor: T.border }}>
+                          <div>
+                            <div className="font-playfair text-sm font-medium" style={{ color: T.ink }}>{drink.name}</div>
+                            {drink.description && <div className="font-inter text-xs" style={{ color: T.stone }}>{drink.description}</div>}
+                          </div>
+                          <div className="font-inter text-xs shrink-0 ml-4" style={{ color: T.stone }}>
+                            {drink.price ? `$${drink.price}` : ''}
+                            {drink.priceGlass ? `$${drink.priceGlass}/glass` : ''}
+                            {drink.priceBottle ? ` · $${drink.priceBottle}/btl` : ''}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Custom Drinks */}
+              {drinksData.customDrinks && (drinksData.customDrinks as any[]).length > 0 && (
+                <div>
+                  <div className="font-bebas text-xs tracking-widest mb-2" style={{ color: T.stone }}>ADDITIONAL DRINKS</div>
+                  <div className="space-y-1.5">
+                    {(drinksData.customDrinks as any[]).map((d: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between py-1.5 border-b border-dashed last:border-0" style={{ borderColor: T.border }}>
+                        <div>
+                          <div className="font-playfair text-sm font-medium" style={{ color: T.ink }}>{d.name}</div>
+                          {d.description && <div className="font-inter text-xs" style={{ color: T.stone }}>{d.description}</div>}
+                        </div>
+                        {d.price && <div className="font-inter text-xs" style={{ color: T.stone }}>${d.price}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
