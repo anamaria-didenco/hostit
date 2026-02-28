@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE runsheets MODIFY COLUMN bookingId INT NULL, MODIFY COLUMN leadId INT NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute ALTER TABLE runsheets MODIFY COLUMN bookingId INT NULL, MODIFY COLUMN leadId INT NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1951
+}

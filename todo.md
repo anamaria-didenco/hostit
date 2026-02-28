@@ -247,3 +247,25 @@
 - [x] Printable event checklist page (/checklist?bookingId=X): assign templates, toggle items, print view
 - [x] Fixed drinks selection test (saveDrinks returns success:true, getDrinks returns the saved record)
 - [x] 66 vitest tests passing, zero TypeScript errors
+
+## Phase 8: Runsheets, Calendar Labels & UX Improvements
+- [ ] Add runsheets and runsheet_items tables to schema, push migration
+- [ ] Add tRPC procedures: runsheets.generate, runsheets.get, runsheets.update, runsheets.addItem, runsheets.deleteItem
+- [ ] Build RunsheetBuilder page (/runsheet?leadId=X or ?bookingId=X)
+- [ ] Add "Create Runsheet" button in leads inbox detail panel (next to "Create Proposal")
+- [ ] Add clickable event names on calendar cells that open RunsheetBuilder
+- [ ] Show event name and status badge on calendar cells for bookings and leads
+- [ ] Add delete enquiry button in leads inbox (with confirmation)
+- [ ] Write vitest tests for runsheet procedures
+
+## Phase 8: Runsheet, Calendar & UX Improvements
+
+- [x] Runsheet DB tables (runsheets + runsheet_items) with nullable leadId/bookingId
+- [x] tRPC runsheets router (create, get, list, update, delete, addItem, updateItem, deleteItem)
+- [x] RunsheetBuilder page (/runsheet) with auto-generate from lead/booking data
+- [x] Create Runsheet button in leads inbox detail panel
+- [x] Create Runsheet button on calendar booking cards
+- [x] Calendar cells show event name + status (clickable, scrolls to booking or opens lead)
+- [x] Delete enquiry button in leads inbox detail panel
+- [x] Sidebar nav text and icons updated to cream (#f7f1e9) colour
+- [x] 71 tests passing (5 new runsheet tests added)

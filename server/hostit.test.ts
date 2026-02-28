@@ -618,3 +618,80 @@ describe("checklists", () => {
     })).rejects.toThrow();
   });
 });
+
+// ─── Runsheet Tests ───────────────────────────────────────────────────────────
+describe("runsheets", () => {
+  it("runsheets.create > creates a runsheet with items", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.runsheets.create({
+      title: "Test Wedding Runsheet",
+      eventType: "Wedding",
+      guestCount: 80,
+      items: [
+        { time: "14:00", duration: 60, title: "Setup", category: "setup", sortOrder: 0 },
+        { time: "15:00", duration: 30, title: "Guest arrival", category: "guest", sortOrder: 1 },
+      ],
+    });
+    expect(result).toBeDefined();
+    expect(result.id).toBeGreaterThan(0);
+    // Cleanup
+    await caller.runsheets.delete({ id: result.id });
+  });
+
+  it("runsheets.get > returns runsheet with items", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const created = await caller.runsheets.create({
+      title: "Get Test Runsheet",
+      eventType: "Birthday",
+      items: [
+        { time: "18:00", duration: 30, title: "Arrival", category: "guest", sortOrder: 0 },
+      ],
+    });
+    const sheet = await caller.runsheets.get({ id: created.id });
+    expect(sheet).not.toBeNull();
+    expect(sheet!.title).toBe("Get Test Runsheet");
+    expect(Array.isArray(sheet!.items)).toBe(true);
+    expect(sheet!.items.length).toBe(1);
+    // Cleanup
+    await caller.runsheets.delete({ id: created.id });
+  });
+
+  it("runsheets.list > returns list for authenticated user", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const created = await caller.runsheets.create({
+      title: "List Test Runsheet",
+    });
+    const list = await caller.runsheets.list({});
+    expect(Array.isArray(list)).toBe(true);
+    const ids = list.map((r: any) => r.id);
+    expect(ids).toContain(created.id);
+    // Cleanup
+    await caller.runsheets.delete({ id: created.id });
+  });
+
+  it("runsheets.update > updates runsheet metadata", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const created = await caller.runsheets.create({ title: "Update Test" });
+    const result = await caller.runsheets.update({
+      id: created.id,
+      title: "Updated Title",
+      guestCount: 120,
+    });
+    expect(result.success).toBe(true);
+    const sheet = await caller.runsheets.get({ id: created.id });
+    expect(sheet!.title).toBe("Updated Title");
+    expect(sheet!.guestCount).toBe(120);
+    // Cleanup
+    await caller.runsheets.delete({ id: created.id });
+  });
+
+  it("runsheets.create > requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.runsheets.create({ title: "Unauth" })).rejects.toThrow();
+  });
+});

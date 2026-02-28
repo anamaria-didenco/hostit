@@ -155,6 +155,15 @@ export default function Dashboard() {
   const addNote = trpc.leads.addNote.useMutation({
     onSuccess: () => { setNoteText(""); utils.leads.getActivity.invalidate({ leadId: selectedLead?.id }); toast.success("Note added"); },
   });
+  const deleteLead = trpc.leads.delete.useMutation({
+    onSuccess: () => {
+      refetchLeads();
+      refetchOverdue();
+      setSelectedLead(null);
+      toast.success("Enquiry deleted");
+    },
+    onError: () => toast.error("Failed to delete enquiry"),
+  });
   const updateSettings = trpc.venue.update.useMutation({
     onSuccess: () => { refetchSettings(); toast.success("Settings saved!"); },
   });
@@ -635,6 +644,19 @@ export default function Dashboard() {
                         className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
                         <FileText className="w-3 h-3" /> CREATE PROPOSAL
                       </button>
+                      <button onClick={() => setLocation(`/runsheet?leadId=${selectedLead.id}`)}
+                        className="border-2 border-burgundy text-burgundy font-bebas tracking-widest text-xs px-4 py-2 flex items-center gap-1 hover:bg-burgundy hover:text-cream transition-all">
+                        <Clock className="w-3 h-3" /> CREATE RUNSHEET
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete enquiry from ${selectedLead.firstName} ${selectedLead.lastName ?? ''}? This cannot be undone.`)) {
+                            deleteLead.mutate({ id: selectedLead.id });
+                          }
+                        }}
+                        className="border-2 border-red-300 text-red-500 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 hover:bg-red-50 transition-all ml-auto">
+                        <Trash2 className="w-3 h-3" /> DELETE
+                      </button>
                     </div>
                   </div>
 
@@ -891,6 +913,9 @@ export default function Dashboard() {
                     const hasFollowUp = followUpDays.has(day);
                     const hasLeadEvent = leadEventDays.has(day);
                     const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
+                    // Find bookings and lead events for this day
+                    const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
+                    const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
                     const bgClass = hasBooking
                       ? "bg-forest/10 border-forest"
                       : hasLeadEvent
@@ -909,14 +934,40 @@ export default function Dashboard() {
                       : isToday
                       ? "text-ink font-semibold"
                       : "text-foreground";
+                    const isClickable = hasBooking || hasLeadEvent;
                     return (
-                      <div key={day} className={`aspect-square flex flex-col items-center justify-center text-sm font-dm border transition-colors ${bgClass}`}>
-                        <span className={textClass}>{day}</span>
-                        <div className="flex gap-0.5 mt-0.5">
-                          {hasBooking && <div className="w-1.5 h-1.5 bg-forest rounded-full" />}
-                          {hasLeadEvent && <div className="w-1.5 h-1.5 bg-rose-500 rounded-full" />}
-                          {hasFollowUp && <div className="w-1.5 h-1.5 bg-gold rounded-full" />}
-                        </div>
+                      <div
+                        key={day}
+                        title={dayBookings.length > 0
+                          ? dayBookings.map((b: any) => `${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} (${b.status})`).join('\n')
+                          : dayLeads.length > 0
+                          ? dayLeads.map((l: any) => `${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} (${l.status})`).join('\n')
+                          : undefined}
+                        onClick={() => {
+                          if (dayBookings.length > 0) {
+                            // scroll to booking in the list below
+                            document.getElementById(`booking-${dayBookings[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                          } else if (dayLeads.length > 0) {
+                            setSelectedLead(dayLeads[0]);
+                            setTab('leads');
+                          }
+                        }}
+                        className={`relative min-h-[52px] flex flex-col p-1 text-sm font-dm border transition-colors ${bgClass} ${isClickable ? 'cursor-pointer' : ''}`}
+                      >
+                        <span className={`${textClass} text-xs leading-none mb-0.5`}>{day}</span>
+                        {dayBookings.slice(0, 2).map((b: any) => (
+                          <div key={b.id} className="text-[9px] leading-tight font-dm text-forest bg-forest/10 px-0.5 rounded truncate w-full">
+                            {b.firstName} {b.lastName ? b.lastName[0] + '.' : ''}
+                          </div>
+                        ))}
+                        {dayLeads.slice(0, 1).map((l: any) => (
+                          <div key={l.id} className="text-[9px] leading-tight font-dm text-rose-700 bg-rose-50 px-0.5 rounded truncate w-full">
+                            {l.firstName} {l.lastName ? l.lastName[0] + '.' : ''}
+                          </div>
+                        ))}
+                        {(dayBookings.length + dayLeads.length) > 2 && (
+                          <div className="text-[9px] text-ink/40">+{dayBookings.length + dayLeads.length - 2} more</div>
+                        )}
                       </div>
                     );
                   })}
@@ -939,19 +990,27 @@ export default function Dashboard() {
                 ) : (
                   <div className="space-y-2">
                     {(monthBookings ?? []).map((b: any) => (
-                      <div key={b.id} className="dante-card p-4 flex items-center justify-between">
+                      <div id={`booking-${b.id}`} key={b.id} className="dante-card p-4 flex items-center justify-between">
                         <div>
                           <div className="font-cormorant font-semibold text-base text-ink">{b.firstName} {b.lastName}</div>
                           <div className="font-dm text-xs text-ink/60">
                             {b.eventType || "Event"} · {new Date(b.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })}
                             {b.guestCount ? ` · ${b.guestCount} guests` : ""}
                           </div>
+                          <div className={`font-bebas text-xs tracking-widest mt-1 ${
+                            b.status === 'confirmed' ? 'text-emerald-600' : b.status === 'tentative' ? 'text-amber-600' : 'text-stone-400'
+                          }`}>{b.status?.toUpperCase()}</div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right flex flex-col items-end gap-2">
                           {b.totalNzd && <div className="font-cormorant text-xl font-semibold text-forest">${Number(b.totalNzd).toLocaleString()}</div>}
                           <div className={`font-bebas text-xs tracking-widest ${b.depositPaid ? "text-emerald-600" : "text-gold"}`}>
                             {b.depositPaid ? "DEPOSIT PAID" : "DEPOSIT PENDING"}
                           </div>
+                          <button
+                            onClick={() => setLocation(`/runsheet?bookingId=${b.id}`)}
+                            className="font-bebas tracking-widest text-xs border border-burgundy/40 text-burgundy px-2 py-1 hover:bg-burgundy hover:text-cream transition-all flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> RUNSHEET
+                          </button>
                         </div>
                       </div>
                     ))}

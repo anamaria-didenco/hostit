@@ -11,6 +11,7 @@ import ProposalView from "./pages/ProposalView";
 import LeadForm from "./pages/LeadForm";
 import FloorPlanBuilder from "./pages/FloorPlanBuilder";
 import Checklist from "./pages/Checklist";
+import RunsheetBuilder from "./pages/RunsheetBuilder";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/proposals/new" component={ProposalBuilder} />
       <Route path="/floor-plan" component={FloorPlanBuilder} />
       <Route path="/checklist" component={Checklist} />
+      <Route path="/runsheet" component={RunsheetBuilder} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

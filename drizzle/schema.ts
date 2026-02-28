@@ -242,10 +242,17 @@ export type InsertEmailTemplate = typeof emailTemplates.$inferInsert;
 // ─── Runsheets ────────────────────────────────────────────────────────────────
 export const runsheets = mysqlTable("runsheets", {
   id: int("id").autoincrement().primaryKey(),
-  bookingId: int("bookingId").notNull(),
   ownerId: int("ownerId").notNull(),
-  token: varchar("token", { length: 64 }).notNull().unique(),
+  leadId: int("leadId"),
+  bookingId: int("bookingId"),
+  title: varchar("title", { length: 255 }).notNull(),
+  eventDate: timestamp("eventDate"),
+  venueName: varchar("venueName", { length: 255 }),
+  spaceName: varchar("spaceName", { length: 255 }),
+  guestCount: int("guestCount"),
+  eventType: varchar("eventType", { length: 100 }),
   notes: text("notes"),
+  publicToken: varchar("publicToken", { length: 64 }).unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -256,12 +263,13 @@ export type InsertRunsheet = typeof runsheets.$inferInsert;
 export const runsheetItems = mysqlTable("runsheet_items", {
   id: int("id").autoincrement().primaryKey(),
   runsheetId: int("runsheetId").notNull(),
+  ownerId: int("ownerId").notNull().default(0),
   time: varchar("time", { length: 10 }).notNull(), // e.g. "17:30"
   duration: int("duration").default(30), // minutes
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
   assignedTo: varchar("assignedTo", { length: 255 }),
-  category: mysqlEnum("category", ["setup", "guest", "food", "beverage", "speech", "entertainment", "packdown", "other"]).default("other").notNull(),
+  category: varchar("category", { length: 50 }).default("other").notNull(),
   sortOrder: int("sortOrder").default(0).notNull(),
 });
 export type RunsheetItem = typeof runsheetItems.$inferSelect;
