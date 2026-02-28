@@ -260,7 +260,7 @@ export default function Dashboard() {
         <div className="mb-8">
           <div className="flex items-center justify-center mb-3">
             <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
               alt="HOSTit"
               className="h-16 w-auto object-contain"
               style={{ filter: 'brightness(0) invert(1)' }}
@@ -293,7 +293,7 @@ export default function Dashboard() {
       <nav className="bg-forest-dark sticky top-0 z-50 border-b border-gold/20 h-14 flex items-center">
         <div className="flex items-center px-5 w-56 flex-shrink-0 border-r border-gold/15">
           <img
-            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
             alt="HOSTit"
             className="h-8 w-auto object-contain"
             style={{ filter: 'brightness(0) invert(1)' }}

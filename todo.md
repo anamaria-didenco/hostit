@@ -194,3 +194,18 @@
 - [x] Rewrite ProposalView.tsx with Paradiso styling (teal header, stripe band, paradiso-card sections)
 - [x] Typography: Playfair Display (headings), Inter (body), Bebas Neue (labels), Cormorant (accent)
 - [x] 53 tests passing, 0 TypeScript errors
+
+## Manhattan Modern Colour Rebrand
+- [ ] Rewrite index.css: burgundy (#6B1A2A), cream (#F2EDE4), powder blue (#B8C8D8)
+- [ ] Update all CSS tokens and legacy aliases
+- [ ] Update Home.tsx, LeadForm.tsx, ProposalView.tsx, ProposalBuilder.tsx
+- [ ] Upload improved logos (glass illustration v2 + lockup v2) and integrate across site
+
+## Manhattan Modern Colour Rebrand
+- [x] Rewrite index.css: deep burgundy (#6B1A2A), warm cream (#F2EDE4), powder blue (#B8C8D8)
+- [x] Update all CSS tokens + legacy aliases (text-forest→burgundy, text-gold→blue, bg-forest-dark→burg-dark)
+- [x] Update typography: Cormorant Garamond (primary serif), Playfair Display (secondary), Inter, Bebas Neue
+- [x] Generate minimalist high-end HOSTit logo (Didot-style HOST + hairline rule + italic "it")
+- [x] Replace all logo instances across Dashboard, Home, LeadForm, ProposalView, ProposalBuilder
+- [x] Rewrite Home.tsx with Manhattan Modern aesthetic
+- [x] 53 tests passing, 0 TypeScript errors

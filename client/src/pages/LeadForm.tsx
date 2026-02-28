@@ -88,7 +88,7 @@ export default function LeadForm() {
           {/* Logo */}
           <div className="flex items-center justify-center mb-5">
             <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
               alt="HOSTit"
               className="h-14 w-auto object-contain"
               style={{ filter: 'brightness(0) invert(1)' }}
@@ -131,7 +131,7 @@ export default function LeadForm() {
             <div className="mt-8 pt-6 border-t border-dashed" style={{ borderColor: T.border }}>
               <div className="flex items-center justify-center">
                 <img
-                  src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+                  src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
                   alt="HOSTit"
                   className="h-8 w-auto object-contain"
                 />
@@ -225,7 +225,7 @@ export default function LeadForm() {
       <div className="py-8 text-center mt-4" style={{ backgroundColor: T.ink, borderTop: `2px solid ${T.terra}55` }}>
         <div className="flex items-center justify-center mb-1">
           <img
-            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
             alt="HOSTit"
             className="h-8 w-auto object-contain"
             style={{ filter: 'brightness(0) invert(1)' }}

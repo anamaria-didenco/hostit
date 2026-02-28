@@ -184,7 +184,7 @@ export default function ProposalBuilder() {
         </Link>
         <div className="flex items-center mr-4">
           <img
-            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
             alt="HOSTit"
             className="h-7 w-auto object-contain"
             style={{ filter: 'brightness(0) invert(1)' }}

@@ -79,7 +79,7 @@ export default function ProposalView() {
         <div className="max-w-3xl mx-auto px-6 py-8">
           <div className="flex items-center mb-1">
             <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
               alt="HOSTit"
               className="h-12 w-auto object-contain"
               style={{ filter: 'brightness(0) invert(1)' }}
@@ -257,7 +257,7 @@ export default function ProposalView() {
         <div className="text-center py-8 border-t-2 border-dashed" style={{ borderColor: T.border }}>
           <div className="flex items-center justify-center mb-1">
             <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-wordmark-YTN7taJQKQTWDCMLsn9YaS.webp"
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
               alt="HOSTit"
               className="h-8 w-auto object-contain"
             />
