@@ -522,3 +522,18 @@
 - [x] Start week on SUN or MON toggle (adjusts day labels and offset)
 - [x] Legend show/hide toggle
 - [x] Settings panel collapses when gear icon clicked again
+
+## Mini Calendar — Click-to-Create Event
+- [ ] Click an empty date cell on the mini calendar to open a quick-create modal
+- [ ] Modal pre-fills the selected date; user can enter event name, type (Enquiry/Confirmed), guest count, and notes
+- [ ] Submitting the modal creates a new lead (enquiry) or booking (confirmed event) via tRPC
+- [ ] Calendar refreshes after creation to show the new dot on the clicked date
+
+## Apple-Inspired Retheme
+- [x] Update index.css: white/light grey surfaces, Inter font, blue accent (#0071E3), generous border-radius, subtle shadows
+- [x] Update index.html: swap fonts to Inter (weights 300-700)
+- [x] Restyle Dashboard: white nav bar with grey nav items, blue active state, clean card layouts
+- [x] Restyle Home.tsx: Apple-style hero, feature grid, clean CTA buttons
+- [ ] Restyle LeadForm.tsx: clean white form with blue submit button
+- [ ] Restyle ProposalView.tsx: clean white proposal document
+- [ ] Restyle ProposalBuilder.tsx: clean white builder UI

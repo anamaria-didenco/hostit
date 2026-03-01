@@ -43,74 +43,73 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   HOSTit Design System — Manhattan Modern
+   HOSTit Design System — Apple-Inspired
    Palette:
-     Burgundy      #6B1A2A  — primary brand, headings, sidebar, CTAs
-     Deep Burgundy #4A0F1C  — sidebar dark, deep backgrounds
-     Warm Cream    #F2EDE4  — page background, card surfaces
-     Ivory White   #FAF8F4  — card highlights, inputs
-     Powder Blue   #B8C8D8  — accent, secondary actions, highlights
-     Dusty Blue    #8AAABB  — muted blue, borders, subtle accents
-     Warm Taupe    #8A7E74  — secondary text, muted elements
-     Deep Ink      #2A1F1A  — body text, dark elements
+     White          #FFFFFF  — primary surface
+     Light Grey     #F5F5F7  — page background (Apple's signature off-white)
+     Mid Grey       #E8E8ED  — borders, dividers
+     Dark Grey      #1D1D1F  — primary text (Apple's near-black)
+     Secondary Text #6E6E73  — secondary / muted text
+     Blue           #0071E3  — primary accent (Apple blue)
+     Blue Dark      #0077ED  — hover state
+     Blue Light     #E8F0FE  — blue tint backgrounds
+     Red            #FF3B30  — destructive
    Typography:
-     Cormorant Garamond — primary editorial serif (headings, display, logo)
-     Playfair Display   — secondary serif (subheadings)
-     Inter              — clean body / UI text
-     Bebas Neue         — uppercase label caps
+     Inter          — primary UI font (closest to SF Pro available on web)
+     System UI      — fallback
 ─────────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  --radius: 0.25rem;
+  --radius: 0.75rem;
 
-  /* Warm cream background */
-  --background:             oklch(0.960 0.012 68);
-  --foreground:             oklch(0.185 0.025 30);
+  /* Light grey page background */
+  --background:             oklch(0.970 0.002 264);
+  --foreground:             oklch(0.130 0.008 264);
 
-  /* Card surfaces: ivory white */
-  --card:                   oklch(0.978 0.008 68);
-  --card-foreground:        oklch(0.185 0.025 30);
-  --popover:                oklch(0.978 0.008 68);
-  --popover-foreground:     oklch(0.185 0.025 30);
+  /* White card surfaces */
+  --card:                   oklch(1.000 0.000 0);
+  --card-foreground:        oklch(0.130 0.008 264);
+  --popover:                oklch(1.000 0.000 0);
+  --popover-foreground:     oklch(0.130 0.008 264);
 
-  /* Primary = Burgundy */
-  --primary:                oklch(0.310 0.095 10);
-  --primary-foreground:     oklch(0.960 0.012 68);
+  /* Primary = Apple Blue */
+  --primary:                oklch(0.540 0.195 250);
+  --primary-foreground:     oklch(1.000 0.000 0);
 
-  /* Secondary = Powder Blue */
-  --secondary:              oklch(0.720 0.045 220);
-  --secondary-foreground:   oklch(0.185 0.025 30);
+  /* Secondary = light grey */
+  --secondary:              oklch(0.940 0.003 264);
+  --secondary-foreground:   oklch(0.130 0.008 264);
 
-  /* Muted = warm linen */
-  --muted:                  oklch(0.930 0.010 65);
-  --muted-foreground:       oklch(0.500 0.020 50);
+  /* Muted = subtle grey */
+  --muted:                  oklch(0.955 0.002 264);
+  --muted-foreground:       oklch(0.460 0.010 264);
 
-  /* Accent = Powder Blue */
-  --accent:                 oklch(0.720 0.045 220);
-  --accent-foreground:      oklch(0.185 0.025 30);
+  /* Accent = blue tint */
+  --accent:                 oklch(0.930 0.025 250);
+  --accent-foreground:      oklch(0.540 0.195 250);
 
-  --destructive:            oklch(0.540 0.195 22);
-  --destructive-foreground: oklch(0.978 0.008 68);
+  --destructive:            oklch(0.590 0.220 25);
+  --destructive-foreground: oklch(1.000 0.000 0);
 
-  --border:                 oklch(0.880 0.012 65);
-  --input:                  oklch(0.930 0.010 65);
-  --ring:                   oklch(0.310 0.095 10);
+  --border:                 oklch(0.910 0.004 264);
+  --input:                  oklch(0.940 0.003 264);
+  --ring:                   oklch(0.540 0.195 250);
 
-  --chart-1: oklch(0.310 0.095 10);
-  --chart-2: oklch(0.720 0.045 220);
-  --chart-3: oklch(0.185 0.025 30);
-  --chart-4: oklch(0.500 0.060 10);
-  --chart-5: oklch(0.580 0.035 220);
+  --chart-1: oklch(0.540 0.195 250);
+  --chart-2: oklch(0.680 0.150 160);
+  --chart-3: oklch(0.720 0.160 60);
+  --chart-4: oklch(0.620 0.180 310);
+  --chart-5: oklch(0.590 0.220 25);
 
-  /* Sidebar = Mid Burgundy (lightened for text legibility) */
-  --sidebar:                    oklch(0.420 0.090 10);
-  --sidebar-foreground:         oklch(0.960 0.012 68);
-  --sidebar-primary:            oklch(0.720 0.045 220);
-  --sidebar-primary-foreground: oklch(0.185 0.025 30);
-  --sidebar-accent:             oklch(0.480 0.090 10);
-  --sidebar-accent-foreground:  oklch(0.960 0.012 68);
-  --sidebar-border:             oklch(0.480 0.090 10);
-  --sidebar-ring:               oklch(0.720 0.045 220);
+  /* Sidebar = white with subtle border */
+  --sidebar:                    oklch(1.000 0.000 0);
+  --sidebar-foreground:         oklch(0.130 0.008 264);
+  --sidebar-primary:            oklch(0.540 0.195 250);
+  --sidebar-primary-foreground: oklch(1.000 0.000 0);
+  --sidebar-accent:             oklch(0.930 0.025 250);
+  --sidebar-accent-foreground:  oklch(0.540 0.195 250);
+  --sidebar-border:             oklch(0.910 0.004 264);
+  --sidebar-ring:               oklch(0.540 0.195 250);
 }
 
 /* ── Base Layer ──────────────────────────────────────────────────────────── */
@@ -128,53 +127,57 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
     font-size: 15px;
-    line-height: 1.65;
+    line-height: 1.6;
+    letter-spacing: -0.01em;
   }
 
-  /* Display headings — Cormorant Garamond (refined editorial serif) */
   h1 {
-    font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
     font-weight: 700;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.03em;
     line-height: 1.05;
   }
 
   h2 {
-    font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
     font-weight: 600;
-    letter-spacing: -0.005em;
+    letter-spacing: -0.025em;
     line-height: 1.15;
   }
 
   h3 {
-    font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
-    font-weight: 500;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
     line-height: 1.25;
   }
 
   h4, h5 {
-    font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
-    font-weight: 500;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.015em;
     line-height: 1.3;
   }
 
   h6 {
-    font-family: 'Bebas Neue', Impact, sans-serif;
-    font-weight: 400;
-    letter-spacing: 0.14em;
-    font-size: 0.72rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-size: 0.75rem;
+    text-transform: uppercase;
   }
 
   label {
-    font-family: 'Inter', sans-serif;
-    font-size: 0.8rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.8125rem;
     font-weight: 500;
+    letter-spacing: -0.005em;
   }
 
   input, textarea, select {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 
   button:not(:disabled),
@@ -186,99 +189,105 @@
     cursor: pointer;
   }
 
-  /* Thin burgundy horizontal rule */
   hr {
     border: none;
-    border-top: 1px solid oklch(0.310 0.095 10 / 0.20);
+    border-top: 1px solid oklch(0.910 0.004 264);
     margin: 1.5rem 0;
   }
 }
 
-/* ── Manhattan Modern Utility Classes ──────────────────────────────────── */
+/* ── Apple-Inspired Utility Classes ──────────────────────────────────────── */
 @layer utilities {
 
   /* ── Font families ── */
-  .font-cormorant { font-family: 'Cormorant Garamond', Georgia, serif; }
-  .font-playfair  { font-family: 'Playfair Display', Georgia, serif; }
-  .font-inter     { font-family: 'Inter', system-ui, sans-serif; }
-  .font-bebas     { font-family: 'Bebas Neue', Impact, sans-serif; }
-  /* Legacy aliases */
-  .font-dm        { font-family: 'Inter', system-ui, sans-serif; }
-  .font-pinyon    { font-family: 'Cormorant Garamond', Georgia, serif; }
-  .font-fell      { font-family: 'Cormorant Garamond', Georgia, serif; }
-  .font-alfa      { font-family: 'Cormorant Garamond', Georgia, serif; }
-  .font-pacifico  { font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; }
+  .font-inter     { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
+  /* Legacy aliases — all map to Inter */
+  .font-cormorant { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-weight: 600; }
+  .font-playfair  { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-weight: 600; }
+  .font-bebas     { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .font-dm        { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
+  .font-pinyon    { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-style: italic; }
+  .font-fell      { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
+  .font-alfa      { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-weight: 700; }
+  .font-pacifico  { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-style: italic; font-weight: 600; }
 
   /* ── Brand colours (text) ── */
-  .text-burgundy  { color: oklch(0.310 0.095 10); }
-  .text-burg-dark { color: oklch(0.220 0.075 10); }
-  .text-blue      { color: oklch(0.720 0.045 220); }
-  .text-cream     { color: oklch(0.960 0.012 68); }
-  .text-taupe     { color: oklch(0.500 0.020 50); }
-  .text-ivory     { color: oklch(0.978 0.008 68); }
-  /* Legacy aliases — map old names to new palette */
-  .text-forest    { color: oklch(0.310 0.095 10); }
-  .text-teal      { color: oklch(0.310 0.095 10); }
-  .text-gold      { color: oklch(0.720 0.045 220); }
-  .text-terra     { color: oklch(0.310 0.095 10); }
-  .text-ink       { color: oklch(0.185 0.025 30); }
-  .text-sage      { color: oklch(0.500 0.020 50); }
-  .text-stone     { color: oklch(0.500 0.020 50); }
-  .text-warm-white { color: oklch(0.978 0.008 68); }
-  /* Old Campari/tomato colours → burgundy */
-  .text-tomato    { color: oklch(0.310 0.095 10); }
-  .text-amber     { color: oklch(0.720 0.045 220); }
-  .text-parchment { color: oklch(0.960 0.012 68); }
+  .text-apple-blue  { color: oklch(0.540 0.195 250); }
+  .text-apple-dark  { color: oklch(0.130 0.008 264); }
+  .text-apple-grey  { color: oklch(0.460 0.010 264); }
+  /* Legacy aliases */
+  .text-forest    { color: oklch(0.540 0.195 250); }
+  .text-teal      { color: oklch(0.540 0.195 250); }
+  .text-gold      { color: oklch(0.540 0.195 250); }
+  .text-terra     { color: oklch(0.540 0.195 250); }
+  .text-burgundy  { color: oklch(0.540 0.195 250); }
+  .text-blue      { color: oklch(0.540 0.195 250); }
+  .text-ink       { color: oklch(0.130 0.008 264); }
+  .text-sage      { color: oklch(0.460 0.010 264); }
+  .text-stone     { color: oklch(0.460 0.010 264); }
+  .text-cream     { color: oklch(1.000 0.000 0); }
+  .text-warm-white { color: oklch(1.000 0.000 0); }
+  .text-ivory     { color: oklch(1.000 0.000 0); }
+  .text-taupe     { color: oklch(0.460 0.010 264); }
+  .text-tomato    { color: oklch(0.590 0.220 25); }
+  .text-amber     { color: oklch(0.720 0.160 60); }
+  .text-parchment { color: oklch(1.000 0.000 0); }
 
   /* ── Brand colours (bg) ── */
-  .bg-burgundy    { background-color: oklch(0.310 0.095 10); }
-  .bg-burg-dark   { background-color: oklch(0.420 0.090 10); }
-  .bg-blue        { background-color: oklch(0.720 0.045 220); }
-  .bg-cream       { background-color: oklch(0.960 0.012 68); }
-  .bg-ivory       { background-color: oklch(0.978 0.008 68); }
-  .bg-linen       { background-color: oklch(0.930 0.010 65); }
+  .bg-apple-blue  { background-color: oklch(0.540 0.195 250); }
+  .bg-apple-grey  { background-color: oklch(0.970 0.002 264); }
+  .bg-apple-card  { background-color: oklch(1.000 0.000 0); }
   /* Legacy aliases */
-  .bg-forest      { background-color: oklch(0.310 0.095 10); }
-  .bg-forest-dark { background-color: oklch(0.420 0.090 10); }
-  .bg-teal        { background-color: oklch(0.310 0.095 10); }
-  .bg-teal-dark   { background-color: oklch(0.420 0.090 10); }
-  .bg-gold        { background-color: oklch(0.720 0.045 220); }
-  .bg-terra       { background-color: oklch(0.310 0.095 10); }
-  .bg-warm-white  { background-color: oklch(0.978 0.008 68); }
-  .bg-ink         { background-color: oklch(0.185 0.025 30); }
-  .bg-parchment   { background-color: oklch(0.960 0.012 68); }
-  .bg-tomato      { background-color: oklch(0.310 0.095 10); }
-  .bg-amber       { background-color: oklch(0.720 0.045 220); }
+  .bg-forest      { background-color: oklch(0.540 0.195 250); }
+  .bg-forest-dark { background-color: oklch(0.450 0.170 250); }
+  .bg-teal        { background-color: oklch(0.540 0.195 250); }
+  .bg-teal-dark   { background-color: oklch(0.450 0.170 250); }
+  .bg-gold        { background-color: oklch(0.540 0.195 250); }
+  .bg-terra       { background-color: oklch(0.540 0.195 250); }
+  .bg-burgundy    { background-color: oklch(0.540 0.195 250); }
+  .bg-burg-dark   { background-color: oklch(0.450 0.170 250); }
+  .bg-blue        { background-color: oklch(0.540 0.195 250); }
+  .bg-cream       { background-color: oklch(1.000 0.000 0); }
+  .bg-ivory       { background-color: oklch(1.000 0.000 0); }
+  .bg-linen       { background-color: oklch(0.955 0.002 264); }
+  .bg-warm-white  { background-color: oklch(1.000 0.000 0); }
+  .bg-ink         { background-color: oklch(0.130 0.008 264); }
+  .bg-parchment   { background-color: oklch(1.000 0.000 0); }
+  .bg-tomato      { background-color: oklch(0.590 0.220 25); }
+  .bg-amber       { background-color: oklch(0.720 0.160 60); }
 
   /* ── Brand colours (border) ── */
-  .border-burgundy { border-color: oklch(0.310 0.095 10); }
-  .border-blue     { border-color: oklch(0.720 0.045 220); }
+  .border-apple-blue { border-color: oklch(0.540 0.195 250); }
+  .border-apple-grey { border-color: oklch(0.910 0.004 264); }
   /* Legacy aliases */
-  .border-forest   { border-color: oklch(0.310 0.095 10); }
-  .border-teal     { border-color: oklch(0.310 0.095 10); }
-  .border-gold     { border-color: oklch(0.720 0.045 220); }
-  .border-terra    { border-color: oklch(0.310 0.095 10); }
-  .border-ink      { border-color: oklch(0.185 0.025 30); }
-  .border-amber    { border-color: oklch(0.720 0.045 220); }
-  .border-tomato   { border-color: oklch(0.310 0.095 10); }
+  .border-forest   { border-color: oklch(0.540 0.195 250); }
+  .border-teal     { border-color: oklch(0.540 0.195 250); }
+  .border-gold     { border-color: oklch(0.540 0.195 250 / 0.30); }
+  .border-terra    { border-color: oklch(0.540 0.195 250); }
+  .border-burgundy { border-color: oklch(0.540 0.195 250); }
+  .border-blue     { border-color: oklch(0.540 0.195 250); }
+  .border-ink      { border-color: oklch(0.130 0.008 264); }
+  .border-amber    { border-color: oklch(0.720 0.160 60); }
+  .border-tomato   { border-color: oklch(0.590 0.220 25); }
 
-  /* ── Elegant divider rule ── */
+  /* ── Divider rule (Apple-style thin grey) ── */
   .terra-rule {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: 0.20em;
-    font-size: 0.60rem;
-    font-family: 'Bebas Neue', sans-serif;
-    color: oklch(0.310 0.095 10 / 0.60);
+    letter-spacing: 0.10em;
+    font-size: 0.65rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    color: oklch(0.460 0.010 264 / 0.60);
   }
   .terra-rule::before,
   .terra-rule::after {
     content: '';
     flex: 1;
     height: 1px;
-    background: linear-gradient(to right, transparent, oklch(0.310 0.095 10 / 0.35), transparent);
+    background: oklch(0.910 0.004 264);
   }
   /* Legacy alias */
   .gold-rule {
@@ -286,197 +295,200 @@
     align-items: center;
     gap: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: 0.20em;
-    font-size: 0.60rem;
-    font-family: 'Bebas Neue', sans-serif;
-    color: oklch(0.310 0.095 10 / 0.60);
+    letter-spacing: 0.10em;
+    font-size: 0.65rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    color: oklch(0.460 0.010 264 / 0.60);
   }
   .gold-rule::before,
   .gold-rule::after {
     content: '';
     flex: 1;
     height: 1px;
-    background: linear-gradient(to right, transparent, oklch(0.310 0.095 10 / 0.35), transparent);
+    background: oklch(0.910 0.004 264);
   }
 
-  /* ── Card with burgundy top accent ── */
+  /* ── Apple-style card ── */
   .paradiso-card {
-    background-color: oklch(0.978 0.008 68);
-    border: 1px solid oklch(0.880 0.012 65);
-    border-top: 2px solid oklch(0.310 0.095 10 / 0.60);
-    border-radius: 0.25rem;
+    background-color: oklch(1.000 0.000 0);
+    border: 1px solid oklch(0.910 0.004 264);
+    border-radius: 0.875rem;
+    box-shadow: 0 1px 3px oklch(0.130 0.008 264 / 0.06), 0 1px 2px oklch(0.130 0.008 264 / 0.04);
   }
   /* Legacy alias */
   .dante-card {
-    background-color: oklch(0.978 0.008 68);
-    border: 1px solid oklch(0.880 0.012 65);
-    border-top: 2px solid oklch(0.310 0.095 10 / 0.60);
-    border-radius: 0.25rem;
+    background-color: oklch(1.000 0.000 0);
+    border: 1px solid oklch(0.910 0.004 264);
+    border-radius: 0.875rem;
+    box-shadow: 0 1px 3px oklch(0.130 0.008 264 / 0.06), 0 1px 2px oklch(0.130 0.008 264 / 0.04);
   }
   .cream-card {
-    background-color: oklch(0.978 0.008 68);
-    border: 1px solid oklch(0.880 0.012 65);
-    border-radius: 0.25rem;
+    background-color: oklch(1.000 0.000 0);
+    border: 1px solid oklch(0.910 0.004 264);
+    border-radius: 0.875rem;
+    box-shadow: 0 1px 3px oklch(0.130 0.008 264 / 0.06);
   }
 
-  /* ── Stripe motif (burgundy + cream) ── */
+  /* ── Stripe motif (subtle grey) ── */
   .stripe-pattern {
     background-image: repeating-linear-gradient(
       90deg,
-      oklch(0.310 0.095 10) 0px,
-      oklch(0.310 0.095 10) 5px,
-      oklch(0.960 0.012 68) 5px,
-      oklch(0.960 0.012 68) 11px,
-      oklch(0.720 0.045 220 / 0.25) 11px,
-      oklch(0.720 0.045 220 / 0.25) 13px,
-      oklch(0.960 0.012 68) 13px,
-      oklch(0.960 0.012 68) 19px
+      oklch(0.910 0.004 264) 0px,
+      oklch(0.910 0.004 264) 1px,
+      transparent 1px,
+      transparent 12px
     );
   }
   .stripe-pattern-v {
     background-image: repeating-linear-gradient(
       180deg,
-      oklch(0.310 0.095 10) 0px,
-      oklch(0.310 0.095 10) 5px,
-      oklch(0.960 0.012 68) 5px,
-      oklch(0.960 0.012 68) 11px,
-      oklch(0.720 0.045 220 / 0.25) 11px,
-      oklch(0.720 0.045 220 / 0.25) 13px,
-      oklch(0.960 0.012 68) 13px,
-      oklch(0.960 0.012 68) 19px
+      oklch(0.910 0.004 264) 0px,
+      oklch(0.910 0.004 264) 1px,
+      transparent 1px,
+      transparent 12px
     );
   }
 
-  /* ── Sidebar nav item ── */
+  /* ── Sidebar nav item (Apple-style) ── */
   .nav-item {
     display: flex;
     align-items: center;
     gap: 0.625rem;
-    padding: 0.5rem 0.875rem;
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.12em;
-    font-size: 0.80rem;
-    color: oklch(0.850 0.015 68);
+    padding: 0.5rem 0.75rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    color: oklch(0.350 0.010 264);
     transition: color 0.12s ease, background-color 0.12s ease;
-    border-radius: 0.25rem;
+    border-radius: 0.5rem;
     cursor: pointer;
   }
   .nav-item:hover {
-    color: oklch(0.960 0.012 68);
-    background-color: oklch(0.310 0.095 10 / 0.50);
+    color: oklch(0.130 0.008 264);
+    background-color: oklch(0.955 0.002 264);
   }
   .nav-item.active {
-    color: oklch(0.960 0.012 68);
-    background-color: oklch(0.310 0.095 10 / 0.40);
-    border-left: 2px solid oklch(0.720 0.045 220);
-    padding-left: calc(0.875rem - 2px);
+    color: oklch(0.540 0.195 250);
+    background-color: oklch(0.930 0.025 250);
+    font-weight: 600;
   }
 
   /* ── Status pill badges ── */
-  .status-new       { background: oklch(0.720 0.045 220 / 0.18); color: oklch(0.380 0.060 220); }
-  .status-quoted    { background: oklch(0.310 0.095 10 / 0.12); color: oklch(0.280 0.080 10); }
-  .status-confirmed { background: oklch(0.50 0.14 155 / 0.15); color: oklch(0.30 0.12 155); }
-  .status-cancelled { background: oklch(0.480 0.032 60 / 0.15); color: oklch(0.40 0.025 60); }
+  .status-new       { background: oklch(0.930 0.025 250); color: oklch(0.540 0.195 250); }
+  .status-quoted    { background: oklch(0.940 0.040 60 / 0.50); color: oklch(0.520 0.120 60); }
+  .status-confirmed { background: oklch(0.920 0.060 155 / 0.60); color: oklch(0.350 0.120 155); }
+  .status-cancelled { background: oklch(0.955 0.002 264); color: oklch(0.460 0.010 264); }
 
-  /* ── Stat card ── */
+  /* ── Stat card (Apple-style) ── */
   .stat-card {
-    background: oklch(0.978 0.008 68);
-    border: 1px solid oklch(0.880 0.012 65);
-    border-top: 2px solid oklch(0.310 0.095 10 / 0.45);
+    background: oklch(1.000 0.000 0);
+    border: 1px solid oklch(0.910 0.004 264);
+    border-radius: 0.875rem;
     padding: 1.25rem;
-    border-radius: 0.25rem;
+    box-shadow: 0 1px 3px oklch(0.130 0.008 264 / 0.06);
   }
 
-  /* ── Primary button (burgundy) ── */
+  /* ── Primary button (Apple Blue) ── */
   .btn-teal {
-    background-color: oklch(0.310 0.095 10);
-    color: oklch(0.960 0.012 68);
-    border-radius: 0.25rem;
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.12em;
-    transition: background-color 0.15s ease;
+    background-color: oklch(0.540 0.195 250);
+    color: oklch(1.000 0.000 0);
+    border-radius: 0.625rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 0.875rem;
+    letter-spacing: -0.01em;
+    transition: background-color 0.15s ease, transform 0.1s ease;
   }
-  .btn-teal:hover { background-color: oklch(0.260 0.082 10); }
+  .btn-teal:hover { background-color: oklch(0.490 0.185 250); }
+  .btn-teal:active { transform: scale(0.98); }
   /* Legacy aliases */
   .btn-forest {
-    background-color: oklch(0.310 0.095 10);
-    color: oklch(0.960 0.012 68);
-    border-radius: 0.25rem;
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.12em;
-    transition: background-color 0.15s ease;
+    background-color: oklch(0.540 0.195 250);
+    color: oklch(1.000 0.000 0);
+    border-radius: 0.625rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 0.875rem;
+    letter-spacing: -0.01em;
+    transition: background-color 0.15s ease, transform 0.1s ease;
   }
-  .btn-forest:hover { background-color: oklch(0.260 0.082 10); }
+  .btn-forest:hover { background-color: oklch(0.490 0.185 250); }
+  .btn-forest:active { transform: scale(0.98); }
 
-  /* ── Blue outline button ── */
+  /* ── Outline button ── */
   .btn-terra-outline {
-    background-color: transparent;
-    color: oklch(0.580 0.055 220);
-    border: 1px solid oklch(0.720 0.045 220 / 0.70);
-    border-radius: 0.25rem;
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.12em;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    background-color: oklch(1.000 0.000 0);
+    color: oklch(0.540 0.195 250);
+    border: 1px solid oklch(0.540 0.195 250 / 0.40);
+    border-radius: 0.625rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 500;
+    font-size: 0.875rem;
+    letter-spacing: -0.01em;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
   }
   .btn-terra-outline:hover {
-    background-color: oklch(0.720 0.045 220 / 0.12);
+    background-color: oklch(0.930 0.025 250);
+    border-color: oklch(0.540 0.195 250 / 0.60);
   }
   /* Legacy alias */
   .btn-gold-outline {
-    background-color: transparent;
-    color: oklch(0.580 0.055 220);
-    border: 1px solid oklch(0.720 0.045 220 / 0.70);
-    border-radius: 0.25rem;
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.12em;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    background-color: oklch(1.000 0.000 0);
+    color: oklch(0.540 0.195 250);
+    border: 1px solid oklch(0.540 0.195 250 / 0.40);
+    border-radius: 0.625rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 500;
+    font-size: 0.875rem;
+    letter-spacing: -0.01em;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
   }
   .btn-gold-outline:hover {
-    background-color: oklch(0.720 0.045 220 / 0.12);
+    background-color: oklch(0.930 0.025 250);
+    border-color: oklch(0.540 0.195 250 / 0.60);
   }
 
-  /* ── Input focus ── */
+  /* ── Input focus (Apple-style) ── */
   .input-paradiso {
-    border: 1px solid oklch(0.880 0.012 65);
-    border-radius: 0.25rem;
-    background: oklch(0.978 0.008 68);
-    font-family: 'Inter', sans-serif;
-    transition: border-color 0.15s ease;
+    border: 1px solid oklch(0.910 0.004 264);
+    border-radius: 0.625rem;
+    background: oklch(1.000 0.000 0);
+    font-family: 'Inter', system-ui, sans-serif;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
   .input-paradiso:focus {
     outline: none;
-    border-color: oklch(0.310 0.095 10 / 0.60);
-    box-shadow: 0 0 0 2px oklch(0.310 0.095 10 / 0.10);
+    border-color: oklch(0.540 0.195 250);
+    box-shadow: 0 0 0 3px oklch(0.540 0.195 250 / 0.15);
   }
   /* Legacy alias */
   .input-dante {
-    border: 1px solid oklch(0.880 0.012 65);
-    border-radius: 0.25rem;
-    background: oklch(0.978 0.008 68);
-    font-family: 'Inter', sans-serif;
-    transition: border-color 0.15s ease;
+    border: 1px solid oklch(0.910 0.004 264);
+    border-radius: 0.625rem;
+    background: oklch(1.000 0.000 0);
+    font-family: 'Inter', system-ui, sans-serif;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
   .input-dante:focus {
     outline: none;
-    border-color: oklch(0.310 0.095 10 / 0.60);
-    box-shadow: 0 0 0 2px oklch(0.310 0.095 10 / 0.10);
+    border-color: oklch(0.540 0.195 250);
+    box-shadow: 0 0 0 3px oklch(0.540 0.195 250 / 0.15);
   }
 
-  /* ── Logo script ── */
+  /* ── Logo ── */
   .logo-script {
-    font-family: 'Cormorant Garamond', Georgia, serif;
-    color: oklch(0.960 0.012 68);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: oklch(0.130 0.008 264);
     line-height: 1;
-    font-style: italic;
   }
 
-  /* ── Checkerboard tile accent (legacy) ── */
+  /* ── Checkerboard (legacy, now subtle dot grid) ── */
   .checkerboard {
-    background-image:
-      repeating-conic-gradient(
-        oklch(0.310 0.095 10 / 0.06) 0% 25%,
-        transparent 0% 50%
-      );
+    background-image: radial-gradient(circle, oklch(0.910 0.004 264) 1px, transparent 1px);
     background-size: 20px 20px;
   }
 

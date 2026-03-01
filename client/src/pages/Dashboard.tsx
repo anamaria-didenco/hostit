@@ -101,12 +101,13 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 
 // ── Overview Widget Sub-Components ──────────────────────────────────────────────
 
-function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings, monthLeadEvents, onPrev, onNext, onDayClick, onViewCalendar }: {
+function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings, monthLeadEvents, onPrev, onNext, onDayClick, onViewCalendar, onCreateEvent }: {
   month: number; year: number; firstDay: number; daysInMonth: number;
   monthBookings: any; monthLeadEvents: any;
   onPrev: () => void; onNext: () => void;
   onDayClick: (dayBookings: any[], dayLeads: any[]) => void;
   onViewCalendar: () => void;
+  onCreateEvent?: (date: string) => void;
 }) {
   const [showLegend, setShowLegend] = React.useState(true);
   const [startDay, setStartDay] = React.useState<0 | 1>(0); // 0=Sun, 1=Mon
@@ -197,11 +198,27 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
             const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
             const hasEnquiry = dayLeads.length > 0;
             const cellBg = hasConfirmed ? 'bg-emerald-50 border-emerald-300' : hasTentative ? 'bg-amber-50 border-amber-300' : hasCancelled ? 'bg-stone-50 border-stone-300' : hasEnquiry ? 'bg-rose-50 border-rose-300' : isToday ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-linen';
+            const isEmpty = dayBookings.length === 0 && dayLeads.length === 0;
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             return (
-              <div key={day} onClick={() => onDayClick(dayBookings, dayLeads)}
-                className={`relative min-h-[44px] flex flex-col p-1 border transition-colors ${cellBg} ${(dayBookings.length > 0 || dayLeads.length > 0) ? 'cursor-pointer' : ''}`}
+              <div
+                key={day}
+                onClick={() => {
+                  if (!isEmpty) {
+                    onDayClick(dayBookings, dayLeads);
+                  } else if (onCreateEvent) {
+                    onCreateEvent(dateStr);
+                  }
+                }}
+                className={`group relative min-h-[44px] flex flex-col p-1 border transition-colors ${cellBg} ${(!isEmpty || onCreateEvent) ? 'cursor-pointer' : ''} ${isEmpty && onCreateEvent ? 'hover:bg-forest/5 hover:border-forest/30' : ''}`}
               >
                 <span className={`text-[11px] font-dm leading-none mb-0.5 ${isToday ? 'font-bold text-gold' : 'text-ink/70'}`}>{day}</span>
+                {/* + icon shown on empty cells when onCreateEvent is wired */}
+                {isEmpty && onCreateEvent && (
+                  <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Plus className="w-3.5 h-3.5 text-forest/60" />
+                  </span>
+                )}
                 <div className="flex flex-wrap gap-0.5 mt-auto">
                   {dayBookings.slice(0, 3).map((b: any) => (
                     <span key={b.id} className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === 'confirmed' ? 'bg-emerald-500' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'}`} />
@@ -380,6 +397,8 @@ export default function Dashboard() {
   const [showAddSpace, setShowAddSpace] = useState(false);
   const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
+  const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' as 'new' | 'tentative' | 'booked' });
   const [widgetEditMode, setWidgetEditMode] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
@@ -414,10 +433,11 @@ export default function Dashboard() {
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
   );
-  const { data: monthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
+  const { data: monthLeadEvents, refetch: refetchMonthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
   );
+
 
   // ── Widget layout preferences ──────────────────────────────────────────
   const { data: userPrefs } = trpc.userPreferences.get.useQuery(undefined, {
@@ -498,6 +518,16 @@ export default function Dashboard() {
       toast.success('Enquiry added!');
     },
     onError: () => toast.error('Failed to add enquiry'),
+  });
+  const createEnquiryFromCalendar = trpc.leads.create.useMutation({
+    onSuccess: () => {
+      refetchLeads();
+      refetchMonthLeadEvents();
+      setQuickCreateDate(null);
+      setQuickCreateForm({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' });
+      toast.success('Event added to calendar!');
+    },
+    onError: () => toast.error('Failed to create event'),
   });
   const updateSettings = trpc.venue.update.useMutation({
     onSuccess: () => { refetchSettings(); toast.success("Settings saved!"); },
@@ -697,37 +727,37 @@ export default function Dashboard() {
     : `${window.location.origin}/enquire`;
 
   if (loading) return (
-    <div className="min-h-screen bg-cream flex items-center justify-center">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="font-cormorant text-3xl text-forest/30 animate-pulse italic">Loading...</div>
     </div>
   );
 
   if (!isAuthenticated) return (
-    <div className="min-h-screen bg-forest-dark flex items-center justify-center">
-      <div className="text-center max-w-sm px-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center max-w-sm w-full mx-4">
         <div className="mb-8">
-          <div className="flex items-center justify-center mb-3">
+          <div className="flex items-center justify-center mb-4">
             <img
               src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
               alt="HOSTit"
-              className="h-16 w-auto object-contain"
-              style={{ filter: 'brightness(0) invert(1)' }}
+              className="h-12 w-auto object-contain"
+              style={{ filter: 'brightness(0)' }}
             />
           </div>
-          <div className="gold-rule max-w-xs mx-auto"><span>EVENT CRM FOR NZ VENUES</span></div>
+          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Event CRM for NZ Venues</p>
         </div>
-        <h2 className="font-cormorant text-3xl text-cream font-semibold mb-3">Sign in to your dashboard</h2>
-        <p className="font-dm text-cream/80 text-sm mb-8">Manage event enquiries, build proposals, and track bookings — all in one place.</p>
+        <h2 className="font-inter text-2xl text-gray-900 font-700 mb-2" style={{ fontWeight: 700, letterSpacing: '-0.02em' }}>Sign in to your dashboard</h2>
+        <p className="font-inter text-gray-500 text-sm mb-8">Manage event enquiries, build proposals, and track bookings — all in one place.</p>
         <a href={getLoginUrl()}>
-          <button className="btn-forest w-full font-bebas tracking-widest text-sm py-3.5 text-cream">
-            SIGN IN
+          <button className="btn-forest w-full text-sm py-3 text-white">
+            Sign In
           </button>
         </a>
-        <div className="mt-6 border-t border-gold/20 pt-6">
-          <p className="font-dm text-xs text-cream/70 mb-3">Looking to enquire about an event?</p>
+        <div className="mt-6 border-t border-gray-100 pt-6">
+          <p className="font-inter text-xs text-gray-400 mb-3">Looking to enquire about an event?</p>
           <Link href="/enquire">
-            <button className="btn-gold-outline w-full font-bebas tracking-widest text-xs py-3">
-              SUBMIT AN ENQUIRY
+            <button className="btn-terra-outline w-full text-xs py-2.5">
+              Submit an Enquiry
             </button>
           </Link>
         </div>
@@ -736,16 +766,16 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-cream font-dm flex flex-col">
+    <div className="min-h-screen bg-gray-50 font-inter flex flex-col">
       {/* ── TOP NAVIGATION BAR (Perfect Venue layout) ──────────────────────── */}
-      <nav className="bg-burgundy sticky top-0 z-50 border-b border-white/10 h-14 flex items-center px-4">
+      <nav className="bg-white sticky top-0 z-50 border-b border-gray-200 h-14 flex items-center px-4 shadow-sm">
         {/* Logo */}
-        <div className="flex items-center pr-5 border-r border-white/20 mr-4 flex-shrink-0">
+        <div className="flex items-center pr-5 border-r border-gray-200 mr-4 flex-shrink-0">
           <img
             src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
             alt="HOSTit"
             className="h-7 w-auto object-contain"
-            style={{ filter: 'brightness(0) invert(1)' }}
+            style={{ filter: 'brightness(0)' }}
           />
         </div>
         {/* Primary nav tabs */}
@@ -759,10 +789,10 @@ export default function Dashboard() {
           <button
             key={item.id}
             onClick={() => setTab(item.id as any)}
-            className={`h-14 px-4 font-dm text-sm transition-colors border-b-2 flex-shrink-0 ${
+            className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 ${
               tab === item.id
-                ? "text-white border-white font-semibold"
-                : "text-white/70 border-transparent hover:text-white hover:border-white/50"
+                ? "text-blue-600 border-blue-600 font-semibold"
+                : "text-gray-500 border-transparent hover:text-gray-900 hover:border-gray-300"
             }`}
           >
             {item.label}
@@ -771,10 +801,10 @@ export default function Dashboard() {
         {/* Settings */}
         <button
           onClick={() => setTab("settings" as any)}
-          className={`h-14 px-4 font-dm text-sm transition-colors border-b-2 flex-shrink-0 ${
+          className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 ${
             tab === "settings"
-              ? "text-white border-white font-semibold"
-              : "text-white/70 border-transparent hover:text-white hover:border-white/50"
+              ? "text-blue-600 border-blue-600 font-semibold"
+              : "text-gray-500 border-transparent hover:text-gray-900 hover:border-gray-300"
           }`}
         >
           Settings
@@ -783,8 +813,8 @@ export default function Dashboard() {
         <div className="flex-1" />
         {/* Right: venue name + avatar */}
         <div className="flex items-center gap-3 flex-shrink-0">
-          <span className="font-dm text-white/80 text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
-          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-dm text-white text-sm font-semibold">
+          <span className="font-inter text-gray-600 text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
+          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-inter text-white text-sm font-semibold">
             {(user?.name ?? "U").charAt(0).toUpperCase()}
           </div>
         </div>
@@ -802,17 +832,19 @@ export default function Dashboard() {
               {/* Header */}
               <div className="mb-6 flex items-end justify-between">
                 <div>
-                  <div className="gold-rule max-w-xs mb-3"><span>DASHBOARD</span></div>
-                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.5rem', fontWeight: 600 }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Dashboard</span>
+                  </div>
+                  <h1 className="font-inter text-gray-900" style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em' }}>
                     Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 17 ? "Afternoon" : "Evening"}
                   </h1>
                 </div>
-                <button
+                  <button
                   onClick={() => setWidgetEditMode(v => !v)}
-                  className={`flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border transition-colors ${
+                  className={`flex items-center gap-1.5 font-inter text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
                     widgetEditMode
-                      ? "bg-forest-dark text-cream border-forest-dark"
-                      : "border-gold/40 text-sage hover:border-forest hover:text-forest"
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600 bg-white"
                   }`}
                   title="Customise dashboard layout"
                 >
@@ -821,25 +853,25 @@ export default function Dashboard() {
                 </button>
               </div>
               {widgetEditMode && (
-                <div className="mb-4 px-4 py-3 bg-gold/10 border border-gold/30 font-dm text-xs text-ink/70">
-                  <strong className="font-bebas tracking-widest text-ink">EDIT MODE</strong> — Drag the <span className="font-semibold">⠿</span> handle to reorder widgets, toggle <strong>HALF/FULL</strong> width, or show/hide. Changes are saved automatically.
+                <div className="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl font-inter text-xs text-blue-700">
+                  <strong className="font-semibold">Edit Mode</strong> — Drag the <span className="font-semibold">⠿</span> handle to reorder widgets, toggle <strong>Half/Full</strong> width, or show/hide. Changes are saved automatically.
                 </div>
               )}
 
               {/* Stats row — always visible, not draggable */}
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-px bg-gold/15 mb-6">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                 {[
-                  { label: "NEW ENQUIRIES", value: stats?.newLeads ?? 0, sub: "awaiting reply", accent: "text-gold", icon: <MessageSquare className="w-4 h-4 text-gold" /> },
-                  { label: "TOTAL ENQUIRIES", value: stats?.totalLeads ?? 0, sub: "all time", accent: "text-ink", icon: <Users className="w-4 h-4 text-sage" /> },
-                  { label: "PROPOSALS SENT", value: stats?.proposalsSent ?? 0, sub: "this period", accent: "text-forest", icon: <FileText className="w-4 h-4 text-forest" /> },
-                  { label: "BOOKINGS THIS MONTH", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, accent: "text-emerald-600", icon: <CheckCircle className="w-4 h-4 text-emerald-600" /> },
-                  { label: "OVERDUE FOLLOW-UPS", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", accent: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-sage", icon: <span className={(stats?.overdueFollowUps ?? 0) > 0 ? "text-red-500 text-base" : "text-sage text-base"}>⏰</span> },
+                  { label: "New Enquiries", value: stats?.newLeads ?? 0, sub: "awaiting reply", iconBg: "bg-blue-100", iconColor: "text-blue-600", icon: <MessageSquare className="w-4 h-4" /> },
+                  { label: "Total Enquiries", value: stats?.totalLeads ?? 0, sub: "all time", iconBg: "bg-gray-100", iconColor: "text-gray-600", icon: <Users className="w-4 h-4" /> },
+                  { label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-indigo-100", iconColor: "text-indigo-600", icon: <FileText className="w-4 h-4" /> },
+                  { label: "Bookings This Month", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, iconBg: "bg-green-100", iconColor: "text-green-600", icon: <CheckCircle className="w-4 h-4" /> },
+                  { label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-100", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-4 h-4" /> },
                 ].map(s => (
                   <div key={s.label} className="stat-card">
-                    <div className="flex items-start justify-between mb-3">{s.icon}</div>
-                    <div className={`font-cormorant text-5xl font-semibold mb-1 ${s.accent}`}>{s.value}</div>
-                    <div className="font-bebas text-xs tracking-widest text-sage leading-tight">{s.label}</div>
-                    <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
+                    <div className={`w-9 h-9 rounded-xl ${s.iconBg} ${s.iconColor} flex items-center justify-center mb-3`}>{s.icon}</div>
+                    <div className="font-inter text-3xl font-700 text-gray-900 mb-0.5" style={{ fontWeight: 700 }}>{s.value}</div>
+                    <div className="font-inter text-xs font-semibold text-gray-500 leading-tight">{s.label}</div>
+                    <div className="font-inter text-xs text-gray-400 mt-0.5">{s.sub}</div>
                   </div>
                 ))}
               </div>
@@ -906,27 +938,27 @@ export default function Dashboard() {
               <div className={`${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-gold/15 bg-warm-white flex-shrink-0`}>
                 <div className="p-4 border-b border-gold/15">
                   {/* Sub-tab toggle */}
-                  <div className="flex mb-3 border border-gold/30">
+                  <div className="flex mb-3 bg-gray-100 rounded-xl p-1 gap-1">
                     <button
                       onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
-                      className={`flex-1 font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1.5 transition-colors ${
-                        leadsSubTab === "new" ? "bg-forest-dark text-cream" : "text-ink/60 hover:bg-gold/10"
+                      className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
+                        leadsSubTab === "new" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
                       }`}>
-                      NEW ENQUIRIES
+                      New
                       {newEnquiries.length > 0 && (
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-dm font-semibold ${
-                          leadsSubTab === "new" ? "bg-gold text-forest-dark" : "bg-forest/20 text-forest"
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                          leadsSubTab === "new" ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"
                         }`}>{newEnquiries.length}</span>
                       )}
                     </button>
                     <button
                       onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
-                      className={`flex-1 font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1.5 transition-colors ${
-                        leadsSubTab === "all" ? "bg-forest-dark text-cream" : "text-ink/60 hover:bg-gold/10"
+                      className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
+                        leadsSubTab === "all" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
                       }`}>
-                      ALL ENQUIRIES
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-dm font-semibold ${
-                        leadsSubTab === "all" ? "bg-gold text-forest-dark" : "bg-forest/20 text-forest"
+                      All
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                        leadsSubTab === "all" ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"
                       }`}>{repliedLeads.length}</span>
                     </button>
                   </div>
@@ -952,9 +984,9 @@ export default function Dashboard() {
                   {/* Add Enquiry button */}
                   <button
                     onClick={() => setShowAddLead(true)}
-                    className="w-full mb-2 bg-forest-dark text-cream font-bebas tracking-widest text-xs py-2 flex items-center justify-center gap-1.5 hover:bg-forest transition-colors"
+                    className="w-full mb-2 bg-blue-600 text-white font-inter font-medium text-sm py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-colors"
                   >
-                    <Plus className="w-3.5 h-3.5" /> ADD ENQUIRY
+                    <Plus className="w-3.5 h-3.5" /> Add Enquiry
                   </button>
                   <div className="relative mb-2">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/60" />
