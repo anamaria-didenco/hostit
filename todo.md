@@ -524,10 +524,10 @@
 - [x] Settings panel collapses when gear icon clicked again
 
 ## Mini Calendar — Click-to-Create Event
-- [ ] Click an empty date cell on the mini calendar to open a quick-create modal
-- [ ] Modal pre-fills the selected date; user can enter event name, type (Enquiry/Confirmed), guest count, and notes
-- [ ] Submitting the modal creates a new lead (enquiry) or booking (confirmed event) via tRPC
-- [ ] Calendar refreshes after creation to show the new dot on the clicked date
+- [x] Click an empty date cell on the mini calendar to open a quick-create modal
+- [x] Modal pre-fills the selected date; user can enter event name, type (Enquiry/Confirmed), guest count, and notes
+- [x] Submitting the modal creates a new lead (enquiry) or booking (confirmed event) via tRPC
+- [x] Calendar refreshes after creation to show the new dot on the clicked date
 
 ## Apple-Inspired Retheme
 - [x] Update index.css: white/light grey surfaces, Inter font, blue accent (#0071E3), generous border-radius, subtle shadows
@@ -542,3 +542,13 @@
 - [ ] Update index.css CSS tokens with new palette
 - [ ] Update Dashboard nav, buttons, stat cards, tabs
 - [ ] Update Home.tsx landing page
+
+## Bug Fixes (Mar 2026)
+- [x] Fix Enquiries tab: status filter not showing results when a status is selected
+
+## Dashboard Full Calendar + Enquiry-to-Event Flow
+- [x] Dashboard home tab: show full monthly calendar grid prominently (left ~70%) + upcoming events sidebar (right ~30%)
+- [x] Enquiries tab: only show non-confirmed leads (exclude booked/confirmed status)
+- [x] Calendar: confirmed enquiries appear as sage green "Event" cards
+- [x] Status pipeline: "Confirm Booking" button promotes enquiry to event
+- [x] Calendar legend updated: Events (sage green), Enquiries (amber), Proposals (violet)

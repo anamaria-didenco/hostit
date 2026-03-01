@@ -324,21 +324,21 @@ export default function ProposalBuilder() {
   return (
     <div className="min-h-screen bg-parchment font-dm">
       {/* Header */}
-      <div className="bg-ink text-cream h-14 flex items-center px-6 sticky top-0 z-40 border-b-4 border-tomato">
+      <div className="bg-white border-b border-gray-200 h-14 flex items-center px-6 sticky top-0 z-40 shadow-sm">
         <Link href="/dashboard">
-          <Button variant="ghost" size="sm" className="text-cream/60 hover:text-cream font-bebas tracking-widest text-xs gap-1 mr-4">
-            <ChevronLeft className="w-4 h-4" /> DASHBOARD
+          <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-800 font-inter text-xs gap-1 mr-4">
+            <ChevronLeft className="w-4 h-4" /> Dashboard
           </Button>
         </Link>
-        <div className="flex items-center mr-4">
+        <div className="flex items-center mr-3">
           <img
             src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
             alt="HOSTit"
             className="h-7 w-auto object-contain"
-            style={{ filter: 'brightness(0) invert(1)' }}
+            style={{ filter: 'brightness(0)' }}
           />
         </div>
-          <div className="font-playfair italic text-amber/90 text-sm">Proposal Builder</div>
+        <div className="font-inter text-sm font-medium text-gray-700">Proposal Builder</div>
         <div className="ml-auto flex items-center gap-2">
           {savedProposal?.publicToken && (
             <Button
@@ -346,7 +346,7 @@ export default function ProposalBuilder() {
               disabled={pdfLoading}
               variant="ghost"
               size="sm"
-              className="text-cream/70 hover:text-cream hover:bg-cream/10 font-bebas tracking-widest text-xs gap-1"
+              className="text-gray-500 hover:text-gray-800 font-inter text-xs gap-1"
             >
               <Download className="w-3.5 h-3.5" />
               {pdfLoading ? "PDF..." : "PDF"}
@@ -354,17 +354,17 @@ export default function ProposalBuilder() {
           )}
           {!savedProposal ? (
             <Button onClick={handleSave} disabled={createProposal.isPending}
-              variant="outline" className="border-amber/40 text-amber hover:bg-amber/10 font-bebas tracking-widest rounded-none text-xs bg-transparent">
-              {createProposal.isPending ? "SAVING..." : "SAVE DRAFT"}
+              variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent">
+              {createProposal.isPending ? "Saving..." : "Save Draft"}
             </Button>
           ) : !sent ? (
             <Button onClick={handleSend} disabled={sendProposal.isPending}
-              className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none text-xs gap-1">
-              <Send className="w-3 h-3" /> {sendProposal.isPending ? "SENDING..." : "SEND TO CLIENT"}
+              className="bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs gap-1">
+              <Send className="w-3 h-3" /> {sendProposal.isPending ? "Sending..." : "Send to Client"}
             </Button>
           ) : (
-            <div className="flex items-center gap-2 text-green-400 font-bebas text-xs tracking-widest">
-              <CheckCircle className="w-4 h-4" /> SENT
+            <div className="flex items-center gap-2 text-sage-dark font-inter text-xs font-medium">
+              <CheckCircle className="w-4 h-4" /> Sent
             </div>
           )}
         </div>

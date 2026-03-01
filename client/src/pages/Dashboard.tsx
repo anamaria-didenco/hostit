@@ -398,7 +398,7 @@ export default function Dashboard() {
   const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
-  const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' as 'new' | 'tentative' | 'booked' });
+  const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked' });
   const [widgetEditMode, setWidgetEditMode] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
@@ -706,9 +706,15 @@ export default function Dashboard() {
     }
   }, [venueSettings]);
 
-  const newEnquiries = (allLeads ?? []).filter((l: any) => l.status === "new");
-  const repliedLeads = (allLeads ?? []).filter((l: any) => l.status !== "new");
-  const leadsToShow = leadsSubTab === "new" ? newEnquiries : repliedLeads;
+  // Confirmed statuses are treated as Events (shown on Calendar), not Enquiries
+  const CONFIRMED_STATUSES = ['booked', 'confirmed'];
+  const activeEnquiries = (allLeads ?? []).filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
+  const newEnquiries = activeEnquiries.filter((l: any) => l.status === "new");
+  const repliedLeads = activeEnquiries.filter((l: any) => l.status !== "new");
+  // When a specific status filter is active, show all active enquiries from the server (don't re-filter by leadsSubTab)
+  const leadsToShow = leadStatusFilter !== "all"
+    ? activeEnquiries
+    : leadsSubTab === "new" ? newEnquiries : repliedLeads;
   const filteredLeads = leadsToShow.filter((l: any) =>
     !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
   );
@@ -828,38 +834,9 @@ export default function Dashboard() {
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
           {tab === "overview" && (
-            <div className="p-6">
-              {/* Header */}
-              <div className="mb-6 flex items-end justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-semibold text-sage-green uppercase tracking-wider">Dashboard</span>
-                  </div>
-                  <h1 className="font-inter text-gray-900" style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em' }}>
-                    Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 17 ? "Afternoon" : "Evening"}
-                  </h1>
-                </div>
-                  <button
-                  onClick={() => setWidgetEditMode(v => !v)}
-                  className={`flex items-center gap-1.5 font-inter text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
-                    widgetEditMode
-                      ? "bg-sage-green text-white border-sage-green"
-                      : "border-border text-gray-400 hover:border-sage-green hover:text-sage-dark bg-white"
-                  }`}
-                  title="Customise dashboard layout"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                  {widgetEditMode ? "DONE" : "CUSTOMISE"}
-                </button>
-              </div>
-              {widgetEditMode && (
-                <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl font-inter text-xs text-amber-800">
-                  <strong className="font-semibold">Edit Mode</strong> — Drag the <span className="font-semibold">⠿</span> handle to reorder widgets, toggle <strong>Half/Full</strong> width, or show/hide. Changes are saved automatically.
-                </div>
-              )}
-
-              {/* Stats row — always visible, not draggable */}
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <div className="flex flex-col h-full overflow-hidden">
+              {/* Stats bar */}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 px-5 pt-4 pb-3 border-b border-border flex-shrink-0">
                 {[
                   { label: "New Enquiries", value: stats?.newLeads ?? 0, sub: "awaiting reply", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-4 h-4" /> },
                   { label: "Total Enquiries", value: stats?.totalLeads ?? 0, sub: "all time", iconBg: "bg-gray-100", iconColor: "text-gray-500", icon: <Users className="w-4 h-4" /> },
@@ -867,67 +844,217 @@ export default function Dashboard() {
                   { label: "Bookings This Month", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <CheckCircle className="w-4 h-4" /> },
                   { label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-100", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-4 h-4" /> },
                 ].map(s => (
-                  <div key={s.label} className="stat-card">
-                    <div className={`w-9 h-9 rounded-xl ${s.iconBg} ${s.iconColor} flex items-center justify-center mb-3`}>{s.icon}</div>
-                    <div className="font-inter text-3xl font-700 text-gray-900 mb-0.5" style={{ fontWeight: 700 }}>{s.value}</div>
+                  <div key={s.label} className="stat-card py-3">
+                    <div className={`w-8 h-8 rounded-lg ${s.iconBg} ${s.iconColor} flex items-center justify-center mb-2`}>{s.icon}</div>
+                    <div className="font-inter text-2xl text-gray-900" style={{ fontWeight: 700 }}>{s.value}</div>
                     <div className="font-inter text-xs font-semibold text-gray-500 leading-tight">{s.label}</div>
                     <div className="font-inter text-xs text-gray-400 mt-0.5">{s.sub}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Draggable two-column widgets */}
-              <DashboardWidgets
-                order={widgetOrder}
-                hidden={hiddenWidgets}
-                sizes={widgetSizes}
-                editMode={widgetEditMode}
-                onOrderChange={handleWidgetOrderChange}
-                onToggleHidden={handleToggleHidden}
-                onToggleSize={handleToggleWidgetSize}
-                widgets={[
-                  {
-                    id: "calendar",
-                    label: "MINI CALENDAR",
-                    content: <MiniCalendarWidget
-                      month={month} year={year} firstDay={firstDay} daysInMonth={daysInMonth}
-                      monthBookings={monthBookings} monthLeadEvents={monthLeadEvents}
-                      onPrev={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
-                      onNext={() => setCalDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
-                      onDayClick={(dayBookings: any[], dayLeads: any[]) => {
-                        if (dayBookings.length > 0) setTab('calendar');
-                        else if (dayLeads.length > 0) { setSelectedLead(dayLeads[0]); setTab('enquiries'); }
-                      }}
-                      onViewCalendar={() => setTab('calendar')}
-                    />,
-                  },
-                  {
-                    id: "enquiries",
-                    label: "NEW ENQUIRIES",
-                    content: <NewEnquiriesWidget
-                      newEnquiries={newEnquiries}
-                      overdueLeads={overdueLeads}
-                      onSelectLead={(lead: any) => { setSelectedLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
-                      onViewAll={() => { setLeadsSubTab('new'); setTab('enquiries'); }}
-                      onViewOverdue={() => setTab('enquiries')}
-                    />,
-                  },
-                  {
-                    id: "pipeline",
-                    label: "PIPELINE SNAPSHOT",
-                    content: <PipelineSnapshotWidget allLeads={allLeads} onViewLeads={() => setTab('enquiries')} />,
-                  },
-                ]}
-              />
+              {/* Main area: full calendar + sidebar */}
+              <div className="flex flex-1 overflow-hidden">
 
-              {/* Lead Form CTA */}
-              {!venueSettings && (
-                <div className="mt-6 bg-forest/8 border border-forest/20 border-l-2 border-l-gold p-6">
-                  <h3 className="font-cormorant text-xl font-semibold text-ink mb-2">Set up your venue</h3>
-                  <p className="font-dm text-sm text-sage mb-4">Configure your venue details and lead form to start receiving enquiries.</p>
-                  <button onClick={() => setTab("settings")} className="btn-forest font-bebas tracking-widest text-xs px-6 py-2.5 text-cream">CONFIGURE VENUE</button>
+                {/* Full Calendar */}
+                <div className="flex-1 flex flex-col overflow-hidden border-r border-border">
+                  {/* Calendar toolbar */}
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-white flex-shrink-0">
+                    <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-sage-tint rounded-lg transition-colors text-gray-500"><ChevronLeft className="w-4 h-4" /></button>
+                    <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-sage-tint rounded-lg transition-colors text-gray-500"><ChevronRight className="w-4 h-4" /></button>
+                    <h2 className="font-inter font-semibold text-gray-900 text-base flex-1" style={{ letterSpacing: '-0.02em' }}>{MONTHS[month]} {year}</h2>
+                    <button onClick={() => setCalDate(new Date())} className="font-inter text-xs font-medium px-3 py-1.5 border border-border rounded-lg text-gray-500 hover:bg-sage-tint hover:text-sage-dark transition-colors">Today</button>
+                    <button
+                      onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
+                      className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
+                      <Plus className="w-3.5 h-3.5" /> Add Event
+                    </button>
+                  </div>
+                  {/* Legend */}
+                  <div className="flex items-center gap-4 px-4 py-1.5 border-b border-border bg-gray-50 flex-shrink-0">
+                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-sage-green inline-block" />Confirmed</span>
+                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Tentative</span>
+                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-violet-400 inline-block" />Proposal</span>
+                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />Enquiry</span>
+                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 inline-block" />Cancelled</span>
+                  </div>
+                  {/* Day headers */}
+                  <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
+                    {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
+                      <div key={d} className={`text-center font-inter text-xs font-semibold py-2 border-r border-border last:border-r-0 ${
+                        d === 'SAT' || d === 'SUN' ? 'text-sage-green bg-sage-tint/30' : 'text-gray-400'
+                      }`}>{d}</div>
+                    ))}
+                  </div>
+                  {/* Calendar grid */}
+                  <div className="flex-1 overflow-auto">
+                    {(() => {
+                      const firstDayOfMonth = new Date(year, month, 1).getDay();
+                      const mondayOffset = (firstDayOfMonth + 6) % 7;
+                      const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
+                      const cells = Array.from({ length: totalCells }, (_, i) => {
+                        const dayNum = i - mondayOffset + 1;
+                        return dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null;
+                      });
+                      const weeks = [];
+                      for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+                      const numWeeks = weeks.length;
+                      return weeks.map((week, wi) => (
+                        <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(100 / numWeeks)}%` }}>
+                          {week.map((day, di) => {
+                            if (!day) return <div key={di} className="border-r border-border last:border-r-0 bg-gray-50/50" />;
+                            const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
+                            const isWeekend = di >= 5;
+                            const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
+                            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
+                            const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                            const statusColor = (status: string) => {
+                              switch(status) {
+                                case 'confirmed': case 'booked': return 'bg-sage-green text-white';
+                                case 'tentative': return 'bg-amber-400 text-white';
+                                case 'proposal_sent': return 'bg-violet-400 text-white';
+                                case 'negotiating': return 'bg-orange-400 text-white';
+                                case 'new': return 'bg-rose-400 text-white';
+                                case 'contacted': return 'bg-rose-300 text-white';
+                                case 'cancelled': case 'lost': return 'bg-gray-300 text-gray-600';
+                                default: return 'bg-gray-200 text-gray-600';
+                              }
+                            };
+                            return (
+                              <div key={di}
+                                className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[90px] ${
+                                  isWeekend ? 'bg-sage-tint/10' : 'bg-white'
+                                } ${isToday ? 'ring-2 ring-inset ring-sage-green' : ''} hover:bg-sage-tint/20 transition-colors`}
+                              >
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span className={`font-inter text-xs font-semibold leading-none ${
+                                    isToday ? 'w-5 h-5 bg-sage-green text-white rounded-full flex items-center justify-center text-[10px]' : isWeekend ? 'text-sage-dark' : 'text-gray-600'
+                                  }`}>{day}</span>
+                                  <button
+                                    onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' }); }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-sage-tint rounded"
+                                    title="Add event">
+                                    <Plus className="w-3 h-3 text-sage-green" />
+                                  </button>
+                                </div>
+                                {dayBookings.slice(0, 3).map((b: any) => (
+                                  <button key={b.id}
+                                    onClick={() => setLocation(`/event/${b.id}`)}
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-tight font-inter font-medium truncate ${statusColor(b.status)} hover:opacity-80 transition-opacity`}
+                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.status}`}>
+                                    {b.eventType || b.firstName || 'Event'}
+                                  </button>
+                                ))}
+                                {dayLeads.slice(0, 2).map((l: any) => (
+                                  <button key={l.id}
+                                    onClick={() => { setSelectedLead(l); setTab('enquiries'); }}
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-tight font-inter font-medium truncate ${statusColor(l.status)} hover:opacity-80 transition-opacity`}
+                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.status}`}>
+                                    {l.eventType || l.firstName || 'Enquiry'}
+                                  </button>
+                                ))}
+                                {(dayBookings.length + dayLeads.length) > 4 && (
+                                  <span className="font-inter text-[9px] text-gray-400 px-1">+{dayBookings.length + dayLeads.length - 4} more</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ));
+                    })()}
+                  </div>
                 </div>
-              )}
+
+                {/* Right sidebar: upcoming events + new enquiries */}
+                <div className="w-72 flex-shrink-0 flex flex-col overflow-hidden bg-white">
+                  {/* Upcoming confirmed events */}
+                  <div className="flex-1 overflow-auto border-b border-border">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                      <h3 className="font-inter text-sm font-semibold text-gray-900">Upcoming Events</h3>
+                      <button onClick={() => setTab('calendar')} className="font-inter text-xs text-sage-green hover:text-sage-dark transition-colors">View all</button>
+                    </div>
+                    {(() => {
+                      const upcoming = [...(monthBookings ?? []), ...(monthLeadEvents ?? []).filter((l: any) => l.status === 'booked' || l.status === 'confirmed')]
+                        .filter((e: any) => new Date(e.eventDate) >= new Date())
+                        .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
+                        .slice(0, 8);
+                      if (upcoming.length === 0) return (
+                        <div className="flex flex-col items-center justify-center p-6 text-center">
+                          <Calendar className="w-8 h-8 text-gray-200 mb-2" />
+                          <p className="font-inter text-xs text-gray-400">No upcoming events this month</p>
+                        </div>
+                      );
+                      return (
+                        <div className="divide-y divide-border">
+                          {upcoming.map((e: any) => {
+                            const isConfirmed = e.status === 'confirmed' || e.status === 'booked';
+                            return (
+                              <button key={e.id}
+                                onClick={() => e._type === 'booking' ? setLocation(`/event/${e.id}`) : (setSelectedLead(e), setTab('enquiries'))}
+                                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-sage-tint/30 transition-colors text-left">
+                                <div className={`w-1.5 h-full min-h-[36px] rounded-full flex-shrink-0 mt-0.5 ${
+                                  isConfirmed ? 'bg-sage-green' : e.status === 'tentative' ? 'bg-amber-400' : e.status === 'proposal_sent' ? 'bg-violet-400' : 'bg-rose-400'
+                                }`} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-inter text-xs font-semibold text-gray-900 truncate">{e.firstName} {e.lastName}</div>
+                                  <div className="font-inter text-xs text-gray-500 truncate">{e.eventType || (isConfirmed ? 'Event' : 'Enquiry')}</div>
+                                  <div className="font-inter text-xs text-gray-400">{new Date(e.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}{e.guestCount ? ` · ${e.guestCount} guests` : ''}</div>
+                                </div>
+                                <span className={`font-inter text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                  isConfirmed ? 'bg-sage-tint text-sage-dark' : e.status === 'tentative' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                                }`}>{isConfirmed ? 'CONFIRMED' : e.status?.replace('_',' ').toUpperCase()}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* New enquiries */}
+                  <div className="flex-1 overflow-auto">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-inter text-sm font-semibold text-gray-900">New Enquiries</h3>
+                        {newEnquiries.length > 0 && (
+                          <span className="bg-sage-green text-white font-inter text-[10px] font-bold px-1.5 py-0.5 rounded-full">{newEnquiries.length}</span>
+                        )}
+                      </div>
+                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} className="font-inter text-xs text-sage-green hover:text-sage-dark transition-colors">View all</button>
+                    </div>
+                    {newEnquiries.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center p-6 text-center">
+                        <CheckCircle className="w-8 h-8 text-sage-green/30 mb-2" />
+                        <p className="font-inter text-xs text-gray-400">All caught up!</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {newEnquiries.slice(0, 6).map((lead: any) => (
+                          <button key={lead.id} onClick={() => { setSelectedLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
+                            className="w-full flex items-start gap-3 px-4 py-3 hover:bg-sage-tint/30 transition-colors text-left">
+                            <div className="w-2 h-2 rounded-full bg-rose-400 mt-1.5 flex-shrink-0 animate-pulse" />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-inter text-xs font-semibold text-gray-900">{lead.firstName} {lead.lastName}</div>
+                              <div className="font-inter text-xs text-gray-500 truncate">{lead.eventType || 'Event'}{lead.guestCount ? ` · ${lead.guestCount} guests` : ''}</div>
+                              {lead.eventDate && <div className="font-inter text-xs text-gray-400">{new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</div>}
+                            </div>
+                            <div className="font-inter text-[10px] text-gray-400 flex-shrink-0">
+                              {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {(overdueLeads ?? []).length > 0 && (
+                      <div className="border-t border-red-200 bg-red-50/50 px-4 py-2 flex items-center gap-2">
+                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                        <span className="font-inter text-xs font-semibold text-red-700">{(overdueLeads ?? []).length} overdue follow-up{(overdueLeads ?? []).length > 1 ? 's' : ''}</span>
+                        <button onClick={() => setTab('enquiries')} className="ml-auto font-inter text-xs text-red-600 hover:text-red-800 transition-colors">View →</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -993,14 +1120,22 @@ export default function Dashboard() {
                     <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
                       placeholder="Search enquiries..." className="pl-9 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold text-sm" />
                   </div>
-                  <Select value={leadStatusFilter} onValueChange={setLeadStatusFilter}>
-                    <SelectTrigger className="rounded-none border border-gold/30 text-xs font-bebas tracking-widest focus:ring-0">
+                  <Select value={leadStatusFilter} onValueChange={(v) => {
+                    setLeadStatusFilter(v);
+                    // When filtering by a specific status, switch to "all" sub-tab so results aren't hidden
+                    if (v !== "all") setLeadsSubTab("all");
+                  }}>
+                    <SelectTrigger className={`rounded-xl border text-xs font-inter font-medium focus:ring-1 focus:ring-sage-green/40 transition-colors ${
+                      leadStatusFilter !== "all"
+                        ? "border-sage-green bg-sage-green/10 text-sage-dark"
+                        : "border-gray-200 bg-white text-ink"
+                    }`}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all" className="font-bebas text-xs tracking-widest">ALL ENQUIRIES</SelectItem>
+                      <SelectItem value="all" className="font-inter text-xs">All Statuses</SelectItem>
                       {PIPELINE_STAGES.map(s => (
-                        <SelectItem key={s.key} value={s.key} className="font-bebas text-xs tracking-widest">{s.label}</SelectItem>
+                        <SelectItem key={s.key} value={s.key} className="font-inter text-xs">{s.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1124,17 +1259,17 @@ export default function Dashboard() {
                           setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
                           setShowEmailModal(true);
                         }}
-                          className="border-2 border-forest text-forest font-bebas tracking-widest text-xs px-4 py-2 flex items-center gap-1 hover:bg-forest hover:text-cream transition-all">
-                          <Mail className="w-3 h-3" /> EMAIL
+                          className="border border-sage-green text-sage-dark font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-green/10 transition-all">
+                          <Mail className="w-3.5 h-3.5" /> Email
                         </button>
                       )}
                       <button onClick={() => setLocation(`/proposals/new?leadId=${selectedLead.id}`)}
-                        className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
-                        <FileText className="w-3 h-3" /> CREATE PROPOSAL
+                        className="bg-sage-green text-white font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-dark transition-all">
+                        <FileText className="w-3.5 h-3.5" /> Create Proposal
                       </button>
                       <button onClick={() => setLocation(`/runsheet?leadId=${selectedLead.id}`)}
-                        className="border-2 border-burgundy text-burgundy font-bebas tracking-widest text-xs px-4 py-2 flex items-center gap-1 hover:bg-burgundy hover:text-cream transition-all">
-                        <Clock className="w-3 h-3" /> CREATE RUNSHEET
+                        className="border border-gray-300 text-gray-600 font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-gray-50 transition-all">
+                        <Clock className="w-3.5 h-3.5" /> Runsheet
                       </button>
                       <button
                         onClick={() => {
@@ -1142,16 +1277,16 @@ export default function Dashboard() {
                             deleteLead.mutate({ id: selectedLead.id });
                           }
                         }}
-                        className="border-2 border-red-300 text-red-500 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 hover:bg-red-50 transition-all ml-auto">
-                        <Trash2 className="w-3 h-3" /> DELETE
+                        className="border border-red-200 text-red-400 font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-red-50 transition-all ml-auto">
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
                       </button>
                     </div>
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
-                    <div className="dante-card p-4">
-                      <h3 className="font-bebas text-xs tracking-widest text-sage mb-3">EVENT DETAILS</h3>
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                      <h3 className="font-inter text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Event Details</h3>
                       <div className="space-y-2 text-sm font-dm">
                         {[
                           ["Event Type", selectedLead.eventType],
@@ -1169,14 +1304,34 @@ export default function Dashboard() {
                     </div>
 
                     {/* Status & Actions */}
-                    <div className="dante-card p-4">
-                      <h3 className="font-bebas text-xs tracking-widest text-sage mb-3">PIPELINE STATUS</h3>
-                      <div className="space-y-2">
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                      <h3 className="font-inter text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Pipeline Status</h3>
+                      {/* Confirm Booking CTA */}
+                      {!['booked','confirmed'].includes(selectedLead.status) && (
+                        <button
+                          onClick={() => updateStatus.mutate({ id: selectedLead.id, status: 'booked' as any })}
+                          className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-sage-green text-white rounded-xl font-inter text-sm font-semibold hover:bg-sage-dark transition-colors shadow-sm">
+                          <CheckCircle className="w-4 h-4" />
+                          Confirm Booking → Move to Calendar
+                        </button>
+                      )}
+                      {['booked','confirmed'].includes(selectedLead.status) && (
+                        <div className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-sage-tint border border-sage-green rounded-xl font-inter text-sm font-semibold text-sage-dark">
+                          <CheckCircle className="w-4 h-4 text-sage-green" />
+                          Confirmed Event — visible on Calendar
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
                         {PIPELINE_STAGES.map(stage => (
                           <button key={stage.key}
                             onClick={() => updateStatus.mutate({ id: selectedLead.id, status: stage.key as any })}
-                            className={`w-full text-left px-3 py-2 border-2 font-bebas text-xs tracking-widest transition-all ${selectedLead.status === stage.key ? stage.color + " border-current" : "border-border text-ink/60 hover:border-current hover:" + stage.color}`}>
-                            {selectedLead.status === stage.key ? "● " : "○ "}{stage.label}
+                            className={`w-full text-left px-3 py-2 rounded-lg border font-inter text-xs font-medium transition-all ${
+                              selectedLead.status === stage.key
+                                ? 'bg-sage-green/10 border-sage-green text-sage-dark'
+                                : 'border-gray-100 text-gray-500 hover:border-sage-green/40 hover:bg-sage-green/5'
+                            }`}>
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${selectedLead.status === stage.key ? 'bg-sage-green' : 'bg-gray-300'}`} />
+                            {stage.label}
                           </button>
                         ))}
                       </div>
@@ -1518,43 +1673,59 @@ export default function Dashboard() {
               {/* List View */}
               {calendarView === "list" && (
               <div className="flex-1 overflow-auto p-6">
-                <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">All Events — {MONTHS[month]} {year}</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-inter font-semibold text-gray-900 text-lg" style={{ letterSpacing: '-0.02em' }}>All Events — {MONTHS[month]} {year}</h2>
+                  <button onClick={() => setShowAddLead(true)} className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
+                    <Plus className="w-3.5 h-3.5" /> Add Event
+                  </button>
+                </div>
                 {(monthBookings ?? []).length === 0 && (monthLeadEvents ?? []).length === 0 ? (
-                  <div className="border border-dashed border-gold/20 p-8 text-center">
-                    <p className="font-dm text-sage text-sm">No events this month</p>
-                    <button onClick={() => setShowAddLead(true)} className="mt-3 btn-forest text-cream font-bebas tracking-widest text-xs px-4 py-2">ADD EVENT</button>
+                  <div className="border border-dashed border-sage-green/20 rounded-xl p-8 text-center">
+                    <Calendar className="w-10 h-10 text-sage-green/30 mx-auto mb-3" />
+                    <p className="font-inter text-sm text-gray-400">No events this month</p>
+                    <button onClick={() => setShowAddLead(true)} className="mt-3 font-inter text-xs font-semibold px-4 py-2 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">Add Event</button>
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {[...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).map((l: any) => ({ ...l, _type: 'lead' }))]
                       .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
                       .map((item: any) => {
-                        const statusColors: Record<string, string> = {
-                          confirmed: 'bg-emerald-500', tentative: 'bg-sky-400', proposal_sent: 'bg-violet-400',
-                          negotiating: 'bg-rose-400', new: 'bg-amber-300', contacted: 'bg-amber-400',
-                          booked: 'bg-emerald-600', lost: 'bg-stone-300', cancelled: 'bg-stone-200',
+                        const isConfirmed = item.status === 'confirmed' || item.status === 'booked';
+                        const statusConfig: Record<string, { bar: string; badge: string; label: string }> = {
+                          confirmed: { bar: 'bg-sage-green', badge: 'bg-sage-tint text-sage-dark', label: 'CONFIRMED' },
+                          booked:    { bar: 'bg-sage-green', badge: 'bg-sage-tint text-sage-dark', label: 'CONFIRMED' },
+                          tentative: { bar: 'bg-amber-400', badge: 'bg-amber-100 text-amber-700', label: 'TENTATIVE' },
+                          proposal_sent: { bar: 'bg-violet-400', badge: 'bg-violet-100 text-violet-700', label: 'PROPOSAL' },
+                          negotiating: { bar: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700', label: 'NEGOTIATING' },
+                          new:       { bar: 'bg-rose-400', badge: 'bg-rose-100 text-rose-700', label: 'NEW ENQUIRY' },
+                          contacted: { bar: 'bg-rose-300', badge: 'bg-rose-50 text-rose-600', label: 'CONTACTED' },
+                          lost:      { bar: 'bg-gray-300', badge: 'bg-gray-100 text-gray-500', label: 'LOST' },
+                          cancelled: { bar: 'bg-gray-200', badge: 'bg-gray-100 text-gray-400', label: 'CANCELLED' },
                         };
+                        const sc = statusConfig[item.status] ?? { bar: 'bg-gray-200', badge: 'bg-gray-100 text-gray-500', label: item.status?.toUpperCase() };
                         return (
-                          <div key={item.id} className="flex items-stretch border border-gold/15 bg-white hover:bg-linen/30 transition-colors">
-                            <div className={`w-1.5 flex-shrink-0 ${statusColors[item.status] ?? 'bg-gold/30'}`} />
-                            <div className="flex-1 p-3 flex items-center justify-between">
-                              <div>
-                                <div className="font-cormorant font-semibold text-base text-ink">{item.firstName} {item.lastName}</div>
-                                <div className="font-dm text-xs text-ink/60">
-                                  {item.eventType || (item._type === 'booking' ? 'Event' : 'Enquiry')} ·
-                                  {new Date(item.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          <div key={item.id} className={`flex items-stretch rounded-xl border overflow-hidden transition-all hover:shadow-sm ${
+                            isConfirmed ? 'border-sage-green/30 bg-white' : 'border-gray-100 bg-white'
+                          }`}>
+                            <div className={`w-1 flex-shrink-0 ${sc.bar}`} />
+                            <div className="flex-1 p-3 flex items-center justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-inter font-semibold text-sm text-gray-900">{item.firstName} {item.lastName}</div>
+                                <div className="font-inter text-xs text-gray-500 truncate">
+                                  {item.eventType || (item._type === 'booking' ? 'Event' : 'Enquiry')}
+                                  {' · '}{new Date(item.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
                                   {item.guestCount ? ` · ${item.guestCount} guests` : ''}
                                   {item.company ? ` · ${item.company}` : ''}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 text-white rounded ${statusColors[item.status] ?? 'bg-gold/30'}`}>
-                                  {item.status?.replace('_',' ').toUpperCase()}
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className={`font-inter text-[10px] font-bold px-2 py-0.5 rounded-full ${sc.badge}`}>
+                                  {sc.label}
                                 </span>
                                 {item._type === 'booking' ? (
-                                  <button onClick={() => setLocation(`/event/${item.id}`)} className="font-bebas text-xs tracking-widest border border-forest/40 text-forest px-2 py-1 hover:bg-forest hover:text-cream transition-all">OPEN</button>
+                                  <button onClick={() => setLocation(`/event/${item.id}`)} className="font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">Open</button>
                                 ) : (
-                                  <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} className="font-bebas text-xs tracking-widest border border-gold/40 text-ink/60 px-2 py-1 hover:bg-gold/10 transition-all">VIEW</button>
+                                  <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} className="font-inter text-xs font-semibold px-3 py-1.5 border border-sage-green/40 text-sage-dark rounded-lg hover:bg-sage-tint transition-colors">View</button>
                                 )}
                               </div>
                             </div>
@@ -3654,6 +3825,97 @@ export default function Dashboard() {
               className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
               {createSpace.isPending ? "ADDING..." : "ADD SPACE"}
             </button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Create Event from Mini Calendar */}
+      <Dialog open={!!quickCreateDate} onOpenChange={(open) => !open && setQuickCreateDate(null)}>
+        <DialogContent className="max-w-md rounded-2xl border border-gray-200 shadow-xl">
+          <DialogHeader>
+            <div className="bg-sage-green -mx-6 -mt-6 px-6 py-4 mb-4 rounded-t-2xl">
+              <DialogTitle className="font-inter text-lg text-white font-semibold">
+                Add Event
+              </DialogTitle>
+              {quickCreateDate && (
+                <p className="font-inter text-sm text-white/80 mt-0.5">
+                  {new Date(quickCreateDate + 'T12:00:00').toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              )}
+            </div>
+          </DialogHeader>
+          <form onSubmit={e => {
+            e.preventDefault();
+            if (!quickCreateDate) return;
+            createEnquiryFromCalendar.mutate({
+              firstName: quickCreateForm.firstName,
+              lastName: quickCreateForm.lastName || undefined,
+              eventType: quickCreateForm.eventType || undefined,
+              eventDate: quickCreateDate,
+              guestCount: quickCreateForm.guestCount ? parseInt(quickCreateForm.guestCount) : undefined,
+              message: quickCreateForm.notes || undefined,
+              status: quickCreateForm.status,
+              source: 'manual',
+            });
+          }} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">First Name *</label>
+                <Input required value={quickCreateForm.firstName}
+                  onChange={e => setQuickCreateForm(f => ({ ...f, firstName: e.target.value }))}
+                  placeholder="First name" className="rounded-xl border-gray-200 text-sm" />
+              </div>
+              <div>
+                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Last Name</label>
+                <Input value={quickCreateForm.lastName}
+                  onChange={e => setQuickCreateForm(f => ({ ...f, lastName: e.target.value }))}
+                  placeholder="Last name" className="rounded-xl border-gray-200 text-sm" />
+              </div>
+            </div>
+            <div>
+              <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Type</label>
+              <Input value={quickCreateForm.eventType}
+                onChange={e => setQuickCreateForm(f => ({ ...f, eventType: e.target.value }))}
+                placeholder="e.g. Wedding, Birthday, Corporate" className="rounded-xl border-gray-200 text-sm" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Guest Count</label>
+                <Input type="number" value={quickCreateForm.guestCount}
+                  onChange={e => setQuickCreateForm(f => ({ ...f, guestCount: e.target.value }))}
+                  placeholder="e.g. 80" className="rounded-xl border-gray-200 text-sm" />
+              </div>
+              <div>
+                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Status</label>
+                <Select value={quickCreateForm.status} onValueChange={v => setQuickCreateForm(f => ({ ...f, status: v as any }))}>
+                  <SelectTrigger className="rounded-xl border-gray-200 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">New Enquiry</SelectItem>
+                    <SelectItem value="contacted">Contacted</SelectItem>
+                    <SelectItem value="booked">Confirmed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Notes</label>
+              <textarea value={quickCreateForm.notes}
+                onChange={e => setQuickCreateForm(f => ({ ...f, notes: e.target.value }))}
+                rows={2} placeholder="Any additional details..."
+                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-inter focus:outline-none focus:ring-1 focus:ring-sage-green/40 resize-none" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={() => setQuickCreateDate(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 font-inter text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button type="submit" disabled={createEnquiryFromCalendar.isPending}
+                className="flex-1 py-2.5 rounded-xl bg-sage-green text-white font-inter text-sm font-medium hover:bg-sage-dark transition-colors disabled:opacity-50">
+                {createEnquiryFromCalendar.isPending ? 'Adding...' : 'Add Event'}
+              </button>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
