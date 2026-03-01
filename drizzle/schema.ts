@@ -47,6 +47,32 @@ export const venueSettings = mysqlTable("venue_settings", {
   smtpFromName: varchar("smtpFromName", { length: 255 }),
   smtpFromEmail: varchar("smtpFromEmail", { length: 320 }),
   smtpSecure: int("smtpSecure").default(0), // 0=STARTTLS, 1=SSL
+  // Venue Details extra fields
+  internalName: varchar("internalName", { length: 255 }),
+  notificationEmail: varchar("notificationEmail", { length: 320 }),
+  addressLine1: varchar("addressLine1", { length: 500 }),
+  addressLine2: varchar("addressLine2", { length: 500 }),
+  suburb: varchar("suburb", { length: 100 }),
+  state: varchar("state", { length: 100 }),
+  postcode: varchar("postcode", { length: 20 }),
+  country: varchar("country", { length: 100 }).default("New Zealand"),
+  timezone: varchar("timezone", { length: 100 }).default("Pacific/Auckland"),
+  eventTimeStart: varchar("eventTimeStart", { length: 10 }).default("08:00"),
+  eventTimeEnd: varchar("eventTimeEnd", { length: 10 }).default("22:00"),
+  minGroupSize: int("minGroupSize").default(0),
+  autoCancelTentative: int("autoCancelTentative").default(1),
+  // Venue Profile fields
+  bannerImageUrl: text("bannerImageUrl"),
+  venueType: varchar("venueType", { length: 100 }),
+  priceCategory: varchar("priceCategory", { length: 10 }).default("$$$"),
+  aboutVenue: text("aboutVenue"),
+  minEventDuration: varchar("minEventDuration", { length: 20 }).default("1 hour"),
+  maxEventDuration: varchar("maxEventDuration", { length: 20 }).default("6 hours"),
+  minLeadTime: varchar("minLeadTime", { length: 20 }).default("1 week"),
+  maxLeadTime: varchar("maxLeadTime", { length: 20 }).default("6 months"),
+  bufferTime: varchar("bufferTime", { length: 20 }).default("30 minutes"),
+  // Operating hours JSON: [{day,enabled,start,end}]
+  operatingHours: text("operatingHours"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

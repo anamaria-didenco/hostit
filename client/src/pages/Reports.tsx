@@ -153,45 +153,126 @@ export default function Reports() {
       {/* ── EVENTS ── */}
       {tab === "events" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-cormorant text-xl font-semibold text-ink">All Events</h2>
-            <span className="font-dm text-sm text-sage">{(allBookings ?? []).length} total</span>
+          {/* Legend */}
+          <div className="flex items-center gap-4 flex-wrap">
+            {[
+              { label: "New", bg: "bg-sky-50", border: "border-sky-300", text: "text-sky-700" },
+              { label: "Contacted", bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-700" },
+              { label: "Proposal Sent", bg: "bg-violet-50", border: "border-violet-300", text: "text-violet-700" },
+              { label: "Negotiating", bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-700" },
+              { label: "Booked", bg: "bg-emerald-50", border: "border-emerald-400", text: "text-emerald-700" },
+              { label: "Lost", bg: "bg-gray-50", border: "border-gray-300", text: "text-gray-500" },
+              { label: "Cancelled", bg: "bg-red-50", border: "border-red-300", text: "text-red-600" },
+            ].map(s => (
+              <span key={s.label} className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${s.bg} ${s.border} ${s.text}`}>{s.label}</span>
+            ))}
+            <span className="font-dm text-xs text-sage ml-auto">{(allLeads ?? []).length} enquiries · {(allBookings ?? []).length} bookings</span>
           </div>
+
+          {/* All Leads table */}
           <div className="dante-card overflow-hidden">
+            <div className="px-5 py-3 border-b border-border bg-linen flex items-center justify-between">
+              <h2 className="font-cormorant text-lg font-semibold text-ink">All Enquiries & Events</h2>
+            </div>
             <table className="w-full">
               <thead>
-                <tr className="border-b border-border bg-linen">
-                  {["Event Name", "Date", "Type", "Guests", "Space", "Value", "Status"].map(h => (
+                <tr className="border-b border-border bg-linen/60">
+                  {["Name", "Event", "Date", "Type", "Guests", "Budget", "Status", "Source"].map(h => (
                     <th key={h} className="font-bebas text-xs tracking-widest text-sage text-left px-4 py-3">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
-                {(allBookings ?? []).length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-8 font-dm text-sm text-sage/60">No events yet</td></tr>
+                {(allLeads ?? []).length === 0 ? (
+                  <tr><td colSpan={8} className="text-center py-8 font-dm text-sm text-sage/60">No enquiries yet</td></tr>
                 ) : (
-                  (allBookings ?? []).map((b: any) => (
-                    <tr key={b.id} className="hover:bg-linen/50 transition-colors">
-                      <td className="px-4 py-3 font-dm text-sm text-ink font-medium">{b.eventName || "—"}</td>
-                      <td className="px-4 py-3 font-dm text-xs text-sage">{b.eventDate ? new Date(b.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
-                      <td className="px-4 py-3 font-dm text-xs text-sage">{b.eventType || "—"}</td>
-                      <td className="px-4 py-3 font-dm text-xs text-sage">{b.guestCount || "—"}</td>
-                      <td className="px-4 py-3 font-dm text-xs text-sage">{b.spaceName || "—"}</td>
-                      <td className="px-4 py-3 font-dm text-sm text-ink">{b.totalValue ? `$${Number(b.totalValue).toLocaleString()}` : "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${
-                          b.status === "confirmed" ? "border-emerald-400 bg-emerald-50 text-emerald-700" :
-                          b.status === "tentative" ? "border-amber-400 bg-amber-50 text-amber-700" :
-                          b.status === "cancelled" ? "border-gray-300 bg-gray-50 text-gray-500" :
-                          "border-blue-300 bg-blue-50 text-blue-700"
-                        }`}>{b.status?.toUpperCase() || "—"}</span>
-                      </td>
-                    </tr>
-                  ))
+                  (allLeads ?? []).slice().sort((a: any, b: any) => {
+                    const order: Record<string, number> = { booked: 0, negotiating: 1, proposal_sent: 2, contacted: 3, new: 4, lost: 5, cancelled: 6 };
+                    return (order[a.status] ?? 9) - (order[b.status] ?? 9);
+                  }).map((l: any) => {
+                    const rowBg =
+                      l.status === "booked" ? "bg-emerald-50/60 hover:bg-emerald-50" :
+                      l.status === "negotiating" ? "bg-amber-50/60 hover:bg-amber-50" :
+                      l.status === "proposal_sent" ? "bg-violet-50/60 hover:bg-violet-50" :
+                      l.status === "contacted" ? "bg-blue-50/60 hover:bg-blue-50" :
+                      l.status === "new" ? "bg-sky-50/60 hover:bg-sky-50" :
+                      l.status === "lost" ? "bg-gray-50/60 hover:bg-gray-50" :
+                      "bg-red-50/60 hover:bg-red-50";
+                    const badgeClass =
+                      l.status === "booked" ? "border-emerald-400 bg-emerald-100 text-emerald-700" :
+                      l.status === "negotiating" ? "border-amber-400 bg-amber-100 text-amber-700" :
+                      l.status === "proposal_sent" ? "border-violet-400 bg-violet-100 text-violet-700" :
+                      l.status === "contacted" ? "border-blue-400 bg-blue-100 text-blue-700" :
+                      l.status === "new" ? "border-sky-400 bg-sky-100 text-sky-700" :
+                      l.status === "lost" ? "border-gray-300 bg-gray-100 text-gray-500" :
+                      "border-red-400 bg-red-100 text-red-600";
+                    return (
+                      <tr key={l.id} className={`transition-colors cursor-pointer ${rowBg}`}>
+                        <td className="px-4 py-3 font-dm text-sm text-ink font-medium">{l.firstName} {l.lastName || ""}</td>
+                        <td className="px-4 py-3 font-dm text-sm text-ink">{l.eventName || "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage whitespace-nowrap">{l.eventDate ? new Date(l.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventType || "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage">{l.guestCount || "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage">{l.budget ? `$${Number(l.budget).toLocaleString()}` : "—"}</td>
+                        <td className="px-4 py-3">
+                          <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${badgeClass}`}>
+                            {l.status?.replace("_", " ").toUpperCase() || "—"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage">{l.source || "—"}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Bookings table */}
+          {(allBookings ?? []).length > 0 && (
+            <div className="dante-card overflow-hidden">
+              <div className="px-5 py-3 border-b border-border bg-linen flex items-center justify-between">
+                <h2 className="font-cormorant text-lg font-semibold text-ink">Confirmed Bookings</h2>
+                <span className="font-dm text-xs text-sage">{(allBookings ?? []).length} events</span>
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-linen/60">
+                    {["Event Name", "Date", "Type", "Guests", "Space", "Value", "Status"].map(h => (
+                      <th key={h} className="font-bebas text-xs tracking-widest text-sage text-left px-4 py-3">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {(allBookings ?? []).map((b: any) => {
+                    const rowBg =
+                      b.status === "confirmed" ? "bg-emerald-50/60 hover:bg-emerald-50" :
+                      b.status === "tentative" ? "bg-amber-50/60 hover:bg-amber-50" :
+                      b.status === "cancelled" ? "bg-gray-50/60 hover:bg-gray-50" :
+                      "bg-blue-50/60 hover:bg-blue-50";
+                    const badgeClass =
+                      b.status === "confirmed" ? "border-emerald-400 bg-emerald-100 text-emerald-700" :
+                      b.status === "tentative" ? "border-amber-400 bg-amber-100 text-amber-700" :
+                      b.status === "cancelled" ? "border-gray-300 bg-gray-100 text-gray-500" :
+                      "border-blue-300 bg-blue-100 text-blue-700";
+                    return (
+                      <tr key={b.id} className={`transition-colors ${rowBg}`}>
+                        <td className="px-4 py-3 font-dm text-sm text-ink font-medium">{b.eventName || `${b.firstName} ${b.lastName || ""}`.trim() || "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage whitespace-nowrap">{b.eventDate ? new Date(b.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage">{b.eventType || "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage">{b.guestCount || "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage">{b.spaceName || "—"}</td>
+                        <td className="px-4 py-3 font-dm text-sm text-ink">{b.totalNzd ? `$${Number(b.totalNzd).toLocaleString()}` : "—"}</td>
+                        <td className="px-4 py-3">
+                          <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${badgeClass}`}>{b.status?.toUpperCase() || "—"}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

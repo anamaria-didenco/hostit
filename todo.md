@@ -443,3 +443,13 @@
 - [x] Create / Edit / Delete floor plans from Settings > Floor Plans
 - [x] Floor Plans added to Settings sidebar navigation
 - [x] TypeScript errors fixed (0 errors)
+
+## Batch Improvements — Mar 2026
+- [x] Venue Details: add Internal Name, Website, Notification Email, Venue Address, Event Settings (timezone, currency, event start/end time, min group size, auto-cancel toggle)
+- [x] Venue Profile: add Availability Settings (event duration min/max, lead time min/max, buffer time), Hours per day (Sun-Sat with start/end times), Venue Description, Banner Image upload, Venue Type dropdown, Price Category radio
+- [x] Remove Express Book from top nav tab list
+- [x] Floor Plans: enable background image upload (upload to S3, store in bgImageUrl)
+- [x] Click event name in calendar/overview widgets to open that lead/booking
+- [x] Reports & Events: show all events/leads as a colour-coded table
+- [x] Leads Inbox: collapsible/hideable sections (All Leads table, New Enquiries)
+- [x] Fix bookings calendar — booked events this month not showing (updateStatus now creates booking record when status set to booked)

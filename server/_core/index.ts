@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import multer from "multer";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
@@ -10,6 +11,7 @@ import { handleStaffSheetPdf } from "../staffSheetPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { storagePut } from "../storage";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -56,6 +58,21 @@ async function startServer() {
       (req as any).user = ctx.user;
       handleStaffSheetPdf(req, res);
     }).catch(next);
+  });
+
+  // Image upload endpoint (for floor plan backgrounds, venue banners, etc.)
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+  app.post("/api/upload-image", upload.single("file"), async (req, res) => {
+    try {
+      const multerReq = req as express.Request & { file?: Express.Multer.File };
+      if (!multerReq.file) { res.status(400).json({ error: "No file" }); return; }
+      const ext = multerReq.file.originalname.split(".").pop() ?? "jpg";
+      const key = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { url } = await storagePut(key, multerReq.file.buffer, multerReq.file.mimetype);
+      res.json({ url });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // tRPC API

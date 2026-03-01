@@ -212,10 +212,11 @@ ${kitchenHtml}
         printBackground: true,
         margin: { top: "15mm", right: "12mm", bottom: "15mm", left: "12mm" },
       });
+      const safeTitle = title.replace(/[^a-zA-Z0-9\-_]/g, "-").replace(/-+/g, "-").slice(0, 50);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="StaffSheet-${runsheetId}-${title.replace(/\s+/g, "-")}.pdf"`
+        `attachment; filename="StaffSheet-${runsheetId}-${safeTitle}.pdf"`
       );
       res.send(Buffer.from(pdf));
     } finally {

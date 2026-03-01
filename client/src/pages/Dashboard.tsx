@@ -6,10 +6,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight,
+  LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
-  BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid
+  BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid, Image as ImageIcon
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -327,6 +327,7 @@ export default function Dashboard() {
   const [widgetEditMode, setWidgetEditMode] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
+  const [collapsedInboxSections, setCollapsedInboxSections] = useState<Set<string>>(new Set());
 
   const utils = trpc.useUtils();
 
@@ -533,20 +534,54 @@ export default function Dashboard() {
 
   const [settingsForm, setSettingsForm] = useState<any>(null);
   useMemo(() => {
-    if (venueSettings && !settingsForm) {
+    if (!settingsForm) {
+      const vs = venueSettings as any;
       setSettingsForm({
-        name: venueSettings.name ?? "",
-        tagline: venueSettings.tagline ?? "",
-        description: venueSettings.description ?? "",
-        address: venueSettings.address ?? "",
-        city: venueSettings.city ?? "",
-        phone: venueSettings.phone ?? "",
-        email: venueSettings.email ?? "",
-        website: venueSettings.website ?? "",
-        leadFormTitle: venueSettings.leadFormTitle ?? "Book Your Event",
-        leadFormSubtitle: venueSettings.leadFormSubtitle ?? "",
-        depositPercent: venueSettings.depositPercent ?? "25",
-        slug: venueSettings.slug ?? "",
+        name: vs?.name ?? "",
+        tagline: vs?.tagline ?? "",
+        description: vs?.description ?? "",
+        address: vs?.address ?? "",
+        city: vs?.city ?? "",
+        phone: vs?.phone ?? "",
+        email: vs?.email ?? "",
+        website: vs?.website ?? "",
+        leadFormTitle: vs?.leadFormTitle ?? "Book Your Event",
+        leadFormSubtitle: vs?.leadFormSubtitle ?? "",
+        depositPercent: vs?.depositPercent ?? "25",
+        slug: vs?.slug ?? "",
+        // New venue details fields
+        internalName: vs?.internalName ?? "",
+        notificationEmail: vs?.notificationEmail ?? "",
+        addressLine1: vs?.addressLine1 ?? "",
+        addressLine2: vs?.addressLine2 ?? "",
+        suburb: vs?.suburb ?? "",
+        state: vs?.state ?? "",
+        postcode: vs?.postcode ?? "",
+        country: vs?.country ?? "New Zealand",
+        timezone: vs?.timezone ?? "Pacific/Auckland",
+        eventTimeStart: vs?.eventTimeStart ?? "08:00",
+        eventTimeEnd: vs?.eventTimeEnd ?? "22:00",
+        minGroupSize: vs?.minGroupSize ?? 0,
+        autoCancelTentative: vs?.autoCancelTentative ?? 1,
+        // Venue profile fields
+        bannerImageUrl: vs?.bannerImageUrl ?? "",
+        venueType: vs?.venueType ?? "",
+        priceCategory: vs?.priceCategory ?? "$$$",
+        aboutVenue: vs?.aboutVenue ?? "",
+        minEventDuration: vs?.minEventDuration ?? "1 hour",
+        maxEventDuration: vs?.maxEventDuration ?? "6 hours",
+        minLeadTime: vs?.minLeadTime ?? "1 week",
+        maxLeadTime: vs?.maxLeadTime ?? "6 months",
+        bufferTime: vs?.bufferTime ?? "30 minutes",
+        operatingHours: vs?.operatingHours ?? JSON.stringify([
+          { day: "Sunday", enabled: true, start: "08:00", end: "22:00" },
+          { day: "Monday", enabled: true, start: "08:00", end: "22:00" },
+          { day: "Tuesday", enabled: true, start: "08:00", end: "22:00" },
+          { day: "Wednesday", enabled: true, start: "08:00", end: "22:00" },
+          { day: "Thursday", enabled: true, start: "08:00", end: "22:00" },
+          { day: "Friday", enabled: true, start: "08:00", end: "22:00" },
+          { day: "Saturday", enabled: true, start: "08:00", end: "22:00" },
+        ]),
       });
     }
   }, [venueSettings]);
@@ -629,7 +664,6 @@ export default function Dashboard() {
           { id: "leads", label: "Inbox" },
           { id: "calendar", label: "Calendar" },
           { id: "tasks", label: "Tasks" },
-          { id: "expressbook", label: "Express Book" },
           { id: "reports", label: "Reports" },
         ].map(item => (
           <button
@@ -805,7 +839,16 @@ export default function Dashboard() {
                     </button>
                   </div>
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className="font-cormorant text-2xl font-semibold text-ink">{leadsSubTab === "new" ? "New Enquiries" : "Leads"}</h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-cormorant text-2xl font-semibold text-ink">{leadsSubTab === "new" ? "New Enquiries" : "Leads"}</h2>
+                      <button
+                        onClick={() => setCollapsedInboxSections(prev => { const n = new Set(prev); n.has(leadsSubTab) ? n.delete(leadsSubTab) : n.add(leadsSubTab); return n; })}
+                        className="p-1 text-ink/40 hover:text-ink transition-colors"
+                        title={collapsedInboxSections.has(leadsSubTab) ? "Show list" : "Collapse list"}
+                      >
+                        <ChevronDown className={`w-4 h-4 transition-transform ${collapsedInboxSections.has(leadsSubTab) ? "-rotate-90" : ""}`} />
+                      </button>
+                    </div>
                     <button
                       onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
                       className={`font-bebas text-xs tracking-widest px-2.5 py-1 border transition-colors ${
@@ -845,7 +888,7 @@ export default function Dashboard() {
                     </label>
                   </div>
                 )}
-                <div className="flex-1 overflow-auto divide-y divide-border/40">
+                {!collapsedInboxSections.has(leadsSubTab) && <div className="flex-1 overflow-auto divide-y divide-border/40">
                   {filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
@@ -899,9 +942,9 @@ export default function Dashboard() {
                         })()}
                       </div>
                     </button>
-                    </div>
+                      </div>
                   ))}
-                </div>
+                </div>}
               </div>
               {/* Floating Bulk Action Toolbar */}
               {bulkSelectMode && selectedLeadIds.size > 0 && (
@@ -1760,74 +1803,122 @@ export default function Dashboard() {
               {/* ── VENUE DETAILS ────────────────────────────────── */}
               {settingsSubTab === "venue-details" && (
               <div>
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Profile</h1>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Details</h1>
               {settingsForm && (
                 <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
-                  <div className="dante-card p-5">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE PROFILE</h2>
-                    <div className="grid grid-cols-2 gap-3">
+
+                  {/* ── Venue Details ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE DETAILS</h2>
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME</label>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-500">*</span></label>
                         <Input value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TAGLINE</label>
-                        <Input value={settingsForm.tagline} onChange={e => setSettingsForm((f: any) => ({ ...f, tagline: e.target.value }))}
-                          placeholder="Auckland's finest event space" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CITY</label>
-                        <Input value={settingsForm.city} onChange={e => setSettingsForm((f: any) => ({ ...f, city: e.target.value }))}
-                          placeholder="Auckland" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PHONE</label>
-                        <Input value={settingsForm.phone} onChange={e => setSettingsForm((f: any) => ({ ...f, phone: e.target.value }))}
-                          placeholder="+64 9 000 0000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">INTERNAL NAME <span className="text-ink/40 font-dm normal-case text-xs">(e.g. Westside or location)</span></label>
+                        <Input value={settingsForm.internalName} onChange={e => setSettingsForm((f: any) => ({ ...f, internalName: e.target.value }))}
+                          placeholder="Westside" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS</label>
-                        <Input value={settingsForm.address} onChange={e => setSettingsForm((f: any) => ({ ...f, address: e.target.value }))}
-                          placeholder="123 Main St, Auckland CBD" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">WEBSITE</label>
+                        <Input value={settingsForm.website} onChange={e => setSettingsForm((f: any) => ({ ...f, website: e.target.value }))}
+                          placeholder="https://yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
+                        <Input type="email" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
+                          placeholder="events@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        <p className="font-dm text-xs text-sage/60 mt-1">Add the email address you want to receive all HOSTit notifications.</p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="dante-card p-5">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">LEAD FORM SETTINGS</h2>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-ink/60 block mb-1">FORM URL SLUG</label>
-                        <div className="flex items-center gap-2">
-                          <span className="font-dm text-xs text-sage bg-linen px-3 py-2 border border-r-0 border-gold/30">/enquire/</span>
-                          <Input value={settingsForm.slug} onChange={e => setSettingsForm((f: any) => ({ ...f, slug: e.target.value.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") }))}
-                            placeholder="my-venue" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold flex-1" />
-                        </div>
-                        <p className="font-dm text-xs text-sage/60 mt-1">Share this link with clients: <span className="text-forest">/enquire/{settingsForm.slug || "my-venue"}</span></p>
+                  {/* ── Venue Address ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE ADDRESS</h2>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="col-span-2">
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 1</label>
+                        <Input value={settingsForm.addressLine1} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine1: e.target.value }))}
+                          placeholder="166 Cashel Street" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 2</label>
+                        <Input value={settingsForm.addressLine2} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine2: e.target.value }))}
+                          placeholder="Christchurch Central City" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM TITLE</label>
-                        <Input value={settingsForm.leadFormTitle} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormTitle: e.target.value }))}
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBURB / CITY</label>
+                        <Input value={settingsForm.suburb} onChange={e => setSettingsForm((f: any) => ({ ...f, suburb: e.target.value }))}
+                          placeholder="Christchurch" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STATE / REGION</label>
+                        <Input value={settingsForm.state} onChange={e => setSettingsForm((f: any) => ({ ...f, state: e.target.value }))}
+                          placeholder="Canterbury" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">POSTCODE</label>
+                        <Input value={settingsForm.postcode} onChange={e => setSettingsForm((f: any) => ({ ...f, postcode: e.target.value }))}
+                          placeholder="8011" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">COUNTRY</label>
+                        <Input value={settingsForm.country} onChange={e => setSettingsForm((f: any) => ({ ...f, country: e.target.value }))}
+                          placeholder="New Zealand" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Event Settings ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">EVENT SETTINGS</h2>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TIME ZONE</label>
+                        <select value={settingsForm.timezone} onChange={e => setSettingsForm((f: any) => ({ ...f, timezone: e.target.value }))}
+                          className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                          {["Pacific/Auckland","Pacific/Chatham","Australia/Sydney","Australia/Melbourne","Australia/Brisbane","UTC"].map(tz => (
+                            <option key={tz} value={tz}>{tz.replace("_"," ")}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CURRENCY</label>
+                        <select value={settingsForm.currency ?? "NZD"} onChange={e => setSettingsForm((f: any) => ({ ...f, currency: e.target.value }))}
+                          className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                          {["NZD","AUD","USD","GBP","EUR"].map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME START</label>
+                        <Input type="time" value={settingsForm.eventTimeStart} onChange={e => setSettingsForm((f: any) => ({ ...f, eventTimeStart: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM SUBTITLE</label>
-                        <Textarea value={settingsForm.leadFormSubtitle} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormSubtitle: e.target.value }))}
-                          placeholder="Tell us about your event and we'll be in touch within 24 hours."
-                          rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME END</label>
+                        <Input type="time" value={settingsForm.eventTimeEnd} onChange={e => setSettingsForm((f: any) => ({ ...f, eventTimeEnd: e.target.value }))}
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DEFAULT DEPOSIT %</label>
-                        <Input type="number" value={settingsForm.depositPercent} onChange={e => setSettingsForm((f: any) => ({ ...f, depositPercent: e.target.value }))}
-                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold w-32" />
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MINIMUM GROUP SIZE</label>
+                        <Input type="number" min={0} value={settingsForm.minGroupSize} onChange={e => setSettingsForm((f: any) => ({ ...f, minGroupSize: parseInt(e.target.value) || 0 }))}
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                      </div>
+                      <div className="flex items-center gap-3 pt-6">
+                        <input type="checkbox" id="autoCancelTentative" checked={settingsForm.autoCancelTentative === 1}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, autoCancelTentative: e.target.checked ? 1 : 0 }))}
+                          className="w-4 h-4 accent-forest" />
+                        <label htmlFor="autoCancelTentative" className="font-dm text-sm text-ink">Automatically cancel tentative events after their event date</label>
                       </div>
                     </div>
                   </div>
 
                   <button type="submit" disabled={updateSettings.isPending}
                     className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
-                    {updateSettings.isPending ? "SAVING..." : "SAVE SETTINGS"}
+                    {updateSettings.isPending ? "SAVING..." : "SAVE VENUE DETAILS"}
                   </button>
                 </form>
               )}
@@ -2150,8 +2241,180 @@ export default function Dashboard() {
               {/* ── VENUE PROFILE (Menus & Floor Plans) ─────────── */}
               {(settingsSubTab === "venue-profile") && (
               <div>
+              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Profile</h1>
+              {settingsForm && (
+                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
+
+                  {/* ── Venue Description ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE DESCRIPTION</h2>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE PROFILE BANNER</label>
+                        <div className="border border-dashed border-gold/30 rounded p-4 text-center bg-linen/30">
+                          {settingsForm.bannerImageUrl ? (
+                            <div className="relative">
+                              <img src={settingsForm.bannerImageUrl} alt="Banner" className="w-full h-40 object-cover rounded" />
+                              <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, bannerImageUrl: "" }))}
+                                className="absolute top-2 right-2 bg-white/80 rounded-full p-1 text-ink/60 hover:text-tomato">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="cursor-pointer block">
+                              <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                                const file = e.target.files?.[0]; if (!file) return;
+                                const fd = new FormData(); fd.append('file', file);
+                                const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                                const data = await res.json();
+                                if (data.url) setSettingsForm((f: any) => ({ ...f, bannerImageUrl: data.url }));
+                              }} />
+                              <div className="py-6">
+                                <ImageIcon className="w-8 h-8 text-gold/40 mx-auto mb-2" />
+                                <p className="font-dm text-sm text-sage">Click to upload banner image</p>
+                                <p className="font-dm text-xs text-sage/60">Upload an image at least 1920 x 1080</p>
+                              </div>
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE TYPE</label>
+                        <select value={settingsForm.venueType} onChange={e => setSettingsForm((f: any) => ({ ...f, venueType: e.target.value }))}
+                          className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                          <option value="">None</option>
+                          {["Restaurant","Bar","Function Venue","Hotel","Rooftop","Garden","Winery","Brewery","Private Dining Room","Conference Centre","Other"].map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">PRICE CATEGORY</label>
+                        <div className="flex gap-4">
+                          {["$$","$$$","$$$$"].map(p => (
+                            <label key={p} className="flex items-center gap-2 cursor-pointer">
+                              <input type="radio" name="priceCategory" value={p} checked={settingsForm.priceCategory === p}
+                                onChange={() => setSettingsForm((f: any) => ({ ...f, priceCategory: p }))}
+                                className="accent-forest" />
+                              <span className="font-dm text-sm text-ink">{p}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ABOUT YOUR VENUE</label>
+                        <Textarea value={settingsForm.aboutVenue} onChange={e => setSettingsForm((f: any) => ({ ...f, aboutVenue: e.target.value }))}
+                          placeholder="Describe your venue..." rows={4}
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Availability Settings ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">AVAILABILITY SETTINGS</h2>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">EVENT DURATION</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="font-dm text-xs text-sage/70 block mb-1">Minimum Duration</label>
+                            <select value={settingsForm.minEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, minEventDuration: e.target.value }))}
+                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                              {["30 minutes","1 hour","2 hours","3 hours","4 hours"].map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-dm text-xs text-sage/70 block mb-1">Maximum Duration</label>
+                            <select value={settingsForm.maxEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, maxEventDuration: e.target.value }))}
+                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                              {["2 hours","3 hours","4 hours","6 hours","8 hours","10 hours","12 hours","No limit"].map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">LEAD TIME</label>
+                        <p className="font-dm text-xs text-sage/60 mb-2">To maximise your inquiries, we recommend your lead time be as short as possible.</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="font-dm text-xs text-sage/70 block mb-1">Minimum Lead Time</label>
+                            <select value={settingsForm.minLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, minLeadTime: e.target.value }))}
+                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                              {["Same day","1 day","2 days","3 days","1 week","2 weeks","1 month"].map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-dm text-xs text-sage/70 block mb-1">Maximum Lead Time</label>
+                            <select value={settingsForm.maxLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, maxLeadTime: e.target.value }))}
+                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                              {["1 month","2 months","3 months","6 months","1 year","2 years"].map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUFFER TIME</label>
+                        <select value={settingsForm.bufferTime} onChange={e => setSettingsForm((f: any) => ({ ...f, bufferTime: e.target.value }))}
+                          className="w-48 border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                          {["None","15 minutes","30 minutes","45 minutes","1 hour","2 hours"].map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Operating Hours ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">HOURS</h2>
+                    <div className="space-y-3">
+                      {(() => {
+                        let hours: any[] = [];
+                        try { hours = JSON.parse(settingsForm.operatingHours); } catch { hours = []; }
+                        return hours.map((h: any, i: number) => (
+                          <div key={h.day} className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 w-32">
+                              <input type="checkbox" checked={h.enabled} id={`oh-${i}`}
+                                onChange={e => {
+                                  const updated = [...hours]; updated[i] = { ...h, enabled: e.target.checked };
+                                  setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
+                                }} className="w-4 h-4 accent-forest" />
+                              <label htmlFor={`oh-${i}`} className="font-dm text-sm text-ink">{h.day}</label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <label className="font-dm text-xs text-sage/60 block">Start Time</label>
+                                <Input type="time" value={h.start} disabled={!h.enabled}
+                                  onChange={e => {
+                                    const updated = [...hours]; updated[i] = { ...h, start: e.target.value };
+                                    setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
+                                  }}
+                                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold w-32 disabled:opacity-40" />
+                              </div>
+                              <div>
+                                <label className="font-dm text-xs text-sage/60 block">End Time</label>
+                                <Input type="time" value={h.end} disabled={!h.enabled}
+                                  onChange={e => {
+                                    const updated = [...hours]; updated[i] = { ...h, end: e.target.value };
+                                    setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
+                                  }}
+                                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold w-32 disabled:opacity-40" />
+                              </div>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+
+                  <button type="submit" disabled={updateSettings.isPending}
+                    className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
+                    {updateSettings.isPending ? "SAVING..." : "SAVE VENUE PROFILE"}
+                  </button>
+                </form>
+              )}
+
               {/* ─── Menus & Floor Plans ─────────────────────────────── */}
-              <div className="mt-10">
+              <div className="mt-10" style={{ display: 'none' }}>
                 <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Menus &amp; Floor Plans</h2>
                 {/* Sub-tabs */}
                 <div className="flex gap-0 mb-6 border-b border-gold/20">

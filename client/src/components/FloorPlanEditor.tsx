@@ -152,14 +152,17 @@ function ElementShape({ el, selected, onSelect, onDragStart }: {
 interface FloorPlanEditorProps {
   initialData?: CanvasData;
   name?: string;
-  onSave?: (data: CanvasData, name: string) => void;
+  bgImageUrl?: string;
+  onSave?: (data: CanvasData, name: string, bgImageUrl?: string) => void;
   isSaving?: boolean;
   readOnly?: boolean;
 }
 
-export default function FloorPlanEditor({ initialData, name: initialName = "Floor Plan", onSave, isSaving, readOnly }: FloorPlanEditorProps) {
+export default function FloorPlanEditor({ initialData, name: initialName = "Floor Plan", bgImageUrl: initialBgImageUrl, onSave, isSaving, readOnly }: FloorPlanEditorProps) {
   const [canvasData, setCanvasData] = useState<CanvasData>(initialData ?? { width: 900, height: 600, elements: [] });
   const [planName, setPlanName] = useState(initialName);
+  const [bgImageUrl, setBgImageUrl] = useState(initialBgImageUrl ?? "");
+  const [bgOpacity, setBgOpacity] = useState(0.3);
   const [selected, setSelected] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [tool, setTool] = useState<"select" | "pan">("select");
@@ -258,7 +261,7 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
   };
 
   const handleSave = () => {
-    if (onSave) onSave(canvasData, planName);
+    if (onSave) onSave(canvasData, planName, bgImageUrl || undefined);
   };
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
@@ -332,6 +335,28 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
             <span className="text-xs font-dm text-ink/50 w-10 text-center">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom(z => Math.min(3, z + 0.1))} className="p-1.5 rounded text-ink/40 hover:text-ink"><ZoomIn className="w-3.5 h-3.5" /></button>
             <div className="h-4 w-px bg-border" />
+            {/* Background image upload */}
+            <label className="cursor-pointer p-1.5 rounded text-ink/40 hover:text-ink flex items-center gap-1" title="Upload background image (venue photo or floor plan to trace)">
+              <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                const file = e.target.files?.[0]; if (!file) return;
+                const fd = new FormData(); fd.append('file', file);
+                const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (data.url) setBgImageUrl(data.url);
+              }} />
+              <span className="text-xs font-bebas tracking-wider">BG</span>
+            </label>
+            {bgImageUrl && (
+              <>
+                <input type="range" min={0.1} max={1} step={0.05} value={bgOpacity}
+                  onChange={e => setBgOpacity(Number(e.target.value))}
+                  className="w-16" title="Background opacity" />
+                <button onClick={() => setBgImageUrl("")} className="p-1 text-ink/30 hover:text-tomato" title="Remove background">
+                  <span className="text-xs">✕</span>
+                </button>
+              </>
+            )}
+            <div className="h-4 w-px bg-border" />
             {/* Save */}
             <button onClick={handleSave} disabled={isSaving} className="btn-forest text-cream font-bebas tracking-widest text-xs px-4 py-1.5 flex items-center gap-1 disabled:opacity-50">
               <Save className="w-3 h-3" />
@@ -368,6 +393,24 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
                 cursor: tool === "pan" ? "grab" : "default",
               }}
             >
+              {/* Background image for tracing */}
+              {bgImageUrl && (
+                <img
+                  src={bgImageUrl}
+                  alt="Background"
+                  style={{
+                    position: "absolute",
+                    top: 0, left: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    opacity: bgOpacity,
+                    pointerEvents: "none",
+                    userSelect: "none",
+                    zIndex: 0,
+                  }}
+                />
+              )}
               {canvasData.elements.map(el => (
                 <ElementShape
                   key={el.id}

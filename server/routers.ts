@@ -59,6 +59,31 @@ export const appRouter = router({
         smtpFromName: z.string().optional(),
         smtpFromEmail: z.string().optional(),
         smtpSecure: z.number().optional(),
+        // New venue details fields
+        internalName: z.string().optional(),
+        notificationEmail: z.string().optional(),
+        addressLine1: z.string().optional(),
+        addressLine2: z.string().optional(),
+        suburb: z.string().optional(),
+        state: z.string().optional(),
+        postcode: z.string().optional(),
+        country: z.string().optional(),
+        timezone: z.string().optional(),
+        eventTimeStart: z.string().optional(),
+        eventTimeEnd: z.string().optional(),
+        minGroupSize: z.number().optional(),
+        autoCancelTentative: z.number().optional(),
+        // Venue profile fields
+        bannerImageUrl: z.string().optional(),
+        venueType: z.string().optional(),
+        priceCategory: z.string().optional(),
+        aboutVenue: z.string().optional(),
+        minEventDuration: z.string().optional(),
+        maxEventDuration: z.string().optional(),
+        minLeadTime: z.string().optional(),
+        maxLeadTime: z.string().optional(),
+        bufferTime: z.string().optional(),
+        operatingHours: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -231,6 +256,27 @@ export const appRouter = router({
           type: "status_change",
           content: `Status changed to ${input.status}${input.note ? ": " + input.note : ""}`,
         });
+        // When marking as booked, auto-create a booking record if one doesn't exist
+        if (input.status === "booked") {
+          const lead = await getLeadById(input.id);
+          if (lead) {
+            const existingBookings = await getBookings(ctx.user.id);
+            const alreadyBooked = existingBookings.some((b: any) => b.leadId === input.id);
+            if (!alreadyBooked) {
+              await createBooking({
+                ownerId: ctx.user.id,
+                leadId: input.id,
+                firstName: lead.firstName,
+                lastName: lead.lastName ?? undefined,
+                email: lead.email,
+                eventType: lead.eventType ?? undefined,
+                eventDate: lead.eventDate ?? new Date(),
+                guestCount: lead.guestCount ?? undefined,
+                status: "confirmed",
+              });
+            }
+          }
+        }
         return { success: true };
       }),
 
