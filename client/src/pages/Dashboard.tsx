@@ -349,14 +349,14 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { id: "profile", label: "Profile" },
   ];
   return (
-    <aside className="w-52 bg-ivory border-r border-border flex-shrink-0 flex flex-col">
+    <aside className="w-52 bg-ivory-sand border-r border-border flex-shrink-0 flex flex-col">
       {/* Venue logo + name */}
       <div className="px-4 py-4 flex items-center gap-3 border-b border-border">
-        <div className="w-10 h-10 rounded-full bg-burgundy/10 border border-burgundy/20 flex items-center justify-center flex-shrink-0 overflow-hidden">
+        <div className="w-10 h-10 rounded-full bg-sage-tint border border-sage-green/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
           {venueLogoUrl ? (
             <img src={venueLogoUrl} alt="logo" className="w-full h-full object-cover" />
           ) : (
-            <span className="font-bebas text-burgundy text-sm">{(venueName ?? 'V').charAt(0)}</span>
+            <span className="font-bebas text-sage-dark text-sm">{(venueName ?? 'V').charAt(0)}</span>
           )}
         </div>
         <span className="font-dm text-sm font-semibold text-ink truncate">{venueName ?? 'Your Venue'}</span>
@@ -368,8 +368,8 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
             onClick={() => setSettingsSubTab(item.id as any)}
             className={`w-full text-left px-4 py-2 font-dm text-sm transition-colors ${
               settingsSubTab === item.id
-                ? "bg-burgundy/8 text-burgundy font-semibold border-l-2 border-burgundy pl-[calc(1rem-2px)]"
-                : "text-ink/70 hover:text-ink hover:bg-muted border-l-2 border-transparent"
+                ? "bg-sage-tint text-sage-dark font-semibold border-l-2 border-sage-green pl-[calc(1rem-2px)]"
+                : "text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent"
             }`}
           >
             {item.label}
@@ -766,11 +766,11 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 font-inter flex flex-col">
+    <div className="min-h-screen bg-background font-inter flex flex-col">
       {/* ── TOP NAVIGATION BAR (Perfect Venue layout) ──────────────────────── */}
-      <nav className="bg-white sticky top-0 z-50 border-b border-gray-200 h-14 flex items-center px-4 shadow-sm">
+      <nav className="bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
-        <div className="flex items-center pr-5 border-r border-gray-200 mr-4 flex-shrink-0">
+        <div className="flex items-center pr-5 border-r border-border mr-4 flex-shrink-0">
           <img
             src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
             alt="HOSTit"
@@ -791,8 +791,8 @@ export default function Dashboard() {
             onClick={() => setTab(item.id as any)}
             className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 ${
               tab === item.id
-                ? "text-blue-600 border-blue-600 font-semibold"
-                : "text-gray-500 border-transparent hover:text-gray-900 hover:border-gray-300"
+                ? "text-sage-dark border-sage-green font-semibold"
+                : "text-gray-400 border-transparent hover:text-gray-700 hover:border-gray-300"
             }`}
           >
             {item.label}
@@ -803,8 +803,8 @@ export default function Dashboard() {
           onClick={() => setTab("settings" as any)}
           className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 ${
             tab === "settings"
-              ? "text-blue-600 border-blue-600 font-semibold"
-              : "text-gray-500 border-transparent hover:text-gray-900 hover:border-gray-300"
+              ? "text-sage-dark border-sage-green font-semibold"
+              : "text-gray-400 border-transparent hover:text-gray-700 hover:border-gray-300"
           }`}
         >
           Settings
@@ -813,8 +813,8 @@ export default function Dashboard() {
         <div className="flex-1" />
         {/* Right: venue name + avatar */}
         <div className="flex items-center gap-3 flex-shrink-0">
-          <span className="font-inter text-gray-600 text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
-          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-inter text-white text-sm font-semibold">
+          <span className="font-inter text-stormy text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
+          <div className="w-8 h-8 rounded-full bg-sage-green flex items-center justify-center font-inter text-white text-sm font-semibold">
             {(user?.name ?? "U").charAt(0).toUpperCase()}
           </div>
         </div>
@@ -833,7 +833,7 @@ export default function Dashboard() {
               <div className="mb-6 flex items-end justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Dashboard</span>
+                    <span className="text-xs font-semibold text-sage-green uppercase tracking-wider">Dashboard</span>
                   </div>
                   <h1 className="font-inter text-gray-900" style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em' }}>
                     Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 17 ? "Afternoon" : "Evening"}
@@ -843,8 +843,8 @@ export default function Dashboard() {
                   onClick={() => setWidgetEditMode(v => !v)}
                   className={`flex items-center gap-1.5 font-inter text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
                     widgetEditMode
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600 bg-white"
+                      ? "bg-sage-green text-white border-sage-green"
+                      : "border-border text-gray-400 hover:border-sage-green hover:text-sage-dark bg-white"
                   }`}
                   title="Customise dashboard layout"
                 >
@@ -853,7 +853,7 @@ export default function Dashboard() {
                 </button>
               </div>
               {widgetEditMode && (
-                <div className="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl font-inter text-xs text-blue-700">
+                <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl font-inter text-xs text-amber-800">
                   <strong className="font-semibold">Edit Mode</strong> — Drag the <span className="font-semibold">⠿</span> handle to reorder widgets, toggle <strong>Half/Full</strong> width, or show/hide. Changes are saved automatically.
                 </div>
               )}
@@ -861,10 +861,10 @@ export default function Dashboard() {
               {/* Stats row — always visible, not draggable */}
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                 {[
-                  { label: "New Enquiries", value: stats?.newLeads ?? 0, sub: "awaiting reply", iconBg: "bg-blue-100", iconColor: "text-blue-600", icon: <MessageSquare className="w-4 h-4" /> },
-                  { label: "Total Enquiries", value: stats?.totalLeads ?? 0, sub: "all time", iconBg: "bg-gray-100", iconColor: "text-gray-600", icon: <Users className="w-4 h-4" /> },
-                  { label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-indigo-100", iconColor: "text-indigo-600", icon: <FileText className="w-4 h-4" /> },
-                  { label: "Bookings This Month", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, iconBg: "bg-green-100", iconColor: "text-green-600", icon: <CheckCircle className="w-4 h-4" /> },
+                  { label: "New Enquiries", value: stats?.newLeads ?? 0, sub: "awaiting reply", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-4 h-4" /> },
+                  { label: "Total Enquiries", value: stats?.totalLeads ?? 0, sub: "all time", iconBg: "bg-gray-100", iconColor: "text-gray-500", icon: <Users className="w-4 h-4" /> },
+                  { label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-sage-tint", iconColor: "text-sage-green", icon: <FileText className="w-4 h-4" /> },
+                  { label: "Bookings This Month", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <CheckCircle className="w-4 h-4" /> },
                   { label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-100", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-4 h-4" /> },
                 ].map(s => (
                   <div key={s.label} className="stat-card">
@@ -938,27 +938,27 @@ export default function Dashboard() {
               <div className={`${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-gold/15 bg-warm-white flex-shrink-0`}>
                 <div className="p-4 border-b border-gold/15">
                   {/* Sub-tab toggle */}
-                  <div className="flex mb-3 bg-gray-100 rounded-xl p-1 gap-1">
+                  <div className="flex mb-3 bg-muted rounded-xl p-1 gap-1">
                     <button
                       onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
                       className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
-                        leadsSubTab === "new" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                        leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
                       }`}>
                       New
                       {newEnquiries.length > 0 && (
                         <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                          leadsSubTab === "new" ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"
+                          leadsSubTab === "new" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"
                         }`}>{newEnquiries.length}</span>
                       )}
                     </button>
                     <button
                       onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
                       className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
-                        leadsSubTab === "all" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                        leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
                       }`}>
                       All
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                        leadsSubTab === "all" ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"
+                        leadsSubTab === "all" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"
                       }`}>{repliedLeads.length}</span>
                     </button>
                   </div>
@@ -984,7 +984,7 @@ export default function Dashboard() {
                   {/* Add Enquiry button */}
                   <button
                     onClick={() => setShowAddLead(true)}
-                    className="w-full mb-2 bg-blue-600 text-white font-inter font-medium text-sm py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-colors"
+                    className="w-full mb-2 bg-sage-green text-white font-inter font-medium text-sm py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-sage-dark transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" /> Add Enquiry
                   </button>
@@ -2112,7 +2112,7 @@ export default function Dashboard() {
 
           {/* ── SETTINGS ─────────────────────────────────────────────────────── */}
           {tab === "settings" && (
-            <div className="flex h-full">
+            <div className="flex" style={{ minHeight: 'calc(100vh - 3.5rem)' }}>
               {/* Settings sidebar — like Perfect Venue */}
               <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} />
               <div className="flex-1 overflow-auto p-8">

@@ -537,3 +537,8 @@
 - [ ] Restyle LeadForm.tsx: clean white form with blue submit button
 - [ ] Restyle ProposalView.tsx: clean white proposal document
 - [ ] Restyle ProposalBuilder.tsx: clean white builder UI
+
+## Custom Colour Palette (Burnt Sienna / Ivory Sand / Stormy Sky / Sage Green)
+- [ ] Update index.css CSS tokens with new palette
+- [ ] Update Dashboard nav, buttons, stat cards, tabs
+- [ ] Update Home.tsx landing page
