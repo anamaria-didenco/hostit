@@ -11,7 +11,7 @@ import { FileText, TrendingUp, DollarSign, Users, Calendar, ArrowUpRight } from 
 const TABS = [
   { key: "overview", label: "Overview" },
   { key: "events", label: "Events" },
-  { key: "leads", label: "Leads" },
+  { key: "enquiries", label: "Enquiries" },
   { key: "revenue", label: "Revenue" },
   { key: "proposals", label: "Proposals" },
 ];
@@ -276,8 +276,8 @@ export default function Reports() {
         </div>
       )}
 
-      {/* ── LEADS ── */}
-      {tab === "leads" && (
+      {/* ── ENQUIRIES ── */}
+      {tab === "enquiries" && (
         <div className="space-y-6">
           {/* Conversion funnel */}
           <div className="dante-card p-5">
@@ -311,7 +311,7 @@ export default function Reports() {
                   <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
                   <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="leads" stroke="#6B1A2A" strokeWidth={2} dot={{ fill: "#6B1A2A", r: 3 }} />
+                  <Line type="monotone" dataKey="enquiries" stroke="#6B1A2A" strokeWidth={2} dot={{ fill: "#6B1A2A", r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (

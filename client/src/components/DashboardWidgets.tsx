@@ -1,9 +1,12 @@
 /**
- * DashboardWidgets — drag-to-reorder, show/hide overview widgets.
+ * DashboardWidgets — drag-to-reorder, show/hide, and resize overview widgets.
  *
  * Widgets are identified by a stable string key. The parent passes the
- * current ordered list and hidden set; this component handles the DnD
- * chrome and calls back on changes.
+ * current ordered list, hidden set, and size map; this component handles
+ * the DnD chrome and calls back on changes.
+ *
+ * Layout: two-column grid. Widgets with size "full" span both columns.
+ * Widgets with size "half" (default) take one column.
  */
 import {
   DndContext,
@@ -16,20 +19,24 @@ import {
 import {
   SortableContext,
   useSortable,
-  verticalListSortingStrategy,
+  rectSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Eye, EyeOff } from "lucide-react";
+import { GripVertical, Eye, EyeOff, Maximize2, Minimize2, LayoutGrid } from "lucide-react";
 import React from "react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+export type WidgetSize = "half" | "full";
 
 export interface WidgetDef {
   id: string;
   label: string;
   /** The actual widget content — rendered when not hidden */
   content: React.ReactNode;
+  /** Default size if not in widgetSizes map */
+  defaultSize?: WidgetSize;
 }
 
 interface Props {
@@ -38,10 +45,13 @@ interface Props {
   order: string[];
   /** Set of hidden widget IDs */
   hidden: Set<string>;
+  /** Map of widget ID to size */
+  sizes?: Record<string, WidgetSize>;
   /** Whether the user is in "edit layout" mode */
   editMode: boolean;
   onOrderChange: (newOrder: string[]) => void;
   onToggleHidden: (id: string) => void;
+  onToggleSize?: (id: string) => void;
 }
 
 // ─── Sortable Widget Shell ───────────────────────────────────────────────────
@@ -52,14 +62,18 @@ function SortableWidget({
   content,
   hidden,
   editMode,
+  size,
   onToggle,
+  onToggleSize,
 }: {
   id: string;
   label: string;
   content: React.ReactNode;
   hidden: boolean;
   editMode: boolean;
+  size: WidgetSize;
   onToggle: () => void;
+  onToggleSize?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
@@ -69,23 +83,44 @@ function SortableWidget({
     transition,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 50 : undefined,
+    gridColumn: size === "full" ? "1 / -1" : undefined,
   };
 
   return (
     <div ref={setNodeRef} style={style} className={`relative ${hidden && !editMode ? "hidden" : ""}`}>
       {/* Edit-mode overlay bar */}
       {editMode && (
-        <div className="flex items-center gap-2 mb-1 px-1">
+        <div className="flex items-center gap-2 mb-1.5 px-1 py-1 bg-gold/10 border border-gold/20">
           {/* Drag handle */}
           <button
             {...attributes}
             {...listeners}
-            className="cursor-grab active:cursor-grabbing text-sage/50 hover:text-sage transition-colors p-0.5"
+            className="cursor-grab active:cursor-grabbing text-sage/60 hover:text-sage transition-colors p-0.5 flex-shrink-0"
             title="Drag to reorder"
           >
             <GripVertical className="w-4 h-4" />
           </button>
-          <span className="font-bebas text-xs tracking-widest text-sage/70 flex-1">{label}</span>
+          <span className="font-bebas text-xs tracking-widest text-sage/80 flex-1">{label}</span>
+
+          {/* Size toggle */}
+          {onToggleSize && (
+            <button
+              onClick={onToggleSize}
+              className={`flex items-center gap-1 font-bebas text-xs tracking-widest px-2 py-0.5 border transition-colors ${
+                size === "full"
+                  ? "border-forest/40 text-forest bg-forest/5 hover:border-forest/70"
+                  : "border-sage/30 text-sage/60 hover:border-sage hover:text-sage"
+              }`}
+              title={size === "full" ? "Switch to half width" : "Switch to full width"}
+            >
+              {size === "full" ? (
+                <><Minimize2 className="w-3 h-3" /> HALF</>
+              ) : (
+                <><Maximize2 className="w-3 h-3" /> FULL</>
+              )}
+            </button>
+          )}
+
           {/* Show/hide toggle */}
           <button
             onClick={onToggle}
@@ -115,9 +150,11 @@ export function DashboardWidgets({
   widgets,
   order,
   hidden,
+  sizes = {},
   editMode,
   onOrderChange,
   onToggleHidden,
+  onToggleSize,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -143,11 +180,12 @@ export function DashboardWidgets({
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
-        <div className="space-y-6">
+      <SortableContext items={orderedIds} strategy={rectSortingStrategy}>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {orderedIds.map((id) => {
             const w = widgetMap[id];
             if (!w) return null;
+            const size: WidgetSize = sizes[id] ?? w.defaultSize ?? "half";
             return (
               <SortableWidget
                 key={id}
@@ -156,7 +194,9 @@ export function DashboardWidgets({
                 content={w.content}
                 hidden={hidden.has(id)}
                 editMode={editMode}
+                size={size}
                 onToggle={() => onToggleHidden(id)}
+                onToggleSize={onToggleSize ? () => onToggleSize(id) : undefined}
               />
             );
           })}

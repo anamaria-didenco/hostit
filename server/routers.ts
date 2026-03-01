@@ -195,6 +195,39 @@ export const appRouter = router({
 
   // ─── Leads ─────────────────────────────────────────────────────────────────
   leads: router({
+    create: protectedProcedure
+      .input(z.object({
+        firstName: z.string().min(1),
+        lastName: z.string().optional(),
+        email: z.string().email().optional().or(z.literal('')),
+        phone: z.string().optional(),
+        company: z.string().optional(),
+        eventType: z.string().optional(),
+        eventDate: z.string().optional(),
+        guestCount: z.number().optional(),
+        budget: z.number().optional(),
+        message: z.string().optional(),
+        status: z.enum(["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"]).optional(),
+        source: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return createLead({
+          ownerId: ctx.user.id,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email || '',
+          phone: input.phone,
+          company: input.company,
+          eventType: input.eventType,
+          eventDate: input.eventDate ? new Date(input.eventDate) : undefined,
+          guestCount: input.guestCount,
+          budget: input.budget?.toString() as any,
+          message: input.message,
+          source: input.source ?? "manual",
+          status: input.status ?? "new",
+        });
+      }),
+
     list: protectedProcedure
       .input(z.object({ status: z.string().optional() }))
       .query(async ({ input, ctx }) => {
@@ -2260,6 +2293,7 @@ export const appRouter = router({
       .input(z.object({
         widgetOrder: z.array(z.string()),
         hiddenWidgets: z.array(z.string()),
+        widgetSizes: z.record(z.string(), z.enum(['half', 'full'])).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -2267,7 +2301,7 @@ export const appRouter = router({
         const { eq } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const layout = { widgetOrder: input.widgetOrder, hiddenWidgets: input.hiddenWidgets };
+        const layout = { widgetOrder: input.widgetOrder, hiddenWidgets: input.hiddenWidgets, widgetSizes: input.widgetSizes ?? {} };
         const existing = await db.select().from(userPreferences).where(eq(userPreferences.ownerId, ctx.user.id));
         if (existing.length > 0) {
           await db.update(userPreferences).set({ dashboardLayout: layout }).where(eq(userPreferences.ownerId, ctx.user.id));

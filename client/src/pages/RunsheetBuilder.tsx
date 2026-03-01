@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
-  UtensilsCrossed, ChefHat,
+  UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
+  MoveUp, MoveDown, Copy, AlertCircle,
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
@@ -47,6 +48,14 @@ function addMinutes(time: string, mins: number): string {
   return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
+function formatTime12(time: string): string {
+  if (!time) return "";
+  const [h, m] = time.split(":").map(Number);
+  const period = h >= 12 ? "pm" : "am";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")}${period}`;
+}
+
 type Item = {
   id?: number;
   time: string;
@@ -57,6 +66,7 @@ type Item = {
   category: string;
   sortOrder: number;
   _tempId?: string;
+  checked?: boolean;
 };
 
 type Dietary = { name: string; count: number; notes?: string };
@@ -100,13 +110,18 @@ export default function RunsheetBuilder() {
   const [saving, setSaving] = useState(false);
   const [sheetId, setSheetId] = useState<number | null>(runsheetId);
 
+  // Contact info
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+
   // Dietaries
   const [dietaries, setDietaries] = useState<Dietary[]>([]);
   const [newDietary, setNewDietary] = useState({ name: "", count: "1", notes: "" });
   const [dietarySectionOpen, setDietarySectionOpen] = useState(true);
 
   // F&B
-  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb'>('timeline');
+  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'checklist'>('timeline');
   const [fnbSection, setFnbSection] = useState<'foh' | 'kitchen'>('foh');
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
   const [fnbSaving, setFnbSaving] = useState(false);
@@ -120,7 +135,22 @@ export default function RunsheetBuilder() {
 
   // Proposal link
   const [linkedProposalId, setLinkedProposalId] = useState<number | undefined>(proposalIdParam);
-  const [proposalSectionOpen, setProposalSectionOpen] = useState(true);
+  const [proposalSectionOpen, setProposalSectionOpen] = useState(false);
+
+  // Checklist items (pre-event tasks)
+  const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>([
+    { id: "c1", text: "Confirm final guest numbers with client", checked: false, category: "admin" },
+    { id: "c2", text: "Send final invoice / confirm payment", checked: false, category: "admin" },
+    { id: "c3", text: "Brief all FOH staff on event details", checked: false, category: "staff" },
+    { id: "c4", text: "Brief kitchen on menu and dietary requirements", checked: false, category: "staff" },
+    { id: "c5", text: "Set up floor plan and tables", checked: false, category: "setup" },
+    { id: "c6", text: "Check AV / sound system", checked: false, category: "setup" },
+    { id: "c7", text: "Prepare bar stock and ice", checked: false, category: "bar" },
+    { id: "c8", text: "Print runsheets for all staff", checked: false, category: "admin" },
+    { id: "c9", text: "Confirm dietary meals with kitchen", checked: false, category: "kitchen" },
+    { id: "c10", text: "Welcome client on arrival", checked: false, category: "guest" },
+  ]);
+  const [newChecklistText, setNewChecklistText] = useState("");
 
   // F&B mutations
   const saveFnbMutation = trpc.fnb.save.useMutation({
@@ -226,6 +256,9 @@ export default function RunsheetBuilder() {
       setEventDate(lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-CA") : "");
       setGuestCount(lead.guestCount ? String(lead.guestCount) : "");
       setEventType(lead.eventType ?? "");
+      setContactName(`${lead.firstName} ${lead.lastName ?? ""}`.trim());
+      setContactEmail(lead.email ?? "");
+      setContactPhone(lead.phone ?? "");
       seedDefaultItems(lead.eventType ?? "");
     }
   }, [lead, sheetId]);
@@ -414,6 +447,27 @@ export default function RunsheetBuilder() {
     setItems(prev => prev.filter((_, i) => i !== idx));
   }
 
+  function moveItem(idx: number, dir: 'up' | 'down') {
+    const newItems = [...items];
+    const targetIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= newItems.length) return;
+    [newItems[idx], newItems[targetIdx]] = [newItems[targetIdx], newItems[idx]];
+    setItems(newItems.map((item, i) => ({ ...item, sortOrder: i })));
+  }
+
+  function duplicateItem(idx: number) {
+    const item = items[idx];
+    const newItem: Item = {
+      ...item,
+      id: undefined,
+      _tempId: `dup-${Date.now()}`,
+      sortOrder: idx + 1,
+    };
+    const newItems = [...items];
+    newItems.splice(idx + 1, 0, newItem);
+    setItems(newItems.map((it, i) => ({ ...it, sortOrder: i })));
+  }
+
   function updateItemField(idx: number, field: keyof Item, value: any) {
     setItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
   }
@@ -440,6 +494,30 @@ export default function RunsheetBuilder() {
     setDietaries(prev => prev.map((d, i) => i === idx ? { ...d, [field]: value } : d));
   }
 
+  function toggleChecklistItem(id: string) {
+    setChecklistItems(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
+  }
+
+  function addChecklistItem() {
+    if (!newChecklistText.trim()) return;
+    setChecklistItems(prev => [...prev, {
+      id: `c-${Date.now()}`,
+      text: newChecklistText.trim(),
+      checked: false,
+      category: "other",
+    }]);
+    setNewChecklistText("");
+  }
+
+  function removeChecklistItem(id: string) {
+    setChecklistItems(prev => prev.filter(item => item.id !== id));
+  }
+
+  // Format event date for display
+  const formattedEventDate = eventDate
+    ? new Date(eventDate + "T12:00:00").toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : "";
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
@@ -453,20 +531,25 @@ export default function RunsheetBuilder() {
     return null;
   }
 
+  const checkedCount = checklistItems.filter(i => i.checked).length;
+
   return (
-    <div className="min-h-screen bg-cream print:bg-white">
-      {/* Header */}
-      <div className="no-print bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-[#f5f3ef] print:bg-white">
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="no-print bg-[#1a1a1a] border-b border-white/10 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/")} className="text-cream/60 hover:text-cream transition-colors">
+          <button onClick={() => navigate("/")} className="text-white/50 hover:text-white transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <span className="font-bebas tracking-widest text-amber text-sm">RUNSHEET BUILDER</span>
+          <div>
+            <span className="font-bebas tracking-widest text-[#d4a843] text-sm">RUNSHEET BUILDER</span>
+            {sheetId && <span className="ml-2 text-white/30 text-xs font-dm">#{sheetId}</span>}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => window.print()}
-            className="font-bebas tracking-widest text-xs text-cream/70 hover:text-amber flex items-center gap-1.5 transition-colors"
+            className="font-bebas tracking-widest text-xs text-white/60 hover:text-[#d4a843] flex items-center gap-1.5 transition-colors"
           >
             <Printer className="w-4 h-4" /> PRINT
           </button>
@@ -475,14 +558,14 @@ export default function RunsheetBuilder() {
               href={`/api/staff-sheet/${sheetId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-bebas tracking-widest text-xs bg-forest/80 hover:bg-forest text-cream px-3 py-1.5 flex items-center gap-1.5 transition-colors"
+              className="font-bebas tracking-widest text-xs bg-[#2d5a27]/80 hover:bg-[#2d5a27] text-white px-3 py-1.5 flex items-center gap-1.5 transition-colors"
             >
               <FileText className="w-3.5 h-3.5" /> STAFF SHEET PDF
             </a>
           ) : (
             <button
               onClick={() => toast.error('Save the runsheet first to generate a Staff Sheet PDF')}
-              className="font-bebas tracking-widest text-xs text-cream/40 flex items-center gap-1.5 cursor-not-allowed"
+              className="font-bebas tracking-widest text-xs text-white/30 flex items-center gap-1.5 cursor-not-allowed"
             >
               <FileText className="w-3.5 h-3.5" /> STAFF SHEET PDF
             </button>
@@ -490,7 +573,7 @@ export default function RunsheetBuilder() {
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
+            className="bg-[#8b1a1a] hover:bg-[#8b1a1a]/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? "SAVING..." : "SAVE RUNSHEET"}
@@ -498,181 +581,142 @@ export default function RunsheetBuilder() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-6">
+      <div className="max-w-5xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0">
 
-        {/* Event Details */}
-        <div className="mb-2 print:mb-6">
-          <Input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            className="text-2xl font-cormorant font-semibold text-ink border-0 border-b-2 border-ink/20 focus-visible:border-burgundy rounded-none px-0 bg-transparent print:border-0 print:text-3xl mb-4"
-            placeholder="Event Runsheet Title"
-          />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 print:grid-cols-4">
+        {/* ── Print Header ────────────────────────────────────────────────── */}
+        <div className="hidden print:block mb-6 pb-4 border-b-2 border-[#1a1a1a]">
+          <div className="flex items-start justify-between">
             <div>
-              <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">DATE</label>
-              <Input
-                type="date"
-                value={eventDate}
-                onChange={e => setEventDate(e.target.value)}
-                className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm print:border-0 print:p-0"
-              />
+              <div className="font-bebas text-2xl tracking-widest text-[#8b1a1a] mb-1">FUNCTION RUNSHEET</div>
+              <div className="font-cormorant text-3xl font-semibold text-[#1a1a1a]">{title}</div>
             </div>
-            <div>
-              <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">EVENT TYPE</label>
-              <Input
-                value={eventType}
-                onChange={e => setEventType(e.target.value)}
-                placeholder="Wedding, Birthday..."
-                className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm print:border-0 print:p-0"
-              />
-            </div>
-            <div>
-              <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">VENUE / SPACE</label>
-              <Input
-                value={spaceName}
-                onChange={e => setSpaceName(e.target.value)}
-                placeholder="Main Hall, Rooftop..."
-                className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm print:border-0 print:p-0"
-              />
-            </div>
-            <div>
-              <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">GUESTS</label>
-              <Input
-                type="number"
-                value={guestCount}
-                onChange={e => setGuestCount(e.target.value)}
-                placeholder="0"
-                className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm print:border-0 print:p-0"
-              />
+            <div className="text-right">
+              <div className="font-bebas text-xs tracking-widest text-[#1a1a1a]/40 mb-1">PREPARED BY</div>
+              <div className="font-dm text-sm font-semibold">{venueName || "HOSTit"}</div>
+              <div className="font-dm text-xs text-[#1a1a1a]/50">{new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</div>
             </div>
           </div>
         </div>
 
-        {/* ── Linked Proposal ─────────────────────────────────────────────── */}
-        {leadProposals && leadProposals.length > 0 && (
-          <div className="bg-white border border-border no-print">
-            <button
-              onClick={() => setProposalSectionOpen(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-burgundy/5 hover:bg-burgundy/10 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <LinkIcon className="w-4 h-4 text-burgundy" />
-                <span className="font-bebas tracking-widest text-sm text-burgundy">LINKED PROPOSAL</span>
-                {linkedProposalId && <span className="text-xs text-burgundy/60 font-dm">(data auto-populated)</span>}
-              </div>
-              {proposalSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
-            </button>
-            {proposalSectionOpen && (
-              <div className="p-4 space-y-4">
-                <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">SELECT PROPOSAL</label>
-                  <select
-                    value={linkedProposalId ?? ""}
-                    onChange={e => setLinkedProposalId(e.target.value ? Number(e.target.value) : undefined)}
-                    className="w-full border-2 border-border rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-burgundy bg-white"
-                  >
-                    <option value="">— No linked proposal —</option>
-                    {leadProposals.map(p => (
-                      <option key={p.id} value={p.id}>{p.title} ({p.status})</option>
-                    ))}
-                  </select>
-                </div>
-                {linkedProposal && (
-                  <div className="bg-cream border border-border p-4 space-y-3">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      <div>
-                        <div className="font-bebas text-xs text-ink/40 tracking-widest">TOTAL</div>
-                        <div className="font-dm font-semibold">${Number(linkedProposal.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
-                      </div>
-                      <div>
-                        <div className="font-bebas text-xs text-ink/40 tracking-widest">GUESTS</div>
-                        <div className="font-dm font-semibold">{(linkedProposal.guestCount ?? guestCount) || "—"}</div>
-                      </div>
-                      <div>
-                        <div className="font-bebas text-xs text-ink/40 tracking-widest">SPACE</div>
-                        <div className="font-dm font-semibold">{linkedProposal.spaceName ?? "—"}</div>
-                      </div>
-                      <div>
-                        <div className="font-bebas text-xs text-ink/40 tracking-widest">STATUS</div>
-                        <div className="font-dm font-semibold capitalize">{linkedProposal.status}</div>
-                      </div>
-                    </div>
-                    {/* Line items */}
-                    {linkedProposal.lineItems && (() => {
-                      try {
-                        const li = JSON.parse(linkedProposal.lineItems as string ?? "[]") as any[];
-                        return li.length > 0 ? (
-                          <div>
-                            <div className="font-bebas text-xs text-ink/40 tracking-widest mb-1">PRICING ITEMS</div>
-                            <div className="space-y-0.5">
-                              {li.map((item: any, i: number) => (
-                                <div key={i} className="flex justify-between text-xs font-dm">
-                                  <span className="text-ink/70">{item.description}{item.qty > 1 ? ` × ${item.qty}` : ""}</span>
-                                  <span className="font-medium">${Number(item.total).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null;
-                      } catch { return null; }
-                    })()}
-                    {/* Bar option */}
-                    {proposalDrinks && (
-                      <div>
-                        <div className="font-bebas text-xs text-ink/40 tracking-widest mb-1">BAR</div>
-                        <div className="text-xs font-dm capitalize text-ink/70">
-                          {proposalDrinks.barOption?.replace(/_/g, " ")}
-                          {proposalDrinks.tabAmount ? ` — Tab: $${Number(proposalDrinks.tabAmount).toLocaleString("en-NZ")}` : ""}
-                        </div>
-                        {(proposalDrinks.selectedDrinks as string[])?.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {(proposalDrinks.selectedDrinks as string[]).map(k => (
-                              <span key={k} className="bg-green-100 text-green-700 text-xs px-2 py-0.5 font-dm">{k.replace(/_/g, " ")}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <a
-                      href={`/proposal/${linkedProposal.publicToken}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-bebas tracking-widest text-burgundy hover:underline"
-                    >
-                      <FileText className="w-3 h-3" /> VIEW FULL PROPOSAL
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
+        {/* ── Event Details Card ──────────────────────────────────────────── */}
+        <div className="bg-white border border-[#e8e0d0] shadow-sm mb-4 print:shadow-none print:border-0 print:mb-2">
+          {/* Editable title */}
+          <div className="px-6 pt-5 pb-3 no-print">
+            <Input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              className="text-2xl font-cormorant font-semibold text-[#1a1a1a] border-0 border-b-2 border-[#1a1a1a]/15 focus-visible:border-[#8b1a1a] rounded-none px-0 bg-transparent"
+              placeholder="Event Runsheet Title"
+            />
           </div>
-        )}
+
+          <div className="px-6 pb-5">
+            {/* Event details grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">DATE</label>
+                <Input
+                  type="date"
+                  value={eventDate}
+                  onChange={e => setEventDate(e.target.value)}
+                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                />
+                <div className="hidden print:block font-dm text-sm font-semibold">{formattedEventDate || "—"}</div>
+              </div>
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">EVENT TYPE</label>
+                <Input
+                  value={eventType}
+                  onChange={e => setEventType(e.target.value)}
+                  placeholder="Wedding, Birthday..."
+                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                />
+                <div className="hidden print:block font-dm text-sm font-semibold">{eventType || "—"}</div>
+              </div>
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">VENUE / SPACE</label>
+                <Input
+                  value={spaceName}
+                  onChange={e => setSpaceName(e.target.value)}
+                  placeholder="Main Hall, Rooftop..."
+                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                />
+                <div className="hidden print:block font-dm text-sm font-semibold">{spaceName || "—"}</div>
+              </div>
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">GUESTS</label>
+                <Input
+                  type="number"
+                  value={guestCount}
+                  onChange={e => setGuestCount(e.target.value)}
+                  placeholder="0"
+                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                />
+                <div className="hidden print:block font-dm text-sm font-semibold">{guestCount || "—"}</div>
+              </div>
+            </div>
+
+            {/* Contact info row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-[#e8e0d0]">
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1 flex items-center gap-1"><User className="w-3 h-3" /> CLIENT NAME</label>
+                <Input
+                  value={contactName}
+                  onChange={e => setContactName(e.target.value)}
+                  placeholder="Client name..."
+                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                />
+                <div className="hidden print:block font-dm text-sm">{contactName || "—"}</div>
+              </div>
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> PHONE</label>
+                <Input
+                  value={contactPhone}
+                  onChange={e => setContactPhone(e.target.value)}
+                  placeholder="Phone number..."
+                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                />
+                <div className="hidden print:block font-dm text-sm">{contactPhone || "—"}</div>
+              </div>
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> EMAIL</label>
+                <Input
+                  value={contactEmail}
+                  onChange={e => setContactEmail(e.target.value)}
+                  placeholder="Email address..."
+                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                />
+                <div className="hidden print:block font-dm text-sm">{contactEmail || "—"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* ── Venue Setup ─────────────────────────────────────────────────── */}
-        <div className="bg-white border border-border">
+        <div className="bg-white border border-[#e8e0d0] shadow-sm mb-4 print:shadow-none">
           <button
             onClick={() => setSetupSectionOpen(v => !v)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors no-print"
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-[#f5f3ef] transition-colors no-print"
           >
             <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-blue-700" />
-              <span className="font-bebas tracking-widest text-sm text-blue-700">VENUE SETUP</span>
+              <Building2 className="w-4 h-4 text-[#3b6b8a]" />
+              <span className="font-bebas tracking-widest text-sm text-[#3b6b8a]">VENUE SETUP</span>
+              {venueSetup && <span className="text-xs text-[#3b6b8a]/50 font-dm truncate max-w-[200px]">{venueSetup.substring(0, 40)}{venueSetup.length > 40 ? "..." : ""}</span>}
             </div>
-            {setupSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
+            {setupSectionOpen ? <ChevronUp className="w-4 h-4 text-[#1a1a1a]/30" /> : <ChevronDown className="w-4 h-4 text-[#1a1a1a]/30" />}
           </button>
-          <div className="hidden print:flex items-center gap-2 px-4 py-2 bg-blue-50 border-b border-blue-100">
-            <Building2 className="w-4 h-4 text-blue-700" />
-            <span className="font-bebas tracking-widest text-sm text-blue-700">VENUE SETUP</span>
+          <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-[#e8e0d0]">
+            <Building2 className="w-4 h-4 text-[#3b6b8a]" />
+            <span className="font-bebas tracking-widest text-sm text-[#3b6b8a]">VENUE SETUP</span>
           </div>
           {setupSectionOpen && (
-            <div className="p-4 space-y-3">
-              <div className="flex flex-wrap gap-2 no-print">
+            <div className="px-5 pb-4 pt-2 space-y-3 no-print">
+              <div className="flex flex-wrap gap-2">
                 {VENUE_SETUP_TEMPLATES.map(t => (
                   <button
                     key={t.label}
                     onClick={() => setVenueSetup(t.value)}
-                    className="text-xs font-bebas tracking-widest px-3 py-1.5 border-2 border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors"
+                    className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-[#3b6b8a]/30 text-[#3b6b8a] hover:bg-[#3b6b8a]/5 transition-colors"
                   >
                     {t.label}
                   </button>
@@ -682,97 +726,85 @@ export default function RunsheetBuilder() {
                 value={venueSetup}
                 onChange={e => setVenueSetup(e.target.value)}
                 placeholder="Describe the room layout, table arrangement, AV setup, decorations, bar position, dance floor, stage..."
-                rows={4}
-                className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy font-dm text-sm"
+                rows={3}
+                className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] font-dm text-sm"
               />
             </div>
           )}
-          {!setupSectionOpen && venueSetup && (
-            <div className="hidden print:block px-4 py-3 font-dm text-sm text-ink/80 whitespace-pre-wrap">{venueSetup}</div>
-          )}
-          {setupSectionOpen && venueSetup && (
-            <div className="hidden print:block px-4 py-3 font-dm text-sm text-ink/80 whitespace-pre-wrap">{venueSetup}</div>
+          {venueSetup && (
+            <div className="hidden print:block px-5 py-3 font-dm text-sm text-[#1a1a1a]/80 whitespace-pre-wrap">{venueSetup}</div>
           )}
         </div>
 
         {/* ── Dietary Requirements ─────────────────────────────────────────── */}
-        <div className="bg-white border border-border">
+        <div className="bg-white border border-[#e8e0d0] shadow-sm mb-4 print:shadow-none">
           <button
             onClick={() => setDietarySectionOpen(v => !v)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-green-50 hover:bg-green-100 transition-colors no-print"
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-[#f5f3ef] transition-colors no-print"
           >
             <div className="flex items-center gap-2">
-              <Leaf className="w-4 h-4 text-green-700" />
-              <span className="font-bebas tracking-widest text-sm text-green-700">DIETARY REQUIREMENTS</span>
+              <Leaf className="w-4 h-4 text-[#2d6a2d]" />
+              <span className="font-bebas tracking-widest text-sm text-[#2d6a2d]">DIETARY REQUIREMENTS</span>
               {dietaries.length > 0 && (
-                <span className="bg-green-700 text-white text-xs font-bebas px-2 py-0.5">{dietaries.length}</span>
+                <span className="bg-[#2d6a2d] text-white text-xs font-bebas px-2 py-0.5">{dietaries.length}</span>
               )}
             </div>
-            {dietarySectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
+            {dietarySectionOpen ? <ChevronUp className="w-4 h-4 text-[#1a1a1a]/30" /> : <ChevronDown className="w-4 h-4 text-[#1a1a1a]/30" />}
           </button>
-          <div className="hidden print:flex items-center gap-2 px-4 py-2 bg-green-50 border-b border-green-100">
-            <Leaf className="w-4 h-4 text-green-700" />
-            <span className="font-bebas tracking-widest text-sm text-green-700">DIETARY REQUIREMENTS</span>
+          <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-[#e8e0d0]">
+            <Leaf className="w-4 h-4 text-[#2d6a2d]" />
+            <span className="font-bebas tracking-widest text-sm text-[#2d6a2d]">DIETARY REQUIREMENTS</span>
           </div>
           {dietarySectionOpen && (
-            <div className="p-4 space-y-4">
-              {/* Quick-add chips */}
-              <div className="no-print">
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">QUICK ADD</label>
-                <div className="flex flex-wrap gap-2">
-                  {COMMON_DIETARIES.map(d => (
-                    <button
-                      key={d}
-                      onClick={() => {
-                        if (!dietaries.find(x => x.name === d)) {
-                          setDietaries(prev => [...prev, { name: d, count: 1 }]);
-                        }
-                      }}
-                      className={`text-xs font-bebas tracking-widest px-3 py-1.5 border-2 transition-colors ${
-                        dietaries.find(x => x.name === d)
-                          ? "bg-green-700 text-white border-green-700"
-                          : "border-green-200 text-green-700 hover:bg-green-50"
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  ))}
-                </div>
+            <div className="px-5 pb-4 pt-2 space-y-4 no-print">
+              <div className="flex flex-wrap gap-2">
+                {COMMON_DIETARIES.map(d => (
+                  <button
+                    key={d}
+                    onClick={() => {
+                      if (!dietaries.find(x => x.name === d)) {
+                        setDietaries(prev => [...prev, { name: d, count: 1 }]);
+                      }
+                    }}
+                    className={`text-xs font-bebas tracking-widest px-3 py-1.5 border transition-colors ${
+                      dietaries.find(x => x.name === d)
+                        ? "bg-[#2d6a2d] text-white border-[#2d6a2d]"
+                        : "border-[#2d6a2d]/30 text-[#2d6a2d] hover:bg-[#2d6a2d]/5"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
               </div>
-
-              {/* Dietary table */}
               {dietaries.length > 0 && (
-                <div className="border-2 border-border divide-y divide-border">
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-cream">
-                    <div className="col-span-4 font-bebas text-xs tracking-widest text-ink/50">REQUIREMENT</div>
-                    <div className="col-span-2 font-bebas text-xs tracking-widest text-ink/50">COUNT</div>
-                    <div className="col-span-5 font-bebas text-xs tracking-widest text-ink/50">NOTES</div>
-                    <div className="col-span-1 no-print"></div>
+                <div className="border border-[#e8e0d0] divide-y divide-[#e8e0d0]">
+                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-[#f5f3ef]">
+                    <div className="col-span-4 font-bebas text-xs tracking-widest text-[#1a1a1a]/50">REQUIREMENT</div>
+                    <div className="col-span-2 font-bebas text-xs tracking-widest text-[#1a1a1a]/50">COUNT</div>
+                    <div className="col-span-5 font-bebas text-xs tracking-widest text-[#1a1a1a]/50">NOTES</div>
+                    <div className="col-span-1"></div>
                   </div>
                   {dietaries.map((d, idx) => (
                     <div key={idx} className="grid grid-cols-12 gap-2 px-3 py-2 items-center">
                       <div className="col-span-4 font-dm text-sm font-medium">{d.name}</div>
                       <div className="col-span-2">
                         <Input
-                          type="number"
-                          min={1}
+                          type="number" min={1}
                           value={d.count}
                           onChange={e => updateDietary(idx, "count", Number(e.target.value))}
-                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8 no-print"
+                          className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-8"
                         />
-                        <span className="hidden print:block font-dm text-sm">{d.count}</span>
                       </div>
                       <div className="col-span-5">
                         <Input
                           value={d.notes ?? ""}
                           onChange={e => updateDietary(idx, "notes", e.target.value)}
                           placeholder="Notes..."
-                          className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8 no-print"
+                          className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-8"
                         />
-                        <span className="hidden print:block font-dm text-sm text-ink/60">{d.notes}</span>
                       </div>
-                      <div className="col-span-1 no-print">
-                        <button onClick={() => removeDietary(idx)} className="text-ink/30 hover:text-red-500 transition-colors">
+                      <div className="col-span-1">
+                        <button onClick={() => removeDietary(idx)} className="text-[#1a1a1a]/30 hover:text-red-500 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -780,203 +812,409 @@ export default function RunsheetBuilder() {
                   ))}
                 </div>
               )}
-
-              {/* Custom dietary add */}
-              <div className="no-print">
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">ADD CUSTOM</label>
-                <div className="flex gap-2">
-                  <Input
-                    value={newDietary.name}
-                    onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Requirement..."
-                    className="flex-1 rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
-                    onKeyDown={e => e.key === "Enter" && addDietary()}
-                  />
-                  <Input
-                    type="number"
-                    min={1}
-                    value={newDietary.count}
-                    onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
-                    placeholder="Count"
-                    className="w-20 rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
-                  />
-                  <Input
-                    value={newDietary.notes}
-                    onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Notes (optional)"
-                    className="flex-1 rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
-                  />
-                  <Button
-                    onClick={addDietary}
-                    className="bg-green-700 hover:bg-green-800 text-white rounded-none font-bebas tracking-widest text-xs gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> ADD
-                  </Button>
-                </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newDietary.name}
+                  onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Add requirement..."
+                  className="flex-1 rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm"
+                  onKeyDown={e => e.key === "Enter" && addDietary()}
+                />
+                <Input
+                  type="number" min={1}
+                  value={newDietary.count}
+                  onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
+                  placeholder="Count"
+                  className="w-20 rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm"
+                />
+                <Input
+                  value={newDietary.notes}
+                  onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Notes (optional)"
+                  className="flex-1 rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm"
+                />
+                <Button
+                  onClick={addDietary}
+                  className="bg-[#2d6a2d] hover:bg-[#2d6a2d]/90 text-white rounded-none font-bebas tracking-widest text-xs gap-1"
+                >
+                  <Plus className="w-3 h-3" /> ADD
+                </Button>
               </div>
-
               {dietaries.length === 0 && (
-                <div className="text-center py-4 text-ink/30 font-dm text-sm">No dietary requirements recorded</div>
+                <div className="text-center py-3 text-[#1a1a1a]/30 font-dm text-sm">No dietary requirements recorded</div>
               )}
+            </div>
+          )}
+          {/* Print view of dietaries */}
+          {dietaries.length > 0 && (
+            <div className="hidden print:block px-5 py-3">
+              <div className="flex flex-wrap gap-2">
+                {dietaries.map((d, i) => (
+                  <div key={i} className="border border-[#e8e0d0] px-3 py-1.5 text-sm font-dm">
+                    <span className="font-semibold">{d.count}×</span> {d.name}
+                    {d.notes && <span className="text-[#1a1a1a]/50 ml-1">— {d.notes}</span>}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
 
         {/* ── Main Tab Navigation ─────────────────────────────────────────── */}
-        <div className="no-print flex border-b-2 border-border gap-0 mb-0">
-          <button
-            onClick={() => setActiveMainTab('timeline')}
-            className={`flex items-center gap-2 px-5 py-2.5 font-bebas tracking-widest text-sm border-b-2 transition-colors ${
-              activeMainTab === 'timeline'
-                ? 'border-burgundy text-burgundy bg-white'
-                : 'border-transparent text-ink/50 hover:text-ink hover:bg-cream'
-            }`}
-          >
-            <Clock className="w-4 h-4" /> TIMELINE
-          </button>
-          <button
-            onClick={() => setActiveMainTab('fnb')}
-            className={`flex items-center gap-2 px-5 py-2.5 font-bebas tracking-widest text-sm border-b-2 transition-colors ${
-              activeMainTab === 'fnb'
-                ? 'border-amber text-amber bg-white'
-                : 'border-transparent text-ink/50 hover:text-ink hover:bg-cream'
-            }`}
-          >
-            <UtensilsCrossed className="w-4 h-4" /> F&amp;B SHEET
-            {fnbItems.length > 0 && (
-              <span className="bg-amber text-ink text-xs font-bebas px-1.5 py-0.5 rounded-sm">{fnbItems.length}</span>
-            )}
-          </button>
+        <div className="no-print flex border-b border-[#e8e0d0] bg-white">
+          {[
+            { id: 'timeline', label: 'TIMELINE', icon: <Clock className="w-4 h-4" />, count: items.length },
+            { id: 'fnb', label: 'F&B SHEET', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
+            { id: 'checklist', label: 'CHECKLIST', icon: <CheckSquare className="w-4 h-4" />, count: `${checkedCount}/${checklistItems.length}` },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveMainTab(tab.id as any)}
+              className={`flex items-center gap-2 px-5 py-3 font-bebas tracking-widest text-sm border-b-2 transition-colors ${
+                activeMainTab === tab.id
+                  ? 'border-[#8b1a1a] text-[#8b1a1a] bg-white'
+                  : 'border-transparent text-[#1a1a1a]/50 hover:text-[#1a1a1a] hover:bg-[#f5f3ef]'
+              }`}
+            >
+              {tab.icon} {tab.label}
+              {tab.count !== undefined && tab.count !== 0 && (
+                <span className={`text-xs font-bebas px-1.5 py-0.5 ${activeMainTab === tab.id ? 'bg-[#8b1a1a]/10 text-[#8b1a1a]' : 'bg-[#1a1a1a]/10 text-[#1a1a1a]/60'}`}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
-        {/* ── F&B Sheet ────────────────────────────────────────────────────── */}
+        {/* ── TIMELINE TAB ────────────────────────────────────────────────── */}
+        {activeMainTab === 'timeline' && (
+          <div className="bg-white border border-[#e8e0d0] border-t-0 shadow-sm print:shadow-none">
+            {/* Timeline header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[#e8e0d0] no-print">
+              <div className="flex items-center gap-3">
+                <h2 className="font-bebas tracking-widest text-[#1a1a1a]/60 text-sm">EVENT TIMELINE</h2>
+                {items.length > 0 && (
+                  <span className="font-dm text-xs text-[#1a1a1a]/40">
+                    {formatTime12(items[0].time)} – {formatTime12(addMinutes(items[items.length-1].time, items[items.length-1].duration))}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={addItem}
+                className="font-bebas tracking-widest text-xs text-[#8b1a1a] hover:text-[#8b1a1a]/80 flex items-center gap-1 transition-colors border border-[#8b1a1a]/30 px-3 py-1.5 hover:bg-[#8b1a1a]/5"
+              >
+                <Plus className="w-3.5 h-3.5" /> ADD ITEM
+              </button>
+            </div>
+
+            {/* Print timeline header */}
+            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-[#e8e0d0] bg-[#1a1a1a]">
+              <Clock className="w-4 h-4 text-white" />
+              <span className="font-bebas tracking-widest text-sm text-white">EVENT TIMELINE</span>
+            </div>
+
+            {items.length === 0 ? (
+              <div className="text-center py-16 text-[#1a1a1a]/30 font-dm text-sm">
+                <Clock className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                No items yet. Click "Add Item" to build your runsheet.
+              </div>
+            ) : (
+              <div className="divide-y divide-[#e8e0d0]">
+                {items.map((item, idx) => {
+                  const key = getItemKey(item);
+                  const isExpanded = expandedItem === key;
+                  const endTime = addMinutes(item.time, item.duration);
+                  const catInfo = CATEGORIES.find(c => c.value === item.category);
+                  return (
+                    <div key={key} className="group hover:bg-[#f5f3ef]/50 transition-colors print:hover:bg-transparent">
+                      {/* Main row */}
+                      <div className="flex items-center gap-0 print:gap-3">
+                        {/* Time column */}
+                        <div className="w-[90px] flex-shrink-0 px-4 py-3 border-r border-[#e8e0d0] print:border-0">
+                          <input
+                            type="time"
+                            value={item.time}
+                            onChange={e => updateItemField(idx, "time", e.target.value)}
+                            className="font-dm text-sm font-bold text-[#1a1a1a] bg-transparent border-0 focus:outline-none w-full no-print"
+                          />
+                          <div className="hidden print:block font-dm text-sm font-bold">{formatTime12(item.time)}</div>
+                          <div className="font-dm text-[10px] text-[#1a1a1a]/40 no-print">–{endTime}</div>
+                          <div className="hidden print:block font-dm text-[10px] text-[#1a1a1a]/40">–{formatTime12(endTime)}</div>
+                        </div>
+
+                        {/* Category badge */}
+                        <div className="w-[90px] flex-shrink-0 px-3 py-3 no-print">
+                          <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${catStyle(item.category)}`}>
+                            {catInfo?.label ?? item.category}
+                          </span>
+                        </div>
+
+                        {/* Title & description */}
+                        <div className="flex-1 px-3 py-3 min-w-0">
+                          <input
+                            value={item.title}
+                            onChange={e => updateItemField(idx, "title", e.target.value)}
+                            placeholder="Item title..."
+                            className="w-full font-dm text-sm font-semibold text-[#1a1a1a] bg-transparent border-0 focus:outline-none no-print"
+                          />
+                          <div className="hidden print:block font-dm text-sm font-semibold">{item.title || "—"}</div>
+                          {item.description && (
+                            <div className="font-dm text-xs text-[#1a1a1a]/50 mt-0.5 truncate print:whitespace-normal">{item.description}</div>
+                          )}
+                        </div>
+
+                        {/* Assigned to */}
+                        {item.assignedTo && (
+                          <div className="px-3 py-3 hidden md:block">
+                            <span className="font-dm text-xs text-[#1a1a1a]/50 bg-[#f5f3ef] px-2 py-0.5">{item.assignedTo}</span>
+                          </div>
+                        )}
+
+                        {/* Duration */}
+                        <div className="w-[50px] flex-shrink-0 px-2 py-3 text-right no-print">
+                          <span className="font-dm text-xs text-[#1a1a1a]/30">{item.duration}m</span>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-0.5 px-2 py-3 no-print opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => moveItem(idx, 'up')}
+                            disabled={idx === 0}
+                            className="p-1 text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60 disabled:opacity-20 transition-colors"
+                            title="Move up"
+                          >
+                            <MoveUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => moveItem(idx, 'down')}
+                            disabled={idx === items.length - 1}
+                            className="p-1 text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60 disabled:opacity-20 transition-colors"
+                            title="Move down"
+                          >
+                            <MoveDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => duplicateItem(idx)}
+                            className="p-1 text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60 transition-colors"
+                            title="Duplicate"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setExpandedItem(isExpanded ? null : key)}
+                            className="p-1 text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60 transition-colors"
+                          >
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => removeItem(idx)}
+                            className="p-1 text-[#1a1a1a]/30 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Expanded detail row */}
+                      {isExpanded && (
+                        <div className="border-t border-[#e8e0d0] px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 bg-[#f5f3ef]/50 no-print">
+                          <div>
+                            <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">DURATION (MINS)</label>
+                            <Input
+                              type="number"
+                              value={item.duration}
+                              onChange={e => updateItemField(idx, "duration", Number(e.target.value))}
+                              className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">CATEGORY</label>
+                            <select
+                              value={item.category}
+                              onChange={e => updateItemField(idx, "category", e.target.value)}
+                              className="w-full border border-[#e8e0d0] rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-[#8b1a1a] bg-white h-9"
+                            >
+                              {CATEGORIES.map(c => (
+                                <option key={c.value} value={c.value}>{c.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">ASSIGNED TO</label>
+                            <Input
+                              value={item.assignedTo ?? ""}
+                              onChange={e => updateItemField(idx, "assignedTo", e.target.value)}
+                              placeholder="Staff member..."
+                              className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">NOTES</label>
+                            <Input
+                              value={item.description ?? ""}
+                              onChange={e => updateItemField(idx, "description", e.target.value)}
+                              placeholder="Additional notes..."
+                              className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* General notes */}
+            <div className="px-5 py-4 border-t border-[#e8e0d0]">
+              <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-2">GENERAL NOTES</label>
+              <Textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Any additional notes for the event..."
+                rows={3}
+                className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] font-dm text-sm no-print"
+              />
+              {notes && <div className="hidden print:block font-dm text-sm text-[#1a1a1a]/70 whitespace-pre-wrap">{notes}</div>}
+            </div>
+          </div>
+        )}
+
+        {/* ── F&B SHEET TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'fnb' && (
-          <div className="space-y-4">
-            {/* FOH / Kitchen toggle */}
-            <div className="flex items-center justify-between">
-              <div className="flex gap-0 border-2 border-border">
+          <div className="bg-white border border-[#e8e0d0] border-t-0 shadow-sm print:shadow-none">
+            {/* FOH / Kitchen sub-tabs */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[#e8e0d0] no-print">
+              <div className="flex gap-0">
                 <button
                   onClick={() => { setFnbSection('foh'); setNewFnbItem(p => ({ ...p, section: 'foh' })); }}
-                  className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors ${
-                    fnbSection === 'foh' ? 'bg-amber text-ink' : 'text-ink/50 hover:bg-cream'
+                  className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors border ${
+                    fnbSection === 'foh'
+                      ? 'bg-[#d4a843] text-[#1a1a1a] border-[#d4a843]'
+                      : 'text-[#1a1a1a]/50 border-[#e8e0d0] hover:bg-[#f5f3ef]'
                   }`}
                 >
                   <UtensilsCrossed className="w-3.5 h-3.5" /> FOH SHEET
-                  <span className="ml-1 text-xs">
-                    ({fnbItems.filter(i => i.section === 'foh').length})
-                  </span>
+                  <span className="ml-0.5 text-xs">({fnbItems.filter(i => i.section === 'foh').length})</span>
                 </button>
                 <button
                   onClick={() => { setFnbSection('kitchen'); setNewFnbItem(p => ({ ...p, section: 'kitchen' })); }}
-                  className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors ${
-                    fnbSection === 'kitchen' ? 'bg-burgundy text-cream' : 'text-ink/50 hover:bg-cream'
+                  className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors border border-l-0 ${
+                    fnbSection === 'kitchen'
+                      ? 'bg-[#8b1a1a] text-white border-[#8b1a1a]'
+                      : 'text-[#1a1a1a]/50 border-[#e8e0d0] hover:bg-[#f5f3ef]'
                   }`}
                 >
                   <ChefHat className="w-3.5 h-3.5" /> KITCHEN SHEET
-                  <span className="ml-1 text-xs">
-                    ({fnbItems.filter(i => i.section === 'kitchen').length})
-                  </span>
+                  <span className="ml-0.5 text-xs">({fnbItems.filter(i => i.section === 'kitchen').length})</span>
                 </button>
               </div>
               <Button
                 onClick={saveFnb}
                 disabled={fnbSaving}
-                className="bg-amber hover:bg-amber/90 text-ink font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5 no-print"
+                className="bg-[#d4a843] hover:bg-[#d4a843]/90 text-[#1a1a1a] font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
                 {fnbSaving ? 'SAVING...' : 'SAVE F&B'}
               </Button>
             </div>
 
+            {/* Print F&B header */}
+            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-[#e8e0d0] bg-[#1a1a1a]">
+              <UtensilsCrossed className="w-4 h-4 text-white" />
+              <span className="font-bebas tracking-widest text-sm text-white">F&B SHEET — {fnbSection === 'foh' ? 'FRONT OF HOUSE' : 'KITCHEN'}</span>
+            </div>
+
             {/* Add new item form */}
-            <div className="bg-white border-2 border-border p-4 space-y-3 no-print">
-              <div className="font-bebas tracking-widest text-xs text-ink/50 mb-2">
+            <div className="px-5 py-4 border-b border-[#e8e0d0] bg-[#f5f3ef]/50 no-print">
+              <div className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 mb-3">
                 ADD {fnbSection === 'foh' ? 'FOH' : 'KITCHEN'} ITEM
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">COURSE</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">COURSE</label>
                   <select
                     value={newFnbItem.course ?? 'Canapes'}
                     onChange={e => setNewFnbItem(p => ({ ...p, course: e.target.value }))}
-                    className="w-full border-2 border-border rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy bg-white"
+                    className="w-full border border-[#e8e0d0] rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-[#8b1a1a] bg-white h-9"
                   >
                     {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">DISH NAME *</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">DISH NAME *</label>
                   <Input
                     value={newFnbItem.dishName ?? ''}
                     onChange={e => setNewFnbItem(p => ({ ...p, dishName: e.target.value }))}
                     placeholder="e.g. Beef Wellington"
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                    className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
                     onKeyDown={e => e.key === 'Enter' && addFnbItem()}
                   />
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">QTY</label>
-                  <Input
-                    type="number" min={1}
-                    value={newFnbItem.qty ?? 1}
-                    onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">SERVICE TIME</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">SERVICE TIME</label>
                   <Input
                     type="time"
                     value={newFnbItem.serviceTime ?? ''}
                     onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                    className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
                   />
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">DIETARY</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">QTY / COVERS</label>
+                  <Input
+                    type="number" min={1}
+                    value={newFnbItem.qty ?? 1}
+                    onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
+                    className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 items-end">
+                <div className="flex-1">
+                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">DIETARY FLAGS</label>
                   <Input
                     value={newFnbItem.dietary ?? ''}
                     onChange={e => setNewFnbItem(p => ({ ...p, dietary: e.target.value }))}
-                    placeholder="GF, VG, DF..."
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                    placeholder="GF, VG, DF, NF..."
+                    className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
                   />
                 </div>
                 {fnbSection === 'foh' && (
-                  <div>
-                    <label className="font-bebas tracking-widest text-xs text-ink/40 block mb-1">STAFF ASSIGNED</label>
+                  <div className="flex-1">
+                    <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">STAFF ASSIGNED</label>
                     <Input
                       value={newFnbItem.staffAssigned ?? ''}
                       onChange={e => setNewFnbItem(p => ({ ...p, staffAssigned: e.target.value }))}
                       placeholder="Name or section..."
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
+                      className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
                     />
                   </div>
                 )}
+                <Button
+                  onClick={addFnbItem}
+                  className="bg-[#1a1a1a] hover:bg-[#1a1a1a]/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5 h-9"
+                >
+                  <Plus className="w-3.5 h-3.5" /> ADD
+                </Button>
               </div>
-              <Button
-                onClick={addFnbItem}
-                className="bg-ink hover:bg-ink/90 text-cream font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" /> ADD TO {fnbSection === 'foh' ? 'FOH' : 'KITCHEN'} SHEET
-              </Button>
             </div>
 
             {/* F&B items table */}
             {fnbItems.filter(i => i.section === fnbSection).length === 0 ? (
-              <div className="text-center py-12 text-ink/30 font-dm text-sm border-2 border-dashed border-border">
+              <div className="text-center py-16 text-[#1a1a1a]/30 font-dm text-sm">
+                <UtensilsCrossed className="w-10 h-10 mx-auto mb-3 opacity-20" />
                 No {fnbSection === 'foh' ? 'FOH' : 'kitchen'} items yet. Add dishes above.
               </div>
             ) : (
-              <div className="border-2 border-border">
-                {/* Header */}
-                <div className={`grid gap-2 px-4 py-2 text-xs font-bebas tracking-widest text-cream ${
-                  fnbSection === 'foh' ? 'bg-amber/90' : 'bg-burgundy'
+              <div>
+                {/* Table header */}
+                <div className={`grid gap-2 px-5 py-2.5 text-xs font-bebas tracking-widest text-white ${
+                  fnbSection === 'foh' ? 'bg-[#d4a843]' : 'bg-[#8b1a1a]'
                 } ${
                   fnbSection === 'foh'
-                    ? 'grid-cols-[80px_1fr_60px_80px_100px_80px_32px]'
-                    : 'grid-cols-[80px_1fr_60px_80px_1fr_1fr_32px]'
+                    ? 'grid-cols-[90px_1fr_60px_80px_100px_90px_32px]'
+                    : 'grid-cols-[90px_1fr_60px_80px_1fr_1fr_32px]'
                 }`}>
                   <div>COURSE</div>
                   <div>DISH</div>
@@ -994,8 +1232,8 @@ export default function RunsheetBuilder() {
                   fnbItems.some(i => i.section === fnbSection && (i.course ?? 'Other') === course)
                 ).map(course => (
                   <div key={course}>
-                    <div className={`px-4 py-1.5 font-bebas tracking-widest text-xs ${
-                      fnbSection === 'foh' ? 'bg-amber/10 text-amber/80' : 'bg-burgundy/10 text-burgundy'
+                    <div className={`px-5 py-1.5 font-bebas tracking-widest text-xs border-b border-[#e8e0d0] ${
+                      fnbSection === 'foh' ? 'bg-[#d4a843]/10 text-[#a07820]' : 'bg-[#8b1a1a]/10 text-[#8b1a1a]'
                     }`}>
                       {course}
                     </div>
@@ -1005,38 +1243,47 @@ export default function RunsheetBuilder() {
                       .map(({ item, originalIdx }) => (
                         <div
                           key={item._tempId ?? originalIdx}
-                          className={`grid gap-2 px-4 py-2 items-center border-t border-border text-sm font-dm hover:bg-cream/50 ${
+                          className={`grid gap-2 px-5 py-2.5 items-center border-b border-[#e8e0d0] text-sm font-dm hover:bg-[#f5f3ef]/50 group ${
                             fnbSection === 'foh'
-                              ? 'grid-cols-[80px_1fr_60px_80px_100px_80px_32px]'
-                              : 'grid-cols-[80px_1fr_60px_80px_1fr_1fr_32px]'
+                              ? 'grid-cols-[90px_1fr_60px_80px_100px_90px_32px]'
+                              : 'grid-cols-[90px_1fr_60px_80px_1fr_1fr_32px]'
                           }`}
                         >
-                          <div className="text-xs text-ink/50">{item.course}</div>
+                          <div className="text-xs text-[#1a1a1a]/40 font-bebas tracking-widest">{item.course}</div>
                           <div>
                             <input
                               value={item.dishName}
                               onChange={e => updateFnbItem(originalIdx, 'dishName', e.target.value)}
-                              className="w-full font-dm text-sm text-ink bg-transparent border-0 focus:outline-none font-medium"
+                              className="w-full font-dm text-sm text-[#1a1a1a] bg-transparent border-0 focus:outline-none font-semibold"
                             />
-                            {item.description && <div className="text-xs text-ink/50">{item.description}</div>}
+                            {item.description && <div className="text-xs text-[#1a1a1a]/40">{item.description}</div>}
                           </div>
                           <div>
                             <input
                               type="number" min={1}
                               value={item.qty}
                               onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
-                              className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center"
+                              className="w-12 font-dm text-sm text-[#1a1a1a] bg-transparent border-0 focus:outline-none text-center"
                             />
                           </div>
-                          <div className="text-xs text-ink/60">{item.serviceTime}</div>
+                          <div className="text-xs text-[#1a1a1a]/50 font-dm">
+                            {item.serviceTime ? formatTime12(item.serviceTime) : '—'}
+                          </div>
                           {fnbSection === 'foh' ? (
                             <>
                               <div>
                                 {item.dietary && (
-                                  <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 font-bebas">{item.dietary}</span>
+                                  <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>
                                 )}
                               </div>
-                              <div className="text-xs text-ink/60">{item.staffAssigned}</div>
+                              <div>
+                                <input
+                                  value={item.staffAssigned ?? ''}
+                                  onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)}
+                                  placeholder="Staff..."
+                                  className="w-full font-dm text-xs text-[#1a1a1a]/70 bg-transparent border-0 focus:outline-none"
+                                />
+                              </div>
                             </>
                           ) : (
                             <>
@@ -1045,7 +1292,7 @@ export default function RunsheetBuilder() {
                                   value={item.prepNotes ?? ''}
                                   onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)}
                                   placeholder="Prep notes..."
-                                  className="w-full font-dm text-xs text-ink bg-transparent border-0 focus:outline-none text-ink/70"
+                                  className="w-full font-dm text-xs text-[#1a1a1a]/70 bg-transparent border-0 focus:outline-none"
                                 />
                               </div>
                               <div>
@@ -1053,15 +1300,15 @@ export default function RunsheetBuilder() {
                                   value={item.platingNotes ?? ''}
                                   onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)}
                                   placeholder="Plating notes..."
-                                  className="w-full font-dm text-xs text-ink bg-transparent border-0 focus:outline-none text-ink/70"
+                                  className="w-full font-dm text-xs text-[#1a1a1a]/70 bg-transparent border-0 focus:outline-none"
                                 />
                               </div>
                             </>
                           )}
-                          <div className="no-print">
+                          <div className="no-print opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => removeFnbItem(originalIdx)}
-                              className="text-ink/30 hover:text-red-500 transition-colors"
+                              className="text-[#1a1a1a]/30 hover:text-red-500 transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1075,13 +1322,13 @@ export default function RunsheetBuilder() {
 
             {/* Dietary summary for kitchen */}
             {fnbSection === 'kitchen' && dietaries.length > 0 && (
-              <div className="bg-green-50 border border-green-200 p-4">
-                <div className="font-bebas tracking-widest text-sm text-green-700 mb-2">DIETARY SUMMARY</div>
+              <div className="px-5 py-4 border-t border-[#e8e0d0] bg-green-50/50">
+                <div className="font-bebas tracking-widest text-xs text-[#2d6a2d] mb-2">DIETARY SUMMARY FOR KITCHEN</div>
                 <div className="flex flex-wrap gap-2">
                   {dietaries.map((d, i) => (
                     <div key={i} className="bg-white border border-green-200 px-3 py-1.5 text-sm font-dm">
-                      <span className="font-semibold">{d.count}×</span> {d.name}
-                      {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
+                      <span className="font-bold">{d.count}×</span> {d.name}
+                      {d.notes && <span className="text-[#1a1a1a]/50 ml-1">— {d.notes}</span>}
                     </div>
                   ))}
                 </div>
@@ -1090,137 +1337,181 @@ export default function RunsheetBuilder() {
           </div>
         )}
 
-        {/* ── Timeline ────────────────────────────────────────────────────── */}
-        {activeMainTab === 'timeline' && (
-        <>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bebas tracking-widest text-ink/70 text-sm">TIMELINE</h2>
-            <button
-              onClick={addItem}
-              className="no-print font-bebas tracking-widest text-xs text-burgundy hover:text-burgundy/80 flex items-center gap-1 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> ADD ITEM
-            </button>
-          </div>
-
-          {items.length === 0 && (
-            <div className="text-center py-12 text-ink/40 font-dm text-sm">
-              No items yet. Click "Add Item" to build your runsheet.
+        {/* ── CHECKLIST TAB ────────────────────────────────────────────────── */}
+        {activeMainTab === 'checklist' && (
+          <div className="bg-white border border-[#e8e0d0] border-t-0 shadow-sm print:shadow-none">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[#e8e0d0]">
+              <div className="flex items-center gap-3">
+                <h2 className="font-bebas tracking-widest text-[#1a1a1a]/60 text-sm">EVENT CHECKLIST</h2>
+                <span className="font-dm text-xs text-[#1a1a1a]/40">{checkedCount} of {checklistItems.length} complete</span>
+              </div>
+              {checkedCount === checklistItems.length && checklistItems.length > 0 && (
+                <span className="font-bebas tracking-widest text-xs text-[#2d6a2d] flex items-center gap-1">
+                  <CheckSquare className="w-3.5 h-3.5" /> ALL DONE
+                </span>
+              )}
             </div>
-          )}
 
-          {items.map((item, idx) => {
-            const key = getItemKey(item);
-            const isExpanded = expandedItem === key;
-            const endTime = addMinutes(item.time, item.duration);
-            return (
-              <div key={key} className="bg-white border border-border shadow-sm print:shadow-none print:border-b print:border-t-0 print:border-x-0 print:rounded-none">
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <div className="no-print text-ink/30 cursor-grab">
-                    <GripVertical className="w-4 h-4" />
-                  </div>
-                  <div className="flex items-center gap-1 min-w-[100px]">
-                    <Clock className="w-3.5 h-3.5 text-ink/40 no-print" />
-                    <input
-                      type="time"
-                      value={item.time}
-                      onChange={e => updateItemField(idx, "time", e.target.value)}
-                      className="font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none w-[70px]"
-                    />
-                    <span className="text-ink/40 text-xs">–{endTime}</span>
-                  </div>
-                  <span className={`font-bebas tracking-widest text-xs px-2 py-0.5 rounded-sm ${catStyle(item.category)} min-w-[80px] text-center`}>
-                    {CATEGORIES.find(c => c.value === item.category)?.label ?? item.category}
+            {/* Progress bar */}
+            <div className="h-1 bg-[#e8e0d0]">
+              <div
+                className="h-1 bg-[#2d6a2d] transition-all duration-300"
+                style={{ width: checklistItems.length > 0 ? `${(checkedCount / checklistItems.length) * 100}%` : '0%' }}
+              />
+            </div>
+
+            <div className="divide-y divide-[#e8e0d0]">
+              {checklistItems.map(item => (
+                <div key={item.id} className="flex items-center gap-3 px-5 py-3 group hover:bg-[#f5f3ef]/50 transition-colors">
+                  <button
+                    onClick={() => toggleChecklistItem(item.id)}
+                    className={`flex-shrink-0 transition-colors ${item.checked ? 'text-[#2d6a2d]' : 'text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60'}`}
+                  >
+                    {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                  </button>
+                  <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? 'line-through text-[#1a1a1a]/40' : 'text-[#1a1a1a]'}`}>
+                    {item.text}
                   </span>
-                  <input
-                    value={item.title}
-                    onChange={e => updateItemField(idx, "title", e.target.value)}
-                    placeholder="Item title..."
-                    className="flex-1 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none"
-                  />
-                  {item.assignedTo && (
-                    <span className="text-xs text-ink/50 font-dm hidden md:block">{item.assignedTo}</span>
-                  )}
-                  <span className="text-xs text-ink/40 font-dm min-w-[40px] text-right">{item.duration}m</span>
-                  <div className="no-print flex items-center gap-1">
-                    <button
-                      onClick={() => setExpandedItem(isExpanded ? null : key)}
-                      className="text-ink/30 hover:text-ink/60 transition-colors"
-                    >
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-                    <button
-                      onClick={() => removeItem(idx)}
-                      className="text-ink/30 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${
+                    item.category === 'admin' ? 'bg-blue-100 text-blue-700' :
+                    item.category === 'staff' ? 'bg-purple-100 text-purple-700' :
+                    item.category === 'setup' ? 'bg-amber-100 text-amber-700' :
+                    item.category === 'bar' ? 'bg-green-100 text-green-700' :
+                    item.category === 'kitchen' ? 'bg-red-100 text-red-700' :
+                    item.category === 'guest' ? 'bg-pink-100 text-pink-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>
+                    {item.category}
+                  </span>
+                  <button
+                    onClick={() => removeChecklistItem(item.id)}
+                    className="opacity-0 group-hover:opacity-100 text-[#1a1a1a]/30 hover:text-red-500 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
+              ))}
+            </div>
 
-                {isExpanded && (
-                  <div className="border-t border-border px-4 py-3 grid grid-cols-2 gap-3 bg-cream/50">
-                    <div>
-                      <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">DURATION (MINUTES)</label>
-                      <Input
-                        type="number"
-                        value={item.duration}
-                        onChange={e => updateItemField(idx, "duration", Number(e.target.value))}
-                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
-                      />
+            {/* Add checklist item */}
+            <div className="px-5 py-4 border-t border-[#e8e0d0] flex gap-2">
+              <Input
+                value={newChecklistText}
+                onChange={e => setNewChecklistText(e.target.value)}
+                placeholder="Add a checklist item..."
+                className="flex-1 rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                onKeyDown={e => e.key === 'Enter' && addChecklistItem()}
+              />
+              <Button
+                onClick={addChecklistItem}
+                className="bg-[#1a1a1a] hover:bg-[#1a1a1a]/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 h-9 flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> ADD
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Linked Proposal (collapsible, at bottom) ──────────────────── */}
+        {leadProposals && leadProposals.length > 0 && (
+          <div className="bg-white border border-[#e8e0d0] shadow-sm mt-4 no-print">
+            <button
+              onClick={() => setProposalSectionOpen(v => !v)}
+              className="w-full flex items-center justify-between px-5 py-3 hover:bg-[#f5f3ef] transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <LinkIcon className="w-4 h-4 text-[#8b1a1a]" />
+                <span className="font-bebas tracking-widest text-sm text-[#8b1a1a]">LINKED PROPOSAL</span>
+                {linkedProposalId && <span className="text-xs text-[#8b1a1a]/50 font-dm">(data auto-populated)</span>}
+              </div>
+              {proposalSectionOpen ? <ChevronUp className="w-4 h-4 text-[#1a1a1a]/30" /> : <ChevronDown className="w-4 h-4 text-[#1a1a1a]/30" />}
+            </button>
+            {proposalSectionOpen && (
+              <div className="px-5 pb-5 pt-2 space-y-4">
+                <div>
+                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-2">SELECT PROPOSAL</label>
+                  <select
+                    value={linkedProposalId ?? ""}
+                    onChange={e => setLinkedProposalId(e.target.value ? Number(e.target.value) : undefined)}
+                    className="w-full border border-[#e8e0d0] rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-[#8b1a1a] bg-white"
+                  >
+                    <option value="">— No linked proposal —</option>
+                    {leadProposals.map(p => (
+                      <option key={p.id} value={p.id}>{p.title} ({p.status})</option>
+                    ))}
+                  </select>
+                </div>
+                {linkedProposal && (
+                  <div className="bg-[#f5f3ef] border border-[#e8e0d0] p-4 space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest">TOTAL</div>
+                        <div className="font-dm font-semibold">${Number(linkedProposal.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                      </div>
+                      <div>
+                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest">GUESTS</div>
+                        <div className="font-dm font-semibold">{(linkedProposal.guestCount ?? guestCount) || "—"}</div>
+                      </div>
+                      <div>
+                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest">SPACE</div>
+                        <div className="font-dm font-semibold">{linkedProposal.spaceName ?? "—"}</div>
+                      </div>
+                      <div>
+                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest">STATUS</div>
+                        <div className="font-dm font-semibold capitalize">{linkedProposal.status}</div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">CATEGORY</label>
-                      <select
-                        value={item.category}
-                        onChange={e => updateItemField(idx, "category", e.target.value)}
-                        className="w-full border-2 border-border rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-burgundy bg-white"
-                      >
-                        {CATEGORIES.map(c => (
-                          <option key={c.value} value={c.value}>{c.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">ASSIGNED TO</label>
-                      <Input
-                        value={item.assignedTo ?? ""}
-                        onChange={e => updateItemField(idx, "assignedTo", e.target.value)}
-                        placeholder="Staff member..."
-                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">NOTES</label>
-                      <Input
-                        value={item.description ?? ""}
-                        onChange={e => updateItemField(idx, "description", e.target.value)}
-                        placeholder="Additional notes..."
-                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
-                      />
-                    </div>
+                    {linkedProposal.lineItems && (() => {
+                      try {
+                        const li = JSON.parse(linkedProposal.lineItems as string ?? "[]") as any[];
+                        return li.length > 0 ? (
+                          <div>
+                            <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest mb-1">PRICING ITEMS</div>
+                            <div className="space-y-0.5">
+                              {li.map((item: any, i: number) => (
+                                <div key={i} className="flex justify-between text-xs font-dm">
+                                  <span className="text-[#1a1a1a]/70">{item.description}{item.qty > 1 ? ` × ${item.qty}` : ""}</span>
+                                  <span className="font-medium">${Number(item.total).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      } catch { return null; }
+                    })()}
+                    {proposalDrinks && (
+                      <div>
+                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest mb-1">BAR</div>
+                        <div className="text-xs font-dm capitalize text-[#1a1a1a]/70">
+                          {proposalDrinks.barOption?.replace(/_/g, " ")}
+                          {proposalDrinks.tabAmount ? ` — Tab: $${Number(proposalDrinks.tabAmount).toLocaleString("en-NZ")}` : ""}
+                        </div>
+                        {(proposalDrinks.selectedDrinks as string[])?.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(proposalDrinks.selectedDrinks as string[]).map(k => (
+                              <span key={k} className="bg-green-100 text-green-700 text-xs px-2 py-0.5 font-dm">{k.replace(/_/g, " ")}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <a
+                      href={`/proposal/${linkedProposal.publicToken}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bebas tracking-widest text-[#8b1a1a] hover:underline"
+                    >
+                      <FileText className="w-3 h-3" /> VIEW FULL PROPOSAL
+                    </a>
                   </div>
                 )}
               </div>
-            );
-          })}
-        </div>
-        {/* Notes */}
-        <div>
-          <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">GENERAL NOTES</label>
-          <Textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Any additional notes for the event..."
-            rows={3}
-            className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy font-dm text-sm"
-          />
-        </div>
-        </>
+            )}
+          </div>
         )}
+
         {/* Print footer */}
-        <div className="hidden print:block mt-8 pt-4 border-t border-ink/20 text-xs text-ink/40 font-dm text-center">
+        <div className="hidden print:block mt-8 pt-4 border-t border-[#1a1a1a]/20 text-xs text-[#1a1a1a]/40 font-dm text-center">
           Prepared by HOSTit — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
         </div>
       </div>
@@ -1229,6 +1520,7 @@ export default function RunsheetBuilder() {
         @media print {
           .no-print { display: none !important; }
           body { background: white; }
+          @page { margin: 1.5cm; }
         }
       `}</style>
     </div>

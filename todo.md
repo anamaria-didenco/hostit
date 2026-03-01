@@ -453,3 +453,72 @@
 - [x] Reports & Events: show all events/leads as a colour-coded table
 - [x] Leads Inbox: collapsible/hideable sections (All Leads table, New Enquiries)
 - [x] Fix bookings calendar — booked events this month not showing (updateStatus now creates booking record when status set to booked)
+
+## Phase 14: Function Tracker Parity + Major UX Overhaul
+
+### Settings Fixes
+- [ ] Remove Express Book from Settings sidebar (already removed from top nav)
+- [ ] Rebuild Menu section in Settings — currently blank; recreate with Menu Sections table, Sales Categories, Menu Items tabs
+- [ ] Fix centering on Settings pages: Automated Tasks, Billing, Group Contact Form, Profile, and others
+
+### Rename Leads → Enquiries
+- [ ] Rename all "Leads" labels to "Enquiries" across the entire UI (nav, headings, buttons, badges)
+- [ ] Rename "Leads Inbox" → "Enquiries Inbox"
+- [ ] Rename "New Leads" → "New Enquiries"
+- [ ] Rename "All Leads" → "All Enquiries"
+
+### Enquiries & Events Workflow
+- [ ] Separate "New Enquiries" inbox (unanswered) from "All Enquiries" (replied/active)
+- [ ] When an enquiry is replied to (email sent), auto-add it to the calendar as an event (keep status)
+- [ ] Allow manual creation of new enquiry from Inbox (+ New Enquiry button)
+- [ ] Allow manual creation of confirmed event from Calendar (+ Add Event button)
+- [ ] Enquiries table: sortable columns (Date Created, Event Date, Occasion, Contact, Company, Guests, Status)
+
+### Calendar Overhaul (Function Tracker style)
+- [ ] Rich event cards: show event title, time range, status, guest count
+- [ ] Colour-coded status: Tentative=blue, Confirmed=green, Proposal Sent=yellow, Final Follow Up=orange, Site Visit=teal
+- [ ] Add event pencil icon on each calendar cell for quick-add
+- [ ] "Add Event" button in calendar header
+- [ ] Month / Week / Day / List view toggle
+- [ ] Today button in calendar header
+- [ ] Multiple events stacked on same day
+
+### Home Dashboard Widgets
+- [ ] Allow resizing of widgets (small/medium/large toggle per widget)
+- [ ] Mini calendar: allow customisation (show/hide follow-up dots, booking dots, enquiry dots)
+- [ ] Widget show/hide toggles persist per user
+
+### Runsheet Overhaul (Function Tracker style)
+- [ ] Editable runsheet table: Time | Duration | Title | Description | Assigned To | Category
+- [ ] Add/delete/reorder rows inline
+- [ ] FOH (Front of House) tab
+- [ ] Kitchen tab (same runsheet data, different view/filter)
+- [ ] When creating a runsheet for an event, same data shared between FOH and Kitchen tabs
+- [ ] Print/PDF export button
+
+## Phase 14: Completed This Session
+
+### RunsheetBuilder Overhaul
+- [x] Editable timeline table: Time | Duration | Title | Description | Assigned To | Category — all inline editable
+- [x] Add/delete/reorder/duplicate rows inline (move up/down buttons + duplicate button)
+- [x] Contact section: Client Name, Phone, Email fields at top of runsheet
+- [x] Three main tabs: Timeline | F&B Sheet | Checklist
+- [x] FOH Sheet tab: course-by-course service, staff assignments, dietary flags, service time
+- [x] Kitchen Sheet tab: same data, shows prep notes and plating notes instead
+- [x] Dietary summary panel shown in Kitchen tab for kitchen awareness
+- [x] Pre-event Checklist tab: tick-off items with categories, add custom items
+- [x] Print view: clean print layout with no-print CSS for all edit controls
+- [x] Print footer with venue name and date
+
+### Dashboard Widget Resizing
+- [x] DashboardWidgets component updated to support HALF/FULL width per widget
+- [x] Resize toggle button (HALF/FULL) shown in edit mode per widget
+- [x] Widget sizes persisted to userPreferences (widgetSizes field added to save mutation)
+- [x] widgetSizes state loaded from userPreferences on mount
+- [x] Edit mode hint updated to mention resize functionality
+
+### Mini Calendar Customisation
+- [x] Settings gear icon on mini calendar header
+- [x] Start week on SUN or MON toggle (adjusts day labels and offset)
+- [x] Legend show/hide toggle
+- [x] Settings panel collapses when gear icon clicked again
