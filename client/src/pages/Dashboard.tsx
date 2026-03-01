@@ -501,6 +501,22 @@ export default function Dashboard() {
   const addNote = trpc.leads.addNote.useMutation({
     onSuccess: () => { setNoteText(""); utils.leads.getActivity.invalidate({ leadId: selectedLead?.id }); toast.success("Note added"); },
   });
+  const createRunsheet = trpc.runsheets.create.useMutation({
+    onSuccess: (data) => {
+      toast.success('Runsheet created!');
+      setLocation(`/runsheet?runsheetId=${data.id}`);
+    },
+    onError: () => toast.error('Failed to create runsheet'),
+  });
+  const deleteBooking = trpc.bookings.delete.useMutation({
+    onSuccess: () => {
+      setSelectedBooking(null);
+      utils.bookings.list.invalidate();
+      utils.bookings.byMonth.invalidate();
+      toast.success('Event deleted');
+    },
+    onError: () => toast.error('Failed to delete event'),
+  });
   const deleteLead = trpc.leads.delete.useMutation({
     onSuccess: () => {
       refetchLeads();
@@ -795,13 +811,18 @@ export default function Dashboard() {
           <button
             key={item.id}
             onClick={() => setTab(item.id as any)}
-            className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 ${
+            className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 relative ${
               tab === item.id
                 ? "text-sage-dark border-sage-green font-semibold"
                 : "text-gray-400 border-transparent hover:text-gray-700 hover:border-gray-300"
             }`}
           >
             {item.label}
+            {item.id === "enquiries" && newEnquiries.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                {newEnquiries.length > 99 ? '99+' : newEnquiries.length}
+              </span>
+            )}
           </button>
         ))}
         {/* Settings */}
@@ -1267,10 +1288,40 @@ export default function Dashboard() {
                         className="bg-sage-green text-white font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-dark transition-all">
                         <FileText className="w-3.5 h-3.5" /> Create Proposal
                       </button>
-                      <button onClick={() => setLocation(`/runsheet?leadId=${selectedLead.id}`)}
-                        className="border border-gray-300 text-gray-600 font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-gray-50 transition-all">
-                        <Clock className="w-3.5 h-3.5" /> Runsheet
-                      </button>
+                      {['booked','confirmed'].includes(selectedLead.status) ? (
+                        <button
+                          onClick={() => {
+                            const eventDate = selectedLead.eventDate ? new Date(selectedLead.eventDate).toISOString().slice(0,10) : undefined;
+                            const guestCount = selectedLead.guestCount ? Number(selectedLead.guestCount) : undefined;
+                            const eventType = selectedLead.eventType || 'Event';
+                            const defaultItems = [
+                              { time: '09:00', duration: 30, title: 'Venue Setup', description: 'Tables, chairs, decorations', assignedTo: 'FOH Team', category: 'Setup', sortOrder: 0 },
+                              { time: '10:00', duration: 60, title: 'Kitchen Prep', description: 'Food preparation and mise en place', assignedTo: 'Kitchen', category: 'Kitchen', sortOrder: 1 },
+                              { time: '17:00', duration: 30, title: 'Guest Arrival', description: 'Welcome drinks and seating', assignedTo: 'FOH', category: 'Service', sortOrder: 2 },
+                              { time: '17:30', duration: 90, title: 'Entrée Service', description: 'First course service', assignedTo: 'FOH', category: 'Service', sortOrder: 3 },
+                              { time: '19:00', duration: 90, title: 'Main Course', description: 'Main course service', assignedTo: 'FOH', category: 'Service', sortOrder: 4 },
+                              { time: '20:30', duration: 60, title: 'Dessert & Coffee', description: 'Dessert service and tea/coffee', assignedTo: 'FOH', category: 'Service', sortOrder: 5 },
+                              { time: '21:30', duration: 60, title: 'Pack Down', description: 'Clear tables, clean venue', assignedTo: 'All Staff', category: 'Cleanup', sortOrder: 6 },
+                            ];
+                            createRunsheet.mutate({
+                              title: `${eventType} — ${selectedLead.firstName} ${selectedLead.lastName ?? ''}`,
+                              leadId: selectedLead.id,
+                              eventDate,
+                              guestCount,
+                              eventType,
+                              items: defaultItems,
+                            });
+                          }}
+                          disabled={createRunsheet.isPending}
+                          className="border border-sage-green text-sage-dark font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-green/10 transition-all disabled:opacity-50">
+                          <Clock className="w-3.5 h-3.5" /> {createRunsheet.isPending ? 'Creating...' : 'Generate Runsheet'}
+                        </button>
+                      ) : (
+                        <button onClick={() => setLocation(`/runsheet?leadId=${selectedLead.id}`)}
+                          className="border border-gray-300 text-gray-600 font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-gray-50 transition-all">
+                          <Clock className="w-3.5 h-3.5" /> Runsheet
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           if (confirm(`Delete enquiry from ${selectedLead.firstName} ${selectedLead.lastName ?? ''}? This cannot be undone.`)) {
@@ -1316,9 +1367,16 @@ export default function Dashboard() {
                         </button>
                       )}
                       {['booked','confirmed'].includes(selectedLead.status) && (
-                        <div className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-sage-tint border border-sage-green rounded-xl font-inter text-sm font-semibold text-sage-dark">
-                          <CheckCircle className="w-4 h-4 text-sage-green" />
-                          Confirmed Event — visible on Calendar
+                        <div className="w-full mb-3 flex flex-col gap-2">
+                          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-sage-tint border border-sage-green rounded-xl font-inter text-sm font-semibold text-sage-dark">
+                            <CheckCircle className="w-4 h-4 text-sage-green" />
+                            Confirmed Event — visible on Calendar
+                          </div>
+                          <button
+                            onClick={() => { setTab('calendar' as any); setSelectedLead(null); }}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-sage-green/40 text-sage-dark rounded-xl font-inter text-xs font-medium hover:bg-sage-tint transition-colors">
+                            <Calendar className="w-3.5 h-3.5" /> View on Calendar
+                          </button>
                         </div>
                       )}
                       <div className="space-y-1.5">
@@ -2066,6 +2124,15 @@ export default function Dashboard() {
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/payments?bookingId=${selectedBooking.id}`); }}
                         className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs col-span-2">
                         <DollarSign className="w-3 h-3" /> PAYMENTS
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
+                            deleteBooking.mutate({ id: selectedBooking.id });
+                          }
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
+                        <Trash2 className="w-3 h-3" /> DELETE EVENT
                       </button>
                     </div>
                   </div>

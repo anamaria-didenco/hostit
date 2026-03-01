@@ -808,6 +808,17 @@ export const appRouter = router({
       .query(async ({ input, ctx }) => {
         return getBookingsByMonth(ctx.user.id, input.year, input.month);
       }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(bookings).where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
   }),
 
   // ─── Menu Packages & Items ────────────────────────────────────────────────

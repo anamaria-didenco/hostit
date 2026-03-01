@@ -552,3 +552,10 @@
 - [x] Calendar: confirmed enquiries appear as sage green "Event" cards
 - [x] Status pipeline: "Confirm Booking" button promotes enquiry to event
 - [x] Calendar legend updated: Events (sage green), Enquiries (amber), Proposals (violet)
+
+## Follow-ups & Delete (Mar 2026 Session 2)
+- [x] New enquiry notification badge on Enquiries nav item (red dot + count when status="new")
+- [x] "View on Calendar" shortcut in confirmed lead detail panel
+- [x] Delete enquiry button in lead detail panel (with confirmation)
+- [x] Delete confirmed event button in Calendar list view (with confirmation)
+- [x] Auto-generate runsheet button from confirmed event in lead detail panel
