@@ -1,0 +1,13 @@
+{
+  "query": "SHOW TABLES LIKE 'floor%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute SHOW TABLES LIKE 'floor%';",
+  "rows": [
+    {
+      "Tables_in_Ptxx6THeEZbSP594bz6QrZ (floor%)": "floor_plans"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_Ptxx6THeEZbSP594bz6QrZ (floor%)\nfloor_plans\n",
+  "stderr": "",
+  "execution_time_ms": 1575
+}

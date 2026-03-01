@@ -482,3 +482,65 @@ export const taxesFees = mysqlTable("taxes_fees", {
 });
 export type TaxFee = typeof taxesFees.$inferSelect;
 export type InsertTaxFee = typeof taxesFees.$inferInsert;
+
+// ─── Menu Sections (Perfect Venue-style) ──────────────────────────────────────
+export const menuSections = mysqlTable("menu_sections", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  sortOrder: int("sort_order").notNull().default(0),
+  hasSalesTax: boolean("has_sales_tax").notNull().default(true),
+  hasAdminFee: boolean("has_admin_fee").notNull().default(true),
+  hasGratuity: boolean("has_gratuity").notNull().default(true),
+  applyToMin: boolean("apply_to_min").notNull().default(true),
+  salesCategory: varchar("sales_category", { length: 100 }).default("Food"),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type MenuSection = typeof menuSections.$inferSelect;
+export type InsertMenuSection = typeof menuSections.$inferInsert;
+
+// ─── Standalone Menu Items (per section) ─────────────────────────────────────
+export const standaloneMenuItems = mysqlTable("standalone_menu_items", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  sectionId: int("section_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  pricePerPerson: varchar("price_per_person", { length: 20 }),
+  priceFlat: varchar("price_flat", { length: 20 }),
+  pricingType: varchar("pricing_type", { length: 20 }).notNull().default("per_person"), // per_person | flat | per_hour
+  imageUrl: text("image_url"),
+  hasSalesTax: boolean("has_sales_tax").notNull().default(false),
+  hasAdminFee: boolean("has_admin_fee").notNull().default(true),
+  hasGratuity: boolean("has_gratuity").notNull().default(true),
+  applyToMin: boolean("apply_to_min").notNull().default(true),
+  sortOrder: int("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type StandaloneMenuItem = typeof standaloneMenuItems.$inferSelect;
+export type InsertStandaloneMenuItem = typeof standaloneMenuItems.$inferInsert;
+
+// ─── Sales Categories ─────────────────────────────────────────────────────────
+export const salesCategories = mysqlTable("sales_categories", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  sortOrder: int("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type SalesCategory = typeof salesCategories.$inferSelect;
+export type InsertSalesCategory = typeof salesCategories.$inferInsert;
+
+// ─── Quickstart Progress ──────────────────────────────────────────────────────
+export const quickstartProgress = mysqlTable("quickstart_progress", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull().unique(),
+  venueDetails: boolean("venue_details").notNull().default(false),
+  contactForm: boolean("contact_form").notNull().default(false),
+  bankAccount: boolean("bank_account").notNull().default(false),
+  menu: boolean("menu").notNull().default(false),
+  spaces: boolean("spaces").notNull().default(false),
+  taxesFees: boolean("taxes_fees").notNull().default(false),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type QuickstartProgress = typeof quickstartProgress.$inferSelect;

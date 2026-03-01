@@ -431,3 +431,15 @@
 - [ ] taxes_fees table in DB (id, ownerId, name, type, rate, appliesto, active)
 - [ ] tRPC taxesFees router (list, create, update, delete)
 - [ ] 0 TypeScript errors, all tests passing
+
+## Floor Plans Feature (Perfect Venue Add-On)
+- [x] floor_plans table already in schema (id, ownerId, bookingId, name, bgImageUrl, canvasData, createdAt)
+- [x] tRPC procedures: floorPlans.list, floorPlans.get, floorPlans.save, floorPlans.delete
+- [x] FloorPlanEditor component: drag-and-drop canvas with 19 element types (tables, chairs, bar, stage, dance floor, etc.)
+- [x] Properties panel: label, color picker, seat count, width/height, position, rotation slider
+- [x] Toolbar: plan name, zoom in/out, grid toggle, snap-to-grid toggle, save button
+- [x] Keyboard shortcuts: Delete/Backspace=delete, R=rotate, Esc=deselect
+- [x] Floor Plans list view with thumbnail previews (table count + seat count)
+- [x] Create / Edit / Delete floor plans from Settings > Floor Plans
+- [x] Floor Plans added to Settings sidebar navigation
+- [x] TypeScript errors fixed (0 errors)

@@ -2051,6 +2051,154 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Menu Sections (Perfect Venue-style) ──────────────────────────────────
+  menuSections: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { menuSections } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(menuSections).where(eq(menuSections.ownerId, ctx.user.id)).orderBy(asc(menuSections.sortOrder));
+    }),
+    create: protectedProcedure
+      .input(z.object({ name: z.string(), salesCategory: z.string().optional(), hasSalesTax: z.boolean().optional(), hasAdminFee: z.boolean().optional(), hasGratuity: z.boolean().optional(), applyToMin: z.boolean().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuSections } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(menuSections).values({ ...input, ownerId: ctx.user.id, hasSalesTax: input.hasSalesTax ?? true, hasAdminFee: input.hasAdminFee ?? true, hasGratuity: input.hasGratuity ?? true, applyToMin: input.applyToMin ?? true, createdAt: Date.now() });
+        return { success: true };
+      }),
+    update: protectedProcedure
+      .input(z.object({ id: z.number(), name: z.string().optional(), salesCategory: z.string().optional(), hasSalesTax: z.boolean().optional(), hasAdminFee: z.boolean().optional(), hasGratuity: z.boolean().optional(), applyToMin: z.boolean().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuSections } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        await db.update(menuSections).set(rest).where(and(eq(menuSections.id, id), eq(menuSections.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuSections, standaloneMenuItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(standaloneMenuItems).where(and(eq(standaloneMenuItems.sectionId, input.id), eq(standaloneMenuItems.ownerId, ctx.user.id)));
+        await db.delete(menuSections).where(and(eq(menuSections.id, input.id), eq(menuSections.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+  // ─── Standalone Menu Items ────────────────────────────────────────────────
+  standaloneMenuItems: router({
+    listBySection: protectedProcedure
+      .input(z.object({ sectionId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { standaloneMenuItems } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(standaloneMenuItems).where(and(eq(standaloneMenuItems.sectionId, input.sectionId), eq(standaloneMenuItems.ownerId, ctx.user.id))).orderBy(asc(standaloneMenuItems.sortOrder));
+      }),
+    listAll: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { standaloneMenuItems } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(standaloneMenuItems).where(eq(standaloneMenuItems.ownerId, ctx.user.id)).orderBy(asc(standaloneMenuItems.sortOrder));
+    }),
+    create: protectedProcedure
+      .input(z.object({ sectionId: z.number(), name: z.string(), description: z.string().optional(), pricePerPerson: z.string().optional(), priceFlat: z.string().optional(), pricingType: z.enum(['per_person','flat','per_hour']).optional(), imageUrl: z.string().optional(), hasSalesTax: z.boolean().optional(), hasAdminFee: z.boolean().optional(), hasGratuity: z.boolean().optional(), applyToMin: z.boolean().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { standaloneMenuItems } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(standaloneMenuItems).values({ ...input, ownerId: ctx.user.id, pricingType: input.pricingType ?? 'per_person', hasSalesTax: input.hasSalesTax ?? false, hasAdminFee: input.hasAdminFee ?? true, hasGratuity: input.hasGratuity ?? true, applyToMin: input.applyToMin ?? true, createdAt: Date.now() });
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { standaloneMenuItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(standaloneMenuItems).where(and(eq(standaloneMenuItems.id, input.id), eq(standaloneMenuItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+  // ─── Sales Categories ─────────────────────────────────────────────────────
+  salesCategories: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { salesCategories } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(salesCategories).where(eq(salesCategories.ownerId, ctx.user.id)).orderBy(asc(salesCategories.sortOrder));
+    }),
+    create: protectedProcedure
+      .input(z.object({ name: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { salesCategories } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(salesCategories).values({ name: input.name, ownerId: ctx.user.id, createdAt: Date.now() });
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { salesCategories } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(salesCategories).where(and(eq(salesCategories.id, input.id), eq(salesCategories.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+  // ─── Quickstart Progress ──────────────────────────────────────────────────
+  quickstart: router({
+    get: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { quickstartProgress } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return null;
+      const rows = await db.select().from(quickstartProgress).where(eq(quickstartProgress.ownerId, ctx.user.id));
+      return rows[0] ?? null;
+    }),
+    markStep: protectedProcedure
+      .input(z.object({ step: z.enum(['venueDetails','contactForm','bankAccount','menu','spaces','taxesFees']), value: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { quickstartProgress } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const existing = await db.select().from(quickstartProgress).where(eq(quickstartProgress.ownerId, ctx.user.id));
+        const update: Record<string, any> = { [input.step]: input.value, updatedAt: Date.now() };
+        if (existing.length > 0) {
+          await db.update(quickstartProgress).set(update).where(eq(quickstartProgress.ownerId, ctx.user.id));
+        } else {
+          await db.insert(quickstartProgress).values({ ownerId: ctx.user.id, venueDetails: false, contactForm: false, bankAccount: false, menu: false, spaces: false, taxesFees: false, updatedAt: Date.now(), [input.step]: input.value });
+        }
+        return { success: true };
+      }),
+  }),
   // ─── User Preferences (dashboard layout) ──────────────────────────────────
   userPreferences: router({
     get: protectedProcedure.query(async ({ ctx }) => {

@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
-  BarChart2, DollarSign, X, MapPin, LayoutGrid
+  BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -19,6 +19,7 @@ import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
+import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 
 // ─── Follow-Up Date Card ────────────────────────────────────────────────────
 function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date | null) => void }) {
@@ -250,35 +251,59 @@ function PipelineSnapshotWidget({ allLeads, onViewLeads }: { allLeads: any; onVi
 }
 
 // ── Settings Sidebar (Perfect Venue style) ─────────────────────────────────
-function SettingsSidebar({ settingsSubTab, setSettingsSubTab }: {
+function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl }: {
   settingsSubTab: string;
   setSettingsSubTab: (t: any) => void;
+  venueName?: string;
+  venueLogoUrl?: string;
 }) {
   const items = [
-    { id: "venue", label: "Venue Profile" },
+    { id: "venue-details", label: "Venue Details" },
+    { id: "venue-profile", label: "Venue Profile" },
+    { id: "spaces", label: "Spaces" },
     { id: "lead-form", label: "Contact Form" },
-    { id: "email", label: "Email" },
+    { id: "integrations", label: "Integrations" },
+    { id: "expressbook", label: "Express Book" },
+    { id: "menu", label: "Menu" },
     { id: "templates", label: "Proposal" },
+    { id: "email", label: "Email" },
+    { id: "automated-tasks", label: "Automated Tasks" },
     { id: "taxes", label: "Taxes & Fees" },
     { id: "team", label: "Team" },
-    { id: "integrations", label: "Integrations" },
-    { id: "spaces", label: "Event Spaces" },
+    { id: "billing", label: "Billing" },
+    { id: "floor-plans", label: "Floor Plans" },
+    { id: "group-contact-form", label: "Group Contact Form" },
+    { id: "group-settings", label: "Group Settings" },
+    { id: "profile", label: "Profile" },
   ];
   return (
-    <aside className="w-52 bg-linen border-r border-gold/20 flex-shrink-0 flex flex-col py-4">
-      {items.map(item => (
-        <button
-          key={item.id}
-          onClick={() => setSettingsSubTab(item.id as any)}
-          className={`w-full text-left px-5 py-2.5 font-dm text-sm transition-colors ${
-            settingsSubTab === item.id
-              ? "bg-burgundy/10 text-burgundy font-semibold border-l-2 border-burgundy pl-[calc(1.25rem-2px)]"
-              : "text-ink/70 hover:text-ink hover:bg-gold/10 border-l-2 border-transparent"
-          }`}
-        >
-          {item.label}
-        </button>
-      ))}
+    <aside className="w-52 bg-ivory border-r border-border flex-shrink-0 flex flex-col">
+      {/* Venue logo + name */}
+      <div className="px-4 py-4 flex items-center gap-3 border-b border-border">
+        <div className="w-10 h-10 rounded-full bg-burgundy/10 border border-burgundy/20 flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {venueLogoUrl ? (
+            <img src={venueLogoUrl} alt="logo" className="w-full h-full object-cover" />
+          ) : (
+            <span className="font-bebas text-burgundy text-sm">{(venueName ?? 'V').charAt(0)}</span>
+          )}
+        </div>
+        <span className="font-dm text-sm font-semibold text-ink truncate">{venueName ?? 'Your Venue'}</span>
+      </div>
+      <div className="flex-1 overflow-auto py-2">
+        {items.map(item => (
+          <button
+            key={item.id}
+            onClick={() => setSettingsSubTab(item.id as any)}
+            className={`w-full text-left px-4 py-2 font-dm text-sm transition-colors ${
+              settingsSubTab === item.id
+                ? "bg-burgundy/8 text-burgundy font-semibold border-l-2 border-burgundy pl-[calc(1rem-2px)]"
+                : "text-ink/70 hover:text-ink hover:bg-muted border-l-2 border-transparent"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
     </aside>
   );
 }
@@ -287,7 +312,7 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"overview"|"leads"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook">("overview");
-  const [settingsSubTab, setSettingsSubTab] = useState<"venue"|"lead-form"|"email"|"templates"|"taxes"|"team"|"integrations"|"spaces">("venue");
+  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-contact-form"|"group-settings"|"profile"|"email-settings"|"floor-plans">("venue-details");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
@@ -482,6 +507,28 @@ export default function Dashboard() {
   const deleteBarItem = trpc.barMenu.delete.useMutation({
     onSuccess: () => { refetchBarMenu(); toast.success("Drink deleted"); },
     onError: () => toast.error("Failed to delete drink"),
+  });
+
+  // ── Floor Plans state ──────────────────────────────────────────────────
+  const [editingFloorPlan, setEditingFloorPlan] = useState<any>(null); // null = list view, object = editor
+  const { data: floorPlansList, refetch: refetchFloorPlans } = trpc.floorPlans.list.useQuery(
+    {},
+    { enabled: !!user?.id && settingsSubTab === 'floor-plans' }
+  );
+  const saveFloorPlan = trpc.floorPlans.save.useMutation({
+    onSuccess: (result) => {
+      refetchFloorPlans();
+      // Update the editing plan with the returned id (for new plans)
+      if (editingFloorPlan && !editingFloorPlan.id && result) {
+        setEditingFloorPlan((prev: any) => ({ ...prev, id: (result as any).insertId ?? prev.id }));
+      }
+      toast.success('Floor plan saved!');
+    },
+    onError: () => toast.error('Failed to save floor plan'),
+  });
+  const deleteFloorPlan = trpc.floorPlans.delete.useMutation({
+    onSuccess: () => { refetchFloorPlans(); toast.success('Floor plan deleted'); },
+    onError: () => toast.error('Failed to delete floor plan'),
   });
 
   const [settingsForm, setSettingsForm] = useState<any>(null);
@@ -1707,11 +1754,11 @@ export default function Dashboard() {
           {tab === "settings" && (
             <div className="flex h-full">
               {/* Settings sidebar — like Perfect Venue */}
-              <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} />
+              <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} />
               <div className="flex-1 overflow-auto p-6 max-w-3xl">
 
-              {/* ── VENUE PROFILE ────────────────────────────────── */}
-              {settingsSubTab === "venue" && (
+              {/* ── VENUE DETAILS ────────────────────────────────── */}
+              {settingsSubTab === "venue-details" && (
               <div>
               <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Profile</h1>
               {settingsForm && (
@@ -2100,8 +2147,8 @@ export default function Dashboard() {
               </div>
               )}
 
-              {/* ── MENU (Menus & Floor Plans) ───────────────────── */}
-              {(settingsSubTab === "venue") && (
+              {/* ── VENUE PROFILE (Menus & Floor Plans) ─────────── */}
+              {(settingsSubTab === "venue-profile") && (
               <div>
               {/* ─── Menus & Floor Plans ─────────────────────────────── */}
               <div className="mt-10">
@@ -2303,6 +2350,526 @@ export default function Dashboard() {
               )}
 
               </div>
+
+              {/* ── AUTOMATED TASKS ─────────────────────────────── */}
+              {settingsSubTab === "automated-tasks" && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Automated Tasks</h1>
+                </div>
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h2 className="font-semibold text-gray-800">Automated Tasks</h2>
+                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+                  </div>
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
+                        <th className="text-left p-3 text-xs font-medium text-gray-500">Create When</th>
+                        <th className="text-left p-3 text-xs font-medium text-gray-500">Event Type</th>
+                        <th className="p-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[{name:'Final Head Count Due',when:'Off',type:'All Events'},{name:'Menu Selections Due',when:'Off',type:'All Events'},{name:'Order Rentals',when:'Off',type:'All Events'}].map((row,i) => (
+                        <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                          <td className="p-3 text-sm text-gray-700">{row.name}</td>
+                          <td className="p-3 text-sm text-gray-500">{row.when}</td>
+                          <td className="p-3 text-sm text-gray-500">{row.type}</td>
+                          <td className="p-3 text-right"><button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              )}
+
+              {/* ── GROUP SETTINGS ──────────────────────────────── */}
+              {settingsSubTab === "group-settings" && (
+              <div className="space-y-6">
+                <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Group Settings</h1>
+                {/* Automated Reminder Emails */}
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h2 className="font-semibold text-gray-800">Automated Reminder Emails</h2>
+                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+                  </div>
+                  <table className="w-full">
+                    <thead><tr className="border-b border-gray-100">
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Send When</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Event Types</th>
+                      <th className="p-3"></th>
+                    </tr></thead>
+                    <tbody>
+                      {[{name:'Final Guest Count Reminder',when:'Off',type:'All Events'},{name:'Post-Event Feedback and Thank You',when:'Off',type:'All Events'},{name:'Remaining Balance Reminder',when:'Off',type:'All Events'}].map((row,i) => (
+                        <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                          <td className="p-3 text-sm text-gray-700">{row.name}</td>
+                          <td className="p-3 text-sm text-gray-500">{row.when}</td>
+                          <td className="p-3 text-sm text-gray-500">{row.type}</td>
+                          <td className="p-3 text-right"><button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Template Emails */}
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h2 className="font-semibold text-gray-800">Template Emails</h2>
+                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+                  </div>
+                  <div className="p-3 text-xs text-gray-400 border-b border-gray-100">Name</div>
+                  {['Available - Pay Deposit','Available - Select Menu Items','Lead Follow Up','New Event Software Email','Not Available','Proposal Sent Follow Up'].map((name,i) => (
+                    <div key={i} className="flex items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50">
+                      <span className="text-sm text-gray-700">{name}</span>
+                      <button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  ))}
+                </div>
+                {/* Attachment Library */}
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h2 className="font-semibold text-gray-800">Attachment Library</h2>
+                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+                  </div>
+                  <table className="w-full">
+                    <thead><tr className="border-b border-gray-100">
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Date Added</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Size</th>
+                    </tr></thead>
+                    <tbody><tr><td colSpan={3} className="p-6 text-center text-sm text-gray-400">No attachments yet</td></tr></tbody>
+                  </table>
+                </div>
+                {/* Reporting Settings */}
+                <div className="bg-white border border-gray-200 rounded p-4">
+                  <h2 className="font-semibold text-gray-800 mb-4">Reporting Settings</h2>
+                  <label className="block text-xs text-gray-500 mb-1">Revenue projections based on</label>
+                  <select className="w-full border border-gray-200 rounded p-2 text-sm text-gray-700">
+                    <option>Grand Total</option>
+                    <option>Subtotal</option>
+                  </select>
+                  <p className="text-xs text-gray-400 mt-2">Choose whether to calculate revenue projections based on the grand total or subtotal.</p>
+                </div>
+                {/* Event Types */}
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h2 className="font-semibold text-gray-800">Event Types</h2>
+                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+                  </div>
+                  {['Anniversary','Birthday','Catering','Corporate','Engagement','Graduation','Happy Hour','Holiday Party','Large Group','Non Profit','Rehearsal Dinner','Wedding'].map((type,i) => (
+                    <div key={i} className="flex items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50">
+                      <span className="text-sm text-gray-700">{type}</span>
+                      <button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              )}
+
+              {/* ── EMAIL SETTINGS ──────────────────────────────── */}
+              {settingsSubTab === "email-settings" && (
+              <div className="space-y-6">
+                <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Email</h1>
+                {/* Automated Reminder Emails */}
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h2 className="font-semibold text-gray-800">Automated Reminder Emails</h2>
+                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+                  </div>
+                  <table className="w-full">
+                    <thead><tr className="border-b border-gray-100">
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Send When</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Event Types</th>
+                    </tr></thead>
+                    <tbody>
+                      {[{name:'Final Guest Count Reminder',when:'Off',type:'All Events'},{name:'Post-Event Feedback and Thank You',when:'Off',type:'All Events'},{name:'Remaining Balance Reminder',when:'Off',type:'All Events'}].map((row,i) => (
+                        <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                          <td className="p-3 text-sm text-gray-700">{row.name}</td>
+                          <td className="p-3 text-sm text-gray-500">{row.when}</td>
+                          <td className="p-3 text-sm text-gray-500">{row.type}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* System Emails */}
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="p-4 border-b border-gray-200"><h2 className="font-semibold text-gray-800">System Emails</h2></div>
+                  <div className="p-3 text-xs text-gray-400 border-b border-gray-100">Name</div>
+                  {['Additional Payment','Contact Form Responses','No Action','Pay Deposit','Pay Remaining Balance','Sign Agreement & Pay Deposit'].map((name,i) => (
+                    <div key={i} className="p-3 border-b border-gray-50 text-sm text-gray-700 hover:bg-gray-50">{name}</div>
+                  ))}
+                </div>
+                {/* Template Emails */}
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h2 className="font-semibold text-gray-800">Template Emails</h2>
+                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+                  </div>
+                  <div className="p-3 text-xs text-gray-400 border-b border-gray-100">Name</div>
+                  {['Available - Pay Deposit','Available - Select Menu Items','Lead Follow Up','New Event Software Email','Not Available','Proposal Sent Follow Up'].map((name,i) => (
+                    <div key={i} className="flex items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50">
+                      <span className="text-sm text-gray-700">{name}</span>
+                      <button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  ))}
+                </div>
+                {/* Venue Out of Office */}
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="p-4 border-b border-gray-200"><h2 className="font-semibold text-gray-800">Venue Out of Office Email</h2></div>
+                  <table className="w-full">
+                    <thead><tr className="border-b border-gray-100">
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Start Date</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">End Date</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Status</th>
+                    </tr></thead>
+                    <tbody>
+                      <tr className="border-b border-gray-50">
+                        <td className="p-3 text-sm text-gray-700">Out of Office</td>
+                        <td className="p-3 text-sm text-gray-500">—</td>
+                        <td className="p-3 text-sm text-gray-500">—</td>
+                        <td className="p-3"><span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">Off</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {/* Attachment Library */}
+                <div className="bg-white border border-gray-200 rounded">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h2 className="font-semibold text-gray-800">Attachment Library</h2>
+                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+                  </div>
+                  <table className="w-full">
+                    <thead><tr className="border-b border-gray-100">
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">From Action</th>
+                      <th className="text-left p-3 text-xs font-medium text-gray-500">Size</th>
+                    </tr></thead>
+                    <tbody><tr><td colSpan={3} className="p-6 text-center text-sm text-gray-400">No attachments yet</td></tr></tbody>
+                  </table>
+                </div>
+                {/* AI Reply Customisation */}
+                <div className="bg-white border border-gray-200 rounded p-4">
+                  <h2 className="font-semibold text-gray-800 mb-3">AI Reply Customisation</h2>
+                  <textarea className="w-full border border-gray-200 rounded p-3 text-sm text-gray-700 h-24 resize-none" placeholder="Prompt" />
+                  <p className="text-xs text-gray-400 mt-2">Customise the AI so that messages sent to your venue are tailored to your business. For example, you can tell the AI about your venue, your events program, and any other relevant information.</p>
+                </div>
+                {/* Customer Feedback */}
+                <div className="bg-white border border-gray-200 rounded p-4">
+                  <h2 className="font-semibold text-gray-800 mb-3">Customer Feedback &amp; Reviews</h2>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" className="rounded" defaultChecked />
+                    <span className="text-sm text-gray-700">Customer Feedback (Request feedback from customers a day after their event is completed.)</span>
+                  </label>
+                </div>
+              </div>
+              )}
+
+              {/* ── PROFILE ─────────────────────────────────────── */}
+              {settingsSubTab === "profile" && (
+              <div className="space-y-6">
+                <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Profile</h1>
+                {/* Account Details */}
+                <div className="bg-white border border-gray-200 rounded p-6">
+                  <h2 className="font-semibold text-gray-800 mb-4">Account Details</h2>
+                  <div className="flex flex-col items-center mb-6">
+                    <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center cursor-pointer hover:border-burgundy/50 transition-colors">
+                      <Camera className="w-6 h-6 text-gray-400 mb-1" />
+                      <span className="text-xs text-gray-400">Upload Image</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-xs text-gray-500 mb-1">First Name</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="First Name" /></div>
+                    <div><label className="block text-xs text-gray-500 mb-1">Last Name</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="Last Name" /></div>
+                  </div>
+                  <div className="mt-4"><label className="block text-xs text-gray-500 mb-1">Email</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="Email" /></div>
+                  <div className="mt-4"><label className="block text-xs text-gray-500 mb-1">Phone</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="Phone" /><p className="text-xs text-gray-400 mt-1">By providing your phone number, you agree to receive text messages. Message and data rates may apply.</p></div>
+                  <div className="mt-4"><label className="block text-xs text-gray-500 mb-1">Scheduling Link</label><input className="w-full border border-gray-200 rounded p-2 text-sm" placeholder="Scheduling Link" /></div>
+                </div>
+                {/* Email Signature */}
+                <div className="bg-white border border-gray-200 rounded p-4">
+                  <h2 className="font-semibold text-gray-800 mb-3">Email Signature</h2>
+                  <button className="border border-gray-300 text-gray-700 text-sm px-4 py-1.5 rounded hover:bg-gray-50">Edit</button>
+                </div>
+                {/* Connect Google Calendar */}
+                <div className="bg-white border border-gray-200 rounded p-4">
+                  <h2 className="font-semibold text-gray-800 mb-3">Connect Google Calendar</h2>
+                  <button className="bg-teal-500 hover:bg-teal-600 text-white text-sm px-4 py-2 rounded">Connect Google Calendar</button>
+                  <div className="flex gap-6 mt-3">
+                    <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded" /><span className="text-sm text-gray-700">Show Lead &amp; Qualified</span></label>
+                    <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded" /><span className="text-sm text-gray-700">Show Proposal Sent</span></label>
+                  </div>
+                </div>
+                {/* Notifications */}
+                <div className="bg-white border border-gray-200 rounded p-4">
+                  <h2 className="font-semibold text-gray-800 mb-3">Notifications</h2>
+                  <div className="mb-3">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Email</p>
+                    <div className="flex flex-wrap gap-4">
+                      {['New Leads','Payments','Weekly Digest','Customer Feedback'].map((n,i) => (
+                        <label key={i} className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded" defaultChecked={n==='Customer Feedback'} /><span className="text-sm text-gray-700">{n}</span></label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Text Message</p>
+                    <p className="text-sm text-gray-400">To receive text messages, add a phone number to your account.</p>
+                  </div>
+                </div>
+                {/* Password */}
+                <div className="bg-white border border-gray-200 rounded p-4">
+                  <h2 className="font-semibold text-gray-800 mb-4">Password</h2>
+                  <div className="max-w-sm space-y-3">
+                    <div className="relative"><input type="password" className="w-full border border-gray-200 rounded p-2 text-sm pr-10" placeholder="Old Password" /><Eye className="w-4 h-4 text-gray-400 absolute right-3 top-2.5" /></div>
+                    <div className="relative"><input type="password" className="w-full border border-gray-200 rounded p-2 text-sm pr-10" placeholder="New Password" /><Eye className="w-4 h-4 text-gray-400 absolute right-3 top-2.5" /></div>
+                    <div className="relative"><input type="password" className="w-full border border-gray-200 rounded p-2 text-sm pr-10" placeholder="New Password Confirmation" /><Eye className="w-4 h-4 text-gray-400 absolute right-3 top-2.5" /></div>
+                    <button className="btn-forest text-cream text-sm font-bebas tracking-widest px-6 py-2">Change Password</button>
+                    <p className="text-xs text-gray-400">If you can't remember your old password, click below to send a reset password email. Make sure to log out before opening the email.</p>
+                    <button className="border border-gray-300 text-gray-700 text-sm px-4 py-1.5 rounded hover:bg-gray-50">Send Password Reset Email</button>
+                  </div>
+                </div>
+              </div>
+              )}
+
+              {/* ── GROUP CONTACT FORM ──────────────────────────── */}
+              {settingsSubTab === "group-contact-form" && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Group Contact Form</h1>
+                  <button className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded hover:bg-gray-50">
+                    <ExternalLink className="w-4 h-4" /> Copy Form Link
+                  </button>
+                </div>
+                <div className="flex gap-6">
+                  {/* Left: Settings */}
+                  <div className="w-80 flex-shrink-0">
+                    <div className="bg-white border border-gray-200 rounded p-4">
+                      <h2 className="font-semibold text-gray-800 mb-1">{venueSettings?.name || 'Your Venue'}</h2>
+                      <div className="flex gap-4 border-b border-gray-200 mb-4">
+                        {['Settings','Fields','Connect'].map((t,i) => (
+                          <button key={i} className={`pb-2 text-sm font-medium ${i===0?'border-b-2 border-burgundy text-burgundy':'text-gray-500 hover:text-gray-700'}`}>{t}</button>
+                        ))}
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Logo</label>
+                          <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center cursor-pointer hover:border-burgundy/50">
+                            <span className="text-xs text-gray-400 text-center">YOUR LOGO</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Banner Image</label>
+                          <div className="w-full h-24 border-2 border-dashed border-gray-300 rounded flex items-center justify-center cursor-pointer hover:border-burgundy/50">
+                            <span className="text-xs text-gray-400">Upload an image at least 1500 x 250</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded border border-gray-200 bg-gray-50"></div>
+                          <span className="text-sm text-gray-700">Form Background Color</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded border border-gray-200 bg-burgundy"></div>
+                          <span className="text-sm text-gray-700">Form Button Color</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Right: Live Preview */}
+                  <div className="flex-1 bg-gray-100 rounded p-6 flex items-start justify-center">
+                    <div className="bg-white rounded shadow-lg w-full max-w-sm overflow-hidden">
+                      <div className="h-24 bg-gray-200 relative">
+                        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-16 h-16 bg-burgundy rounded-full flex items-center justify-center">
+                          <span className="text-cream text-xs font-bold">LOGO</span>
+                        </div>
+                      </div>
+                      <div className="pt-12 pb-4 px-4">
+                        <h3 className="text-center font-semibold text-gray-800 mb-4">Plan your event with {venueSettings?.name || 'Your Venue'}</h3>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="First Name *" readOnly />
+                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Last Name" readOnly />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Email *" readOnly />
+                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Phone" readOnly />
+                        </div>
+                        <input className="w-full border border-gray-200 rounded p-2 text-xs mb-2" placeholder="Event Name" readOnly />
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Desired Date" readOnly />
+                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Start Time" readOnly />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Budget" readOnly />
+                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Estimated Group Size" readOnly />
+                        </div>
+                        <textarea className="w-full border border-gray-200 rounded p-2 text-xs mb-3 h-16 resize-none" placeholder="Tell us about your event *" readOnly />
+                        <button className="w-full bg-burgundy text-cream text-sm py-2 rounded">Send Request</button>
+                        <p className="text-center text-xs text-gray-400 mt-2">Powered by HOSTit</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              )}
+
+              {/* ── FLOOR PLANS ─────────────────────────────────── */}
+              {settingsSubTab === "floor-plans" && (
+              <div className="h-full flex flex-col" style={{ minHeight: 0 }}>
+                {editingFloorPlan ? (
+                  /* ── Editor view ── */
+                  <div className="flex flex-col" style={{ height: 'calc(100vh - 180px)', minHeight: 500 }}>
+                    <div className="flex items-center gap-3 mb-3 flex-shrink-0">
+                      <button
+                        onClick={() => setEditingFloorPlan(null)}
+                        className="flex items-center gap-1 text-xs font-bebas tracking-widest text-ink/50 hover:text-ink transition-colors"
+                      >
+                        <ChevronLeft className="w-3 h-3" /> BACK TO FLOOR PLANS
+                      </button>
+                    </div>
+                    <div className="flex-1 border border-border rounded overflow-hidden" style={{ minHeight: 0 }}>
+                      <FloorPlanEditor
+                        key={editingFloorPlan.id ?? 'new'}
+                        initialData={editingFloorPlan.canvasData ?? undefined}
+                        name={editingFloorPlan.name ?? 'Floor Plan'}
+                        isSaving={saveFloorPlan.isPending}
+                        onSave={(canvasData: CanvasData, name: string) => {
+                          saveFloorPlan.mutate({
+                            id: editingFloorPlan.id ?? undefined,
+                            name,
+                            canvasData,
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  /* ── List view ── */
+                  <div>
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Floor Plans</h1>
+                        <p className="font-dm text-sm text-ink/50 mt-1">Create and manage floor plan templates for your event spaces.</p>
+                      </div>
+                      <button
+                        onClick={() => setEditingFloorPlan({ id: null, name: 'New Floor Plan', canvasData: null })}
+                        className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" /> NEW FLOOR PLAN
+                      </button>
+                    </div>
+
+                    {/* Info banner */}
+                    <div className="bg-burgundy/5 border border-burgundy/20 rounded p-4 mb-6 flex items-start gap-3">
+                      <Grid className="w-5 h-5 text-burgundy flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-dm text-sm text-ink font-medium">Interactive Floor Plan Builder</p>
+                        <p className="font-dm text-xs text-ink/60 mt-1">Drag and drop tables, chairs, stages, bars, and more onto the canvas. Assign seat counts, rotate elements, and save templates to reuse across events.</p>
+                      </div>
+                    </div>
+
+                    {/* Floor plans grid */}
+                    {(floorPlansList ?? []).length === 0 ? (
+                      <div className="bg-white border border-gray-200 rounded p-12 text-center">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Grid className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <h3 className="font-cormorant text-xl font-semibold text-gray-700 mb-2">No Floor Plans Yet</h3>
+                        <p className="text-sm text-gray-400 mb-6 max-w-sm mx-auto">Create interactive floor plans for your event spaces. Drag and drop tables, chairs, and other elements to design your layouts.</p>
+                        <button
+                          onClick={() => setEditingFloorPlan({ id: null, name: 'New Floor Plan', canvasData: null })}
+                          className="btn-forest text-cream text-xs font-bebas tracking-widest px-6 py-2"
+                        >
+                          CREATE FIRST FLOOR PLAN
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                        {(floorPlansList ?? []).map((plan: any) => (
+                          <div key={plan.id} className="bg-white border border-gray-200 rounded overflow-hidden hover:border-burgundy/30 transition-colors group">
+                            {/* Preview thumbnail */}
+                            <div
+                              className="h-36 bg-gray-50 border-b border-gray-100 flex items-center justify-center cursor-pointer relative"
+                              onClick={() => setEditingFloorPlan(plan)}
+                            >
+                              {plan.canvasData?.elements?.length > 0 ? (
+                                <div className="relative" style={{ transform: 'scale(0.18)', transformOrigin: 'center center', width: plan.canvasData.width, height: plan.canvasData.height, pointerEvents: 'none' }}>
+                                  {plan.canvasData.elements.map((el: any) => (
+                                    <div key={el.id} style={{
+                                      position: 'absolute', left: el.x, top: el.y, width: el.width, height: el.height,
+                                      backgroundColor: el.color ?? '#888',
+                                      borderRadius: el.type?.includes('round') || el.type === 'chair' || el.type === 'plant' || el.type === 'pillar' ? '50%' : '3px',
+                                      transform: `rotate(${el.rotation}deg)`,
+                                      transformOrigin: 'center center',
+                                    }} />
+                                  ))}
+                                </div>
+                              ) : (
+                                <Grid className="w-10 h-10 text-gray-300" />
+                              )}
+                              <div className="absolute inset-0 bg-burgundy/0 group-hover:bg-burgundy/5 transition-colors flex items-center justify-center">
+                                <span className="opacity-0 group-hover:opacity-100 font-bebas tracking-widest text-xs text-burgundy bg-white/90 px-3 py-1 rounded transition-opacity">EDIT</span>
+                              </div>
+                            </div>
+                            <div className="p-3 flex items-center justify-between">
+                              <div>
+                                <p className="font-dm text-sm font-semibold text-ink">{plan.name}</p>
+                                <p className="font-dm text-xs text-ink/40">
+                                  {plan.canvasData?.elements?.filter((e: any) => e.type?.includes('table')).length ?? 0} tables ·
+                                  {' '}{plan.canvasData?.elements?.reduce((s: number, e: any) => s + (e.seats ?? 0), 0) ?? 0} seats
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => setEditingFloorPlan(plan)}
+                                  className="p-1.5 text-ink/30 hover:text-ink transition-colors"
+                                  title="Edit"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => { if (confirm('Delete this floor plan?')) deleteFloorPlan.mutate({ id: plan.id }); }}
+                                  className="p-1.5 text-ink/30 hover:text-red-500 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              )}
+
+              {/* ── BILLING ─────────────────────────────────────── */}
+              {settingsSubTab === "billing" && (
+              <div>
+                <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Billing</h1>
+                <div className="bg-white border border-gray-200 rounded p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="font-semibold text-gray-800">Current Plan</h2>
+                      <p className="text-sm text-gray-500 mt-1">Free Starter Plan</p>
+                    </div>
+                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-6 py-2">UPGRADE</button>
+                  </div>
+                  <div className="border-t border-gray-100 pt-4">
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">Payment Method</h3>
+                    <p className="text-sm text-gray-400">No payment method on file.</p>
+                    <button className="mt-3 border border-gray-300 text-gray-700 text-sm px-4 py-1.5 rounded hover:bg-gray-50">Add Payment Method</button>
+                  </div>
+                </div>
+              </div>
+              )}
+
             </div>
           )}
         </main>
