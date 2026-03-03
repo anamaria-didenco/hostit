@@ -138,6 +138,7 @@ export const leads = mysqlTable("leads", {
   source: varchar("source", { length: 100 }).default("lead_form"),
   internalNotes: text("internalNotes"),
   followUpDate: timestamp("followUpDate"),
+  readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -570,3 +571,17 @@ export const quickstartProgress = mysqlTable("quickstart_progress", {
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 });
 export type QuickstartProgress = typeof quickstartProgress.$inferSelect;
+
+// ─── Runsheet Templates ───────────────────────────────────────────────────────
+export const runsheetTemplates = mysqlTable("runsheet_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  eventType: varchar("event_type", { length: 100 }),
+  items: json("items").notNull(), // Array of RunsheetItem objects
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type RunsheetTemplate = typeof runsheetTemplates.$inferSelect;
+export type InsertRunsheetTemplate = typeof runsheetTemplates.$inferInsert;

@@ -9,7 +9,8 @@ import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
-  BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid, Image as ImageIcon, Edit2
+  BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid, Image as ImageIcon, Edit2,
+  ArrowUpDown
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -93,7 +94,7 @@ const PIPELINE_STAGES = [
   { key: "contacted", label: "CONTACTED", color: "border-sky-400 bg-sky-50 text-sky-700" },
   { key: "proposal_sent", label: "PROPOSAL SENT", color: "border-forest bg-forest/10 text-forest" },
   { key: "negotiating", label: "NEGOTIATING", color: "border-orange-400 bg-orange-50 text-orange-700" },
-  { key: "booked", label: "BOOKED", color: "border-emerald-500 bg-emerald-50 text-emerald-700" },
+  { key: "booked", label: "CONFIRMED", color: "border-emerald-500 bg-emerald-50 text-emerald-700" },
   { key: "lost", label: "LOST", color: "border-stone-400 bg-stone-50 text-stone-500" },
 ];
 
@@ -348,35 +349,51 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { id: "group-settings", label: "Group Settings" },
     { id: "profile", label: "Profile" },
   ];
+  const currentLabel = items.find(i => i.id === settingsSubTab)?.label ?? 'Settings';
   return (
-    <aside className="w-52 bg-ivory-sand border-r border-border flex-shrink-0 flex flex-col">
-      {/* Venue logo + name */}
-      <div className="px-4 py-4 flex items-center gap-3 border-b border-border">
-        <div className="w-10 h-10 rounded-full bg-sage-tint border border-sage-green/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
-          {venueLogoUrl ? (
-            <img src={venueLogoUrl} alt="logo" className="w-full h-full object-cover" />
-          ) : (
-            <span className="font-bebas text-sage-dark text-sm">{(venueName ?? 'V').charAt(0)}</span>
-          )}
+    <>
+      {/* Mobile: dropdown selector */}
+      <div className="md:hidden border-b border-border bg-white px-4 py-3">
+        <select
+          value={settingsSubTab}
+          onChange={e => setSettingsSubTab(e.target.value as any)}
+          className="w-full font-inter text-sm border border-border rounded-lg px-3 py-2 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-sage-green/40"
+        >
+          {items.map(item => (
+            <option key={item.id} value={item.id}>{item.label}</option>
+          ))}
+        </select>
+      </div>
+      {/* Desktop: sidebar */}
+      <aside className="hidden md:flex w-52 bg-ivory-sand border-r border-border flex-shrink-0 flex-col">
+        {/* Venue logo + name */}
+        <div className="px-4 py-4 flex items-center gap-3 border-b border-border">
+          <div className="w-10 h-10 rounded-full bg-sage-tint border border-sage-green/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
+            {venueLogoUrl ? (
+              <img src={venueLogoUrl} alt="logo" className="w-full h-full object-cover" />
+            ) : (
+              <span className="font-bebas text-sage-dark text-sm">{(venueName ?? 'V').charAt(0)}</span>
+            )}
+          </div>
+          <span className="font-dm text-sm font-semibold text-ink truncate">{venueName ?? 'Your Venue'}</span>
         </div>
-        <span className="font-dm text-sm font-semibold text-ink truncate">{venueName ?? 'Your Venue'}</span>
-      </div>
-      <div className="flex-1 overflow-auto py-2">
-        {items.map(item => (
-          <button
-            key={item.id}
-            onClick={() => setSettingsSubTab(item.id as any)}
-            className={`w-full text-left px-4 py-2 font-dm text-sm transition-colors ${
-              settingsSubTab === item.id
-                ? "bg-sage-tint text-sage-dark font-semibold border-l-2 border-sage-green pl-[calc(1rem-2px)]"
-                : "text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-    </aside>
+        <div className="flex-1 overflow-auto py-2">
+          {items.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setSettingsSubTab(item.id as any)}
+              className={`w-full text-left px-4 py-2 font-dm text-sm transition-colors ${
+                settingsSubTab === item.id
+                  ? "bg-sage-tint text-sage-dark font-semibold border-l-2 border-sage-green pl-[calc(1rem-2px)]"
+                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -388,6 +405,10 @@ export default function Dashboard() {
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
+  const [leadSortBy, setLeadSortBy] = useState<"enquiry_date"|"event_date"|"status">("enquiry_date");
+  const [leadSortDir, setLeadSortDir] = useState<"desc"|"asc">("desc");
+  const [eventSortBy, setEventSortBy] = useState<"event_date"|"date_booked"|"status">("event_date");
+  const [eventSortDir, setEventSortDir] = useState<"asc"|"desc">("asc");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
@@ -396,6 +417,9 @@ export default function Dashboard() {
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
   const [showAddSpace, setShowAddSpace] = useState(false);
   const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
+  const [showEditSpace, setShowEditSpace] = useState(false);
+  const [editingSpace, setEditingSpace] = useState<any>(null);
+  const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
   const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked' });
@@ -526,6 +550,22 @@ export default function Dashboard() {
     },
     onError: () => toast.error("Failed to delete enquiry"),
   });
+  const markRead = trpc.leads.markRead.useMutation({
+    onSuccess: (_data, vars) => {
+      // Update the local lead list so the badge count drops immediately
+      utils.leads.list.invalidate();
+    },
+  });
+
+  // Helper: select a lead and mark it as read
+  function selectLead(lead: any) {
+    setSelectedLead(lead);
+    // Note: selectLead is defined below; this is the inner implementation
+    if (lead && !lead.readAt) {
+      markRead.mutate({ id: lead.id });
+    }
+  }
+
   const createEnquiry = trpc.leads.create.useMutation({
     onSuccess: () => {
       refetchLeads();
@@ -550,6 +590,12 @@ export default function Dashboard() {
   });
   const createSpace = trpc.spaces.create.useMutation({
     onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
+  });
+  const updateSpace = trpc.spaces.update.useMutation({
+    onSuccess: () => { refetchSpaces(); setShowEditSpace(false); setEditingSpace(null); toast.success("Space updated!"); },
+  });
+  const deleteSpace = trpc.spaces.delete.useMutation({
+    onSuccess: () => { refetchSpaces(); toast.success("Space deleted!"); },
   });
 
   // Menu packages
@@ -726,14 +772,31 @@ export default function Dashboard() {
   const CONFIRMED_STATUSES = ['booked', 'confirmed'];
   const activeEnquiries = (allLeads ?? []).filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
   const newEnquiries = activeEnquiries.filter((l: any) => l.status === "new");
+  const unreadCount = newEnquiries.filter((l: any) => !l.readAt).length;
   const repliedLeads = activeEnquiries.filter((l: any) => l.status !== "new");
   // When a specific status filter is active, show all active enquiries from the server (don't re-filter by leadsSubTab)
   const leadsToShow = leadStatusFilter !== "all"
     ? activeEnquiries
     : leadsSubTab === "new" ? newEnquiries : repliedLeads;
-  const filteredLeads = leadsToShow.filter((l: any) =>
-    !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
-  );
+  const filteredLeads = leadsToShow
+    .filter((l: any) =>
+      !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
+    )
+    .slice()
+    .sort((a: any, b: any) => {
+      let cmp = 0;
+      if (leadSortBy === 'enquiry_date') {
+        cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      } else if (leadSortBy === 'event_date') {
+        const aDate = a.eventDate ? new Date(a.eventDate).getTime() : 0;
+        const bDate = b.eventDate ? new Date(b.eventDate).getTime() : 0;
+        cmp = aDate - bDate;
+      } else if (leadSortBy === 'status') {
+        const order = ['new','contacted','proposal_sent','site_visit','negotiating','booked','confirmed','lost','cancelled'];
+        cmp = (order.indexOf(a.status) ?? 99) - (order.indexOf(b.status) ?? 99);
+      }
+      return leadSortDir === 'asc' ? cmp : -cmp;
+    });
 
   // Calendar
   const year = calDate.getFullYear();
@@ -789,7 +852,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background font-inter flex flex-col">
-      {/* ── TOP NAVIGATION BAR (Perfect Venue layout) ──────────────────────── */}
+      {/* ── TOP NAVIGATION BAR ──────────────────────────────────────────────── */}
       <nav className="bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
         <div className="flex items-center pr-5 border-r border-border mr-4 flex-shrink-0">
@@ -800,44 +863,52 @@ export default function Dashboard() {
             style={{ filter: 'brightness(0)' }}
           />
         </div>
-        {/* Primary nav tabs */}
-        {[
-          { id: "overview", label: "Home" },
-          { id: "enquiries", label: "Enquiries" },
-          { id: "calendar", label: "Calendar" },
-          { id: "tasks", label: "Tasks" },
-          { id: "reports", label: "Reports" },
-        ].map(item => (
+        {/* Primary nav tabs — hidden on mobile (shown in bottom bar instead) */}
+        <div className="hidden md:flex items-center">
+          {[
+            { id: "overview", label: "Home" },
+            { id: "enquiries", label: "Enquiries" },
+            { id: "calendar", label: "Calendar" },
+            { id: "tasks", label: "Tasks" },
+            { id: "reports", label: "Reports" },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id as any)}
+              className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 relative ${
+                tab === item.id
+                  ? "text-sage-dark border-sage-green font-semibold"
+                  : "text-gray-400 border-transparent hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              {item.label}
+              {item.id === "enquiries" && unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
+          ))}
+          {/* Settings */}
           <button
-            key={item.id}
-            onClick={() => setTab(item.id as any)}
-            className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 relative ${
-              tab === item.id
+            onClick={() => setTab("settings" as any)}
+            className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 ${
+              tab === "settings"
                 ? "text-sage-dark border-sage-green font-semibold"
                 : "text-gray-400 border-transparent hover:text-gray-700 hover:border-gray-300"
             }`}
           >
-            {item.label}
-            {item.id === "enquiries" && newEnquiries.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
-                {newEnquiries.length > 99 ? '99+' : newEnquiries.length}
-              </span>
-            )}
+            Settings
           </button>
-        ))}
-        {/* Settings */}
-        <button
-          onClick={() => setTab("settings" as any)}
-          className={`h-14 px-4 font-inter text-sm transition-colors border-b-2 flex-shrink-0 ${
-            tab === "settings"
-              ? "text-sage-dark border-sage-green font-semibold"
-              : "text-gray-400 border-transparent hover:text-gray-700 hover:border-gray-300"
-          }`}
-        >
-          Settings
-        </button>
-        {/* Spacer */}
-        <div className="flex-1" />
+        </div>
+        {/* Mobile: current tab label */}
+        <div className="md:hidden flex-1 text-center">
+          <span className="font-inter text-sm font-semibold text-sage-dark">
+            {tab === "overview" ? "Home" : tab === "enquiries" ? "Enquiries" : tab === "calendar" ? "Calendar" : tab === "tasks" ? "Tasks" : tab === "reports" ? "Reports" : "Settings"}
+          </span>
+        </div>
+        {/* Spacer (desktop only) */}
+        <div className="hidden md:flex flex-1" />
         {/* Right: venue name + avatar */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <span className="font-inter text-stormy text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
@@ -851,13 +922,13 @@ export default function Dashboard() {
         {/* No sidebar — full-width main content */}
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto pb-16 md:pb-0">
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
           {tab === "overview" && (
-            <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex flex-col min-h-full md:h-full md:overflow-hidden">
               {/* Stats bar */}
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 px-5 pt-4 pb-3 border-b border-border flex-shrink-0">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 px-4 pt-4 pb-3 border-b border-border flex-shrink-0">
                 {[
                   { label: "New Enquiries", value: stats?.newLeads ?? 0, sub: "awaiting reply", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-4 h-4" /> },
                   { label: "Total Enquiries", value: stats?.totalLeads ?? 0, sub: "all time", iconBg: "bg-gray-100", iconColor: "text-gray-500", icon: <Users className="w-4 h-4" /> },
@@ -875,10 +946,10 @@ export default function Dashboard() {
               </div>
 
               {/* Main area: full calendar + sidebar */}
-              <div className="flex flex-1 overflow-hidden">
+              <div className="flex flex-col md:flex-row flex-1 overflow-auto md:overflow-hidden">
 
                 {/* Full Calendar */}
-                <div className="flex-1 flex flex-col overflow-hidden border-r border-border">
+                <div className="flex-1 flex flex-col overflow-hidden md:border-r border-border">
                   {/* Calendar toolbar */}
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-white flex-shrink-0">
                     <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-sage-tint rounded-lg transition-colors text-gray-500"><ChevronLeft className="w-4 h-4" /></button>
@@ -960,7 +1031,7 @@ export default function Dashboard() {
                                 </div>
                                 {dayBookings.slice(0, 3).map((b: any) => (
                                   <button key={b.id}
-                                    onClick={() => setLocation(`/event/${b.id}`)}
+                                    onClick={() => { setSelectedBooking(b); setTab('calendar'); }}
                                     className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-tight font-inter font-medium truncate ${statusColor(b.status)} hover:opacity-80 transition-opacity`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.status}`}>
                                     {b.eventType || b.firstName || 'Event'}
@@ -968,7 +1039,7 @@ export default function Dashboard() {
                                 ))}
                                 {dayLeads.slice(0, 2).map((l: any) => (
                                   <button key={l.id}
-                                    onClick={() => { setSelectedLead(l); setTab('enquiries'); }}
+                                    onClick={() => { selectLead(l); setTab('enquiries'); }}
                                     className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-tight font-inter font-medium truncate ${statusColor(l.status)} hover:opacity-80 transition-opacity`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.status}`}>
                                     {l.eventType || l.firstName || 'Enquiry'}
@@ -987,7 +1058,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Right sidebar: upcoming events + new enquiries */}
-                <div className="w-72 flex-shrink-0 flex flex-col overflow-hidden bg-white">
+                <div className="w-full md:w-72 flex-shrink-0 flex flex-col md:overflow-hidden bg-white border-t md:border-t-0 border-border">
                   {/* Upcoming confirmed events */}
                   <div className="flex-1 overflow-auto border-b border-border">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -1051,7 +1122,7 @@ export default function Dashboard() {
                     ) : (
                       <div className="divide-y divide-border">
                         {newEnquiries.slice(0, 6).map((lead: any) => (
-                          <button key={lead.id} onClick={() => { setSelectedLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
+                          <button key={lead.id} onClick={() => { selectLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
                             className="w-full flex items-start gap-3 px-4 py-3 hover:bg-sage-tint/30 transition-colors text-left">
                             <div className="w-2 h-2 rounded-full bg-rose-400 mt-1.5 flex-shrink-0 animate-pulse" />
                             <div className="flex-1 min-w-0">
@@ -1160,6 +1231,26 @@ export default function Dashboard() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {/* Sort controls */}
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <Select value={leadSortBy} onValueChange={(v: any) => setLeadSortBy(v)}>
+                      <SelectTrigger className="flex-1 rounded-xl border border-gray-200 bg-white text-xs font-inter font-medium focus:ring-1 focus:ring-sage-green/40 h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="enquiry_date" className="font-inter text-xs">Enquiry Date</SelectItem>
+                        <SelectItem value="event_date" className="font-inter text-xs">Event Date</SelectItem>
+                        <SelectItem value="status" className="font-inter text-xs">Status</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <button
+                      onClick={() => setLeadSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                      className="flex-shrink-0 h-8 w-8 flex items-center justify-center border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition-colors"
+                      title={leadSortDir === 'asc' ? 'Ascending' : 'Descending'}
+                    >
+                      <ArrowUpDown className="w-3.5 h-3.5 text-ink/60" />
+                    </button>
+                  </div>
                 </div>
                 {/* Select All bar — only visible in bulk mode */}
                 {bulkSelectMode && filteredLeads.length > 0 && (
@@ -1199,12 +1290,12 @@ export default function Dashboard() {
                             className="w-4 h-4 accent-forest cursor-pointer" />
                         </label>
                       )}
-                    <button onClick={() => { if (!bulkSelectMode) setSelectedLead(lead); }}
+                    <button onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
                       className={`flex-1 p-4 text-left hover:bg-linen transition-colors ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5 border-l-2 border-gold" : "border-l-2 border-transparent"}`}>
                       <div className="flex items-start justify-between mb-1">
                         <div className="font-cormorant font-semibold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
                         <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border flex-shrink-0 ml-2 ${PIPELINE_STAGES.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
-                          {lead.status.replace(/_/g, " ").toUpperCase()}
+                          {lead.status === 'booked' ? 'CONFIRMED' : lead.status.replace(/_/g, " ").toUpperCase()}
                         </div>
                       </div>
                       <div className="font-dm text-xs text-ink/60 truncate">{lead.email}</div>
@@ -1265,16 +1356,16 @@ export default function Dashboard() {
               )}
               {/* Lead Detail */}
               {selectedLead ? (
-                <div className="flex-1 overflow-auto p-6">
-                  <div className="flex items-center gap-3 mb-6">
-                    <button onClick={() => setSelectedLead(null)} className="md:hidden font-bebas tracking-widest text-xs text-forest flex items-center gap-1">
-                      <ChevronLeft className="w-4 h-4" /> BACK
+                <div className="flex-1 overflow-auto p-4 md:p-6">
+                  <div className="flex items-center gap-3 mb-4 md:mb-6">
+                    <button onClick={() => setSelectedLead(null)} className="md:hidden font-inter font-medium text-sm text-sage-dark flex items-center gap-1 py-1 pr-2">
+                      <ChevronLeft className="w-4 h-4" /> Back
                     </button>
                     <div className="flex-1">
                       <h2 className="font-cormorant text-ink" style={{ fontSize: '1.8rem', fontWeight: 600 }}>{selectedLead.firstName} {selectedLead.lastName}</h2>
                       <div className="font-dm text-sm text-sage">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                       {selectedLead.email && (
                         <button onClick={() => {
                           setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
@@ -1581,7 +1672,7 @@ export default function Dashboard() {
                       </div>
                       <div className="space-y-2">
                         {stageLeads.map((lead: any) => (
-                          <div key={lead.id} onClick={() => { setSelectedLead(lead); setTab("enquiries"); }}
+                          <div key={lead.id} onClick={() => { selectLead(lead); setTab("enquiries"); }}
                             className="dante-card p-3 cursor-pointer hover:border-gold/40 transition-colors">
                             <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
                             <div className="font-dm text-xs text-sage">{lead.eventType || "Event"}</div>
@@ -1606,13 +1697,13 @@ export default function Dashboard() {
           {tab === "calendar" && (
             <div className="flex flex-col h-full overflow-hidden">
               {/* Calendar Toolbar */}
-              <div className="flex items-center gap-3 px-6 py-3 border-b border-gold/15 bg-cream flex-shrink-0">
+              <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-gold/15 bg-cream flex-shrink-0">
                 <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronLeft className="w-4 h-4" /></button>
                 <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
-                <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
-                <h2 className="font-cormorant text-xl font-semibold text-ink flex-1">{MONTHS[month]} {year}</h2>
-                {/* View switcher */}
-                <div className="flex border border-gold/30">
+                <button onClick={() => setCalDate(new Date())} className="hidden sm:block font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
+                <h2 className="font-cormorant text-base md:text-xl font-semibold text-ink flex-1">{MONTHS[month]} {year}</h2>
+                {/* View switcher — hidden on mobile */}
+                <div className="hidden sm:flex border border-gold/30">
                   {(["month","week","day","list"] as const).map(v => (
                     <button key={v}
                       onClick={() => setCalendarView(v)}
@@ -1622,13 +1713,13 @@ export default function Dashboard() {
                   ))}
                 </div>
                 <button onClick={() => setShowAddLead(true)}
-                  className="btn-forest text-cream font-bebas tracking-widest text-xs px-4 py-1.5 flex items-center gap-1.5">
-                  <Plus className="w-3.5 h-3.5" /> ADD EVENT
+                  className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 md:px-4 py-1.5 flex items-center gap-1">
+                  <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD EVENT</span><span className="sm:hidden">ADD</span>
                 </button>
               </div>
 
               {/* Legend */}
-              <div className="flex items-center gap-4 px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0">
+              <div className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto">
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-emerald-500 rounded-sm" /><span>Confirmed</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-sky-400 rounded-sm" /><span>Tentative</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-300 rounded-sm" /><span>Enquiry / Lead</span></div>
@@ -1691,20 +1782,28 @@ export default function Dashboard() {
                             }`}>{day}</span>
                             {/* Booking cards */}
                             {dayBookings.map((b: any) => (
-                              <button key={b.id}
-                                onClick={() => setLocation(`/event/${b.id}`)}
-                                className={`w-full text-left rounded px-1 py-0.5 text-[10px] leading-tight font-dm truncate ${statusCard(b.status)} hover:opacity-80 transition-opacity`}
-                                title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.status} — ${b.guestCount ?? '?'} guests`}>
-                                <div className="font-semibold truncate">{b.eventType || 'Event'}</div>
-                                {b.startTime && <div className="opacity-80">{b.startTime} – {b.endTime}</div>}
-                                <div className="opacity-80 capitalize">{b.status}</div>
-                                {b.guestCount && <div className="opacity-80">Guests {b.guestCount}</div>}
-                              </button>
+                              <div key={b.id} className="relative group/card w-full">
+                                <button
+                                  onClick={() => setLocation(`/event/${b.id}`)}
+                                  className={`w-full text-left rounded px-1 py-0.5 text-[10px] leading-tight font-dm truncate ${statusCard(b.status)} hover:opacity-80 transition-opacity`}
+                                  title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.status} — ${b.guestCount ?? '?'} guests`}>
+                                  <div className="font-semibold truncate">{b.eventType || 'Event'}</div>
+                                  {b.startTime && <div className="opacity-80">{b.startTime} – {b.endTime}</div>}
+                                  <div className="opacity-80 capitalize">{b.status === 'booked' ? 'Confirmed' : b.status}</div>
+                                  {b.guestCount && <div className="opacity-80">Guests {b.guestCount}</div>}
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); if (confirm(`Delete ${b.eventType || 'event'} for ${b.firstName}?`)) deleteBooking.mutate({ id: b.id }); }}
+                                  className="absolute top-0 right-0 opacity-0 group-hover/card:opacity-100 transition-opacity bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center"
+                                  title="Delete event">
+                                  <X className="w-2 h-2" />
+                                </button>
+                              </div>
                             ))}
                             {/* Lead/enquiry cards */}
                             {dayLeads.map((l: any) => (
                               <button key={l.id}
-                                onClick={() => { setSelectedLead(l); setTab('enquiries'); }}
+                                onClick={() => { selectLead(l); setTab('enquiries'); }}
                                 className={`w-full text-left rounded px-1 py-0.5 text-[10px] leading-tight font-dm truncate ${statusCard(l.status)} hover:opacity-80 transition-opacity`}
                                 title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.status} — ${l.guestCount ?? '?'} guests`}>
                                 <div className="font-semibold truncate">{l.eventType || 'Enquiry'}</div>
@@ -1731,11 +1830,30 @@ export default function Dashboard() {
               {/* List View */}
               {calendarView === "list" && (
               <div className="flex-1 overflow-auto p-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <h2 className="font-inter font-semibold text-gray-900 text-lg" style={{ letterSpacing: '-0.02em' }}>All Events — {MONTHS[month]} {year}</h2>
-                  <button onClick={() => setShowAddLead(true)} className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
-                    <Plus className="w-3.5 h-3.5" /> Add Event
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <Select value={eventSortBy} onValueChange={(v: any) => setEventSortBy(v)}>
+                      <SelectTrigger className="h-8 text-xs font-inter border-gray-200 rounded-lg w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="event_date" className="font-inter text-xs">Event Date</SelectItem>
+                        <SelectItem value="date_booked" className="font-inter text-xs">Date Booked</SelectItem>
+                        <SelectItem value="status" className="font-inter text-xs">Status</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <button
+                      onClick={() => setEventSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                      className="h-8 w-8 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+                      title={eventSortDir === 'asc' ? 'Ascending' : 'Descending'}
+                    >
+                      <ArrowUpDown className="w-3.5 h-3.5 text-gray-500" />
+                    </button>
+                    <button onClick={() => setShowAddLead(true)} className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
+                      <Plus className="w-3.5 h-3.5" /> Add Event
+                    </button>
+                  </div>
                 </div>
                 {(monthBookings ?? []).length === 0 && (monthLeadEvents ?? []).length === 0 ? (
                   <div className="border border-dashed border-sage-green/20 rounded-xl p-8 text-center">
@@ -1746,7 +1864,18 @@ export default function Dashboard() {
                 ) : (
                   <div className="space-y-2">
                     {[...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).map((l: any) => ({ ...l, _type: 'lead' }))]
-                      .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
+                      .sort((a: any, b: any) => {
+                        let cmp = 0;
+                        if (eventSortBy === 'event_date') {
+                          cmp = new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime();
+                        } else if (eventSortBy === 'date_booked') {
+                          cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+                        } else if (eventSortBy === 'status') {
+                          const ord = ['confirmed','booked','tentative','proposal_sent','negotiating','contacted','new','lost','cancelled'];
+                          cmp = (ord.indexOf(a.status) ?? 99) - (ord.indexOf(b.status) ?? 99);
+                        }
+                        return eventSortDir === 'asc' ? cmp : -cmp;
+                      })
                       .map((item: any) => {
                         const isConfirmed = item.status === 'confirmed' || item.status === 'booked';
                         const statusConfig: Record<string, { bar: string; badge: string; label: string }> = {
@@ -1776,7 +1905,7 @@ export default function Dashboard() {
                                   {item.company ? ` · ${item.company}` : ''}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                                 <span className={`font-inter text-[10px] font-bold px-2 py-0.5 rounded-full ${sc.badge}`}>
                                   {sc.label}
                                 </span>
@@ -1784,6 +1913,14 @@ export default function Dashboard() {
                                   <button onClick={() => setLocation(`/event/${item.id}`)} className="font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">Open</button>
                                 ) : (
                                   <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} className="font-inter text-xs font-semibold px-3 py-1.5 border border-sage-green/40 text-sage-dark rounded-lg hover:bg-sage-tint transition-colors">View</button>
+                                )}
+                                {item._type === 'booking' && (
+                                  <button
+                                    onClick={() => { if (confirm(`Delete ${item.eventType || 'event'} for ${item.firstName}?`)) deleteBooking.mutate({ id: item.id }); }}
+                                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Delete event">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
                                 )}
                               </div>
                             </div>
@@ -1959,7 +2096,7 @@ export default function Dashboard() {
                       const isPast = followDate <= new Date();
                       return (
                         <button key={lead.id}
-                          onClick={() => { setSelectedLead(lead); setTab('enquiries'); }}
+                          onClick={() => { selectLead(lead); setTab('enquiries'); }}
                           className="w-full dante-card p-4 flex items-center justify-between hover:bg-gold/5 transition-colors text-left">
                           <div>
                             <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
@@ -1992,7 +2129,7 @@ export default function Dashboard() {
                       };
                       return (
                         <button key={lead.id}
-                          onClick={() => { setSelectedLead(lead); setTab('enquiries'); }}
+                          onClick={() => { selectLead(lead); setTab('enquiries'); }}
                           className="w-full dante-card p-4 flex items-center justify-between hover:bg-rose-50/50 transition-colors text-left">
                           <div>
                             <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
@@ -2000,7 +2137,7 @@ export default function Dashboard() {
                           </div>
                           <div className="text-right">
                             <div className={`font-bebas text-xs tracking-widest ${statusColors[lead.status] ?? 'text-ink'}`}>
-                              {lead.status?.replace('_', ' ').toUpperCase()}
+                              {lead.status === 'booked' ? 'CONFIRMED' : lead.status?.replace('_', ' ').toUpperCase()}
                             </div>
                             <div className="font-dm text-xs text-ink/50">
                               {eventDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
@@ -2017,10 +2154,10 @@ export default function Dashboard() {
           {/* ── BOOKING SLIDE-OUT PANEL ─────────────────────────────────────── */}
           {selectedBooking && (
             <div className="fixed inset-0 z-50 flex">
-              {/* Backdrop */}
-              <div className="flex-1 bg-black/40" onClick={() => setSelectedBooking(null)} />
-              {/* Drawer */}
-              <div className="w-full max-w-md bg-cream border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl">
+              {/* Backdrop — hidden on mobile (full-screen drawer) */}
+              <div className="hidden md:flex flex-1 bg-black/40" onClick={() => setSelectedBooking(null)} />
+              {/* Drawer — full screen on mobile, side panel on desktop */}
+              <div className="w-full md:max-w-md bg-cream md:border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl">
                 {/* Header */}
                 <div className="bg-forest-dark px-5 py-4 flex items-center justify-between">
                   <div>
@@ -2350,10 +2487,10 @@ export default function Dashboard() {
 
           {/* ── SETTINGS ─────────────────────────────────────────────────────── */}
           {tab === "settings" && (
-            <div className="flex" style={{ minHeight: 'calc(100vh - 3.5rem)' }}>
+            <div className="flex flex-col md:flex-row" style={{ minHeight: 'calc(100vh - 3.5rem)' }}>
               {/* Settings sidebar — like Perfect Venue */}
               <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} />
-              <div className="flex-1 overflow-auto p-8">
+              <div className="flex-1 overflow-auto p-4 md:p-8">
 
               {/* ── VENUE DETAILS ────────────────────────────────── */}
               {settingsSubTab === "venue-details" && (
@@ -2718,15 +2855,72 @@ export default function Dashboard() {
               {settingsSubTab === "lead-form" && (
               <div className="max-w-3xl mx-auto">
               <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Contact Form</h1>
-              <div className="dante-card p-5">
-                <p className="font-dm text-sm text-ink/70">Your public enquiry form is available at <span className="text-forest font-semibold">/enquire/{venueSettings?.slug || 'your-venue'}</span>. Customise the form title, subtitle, and slug in Venue Profile settings.</p>
-                <div className="mt-4 flex gap-3">
-                  <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
-                    className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream">OPEN FORM</a>
-                  <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Form link copied!'); }}
-                    className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink hover:bg-gold/10">COPY LINK</button>
+
+              {/* Form branding editor */}
+              {settingsForm && (
+              <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-4">
+                <div className="dante-card p-5 space-y-4">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage">FORM CONTENT</h2>
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM TITLE</label>
+                    <Input value={settingsForm.leadFormTitle ?? ''} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormTitle: e.target.value }))}
+                      placeholder="Book Your Event" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM SUBTITLE</label>
+                    <Textarea value={settingsForm.leadFormSubtitle ?? ''} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormSubtitle: e.target.value }))}
+                      placeholder="Tell us about your event and we'll get back to you within 24 hours."
+                      rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
+                  </div>
                 </div>
-              </div>
+                <div className="dante-card p-5 space-y-4">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage">FORM BRANDING</h2>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">HEADER COLOUR</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
+                          className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
+                        <Input value={settingsForm.primaryColor ?? '#2D4A3E'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
+                          placeholder="#2D4A3E" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+                      </div>
+                      <p className="font-dm text-xs text-ink/40 mt-1">Used as the form header background colour</p>
+                    </div>
+                    {/* Live preview swatch */}
+                    <div className="flex-1">
+                      <div className="rounded border border-gold/20 overflow-hidden">
+                        <div className="p-4 text-center" style={{ backgroundColor: settingsForm.primaryColor ?? '#2D4A3E' }}>
+                          <div className="text-xs font-bold" style={{ color: '#ffffff' }}>{settingsForm.leadFormTitle || 'Book Your Event'}</div>
+                          <div className="text-xs mt-0.5 opacity-70" style={{ color: '#ffffff' }}>{venueSettings?.name ?? 'Your Venue'}</div>
+                        </div>
+                        <div className="bg-gray-50 p-2 text-center">
+                          <div className="text-xs text-gray-400">Preview</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="dante-card p-5">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage mb-3">FORM LINK</h2>
+                  <p className="font-dm text-sm text-ink/70 mb-3">Your public enquiry form is available at:</p>
+                  <div className="flex items-center gap-2 bg-gold/5 border border-gold/20 rounded px-3 py-2">
+                    <span className="font-mono text-sm text-ink/70 flex-1 truncate">{window.location.origin}/enquire/{venueSettings?.slug || 'your-venue'}</span>
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Link copied!'); }}
+                      className="font-bebas tracking-widest text-xs px-3 py-1 border border-gold/30 text-ink hover:bg-gold/10 flex-shrink-0">COPY</button>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
+                      className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream">OPEN FORM</a>
+                  </div>
+                </div>
+                <button type="submit" disabled={updateSettings.isPending}
+                  className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
+                  {updateSettings.isPending ? 'SAVING...' : 'SAVE CHANGES'}
+                </button>
+              </form>
+              )}
               </div>
               )}
 
@@ -3158,6 +3352,23 @@ export default function Dashboard() {
                             {s.minCapacity && s.maxCapacity ? `${s.minCapacity}–${s.maxCapacity} guests` : s.maxCapacity ? `Up to ${s.maxCapacity} guests` : ""}
                             {s.minSpend ? ` · Min spend $${Number(s.minSpend).toLocaleString()}` : ""}
                           </div>
+                          {s.description && <div className="font-dm text-xs text-ink/40 mt-0.5">{s.description}</div>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setEditingSpace(s); setEditSpaceForm({ name: s.name, description: s.description ?? '', minCapacity: s.minCapacity ? String(s.minCapacity) : '', maxCapacity: s.maxCapacity ? String(s.maxCapacity) : '', minSpend: s.minSpend ? String(s.minSpend) : '' }); setShowEditSpace(true); }}
+                            className="text-sage hover:text-forest-dark p-1"
+                            title="Edit space"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteSpace.mutate({ id: s.id }); }}
+                            className="text-red-400 hover:text-red-600 p-1"
+                            title="Delete space"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -3167,7 +3378,6 @@ export default function Dashboard() {
               </div>
               )}
 
-              </div>
 
               {/* ── AUTOMATED TASKS ─────────────────────────────── */}
               {settingsSubTab === "automated-tasks" && (
@@ -3456,82 +3666,105 @@ export default function Dashboard() {
               )}
 
               {/* ── GROUP CONTACT FORM ──────────────────────────── */}
-              {settingsSubTab === "group-contact-form" && (
-              <div>
+              {settingsSubTab === "group-contact-form" && settingsForm && (
+              <div className="max-w-3xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
                   <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Group Contact Form</h1>
-                  <button className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded hover:bg-gray-50">
-                    <ExternalLink className="w-4 h-4" /> Copy Form Link
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Form link copied!'); }}
+                      className="flex items-center gap-2 border border-gold/30 text-ink text-sm px-4 py-2 hover:bg-gold/10 font-bebas tracking-widest">
+                      <ExternalLink className="w-4 h-4" /> COPY FORM LINK
+                    </button>
+                    <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
+                      className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream">OPEN FORM</a>
+                  </div>
+                </div>
+
+                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-4">
+                  {/* Logo upload */}
+                  <div className="dante-card p-5">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">LOGO</h2>
+                    <div className="flex items-center gap-4">
+                      <div className="w-20 h-20 rounded-full border-2 border-dashed border-gold/40 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
+                        {settingsForm.logoUrl ? (
+                          <img src={settingsForm.logoUrl} alt="logo" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-xs text-gray-400 text-center px-2">No logo</span>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">UPLOAD LOGO</label>
+                        <input type="file" accept="image/*"
+                          onChange={async e => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            const fd = new FormData(); fd.append('file', file);
+                            const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                            const { url } = await res.json();
+                            setSettingsForm((f: any) => ({ ...f, logoUrl: url }));
+                            toast.success('Logo uploaded!');
+                          }}
+                          className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
+                        <p className="font-dm text-xs text-ink/40 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Banner image upload */}
+                  <div className="dante-card p-5">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">BANNER IMAGE</h2>
+                    <div
+                      className="w-full h-28 border-2 border-dashed border-gold/40 rounded flex items-center justify-center overflow-hidden bg-gray-50 mb-3 relative cursor-pointer"
+                      onClick={() => document.getElementById('banner-upload')?.click()}
+                    >
+                      {settingsForm.coverImageUrl ? (
+                        <img src={settingsForm.coverImageUrl} alt="banner" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs text-gray-400">Click to upload banner (recommended: 1500 × 250px)</span>
+                      )}
+                    </div>
+                    <input id="banner-upload" type="file" accept="image/*" className="hidden"
+                      onChange={async e => {
+                        const file = e.target.files?.[0]; if (!file) return;
+                        const fd = new FormData(); fd.append('file', file);
+                        const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                        const { url } = await res.json();
+                        setSettingsForm((f: any) => ({ ...f, coverImageUrl: url }));
+                        toast.success('Banner uploaded!');
+                      }}
+                    />
+                    <p className="font-dm text-xs text-ink/40">Recommended size: 1500 × 250px. JPG or PNG.</p>
+                  </div>
+
+                  {/* Colours */}
+                  <div className="dante-card p-5 space-y-4">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage">FORM COLOURS</h2>
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">HEADER / BUTTON COLOUR</label>
+                        <div className="flex items-center gap-2">
+                          <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
+                            onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
+                            className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
+                          <Input value={settingsForm.primaryColor ?? '#2D4A3E'}
+                            onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
+                            placeholder="#2D4A3E" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+                        </div>
+                      </div>
+                      {/* Preview swatch */}
+                      <div className="flex-1">
+                        <div className="rounded border border-gold/20 overflow-hidden">
+                          <div className="h-10" style={{ backgroundColor: settingsForm.primaryColor ?? '#2D4A3E' }} />
+                          <div className="bg-gray-50 p-2 text-center text-xs text-gray-400">Header preview</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button type="submit" disabled={updateSettings.isPending}
+                    className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
+                    {updateSettings.isPending ? 'SAVING...' : 'SAVE CHANGES'}
                   </button>
-                </div>
-                <div className="flex gap-6">
-                  {/* Left: Settings */}
-                  <div className="w-80 flex-shrink-0">
-                    <div className="bg-white border border-gray-200 rounded p-4">
-                      <h2 className="font-semibold text-gray-800 mb-1">{venueSettings?.name || 'Your Venue'}</h2>
-                      <div className="flex gap-4 border-b border-gray-200 mb-4">
-                        {['Settings','Fields','Connect'].map((t,i) => (
-                          <button key={i} className={`pb-2 text-sm font-medium ${i===0?'border-b-2 border-burgundy text-burgundy':'text-gray-500 hover:text-gray-700'}`}>{t}</button>
-                        ))}
-                      </div>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Logo</label>
-                          <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center cursor-pointer hover:border-burgundy/50">
-                            <span className="text-xs text-gray-400 text-center">YOUR LOGO</span>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Banner Image</label>
-                          <div className="w-full h-24 border-2 border-dashed border-gray-300 rounded flex items-center justify-center cursor-pointer hover:border-burgundy/50">
-                            <span className="text-xs text-gray-400">Upload an image at least 1500 x 250</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded border border-gray-200 bg-gray-50"></div>
-                          <span className="text-sm text-gray-700">Form Background Color</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded border border-gray-200 bg-burgundy"></div>
-                          <span className="text-sm text-gray-700">Form Button Color</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Right: Live Preview */}
-                  <div className="flex-1 bg-gray-100 rounded p-6 flex items-start justify-center">
-                    <div className="bg-white rounded shadow-lg w-full max-w-sm overflow-hidden">
-                      <div className="h-24 bg-gray-200 relative">
-                        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-16 h-16 bg-burgundy rounded-full flex items-center justify-center">
-                          <span className="text-cream text-xs font-bold">LOGO</span>
-                        </div>
-                      </div>
-                      <div className="pt-12 pb-4 px-4">
-                        <h3 className="text-center font-semibold text-gray-800 mb-4">Plan your event with {venueSettings?.name || 'Your Venue'}</h3>
-                        <div className="grid grid-cols-2 gap-2 mb-2">
-                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="First Name *" readOnly />
-                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Last Name" readOnly />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 mb-2">
-                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Email *" readOnly />
-                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Phone" readOnly />
-                        </div>
-                        <input className="w-full border border-gray-200 rounded p-2 text-xs mb-2" placeholder="Event Name" readOnly />
-                        <div className="grid grid-cols-2 gap-2 mb-2">
-                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Desired Date" readOnly />
-                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Start Time" readOnly />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 mb-2">
-                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Budget" readOnly />
-                          <input className="border border-gray-200 rounded p-2 text-xs" placeholder="Estimated Group Size" readOnly />
-                        </div>
-                        <textarea className="w-full border border-gray-200 rounded p-2 text-xs mb-3 h-16 resize-none" placeholder="Tell us about your event *" readOnly />
-                        <button className="w-full bg-burgundy text-cream text-sm py-2 rounded">Send Request</button>
-                        <p className="text-center text-xs text-gray-400 mt-2">Powered by HOSTit</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                </form>
               </div>
               )}
 
@@ -3847,6 +4080,7 @@ export default function Dashboard() {
               </div>
               )}
 
+              </div>
             </div>
           )}
         </main>
@@ -3891,6 +4125,50 @@ export default function Dashboard() {
             <button type="submit" disabled={createSpace.isPending}
               className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
               {createSpace.isPending ? "ADDING..." : "ADD SPACE"}
+            </button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Space Modal */}
+      <Dialog open={showEditSpace} onOpenChange={setShowEditSpace}>
+        <DialogContent className="max-w-md rounded-none border border-gold/30">
+          <DialogHeader>
+            <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">
+              <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Edit Event Space</DialogTitle>
+            </div>
+          </DialogHeader>
+          <form onSubmit={e => { e.preventDefault(); if (!editingSpace) return; updateSpace.mutate({ id: editingSpace.id, name: editSpaceForm.name, description: editSpaceForm.description || null, minCapacity: editSpaceForm.minCapacity ? parseInt(editSpaceForm.minCapacity) : null, maxCapacity: editSpaceForm.maxCapacity ? parseInt(editSpaceForm.maxCapacity) : null, minSpend: editSpaceForm.minSpend ? parseFloat(editSpaceForm.minSpend) : null }); }} className="space-y-3">
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
+              <Input required value={editSpaceForm.name} onChange={e => setEditSpaceForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="The Main Dining Room" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN CAPACITY</label>
+                <Input type="number" value={editSpaceForm.minCapacity} onChange={e => setEditSpaceForm(f => ({ ...f, minCapacity: e.target.value }))}
+                  placeholder="20" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+              </div>
+              <div>
+                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MAX CAPACITY</label>
+                <Input type="number" value={editSpaceForm.maxCapacity} onChange={e => setEditSpaceForm(f => ({ ...f, maxCapacity: e.target.value }))}
+                  placeholder="120" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+              </div>
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MIN SPEND (NZD)</label>
+              <Input type="number" value={editSpaceForm.minSpend} onChange={e => setEditSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
+                placeholder="2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+              <Textarea value={editSpaceForm.description} onChange={e => setEditSpaceForm(f => ({ ...f, description: e.target.value }))}
+                rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
+            </div>
+            <button type="submit" disabled={updateSpace.isPending}
+              className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
+              {updateSpace.isPending ? "SAVING..." : "SAVE CHANGES"}
             </button>
           </form>
         </DialogContent>
@@ -4085,6 +4363,33 @@ export default function Dashboard() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ── MOBILE BOTTOM TAB BAR (hidden on md+) ─────────────────────── */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
+        {[
+          { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
+          { id: "enquiries", label: "Enquiries", icon: <MessageSquare className="w-5 h-5" /> },
+          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
+          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
+          { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
+        ].map(item => (
+          <button
+            key={item.id}
+            onClick={() => setTab(item.id as any)}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
+              tab === item.id ? "text-sage-dark" : "text-gray-400"
+            }`}
+          >
+            {item.icon}
+            <span className="text-[10px] font-inter font-medium leading-none">{item.label}</span>
+            {item.id === "enquiries" && unreadCount > 0 && (
+              <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

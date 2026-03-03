@@ -1,0 +1,17 @@
+{
+  "query": "SELECT id, ownerId, title, leadId, bookingId FROM runsheets WHERE id = 330001;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute SELECT id, ownerId, title, leadId, bookingId FROM runsheets WHERE id = 330001;",
+  "rows": [
+    {
+      "id": "330001",
+      "ownerId": "1",
+      "title": "Wedding — Keeraty C",
+      "leadId": "2",
+      "bookingId": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\townerId\ttitle\tleadId\tbookingId\n330001\t1\tWedding — Keeraty C\t2\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1650
+}

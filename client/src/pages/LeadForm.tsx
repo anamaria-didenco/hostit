@@ -14,17 +14,18 @@ const EVENT_TYPES = [
   "Engagement Party", "Baby Shower", "Fundraiser", "Conference", "Other",
 ];
 
-// Paradiso colour tokens
-const T = {
-  teal:      'oklch(0.280 0.065 178)',
-  tealMid:   'oklch(0.400 0.075 178)',
-  terra:     'oklch(0.450 0.155 25)',
-  cream:     'oklch(0.958 0.020 88)',
-  ivory:     'oklch(0.978 0.014 86)',
-  ink:       'oklch(0.220 0.018 45)',
-  stone:     'oklch(0.500 0.025 60)',
-  border:    'oklch(0.875 0.022 80)',
-};
+// Convert hex to OKLCH-compatible CSS (we just use the hex directly for simplicity)
+function hexToRgb(hex: string) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return { r, g, b };
+}
+
+function isLight(hex: string) {
+  const { r, g, b } = hexToRgb(hex);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 128;
+}
 
 export default function LeadForm() {
   const { slug } = useParams<{ slug?: string }>();
@@ -68,114 +69,119 @@ export default function LeadForm() {
     setForm(f => ({ ...f, [field]: e.target.value }));
 
   if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: T.cream }}>
-      <div className="font-playfair text-2xl italic animate-pulse" style={{ color: T.terra }}>Loading…</div>
+    <div className="min-h-screen flex items-center justify-center bg-[#f8f5f0]">
+      <div className="text-2xl italic animate-pulse text-gray-400">Loading…</div>
     </div>
   );
 
-  const venueName   = venue?.name ?? "HOSTit Venue";
-  const formTitle   = venue?.leadFormTitle ?? "Book Your Event";
+  const venueName    = venue?.name ?? "HOSTit Venue";
+  const formTitle    = venue?.leadFormTitle ?? "Book Your Event";
   const formSubtitle = venue?.leadFormSubtitle ?? "Tell us about your event and we'll get back to you within 24 hours.";
+  const primaryColor = venue?.primaryColor ?? "#2D4A3E";
+  const logoUrl      = venue?.logoUrl;
+  const textOnPrimary = isLight(primaryColor) ? "#1a1a1a" : "#ffffff";
 
-  const inputClass = "rounded-none border-2 focus-visible:ring-0 focus-visible:border-[oklch(0.400_0.075_178)] font-inter text-sm";
+  const inputClass = "rounded-sm border border-gray-200 focus-visible:ring-1 focus-visible:ring-offset-0 font-inter text-sm bg-white";
 
   return (
-    <div className="min-h-screen font-inter" style={{ backgroundColor: T.cream }}>
+    <div className="min-h-screen font-inter" style={{ backgroundColor: "#f8f5f0" }}>
 
-      {/* ── Paradiso Header ─────────────────────────────────────────── */}
-      <div style={{ backgroundColor: T.teal, color: T.cream }}>
+      {/* ── Venue Header ─────────────────────────────────────────── */}
+      <div style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
         <div className="max-w-2xl mx-auto px-6 py-12 text-center">
-          {/* Logo */}
+          {/* Logo or venue initial */}
           <div className="flex items-center justify-center mb-5">
-            <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-              alt="HOSTit"
-              className="h-14 w-auto object-contain"
-              style={{ filter: 'brightness(0) invert(1)' }}
-            />
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={venueName}
+                className="h-16 w-auto object-contain"
+                style={isLight(primaryColor) ? {} : { filter: 'brightness(0) invert(1)' }}
+              />
+            ) : (
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold"
+                style={{ backgroundColor: `${textOnPrimary}22`, color: textOnPrimary }}
+              >
+                {venueName.charAt(0).toUpperCase()}
+              </div>
+            )}
           </div>
-          {/* Terracotta rule */}
+          {/* Decorative rule */}
           <div className="flex items-center gap-3 justify-center mb-6">
-            <div className="flex-1 h-px" style={{ background: `${T.terra}55` }} />
-            <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: T.terra }} />
-            <div className="flex-1 h-px" style={{ background: `${T.terra}55` }} />
+            <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
+            <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: `${textOnPrimary}88` }} />
+            <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
           </div>
-          <div className="font-playfair text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: T.cream }}>{venueName}</div>
-          <h1 className="font-playfair italic text-xl mb-3" style={{ color: 'oklch(0.750 0.080 25)' }}>{formTitle}</h1>
-          <p className="font-inter text-sm leading-relaxed max-w-md mx-auto" style={{ color: 'oklch(0.850 0.018 88)' }}>{formSubtitle}</p>
+          <div className="text-3xl md:text-4xl font-bold leading-tight mb-2 font-serif" style={{ color: textOnPrimary }}>{venueName}</div>
+          <h1 className="text-xl italic mb-3 font-serif" style={{ color: `${textOnPrimary}cc` }}>{formTitle}</h1>
+          <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}99` }}>{formSubtitle}</p>
           {/* Venue contact info */}
           {(venue?.city || venue?.phone || venue?.email) && (
             <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
-              {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: 'oklch(0.800 0.018 88)' }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
-              {venue.phone && <div className="flex items-center gap-1.5 text-xs" style={{ color: 'oklch(0.800 0.018 88)' }}><Phone className="w-3 h-3" /> {venue.phone}</div>}
-              {venue.email && <div className="flex items-center gap-1.5 text-xs" style={{ color: 'oklch(0.800 0.018 88)' }}><Mail className="w-3 h-3" /> {venue.email}</div>}
+              {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
+              {venue.phone && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Phone className="w-3 h-3" /> {venue.phone}</div>}
+              {venue.email && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Mail className="w-3 h-3" /> {venue.email}</div>}
             </div>
           )}
         </div>
       </div>
 
-      {/* Stripe accent band */}
-      <div className="h-3 stripe-pattern" />
+      {/* Accent band */}
+      <div className="h-1" style={{ backgroundColor: `${primaryColor}66` }} />
 
       <div className="max-w-2xl mx-auto px-6 py-10">
         {submitted ? (
-          <div className="paradiso-card p-10 text-center" style={{ borderTop: `2px solid ${T.tealMid}` }}>
-            <CheckCircle className="w-16 h-16 mx-auto mb-5" style={{ color: T.tealMid }} />
-            <h2 className="font-playfair text-3xl font-bold mb-3" style={{ color: T.ink }}>Enquiry Received!</h2>
-            <p className="font-inter mb-2" style={{ color: T.stone }}>
-              Thank you for your enquiry. The team at <strong style={{ color: T.ink }}>{venueName}</strong> will be in touch within 24 hours.
+          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-10 text-center">
+            <CheckCircle className="w-16 h-16 mx-auto mb-5" style={{ color: primaryColor }} />
+            <h2 className="text-3xl font-bold mb-3 font-serif text-gray-800">Enquiry Received!</h2>
+            <p className="text-gray-500 mb-2">
+              Thank you for your enquiry. The team at <strong className="text-gray-800">{venueName}</strong> will be in touch within 24 hours.
             </p>
-            <p className="font-inter text-sm" style={{ color: `${T.stone}99` }}>
+            <p className="text-sm text-gray-400">
               A confirmation has been noted. Please check your email for updates.
             </p>
-            <div className="mt-8 pt-6 border-t border-dashed" style={{ borderColor: T.border }}>
-              <div className="flex items-center justify-center">
-                <img
-                  src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-                  alt="HOSTit"
-                  className="h-8 w-auto object-contain"
-                />
-              </div>
-              <div className="font-bebas text-xs tracking-widest mt-1" style={{ color: T.stone }}>EVENT CRM FOR NEW ZEALAND VENUES</div>
+            <div className="mt-8 pt-6 border-t border-dashed border-gray-200">
+              <div className="font-bold text-xs tracking-widest text-gray-400">POWERED BY HOSTit</div>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Personal Details */}
-            <div className="paradiso-card p-6">
-              <h2 className="font-bebas text-xs tracking-widest mb-4" style={{ color: T.stone }}>YOUR DETAILS</h2>
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">YOUR DETAILS</h2>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>FIRST NAME *</label>
+                  <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">FIRST NAME *</label>
                   <Input required value={form.firstName} onChange={set("firstName")} placeholder="Jane" className={inputClass} />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>LAST NAME</label>
+                  <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">LAST NAME</label>
                   <Input value={form.lastName} onChange={set("lastName")} placeholder="Smith" className={inputClass} />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>EMAIL *</label>
+                  <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">EMAIL *</label>
                   <Input required type="email" value={form.email} onChange={set("email")} placeholder="jane@example.com" className={inputClass} />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>PHONE</label>
+                  <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">PHONE</label>
                   <Input type="tel" value={form.phone} onChange={set("phone")} placeholder="+64 21 000 0000" className={inputClass} />
                 </div>
                 <div className="col-span-2">
-                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>COMPANY / ORGANISATION</label>
+                  <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">COMPANY / ORGANISATION</label>
                   <Input value={form.company} onChange={set("company")} placeholder="Acme Ltd" className={inputClass} />
                 </div>
               </div>
             </div>
 
             {/* Event Details */}
-            <div className="paradiso-card p-6">
-              <h2 className="font-bebas text-xs tracking-widest mb-4" style={{ color: T.stone }}>EVENT DETAILS</h2>
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">EVENT DETAILS</h2>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>TYPE OF EVENT</label>
+                  <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">TYPE OF EVENT</label>
                   <Select value={form.eventType} onValueChange={v => setForm(f => ({ ...f, eventType: v }))}>
-                    <SelectTrigger className="rounded-none border-2 focus:ring-0 font-inter text-sm">
+                    <SelectTrigger className="rounded-sm border border-gray-200 focus:ring-1 font-inter text-sm bg-white">
                       <SelectValue placeholder="Select event type…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -184,26 +190,26 @@ export default function LeadForm() {
                   </Select>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>PREFERRED DATE</label>
+                  <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">PREFERRED DATE</label>
                   <Input type="date" value={form.eventDate} onChange={set("eventDate")}
                     min={new Date().toISOString().split("T")[0]} className={inputClass} />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>GUEST COUNT</label>
+                  <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">GUEST COUNT</label>
                   <Input type="number" value={form.guestCount} onChange={set("guestCount")} placeholder="50" min="1" className={inputClass} />
                 </div>
                 <div className="col-span-2">
-                  <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>APPROXIMATE BUDGET (NZD)</label>
+                  <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">APPROXIMATE BUDGET (NZD)</label>
                   <Input type="number" value={form.budget} onChange={set("budget")} placeholder="5000" className={inputClass} />
                 </div>
               </div>
             </div>
 
             {/* How did you hear */}
-            <div className="paradiso-card p-6">
-              <h2 className="font-bebas text-xs tracking-widest mb-3" style={{ color: T.stone }}>HOW DID YOU HEAR ABOUT US?</h2>
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <h2 className="font-bold text-xs tracking-widest mb-3 text-gray-400">HOW DID YOU HEAR ABOUT US?</h2>
               <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v }))}>
-                <SelectTrigger className="rounded-none border-2 focus:ring-0 font-inter text-sm">
+                <SelectTrigger className="rounded-sm border border-gray-200 focus:ring-1 font-inter text-sm bg-white">
                   <SelectValue placeholder="Select an option…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -213,9 +219,10 @@ export default function LeadForm() {
                 </SelectContent>
               </Select>
             </div>
+
             {/* Message */}
-            <div className="paradiso-card p-6">
-              <h2 className="font-bebas text-xs tracking-widest mb-3" style={{ color: T.stone }}>TELL US MORE</h2>
+            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <h2 className="font-bold text-xs tracking-widest mb-3 text-gray-400">TELL US MORE</h2>
               <Textarea value={form.message} onChange={set("message")}
                 placeholder="Any additional details about your event, special requirements, dietary needs, AV equipment, etc."
                 rows={4} className={`${inputClass} resize-none`} />
@@ -223,12 +230,12 @@ export default function LeadForm() {
 
             {/* Submit */}
             <Button type="submit" disabled={submitLead.isPending}
-              className="w-full font-bebas tracking-widest rounded-none h-14 text-lg shadow-sm transition-colors"
-              style={{ backgroundColor: T.terra, color: T.cream }}>
+              className="w-full font-bold tracking-widest rounded-sm h-14 text-base shadow-sm transition-opacity hover:opacity-90"
+              style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
               {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
             </Button>
 
-            <p className="font-inter text-xs text-center" style={{ color: T.stone }}>
+            <p className="font-inter text-xs text-center text-gray-400">
               By submitting this form you agree to be contacted by {venueName} regarding your event enquiry.
             </p>
           </form>
@@ -236,19 +243,11 @@ export default function LeadForm() {
       </div>
 
       {/* Footer */}
-      <div className="py-8 text-center mt-4" style={{ backgroundColor: T.ink, borderTop: `2px solid ${T.terra}55` }}>
-        <div className="flex items-center justify-center mb-1">
-          <img
-            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-            alt="HOSTit"
-            className="h-8 w-auto object-contain"
-            style={{ filter: 'brightness(0) invert(1)' }}
-          />
-        </div>
-        <div className="font-bebas text-xs tracking-widest" style={{ color: 'oklch(0.500 0.020 60)' }}>EVENT CRM · MADE FOR NEW ZEALAND VENUES</div>
+      <div className="py-8 text-center mt-4 bg-gray-800 border-t border-gray-700">
+        <div className="font-bold text-xs tracking-widest text-gray-500">POWERED BY HOSTit · EVENT CRM FOR NEW ZEALAND VENUES</div>
         <div className="mt-3">
           <Link href="/dashboard">
-            <span className="font-inter text-xs cursor-pointer transition-colors" style={{ color: 'oklch(0.450 0.020 60)' }}>Venue owner? Sign in →</span>
+            <span className="font-inter text-xs cursor-pointer transition-colors text-gray-600 hover:text-gray-400">Venue owner? Sign in →</span>
           </Link>
         </div>
       </div>

@@ -138,6 +138,54 @@ export default function RunsheetBuilder() {
   const [proposalSectionOpen, setProposalSectionOpen] = useState(false);
 
   // Checklist items (pre-event tasks)
+  // Templates panel
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  const { data: templates, refetch: refetchTemplates } = trpc.runsheetTemplates.list.useQuery();
+  const createTemplateMutation = trpc.runsheetTemplates.create.useMutation({
+    onSuccess: () => { toast.success('Template saved!'); refetchTemplates(); setSaveTemplateName(''); },
+    onError: () => toast.error('Failed to save template'),
+  });
+  const deleteTemplateMutation = trpc.runsheetTemplates.delete.useMutation({
+    onSuccess: () => { toast.success('Template deleted'); refetchTemplates(); },
+    onError: () => toast.error('Failed to delete template'),
+  });
+
+  async function saveAsTemplate() {
+    if (!saveTemplateName.trim()) { toast.error('Enter a template name'); return; }
+    setSavingTemplate(true);
+    try {
+      await createTemplateMutation.mutateAsync({
+        name: saveTemplateName.trim(),
+        eventType: eventType || undefined,
+        items: items.map((item, i) => ({
+          time: item.time,
+          duration: item.duration,
+          title: item.title,
+          description: item.description,
+          assignedTo: item.assignedTo,
+          category: item.category,
+          sortOrder: i,
+        })),
+      });
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
+  function loadTemplate(template: any) {
+    const templateItems = (template.items as any[]).map((item: any, i: number) => ({
+      ...item,
+      _tempId: `tpl-${Date.now()}-${i}`,
+    }));
+    setItems(templateItems);
+    if (template.eventType) setEventType(template.eventType);
+    toast.success(`Loaded template: ${template.name}`);
+    setShowTemplates(false);
+  }
+
   const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>([
     { id: "c1", text: "Confirm final guest numbers with client", checked: false, category: "admin" },
     { id: "c2", text: "Send final invoice / confirm payment", checked: false, category: "admin" },
@@ -230,6 +278,10 @@ export default function RunsheetBuilder() {
     { enabled: !!linkedProposalId }
   );
   const { data: proposalDrinks } = trpc.proposals.getDrinks.useQuery(
+    { proposalId: linkedProposalId! },
+    { enabled: !!linkedProposalId }
+  );
+  const { data: proposalQuote } = trpc.quote.get.useQuery(
     { proposalId: linkedProposalId! },
     { enabled: !!linkedProposalId }
   );
@@ -548,6 +600,14 @@ export default function RunsheetBuilder() {
         </div>
         <div className="flex items-center gap-3">
           <button
+            onClick={() => setShowTemplates(v => !v)}
+            className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 transition-colors px-3 py-1.5 border ${
+              showTemplates ? 'border-[#d4a843] text-[#d4a843] bg-[#d4a843]/10' : 'border-white/20 text-white/60 hover:text-[#d4a843] hover:border-[#d4a843]/50'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" /> TEMPLATES
+          </button>
+          <button
             onClick={() => window.print()}
             className="font-bebas tracking-widest text-xs text-white/60 hover:text-[#d4a843] flex items-center gap-1.5 transition-colors"
           >
@@ -580,6 +640,73 @@ export default function RunsheetBuilder() {
           </Button>
         </div>
       </div>
+
+      {/* ── Templates Panel ─────────────────────────────────────────────── */}
+      {showTemplates && (
+        <div className="bg-[#1a1a1a] border-b border-[#333] no-print">
+          <div className="max-w-5xl mx-auto px-6 py-5">
+            <div className="flex items-start gap-6">
+              {/* Save current as template */}
+              <div className="flex-1">
+                <div className="font-bebas tracking-widest text-[#d4a843] text-sm mb-3">SAVE CURRENT TIMELINE AS TEMPLATE</div>
+                <div className="flex gap-2">
+                  <input
+                    value={saveTemplateName}
+                    onChange={e => setSaveTemplateName(e.target.value)}
+                    placeholder="Template name (e.g. Wedding Dinner)..."
+                    className="flex-1 bg-[#2a2a2a] border border-[#444] text-white placeholder-white/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-[#d4a843]"
+                    onKeyDown={e => e.key === 'Enter' && saveAsTemplate()}
+                  />
+                  <button
+                    onClick={saveAsTemplate}
+                    disabled={savingTemplate || !saveTemplateName.trim()}
+                    className="bg-[#d4a843] hover:bg-[#d4a843]/90 disabled:opacity-40 text-[#1a1a1a] font-bebas tracking-widest text-xs px-4 py-2 flex items-center gap-1.5 transition-colors"
+                  >
+                    <Save className="w-3.5 h-3.5" /> {savingTemplate ? 'SAVING...' : 'SAVE'}
+                  </button>
+                </div>
+                {items.length === 0 && (
+                  <p className="text-white/30 text-xs font-dm mt-2">Add timeline items first before saving as a template.</p>
+                )}
+              </div>
+              {/* Divider */}
+              <div className="w-px bg-[#333] self-stretch" />
+              {/* Saved templates */}
+              <div className="flex-1">
+                <div className="font-bebas tracking-widest text-[#d4a843] text-sm mb-3">LOAD A SAVED TEMPLATE</div>
+                {!templates || templates.length === 0 ? (
+                  <p className="text-white/30 text-sm font-dm">No templates saved yet. Save your first timeline above.</p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {templates.map((tpl: any) => (
+                      <div key={tpl.id} className="flex items-center gap-2 bg-[#2a2a2a] border border-[#333] px-3 py-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-dm text-sm text-white truncate">{tpl.name}</div>
+                          <div className="font-dm text-xs text-white/40">
+                            {(tpl.items as any[]).length} items{tpl.eventType ? ` · ${tpl.eventType}` : ''}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => loadTemplate(tpl)}
+                          className="font-bebas tracking-widest text-xs bg-[#8D957E] hover:bg-[#8D957E]/90 text-white px-3 py-1.5 transition-colors flex-shrink-0"
+                        >
+                          LOAD
+                        </button>
+                        <button
+                          onClick={() => { if (confirm(`Delete template "${tpl.name}"?`)) deleteTemplateMutation.mutate({ id: tpl.id }); }}
+                          className="text-white/30 hover:text-red-400 transition-colors flex-shrink-0 p-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-5xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0">
 
@@ -1124,6 +1251,106 @@ export default function RunsheetBuilder() {
               <UtensilsCrossed className="w-4 h-4 text-white" />
               <span className="font-bebas tracking-widest text-sm text-white">F&B SHEET — {fnbSection === 'foh' ? 'FRONT OF HOUSE' : 'KITCHEN'}</span>
             </div>
+
+            {/* ── PROPOSAL F&B SUMMARY ─────────────────────────────────── */}
+            {linkedProposalId && (proposalDrinks || (proposalQuote?.items && proposalQuote.items.length > 0) || (linkedProposal?.lineItems)) && (
+              <div className="mx-5 my-4 border border-[#d4a843]/40 bg-[#fffbf0] p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <UtensilsCrossed className="w-3.5 h-3.5 text-[#d4a843]" />
+                  <span className="font-bebas tracking-widest text-xs text-[#8b6914]">FOOD & BEVERAGE FROM PROPOSAL</span>
+                </div>
+
+                {/* Food items from line items */}
+                {linkedProposal?.lineItems && (() => {
+                  try {
+                    const li = JSON.parse(linkedProposal.lineItems as string ?? '[]') as any[];
+                    const foodItems = li.filter((item: any) => item.description);
+                    if (!foodItems.length) return null;
+                    return (
+                      <div>
+                        <div className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 mb-1.5">FOOD & PRICING</div>
+                        <div className="space-y-1">
+                          {foodItems.map((item: any, i: number) => (
+                            <div key={i} className="flex justify-between items-start text-xs font-dm">
+                              <span className="text-[#1a1a1a]/80 flex-1">
+                                {item.description}
+                                {item.qty > 1 ? <span className="text-[#1a1a1a]/40 ml-1">× {item.qty}</span> : null}
+                              </span>
+                              <span className="font-semibold text-[#1a1a1a] ml-3">${Number(item.total ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  } catch { return null; }
+                })()}
+
+                {/* Quote items (hire, styling, etc.) */}
+                {proposalQuote?.items && proposalQuote.items.length > 0 && (
+                  <div>
+                    <div className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 mb-1.5">ADDITIONAL ITEMS</div>
+                    <div className="space-y-1">
+                      {proposalQuote.items.map((item: any) => (
+                        <div key={item.id} className="flex justify-between items-start text-xs font-dm">
+                          <div className="flex-1">
+                            <span className="text-[#1a1a1a]/80">{item.name}</span>
+                            {item.description && <span className="text-[#1a1a1a]/40 ml-1">— {item.description}</span>}
+                            {Number(item.qty) > 1 && <span className="text-[#1a1a1a]/40 ml-1">× {item.qty}</span>}
+                          </div>
+                          <span className="font-semibold text-[#1a1a1a] ml-3">${(Number(item.qty) * Number(item.unitPrice)).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Bar / Beverages */}
+                {proposalDrinks && (
+                  <div>
+                    <div className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 mb-1.5">BAR & BEVERAGES</div>
+                    <div className="text-xs font-dm text-[#1a1a1a]/80 capitalize mb-1">
+                      <span className="font-semibold">{proposalDrinks.barOption?.replace(/_/g, ' ')}</span>
+                      {proposalDrinks.tabAmount ? ` — Bar tab: $${Number(proposalDrinks.tabAmount).toLocaleString('en-NZ')}` : ''}
+                    </div>
+                    {(proposalDrinks.selectedDrinks as string[])?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {(proposalDrinks.selectedDrinks as string[]).map(k => (
+                          <span key={k} className="bg-green-100 text-green-800 text-[10px] px-2 py-0.5 font-dm border border-green-200">
+                            {k.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {(proposalDrinks.customDrinks as any[])?.length > 0 && (
+                      <div className="space-y-0.5">
+                        {(proposalDrinks.customDrinks as any[]).map((d: any, i: number) => (
+                          <div key={i} className="text-xs font-dm text-[#1a1a1a]/70 flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-[#d4a843] inline-block flex-shrink-0" />
+                            {d.name}{d.description ? ` — ${d.description}` : ''}{d.price ? ` ($${d.price})` : ''}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Guest count + dietary summary */}
+                {(linkedProposal?.guestCount || linkedProposal?.spaceName) && (
+                  <div className="flex gap-4 pt-1 border-t border-[#d4a843]/20 text-xs font-dm text-[#1a1a1a]/60">
+                    {linkedProposal.guestCount && <span><span className="font-semibold text-[#1a1a1a]/80">{linkedProposal.guestCount}</span> guests</span>}
+                    {linkedProposal.spaceName && <span>Space: <span className="font-semibold text-[#1a1a1a]/80">{linkedProposal.spaceName}</span></span>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* No proposal linked notice */}
+            {!linkedProposalId && (
+              <div className="mx-5 my-3 p-3 bg-[#f5f3ef] border border-[#e8e0d0] text-xs font-dm text-[#1a1a1a]/50 flex items-center gap-2">
+                <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                Link a proposal in the sidebar to automatically pull in food & beverage selections.
+              </div>
+            )}
 
             {/* Add new item form */}
             <div className="px-5 py-4 border-b border-[#e8e0d0] bg-[#f5f3ef]/50 no-print">

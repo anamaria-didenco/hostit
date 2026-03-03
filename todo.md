@@ -559,3 +559,29 @@
 - [x] Delete enquiry button in lead detail panel (with confirmation)
 - [x] Delete confirmed event button in Calendar list view (with confirmation)
 - [x] Auto-generate runsheet button from confirmed event in lead detail panel
+
+## Follow-ups + Mobile (Mar 2026 Session 3)
+- [ ] Read/unread tracking: add readAt to leads, clear nav badge when enquiry opened
+- [ ] Calendar event dot click-through: clicking a dot opens booking detail drawer
+- [ ] Runsheet template presets: save/load custom default timelines
+- [ ] Mobile nav: bottom tab bar on phones (Home, Enquiries, Calendar, Tasks, Settings)
+- [ ] Mobile dashboard: full-width calendar, stacked sidebar content
+- [ ] Mobile enquiries: full-screen list → detail slide-in
+- [ ] Mobile calendar: swipe month navigation, tap event dot to open detail
+- [ ] Mobile settings: full-width stacked layout, no sidebar
+- [ ] Mobile runsheet builder: stacked rows, large tap targets
+- [ ] Mobile lead form (public): already responsive, verify on small screens
+
+## Bug Fixes & UX Improvements (Mar 2026)
+- [x] Fix Automated Tasks settings layout (divider pushing content right)
+- [x] Fix Billing settings layout (same divider issue)
+- [x] Fix Spaces editing (can't edit event spaces)
+- [x] Fix Contact Form editing + branding cohesion
+- [x] Fix Group Contact Form (can't upload, bad spacing)
+- [x] Add sort dropdown for Enquiries (date booked, event date, status, enquiry date, asc/desc)
+- [x] Add sort dropdown for Events/calendar list
+- [x] Make calendar event names clickable to open booking
+- [x] Add easy delete button for events in calendar (month/week/day/list views)
+- [x] Rename 'booked' status to 'confirmed' throughout the app
+- [ ] Fix PDF saving (proposals, runsheets, staff sheets not saving/downloading)
+- [x] Add food & beverage selections to RunsheetBuilder (from linked proposal)

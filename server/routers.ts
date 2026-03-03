@@ -165,6 +165,25 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         return createEventSpace({ ownerId: ctx.user.id, ...input });
       }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).optional(),
+        description: z.string().optional().nullable(),
+        minCapacity: z.number().optional().nullable(),
+        maxCapacity: z.number().optional().nullable(),
+        minSpend: z.number().optional().nullable(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { eventSpaces } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return;
+        const { id, ...fields } = input;
+        await db.update(eventSpaces).set(fields as any).where(and(eq(eventSpaces.id, id), eq(eventSpaces.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
   }),
 
   // ─── Contacts ──────────────────────────────────────────────────────────────
@@ -360,6 +379,21 @@ export const appRouter = router({
          await db.delete(leads).where(and(eq(leads.id, input.id), eq(leads.ownerId, ctx.user.id)));
         return { success: true };
       }),
+    // Mark a lead as read (clears the unread badge)
+    markRead: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { leads } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { success: false };
+        await db.update(leads)
+          .set({ readAt: new Date() })
+          .where(and(eq(leads.id, input.id), eq(leads.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
     // Dedicated follow-up date setter (convenience wrapper around update)
     setFollowUpDate: protectedProcedure
       .input(z.object({
@@ -1576,8 +1610,8 @@ export const appRouter = router({
         time: z.string(),
         duration: z.number().optional(),
         title: z.string(),
-        description: z.string().optional(),
-        assignedTo: z.string().optional(),
+        description: z.string().nullable().optional(),
+        assignedTo: z.string().nullable().optional(),
         category: z.string().optional(),
         sortOrder: z.number().default(0),
       }))
@@ -1606,8 +1640,8 @@ export const appRouter = router({
         time: z.string().optional(),
         duration: z.number().optional(),
         title: z.string().optional(),
-        description: z.string().optional(),
-        assignedTo: z.string().optional(),
+        description: z.string().nullable().optional(),
+        assignedTo: z.string().nullable().optional(),
         category: z.string().optional(),
         sortOrder: z.number().optional(),
       }))
@@ -2319,6 +2353,58 @@ export const appRouter = router({
         } else {
           await db.insert(userPreferences).values({ ownerId: ctx.user.id, dashboardLayout: layout });
         }
+        return { success: true };
+      }),
+  }),
+
+  // ── Runsheet Templates ────────────────────────────────────────────────────
+  runsheetTemplates: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { runsheetTemplates } = await import('../drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(runsheetTemplates)
+        .where(eq(runsheetTemplates.ownerId, ctx.user.id))
+        .orderBy(desc(runsheetTemplates.createdAt));
+    }),
+
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+        description: z.string().optional(),
+        eventType: z.string().optional(),
+        items: z.array(z.any()),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { runsheetTemplates } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        const [result] = await db.insert(runsheetTemplates).values({
+          ownerId: ctx.user.id,
+          name: input.name,
+          description: input.description ?? null,
+          eventType: input.eventType ?? null,
+          items: input.items,
+          createdAt: now,
+          updatedAt: now,
+        });
+        return { id: (result as any).insertId, success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { runsheetTemplates } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { success: false };
+        await db.delete(runsheetTemplates)
+          .where(and(eq(runsheetTemplates.id, input.id), eq(runsheetTemplates.ownerId, ctx.user.id)));
         return { success: true };
       }),
   }),
