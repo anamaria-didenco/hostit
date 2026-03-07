@@ -190,7 +190,8 @@ export default function RunsheetBuilder() {
   const [showCatalogSelector, setShowCatalogSelector] = useState(false);
   const [catalogSelectorType, setCatalogSelectorType] = useState<'food'|'drink'>('food');
   const [catalogSelectorCategoryId, setCatalogSelectorCategoryId] = useState<number|null>(null);
-  const [catalogSelectedItems, setCatalogSelectedItems] = useState<Set<number>>(new Set());
+  // Map<itemId, qty> for catalogue selector
+  const [catalogSelectedItems, setCatalogSelectedItems] = useState<Map<number, number>>(new Map());
   const { data: catalogCategories } = trpc.menuCatalog.listCategories.useQuery(
     { type: catalogSelectorType },
     { enabled: showCatalogSelector }
@@ -218,7 +219,7 @@ export default function RunsheetBuilder() {
         course: catalogSelectorType === 'food' ? (catalogCategories?.find((c: any) => c.id === catalogSelectorCategoryId)?.name ?? 'Other') : 'Drinks',
         dishName: ci.name,
         description: ci.description ?? '',
-        qty: 1,
+        qty: catalogSelectedItems.get(ci.id) ?? 1,
         dietary: '',
         serviceTime: '',
         staffAssigned: '',
@@ -226,7 +227,7 @@ export default function RunsheetBuilder() {
         _tempId: `cat-${Date.now()}-${i}`,
       }));
     setFnbItems(prev => [...prev, ...toAdd]);
-    setCatalogSelectedItems(new Set());
+    setCatalogSelectedItems(new Map());
     setShowCatalogSelector(false);
     toast.success(`Added ${toAdd.length} item${toAdd.length > 1 ? 's' : ''} to F&B sheet`);
   }
@@ -1431,7 +1432,7 @@ export default function RunsheetBuilder() {
                   ADD {fnbSection === 'foh' ? 'FOH' : 'KITCHEN'} ITEM
                 </div>
                 <button
-                  onClick={() => { setShowCatalogSelector(true); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Set()); }}
+                  onClick={() => { setShowCatalogSelector(true); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); }}
                   className="font-bebas tracking-widest text-[10px] text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-2.5 py-1 hover:bg-forest/5 transition-colors"
                 >
                   <UtensilsCrossed className="w-3 h-3" /> ADD FROM MENU CATALOGUE
@@ -1879,24 +1880,78 @@ export default function RunsheetBuilder() {
                     </div>
                   ) : (
                     <div className="border border-gold/30 divide-y divide-gold/20">
-                      <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-linen">
+                      <div className="grid grid-cols-12 gap-1 px-3 py-2 bg-linen">
                         <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/50">TIME</div>
                         <div className="col-span-1 font-bebas text-[10px] tracking-widest text-ink/50">MINS</div>
-                        <div className="col-span-5 font-bebas text-[10px] tracking-widest text-ink/50">TITLE</div>
+                        <div className="col-span-4 font-bebas text-[10px] tracking-widest text-ink/50">TITLE</div>
                         <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/50">CATEGORY</div>
                         <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/50">DESCRIPTION</div>
+                        <div className="col-span-1 font-bebas text-[10px] tracking-widest text-ink/50"></div>
                       </div>
                       {parsedItems.map((item: any, i: number) => (
-                        <div key={i} className="grid grid-cols-12 gap-2 px-3 py-2 items-start text-sm font-dm hover:bg-linen/50">
-                          <div className="col-span-2 font-mono text-xs text-forest font-semibold">{item.time ?? '—'}</div>
-                          <div className="col-span-1 text-ink/60 text-xs">{item.duration ?? 30}m</div>
-                          <div className="col-span-5 font-medium text-ink">{item.title ?? 'Untitled'}</div>
+                        <div key={i} className="grid grid-cols-12 gap-1 px-3 py-2 items-center text-sm font-dm hover:bg-linen/30 group">
+                          {/* TIME */}
                           <div className="col-span-2">
-                            <span className={`text-[10px] font-bebas px-1.5 py-0.5 ${catStyle(String(item.category ?? 'other').toLowerCase())}`}>
-                              {item.category ?? 'Other'}
-                            </span>
+                            <input
+                              type="text"
+                              value={item.time ?? ''}
+                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, time: e.target.value } : p) : prev)}
+                              className="w-full font-mono text-xs text-forest font-semibold bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5"
+                              placeholder="HH:MM"
+                            />
                           </div>
-                          <div className="col-span-2 text-xs text-ink/50 truncate">{item.description ?? ''}</div>
+                          {/* DURATION */}
+                          <div className="col-span-1">
+                            <input
+                              type="number"
+                              value={item.duration ?? 30}
+                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, duration: parseInt(e.target.value) || 30 } : p) : prev)}
+                              className="w-full text-xs text-ink/60 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5"
+                              min={1}
+                            />
+                          </div>
+                          {/* TITLE */}
+                          <div className="col-span-4">
+                            <input
+                              type="text"
+                              value={item.title ?? ''}
+                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, title: e.target.value } : p) : prev)}
+                              className="w-full font-medium text-ink text-sm bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5"
+                              placeholder="Title"
+                            />
+                          </div>
+                          {/* CATEGORY */}
+                          <div className="col-span-2">
+                            <select
+                              value={item.category ?? 'other'}
+                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, category: e.target.value } : p) : prev)}
+                              className={`w-full text-[10px] font-bebas px-1 py-0.5 border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none ${catStyle(String(item.category ?? 'other').toLowerCase())}`}
+                            >
+                              {CATEGORIES.map(c => (
+                                <option key={c.value} value={c.value}>{c.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {/* DESCRIPTION */}
+                          <div className="col-span-2">
+                            <input
+                              type="text"
+                              value={item.description ?? ''}
+                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, description: e.target.value } : p) : prev)}
+                              className="w-full text-xs text-ink/50 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5"
+                              placeholder="Notes…"
+                            />
+                          </div>
+                          {/* DELETE */}
+                          <div className="col-span-1 flex justify-end">
+                            <button
+                              onClick={() => setParsedItems(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
+                              className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-500 transition-all p-0.5"
+                              title="Remove this item"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1940,7 +1995,7 @@ export default function RunsheetBuilder() {
               {(['food', 'drink'] as const).map(t => (
                 <button
                   key={t}
-                  onClick={() => { setCatalogSelectorType(t); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Set()); }}
+                  onClick={() => { setCatalogSelectorType(t); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); }}
                   className={`flex-1 py-3 font-bebas tracking-widest text-sm transition-colors ${
                     catalogSelectorType === t ? 'bg-forest text-white' : 'text-ink/50 hover:bg-linen'
                   }`}
@@ -1960,7 +2015,7 @@ export default function RunsheetBuilder() {
                   catalogCategories.map((cat: any) => (
                     <button
                       key={cat.id}
-                      onClick={() => { setCatalogSelectorCategoryId(cat.id); setCatalogSelectedItems(new Set()); }}
+                      onClick={() => { setCatalogSelectorCategoryId(cat.id); setCatalogSelectedItems(new Map()); }}
                       className={`w-full text-left px-3 py-2.5 font-dm text-sm transition-colors border-b border-gold/20 ${
                         catalogSelectorCategoryId === cat.id ? 'bg-forest text-white' : 'hover:bg-linen text-ink'
                       }`}
@@ -1988,38 +2043,72 @@ export default function RunsheetBuilder() {
                   <div className="divide-y divide-gold/20">
                     {catalogItems.map((item: any) => {
                       const isSelected = catalogSelectedItems.has(item.id);
+                      const qty = catalogSelectedItems.get(item.id) ?? 1;
                       return (
-                        <button
+                        <div
                           key={item.id}
-                          onClick={() => {
-                            setCatalogSelectedItems(prev => {
-                              const next = new Set(prev);
-                              if (next.has(item.id)) next.delete(item.id);
-                              else next.add(item.id);
-                              return next;
-                            });
-                          }}
-                          className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors ${
-                            isSelected ? 'bg-forest/10 border-l-2 border-forest' : 'hover:bg-linen border-l-2 border-transparent'
+                          className={`px-4 py-3 flex items-start gap-3 transition-colors ${
+                            isSelected ? 'bg-forest/10 border-l-2 border-forest' : 'border-l-2 border-transparent hover:bg-linen'
                           }`}
                         >
-                          <div className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                            isSelected ? 'bg-forest border-forest' : 'border-ink/30'
-                          }`}>
+                          {/* Checkbox toggle */}
+                          <button
+                            onClick={() => {
+                              setCatalogSelectedItems(prev => {
+                                const next = new Map(prev);
+                                if (next.has(item.id)) next.delete(item.id);
+                                else next.set(item.id, 1);
+                                return next;
+                              });
+                            }}
+                            className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                              isSelected ? 'bg-forest border-forest' : 'border-ink/30'
+                            }`}
+                          >
                             {isSelected && <span className="text-white text-[10px] leading-none">✓</span>}
-                          </div>
-                          <div className="flex-1 min-w-0">
+                          </button>
+                          {/* Item info */}
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => {
+                            setCatalogSelectedItems(prev => {
+                              const next = new Map(prev);
+                              if (next.has(item.id)) next.delete(item.id);
+                              else next.set(item.id, 1);
+                              return next;
+                            });
+                          }}>
                             <div className="font-dm text-sm font-medium text-ink">{item.name}</div>
                             {item.description && <div className="font-dm text-xs text-ink/50 mt-0.5 truncate">{item.description}</div>}
                             {item.allergens && <div className="font-dm text-[10px] text-amber-700 mt-0.5">⚠ {item.allergens}</div>}
                           </div>
+                          {/* Qty input (only when selected) */}
+                          {isSelected && (
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={e => { e.stopPropagation(); setCatalogSelectedItems(prev => { const next = new Map(prev); const cur = next.get(item.id) ?? 1; if (cur <= 1) next.delete(item.id); else next.set(item.id, cur - 1); return next; }); }}
+                                className="w-5 h-5 border border-forest/40 text-forest hover:bg-forest/10 flex items-center justify-center text-xs font-bold"
+                              >-</button>
+                              <input
+                                type="number"
+                                min={1}
+                                value={qty}
+                                onClick={e => e.stopPropagation()}
+                                onChange={e => { const v = Math.max(1, parseInt(e.target.value) || 1); setCatalogSelectedItems(prev => { const next = new Map(prev); next.set(item.id, v); return next; }); }}
+                                className="w-10 text-center text-xs font-dm border border-gold/30 focus:border-forest focus:outline-none py-0.5"
+                              />
+                              <button
+                                onClick={e => { e.stopPropagation(); setCatalogSelectedItems(prev => { const next = new Map(prev); next.set(item.id, (next.get(item.id) ?? 1) + 1); return next; }); }}
+                                className="w-5 h-5 border border-forest/40 text-forest hover:bg-forest/10 flex items-center justify-center text-xs font-bold"
+                              >+</button>
+                            </div>
+                          )}
+                          {/* Price */}
                           {item.price > 0 && (
                             <div className="text-right flex-shrink-0">
                               <div className="font-dm text-sm font-semibold text-ink">${(item.price / 100).toFixed(2)}</div>
                               <div className="font-bebas text-[9px] text-ink/40 tracking-widest">{item.pricingType === 'per_person' ? 'PP' : 'EACH'}</div>
                             </div>
                           )}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -2030,7 +2119,9 @@ export default function RunsheetBuilder() {
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gold/30 flex items-center justify-between bg-linen/50">
               <span className="font-dm text-sm text-ink/60">
-                {catalogSelectedItems.size > 0 ? `${catalogSelectedItems.size} item${catalogSelectedItems.size > 1 ? 's' : ''} selected` : 'Select items to add'}
+                {catalogSelectedItems.size > 0
+                  ? (() => { const totalQty = Array.from(catalogSelectedItems.values()).reduce((a, b) => a + b, 0); return `${catalogSelectedItems.size} item${catalogSelectedItems.size > 1 ? 's' : ''} selected · ${totalQty} total qty`; })()
+                  : 'Select items to add'}
               </span>
               <div className="flex gap-3">
                 <button onClick={() => setShowCatalogSelector(false)} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>

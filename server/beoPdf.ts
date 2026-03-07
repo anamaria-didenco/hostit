@@ -402,7 +402,7 @@ ${notesHtml}
     }
 
     const browser = await puppeteer.launch({
-      executablePath: "/usr/bin/chromium-browser",
+      executablePath: "/usr/lib/chromium-browser/chromium-browser",
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
       headless: true,
     });

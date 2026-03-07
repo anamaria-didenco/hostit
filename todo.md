@@ -592,3 +592,13 @@
 - [x] Persist selected theme in venue_settings.themeKey field (added to DB)
 - [x] Apply theme on app load from venue settings (useEffect sets data-theme on html element)
 - [x] Fix RunsheetBuilder to use CSS brand tokens (removed all 205 hardcoded hex colours)
+
+## Phase 12: RunsheetBuilder UX Improvements
+- [x] Editable parsed items in Smart Paste preview (inline edit time/title/category/duration before confirming)
+- [x] Quantity input in Menu Catalogue selector (set qty/covers at selection time)
+- [x] Fix PDF export for BEO and Staff Sheet (Puppeteer executablePath fixed: /usr/lib/chromium-browser/chromium-browser)
+
+## Phase 12: RunsheetBuilder UX Improvements
+- [x] Editable parsed items in Smart Paste preview (inline edit time/title/category/duration before confirming)
+- [x] Quantity input in Menu Catalogue selector (set qty/covers at selection time)
+- [x] Fix PDF export for BEO and Staff Sheet (Puppeteer executablePath fixed: /usr/lib/chromium-browser/chromium-browser)
