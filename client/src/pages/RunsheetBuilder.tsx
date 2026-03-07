@@ -586,15 +586,15 @@ export default function RunsheetBuilder() {
   const checkedCount = checklistItems.filter(i => i.checked).length;
 
   return (
-    <div className="min-h-screen bg-[#f5f3ef] print:bg-white">
+    <div className="min-h-screen bg-linen print:bg-white">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="no-print bg-[#1a1a1a] border-b border-white/10 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
+      <div className="no-print bg-forest border-b border-white/10 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate("/")} className="text-white/50 hover:text-white transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <span className="font-bebas tracking-widest text-[#d4a843] text-sm">RUNSHEET BUILDER</span>
+            <span className="font-bebas tracking-widest text-gold text-sm">RUNSHEET BUILDER</span>
             {sheetId && <span className="ml-2 text-white/30 text-xs font-dm">#{sheetId}</span>}
           </div>
         </div>
@@ -602,14 +602,14 @@ export default function RunsheetBuilder() {
           <button
             onClick={() => setShowTemplates(v => !v)}
             className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 transition-colors px-3 py-1.5 border ${
-              showTemplates ? 'border-[#d4a843] text-[#d4a843] bg-[#d4a843]/10' : 'border-white/20 text-white/60 hover:text-[#d4a843] hover:border-[#d4a843]/50'
+              showTemplates ? 'border-gold text-gold bg-gold/10' : 'border-white/20 text-white/60 hover:text-gold hover:border-gold/50'
             }`}
           >
             <FileText className="w-3.5 h-3.5" /> TEMPLATES
           </button>
           <button
             onClick={() => window.print()}
-            className="font-bebas tracking-widest text-xs text-white/60 hover:text-[#d4a843] flex items-center gap-1.5 transition-colors"
+            className="font-bebas tracking-widest text-xs text-white/60 hover:text-gold flex items-center gap-1.5 transition-colors"
           >
             <Printer className="w-4 h-4" /> PRINT
           </button>
@@ -633,7 +633,7 @@ export default function RunsheetBuilder() {
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-[#8b1a1a] hover:bg-[#8b1a1a]/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
+            className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? "SAVING..." : "SAVE RUNSHEET"}
@@ -643,24 +643,24 @@ export default function RunsheetBuilder() {
 
       {/* ── Templates Panel ─────────────────────────────────────────────── */}
       {showTemplates && (
-        <div className="bg-[#1a1a1a] border-b border-[#333] no-print">
+        <div className="bg-forest border-b border-white/10 no-print">
           <div className="max-w-5xl mx-auto px-6 py-5">
             <div className="flex items-start gap-6">
               {/* Save current as template */}
               <div className="flex-1">
-                <div className="font-bebas tracking-widest text-[#d4a843] text-sm mb-3">SAVE CURRENT TIMELINE AS TEMPLATE</div>
+                <div className="font-bebas tracking-widest text-gold text-sm mb-3">SAVE CURRENT TIMELINE AS TEMPLATE</div>
                 <div className="flex gap-2">
                   <input
                     value={saveTemplateName}
                     onChange={e => setSaveTemplateName(e.target.value)}
                     placeholder="Template name (e.g. Wedding Dinner)..."
-                    className="flex-1 bg-[#2a2a2a] border border-[#444] text-white placeholder-white/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-[#d4a843]"
+                    className="flex-1 bg-[#2a2a2a] border border-[#444] text-white placeholder-white/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-gold"
                     onKeyDown={e => e.key === 'Enter' && saveAsTemplate()}
                   />
                   <button
                     onClick={saveAsTemplate}
                     disabled={savingTemplate || !saveTemplateName.trim()}
-                    className="bg-[#d4a843] hover:bg-[#d4a843]/90 disabled:opacity-40 text-[#1a1a1a] font-bebas tracking-widest text-xs px-4 py-2 flex items-center gap-1.5 transition-colors"
+                    className="bg-gold hover:bg-gold/90 disabled:opacity-40 text-ink font-bebas tracking-widest text-xs px-4 py-2 flex items-center gap-1.5 transition-colors"
                   >
                     <Save className="w-3.5 h-3.5" /> {savingTemplate ? 'SAVING...' : 'SAVE'}
                   </button>
@@ -670,16 +670,16 @@ export default function RunsheetBuilder() {
                 )}
               </div>
               {/* Divider */}
-              <div className="w-px bg-[#333] self-stretch" />
+              <div className="w-px bg-white/10 self-stretch" />
               {/* Saved templates */}
               <div className="flex-1">
-                <div className="font-bebas tracking-widest text-[#d4a843] text-sm mb-3">LOAD A SAVED TEMPLATE</div>
+                <div className="font-bebas tracking-widest text-gold text-sm mb-3">LOAD A SAVED TEMPLATE</div>
                 {!templates || templates.length === 0 ? (
                   <p className="text-white/30 text-sm font-dm">No templates saved yet. Save your first timeline above.</p>
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {templates.map((tpl: any) => (
-                      <div key={tpl.id} className="flex items-center gap-2 bg-[#2a2a2a] border border-[#333] px-3 py-2">
+                      <div key={tpl.id} className="flex items-center gap-2 bg-[#2a2a2a] border border-white/10 px-3 py-2">
                         <div className="flex-1 min-w-0">
                           <div className="font-dm text-sm text-white truncate">{tpl.name}</div>
                           <div className="font-dm text-xs text-white/40">
@@ -711,28 +711,28 @@ export default function RunsheetBuilder() {
       <div className="max-w-5xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0">
 
         {/* ── Print Header ────────────────────────────────────────────────── */}
-        <div className="hidden print:block mb-6 pb-4 border-b-2 border-[#1a1a1a]">
+        <div className="hidden print:block mb-6 pb-4 border-b-2 border-ink">
           <div className="flex items-start justify-between">
             <div>
-              <div className="font-bebas text-2xl tracking-widest text-[#8b1a1a] mb-1">FUNCTION RUNSHEET</div>
-              <div className="font-cormorant text-3xl font-semibold text-[#1a1a1a]">{title}</div>
+              <div className="font-bebas text-2xl tracking-widest text-forest mb-1">FUNCTION RUNSHEET</div>
+              <div className="font-cormorant text-3xl font-semibold text-ink">{title}</div>
             </div>
             <div className="text-right">
-              <div className="font-bebas text-xs tracking-widest text-[#1a1a1a]/40 mb-1">PREPARED BY</div>
+              <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">PREPARED BY</div>
               <div className="font-dm text-sm font-semibold">{venueName || "HOSTit"}</div>
-              <div className="font-dm text-xs text-[#1a1a1a]/50">{new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</div>
+              <div className="font-dm text-xs text-ink/50">{new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</div>
             </div>
           </div>
         </div>
 
         {/* ── Event Details Card ──────────────────────────────────────────── */}
-        <div className="bg-white border border-[#e8e0d0] shadow-sm mb-4 print:shadow-none print:border-0 print:mb-2">
+        <div className="bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none print:border-0 print:mb-2">
           {/* Editable title */}
           <div className="px-6 pt-5 pb-3 no-print">
             <Input
               value={title}
               onChange={e => setTitle(e.target.value)}
-              className="text-2xl font-cormorant font-semibold text-[#1a1a1a] border-0 border-b-2 border-[#1a1a1a]/15 focus-visible:border-[#8b1a1a] rounded-none px-0 bg-transparent"
+              className="text-2xl font-cormorant font-semibold text-ink border-0 border-b-2 border-ink/15 focus-visible:border-forest rounded-none px-0 bg-transparent"
               placeholder="Event Runsheet Title"
             />
           </div>
@@ -741,77 +741,77 @@ export default function RunsheetBuilder() {
             {/* Event details grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">DATE</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DATE</label>
                 <Input
                   type="date"
                   value={eventDate}
                   onChange={e => setEventDate(e.target.value)}
-                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{formattedEventDate || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">EVENT TYPE</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">EVENT TYPE</label>
                 <Input
                   value={eventType}
                   onChange={e => setEventType(e.target.value)}
                   placeholder="Wedding, Birthday..."
-                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventType || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">VENUE / SPACE</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">VENUE / SPACE</label>
                 <Input
                   value={spaceName}
                   onChange={e => setSpaceName(e.target.value)}
                   placeholder="Main Hall, Rooftop..."
-                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{spaceName || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">GUESTS</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">GUESTS</label>
                 <Input
                   type="number"
                   value={guestCount}
                   onChange={e => setGuestCount(e.target.value)}
                   placeholder="0"
-                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{guestCount || "—"}</div>
               </div>
             </div>
 
             {/* Contact info row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-[#e8e0d0]">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gold/30">
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1 flex items-center gap-1"><User className="w-3 h-3" /> CLIENT NAME</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1 flex items-center gap-1"><User className="w-3 h-3" /> CLIENT NAME</label>
                 <Input
                   value={contactName}
                   onChange={e => setContactName(e.target.value)}
                   placeholder="Client name..."
-                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm">{contactName || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> PHONE</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> PHONE</label>
                 <Input
                   value={contactPhone}
                   onChange={e => setContactPhone(e.target.value)}
                   placeholder="Phone number..."
-                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm">{contactPhone || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> EMAIL</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> EMAIL</label>
                 <Input
                   value={contactEmail}
                   onChange={e => setContactEmail(e.target.value)}
                   placeholder="Email address..."
-                  className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9 no-print"
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm">{contactEmail || "—"}</div>
               </div>
@@ -820,21 +820,21 @@ export default function RunsheetBuilder() {
         </div>
 
         {/* ── Venue Setup ─────────────────────────────────────────────────── */}
-        <div className="bg-white border border-[#e8e0d0] shadow-sm mb-4 print:shadow-none">
+        <div className="bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none">
           <button
             onClick={() => setSetupSectionOpen(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-[#f5f3ef] transition-colors no-print"
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors no-print"
           >
             <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-[#3b6b8a]" />
-              <span className="font-bebas tracking-widest text-sm text-[#3b6b8a]">VENUE SETUP</span>
-              {venueSetup && <span className="text-xs text-[#3b6b8a]/50 font-dm truncate max-w-[200px]">{venueSetup.substring(0, 40)}{venueSetup.length > 40 ? "..." : ""}</span>}
+              <Building2 className="w-4 h-4 text-forest" />
+              <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
+              {venueSetup && <span className="text-xs text-forest/50 font-dm truncate max-w-[200px]">{venueSetup.substring(0, 40)}{venueSetup.length > 40 ? "..." : ""}</span>}
             </div>
-            {setupSectionOpen ? <ChevronUp className="w-4 h-4 text-[#1a1a1a]/30" /> : <ChevronDown className="w-4 h-4 text-[#1a1a1a]/30" />}
+            {setupSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
           </button>
-          <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-[#e8e0d0]">
-            <Building2 className="w-4 h-4 text-[#3b6b8a]" />
-            <span className="font-bebas tracking-widest text-sm text-[#3b6b8a]">VENUE SETUP</span>
+          <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30">
+            <Building2 className="w-4 h-4 text-forest" />
+            <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
           </div>
           {setupSectionOpen && (
             <div className="px-5 pb-4 pt-2 space-y-3 no-print">
@@ -843,7 +843,7 @@ export default function RunsheetBuilder() {
                   <button
                     key={t.label}
                     onClick={() => setVenueSetup(t.value)}
-                    className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-[#3b6b8a]/30 text-[#3b6b8a] hover:bg-[#3b6b8a]/5 transition-colors"
+                    className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors"
                   >
                     {t.label}
                   </button>
@@ -854,33 +854,33 @@ export default function RunsheetBuilder() {
                 onChange={e => setVenueSetup(e.target.value)}
                 placeholder="Describe the room layout, table arrangement, AV setup, decorations, bar position, dance floor, stage..."
                 rows={3}
-                className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] font-dm text-sm"
+                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm"
               />
             </div>
           )}
           {venueSetup && (
-            <div className="hidden print:block px-5 py-3 font-dm text-sm text-[#1a1a1a]/80 whitespace-pre-wrap">{venueSetup}</div>
+            <div className="hidden print:block px-5 py-3 font-dm text-sm text-ink/80 whitespace-pre-wrap">{venueSetup}</div>
           )}
         </div>
 
         {/* ── Dietary Requirements ─────────────────────────────────────────── */}
-        <div className="bg-white border border-[#e8e0d0] shadow-sm mb-4 print:shadow-none">
+        <div className="bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none">
           <button
             onClick={() => setDietarySectionOpen(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-[#f5f3ef] transition-colors no-print"
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors no-print"
           >
             <div className="flex items-center gap-2">
-              <Leaf className="w-4 h-4 text-[#2d6a2d]" />
-              <span className="font-bebas tracking-widest text-sm text-[#2d6a2d]">DIETARY REQUIREMENTS</span>
+              <Leaf className="w-4 h-4 text-forest" />
+              <span className="font-bebas tracking-widest text-sm text-forest">DIETARY REQUIREMENTS</span>
               {dietaries.length > 0 && (
-                <span className="bg-[#2d6a2d] text-white text-xs font-bebas px-2 py-0.5">{dietaries.length}</span>
+                <span className="bg-forest text-cream text-xs font-bebas px-2 py-0.5">{dietaries.length}</span>
               )}
             </div>
-            {dietarySectionOpen ? <ChevronUp className="w-4 h-4 text-[#1a1a1a]/30" /> : <ChevronDown className="w-4 h-4 text-[#1a1a1a]/30" />}
+            {dietarySectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
           </button>
-          <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-[#e8e0d0]">
-            <Leaf className="w-4 h-4 text-[#2d6a2d]" />
-            <span className="font-bebas tracking-widest text-sm text-[#2d6a2d]">DIETARY REQUIREMENTS</span>
+          <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30">
+            <Leaf className="w-4 h-4 text-forest" />
+            <span className="font-bebas tracking-widest text-sm text-forest">DIETARY REQUIREMENTS</span>
           </div>
           {dietarySectionOpen && (
             <div className="px-5 pb-4 pt-2 space-y-4 no-print">
@@ -895,8 +895,8 @@ export default function RunsheetBuilder() {
                     }}
                     className={`text-xs font-bebas tracking-widest px-3 py-1.5 border transition-colors ${
                       dietaries.find(x => x.name === d)
-                        ? "bg-[#2d6a2d] text-white border-[#2d6a2d]"
-                        : "border-[#2d6a2d]/30 text-[#2d6a2d] hover:bg-[#2d6a2d]/5"
+                        ? "bg-forest text-cream border-forest"
+                        : "border-forest/30 text-forest hover:bg-forest/5"
                     }`}
                   >
                     {d}
@@ -904,11 +904,11 @@ export default function RunsheetBuilder() {
                 ))}
               </div>
               {dietaries.length > 0 && (
-                <div className="border border-[#e8e0d0] divide-y divide-[#e8e0d0]">
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-[#f5f3ef]">
-                    <div className="col-span-4 font-bebas text-xs tracking-widest text-[#1a1a1a]/50">REQUIREMENT</div>
-                    <div className="col-span-2 font-bebas text-xs tracking-widest text-[#1a1a1a]/50">COUNT</div>
-                    <div className="col-span-5 font-bebas text-xs tracking-widest text-[#1a1a1a]/50">NOTES</div>
+                <div className="border border-gold/30 divide-y divide-gold/20">
+                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-linen">
+                    <div className="col-span-4 font-bebas text-xs tracking-widest text-ink/50">REQUIREMENT</div>
+                    <div className="col-span-2 font-bebas text-xs tracking-widest text-ink/50">COUNT</div>
+                    <div className="col-span-5 font-bebas text-xs tracking-widest text-ink/50">NOTES</div>
                     <div className="col-span-1"></div>
                   </div>
                   {dietaries.map((d, idx) => (
@@ -919,7 +919,7 @@ export default function RunsheetBuilder() {
                           type="number" min={1}
                           value={d.count}
                           onChange={e => updateDietary(idx, "count", Number(e.target.value))}
-                          className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-8"
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-8"
                         />
                       </div>
                       <div className="col-span-5">
@@ -927,11 +927,11 @@ export default function RunsheetBuilder() {
                           value={d.notes ?? ""}
                           onChange={e => updateDietary(idx, "notes", e.target.value)}
                           placeholder="Notes..."
-                          className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-8"
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-8"
                         />
                       </div>
                       <div className="col-span-1">
-                        <button onClick={() => removeDietary(idx)} className="text-[#1a1a1a]/30 hover:text-red-500 transition-colors">
+                        <button onClick={() => removeDietary(idx)} className="text-ink/30 hover:text-red-500 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -944,7 +944,7 @@ export default function RunsheetBuilder() {
                   value={newDietary.name}
                   onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Add requirement..."
-                  className="flex-1 rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm"
+                  className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   onKeyDown={e => e.key === "Enter" && addDietary()}
                 />
                 <Input
@@ -952,23 +952,23 @@ export default function RunsheetBuilder() {
                   value={newDietary.count}
                   onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
                   placeholder="Count"
-                  className="w-20 rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm"
+                  className="w-20 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
                 <Input
                   value={newDietary.notes}
                   onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
                   placeholder="Notes (optional)"
-                  className="flex-1 rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm"
+                  className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
                 <Button
                   onClick={addDietary}
-                  className="bg-[#2d6a2d] hover:bg-[#2d6a2d]/90 text-white rounded-none font-bebas tracking-widest text-xs gap-1"
+                  className="bg-forest hover:bg-forest/90 text-cream rounded-none font-bebas tracking-widest text-xs gap-1"
                 >
                   <Plus className="w-3 h-3" /> ADD
                 </Button>
               </div>
               {dietaries.length === 0 && (
-                <div className="text-center py-3 text-[#1a1a1a]/30 font-dm text-sm">No dietary requirements recorded</div>
+                <div className="text-center py-3 text-ink/30 font-dm text-sm">No dietary requirements recorded</div>
               )}
             </div>
           )}
@@ -977,9 +977,9 @@ export default function RunsheetBuilder() {
             <div className="hidden print:block px-5 py-3">
               <div className="flex flex-wrap gap-2">
                 {dietaries.map((d, i) => (
-                  <div key={i} className="border border-[#e8e0d0] px-3 py-1.5 text-sm font-dm">
+                  <div key={i} className="border border-gold/30 px-3 py-1.5 text-sm font-dm">
                     <span className="font-semibold">{d.count}×</span> {d.name}
-                    {d.notes && <span className="text-[#1a1a1a]/50 ml-1">— {d.notes}</span>}
+                    {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
                   </div>
                 ))}
               </div>
@@ -988,7 +988,7 @@ export default function RunsheetBuilder() {
         </div>
 
         {/* ── Main Tab Navigation ─────────────────────────────────────────── */}
-        <div className="no-print flex border-b border-[#e8e0d0] bg-white">
+        <div className="no-print flex border-b border-gold/30 bg-white">
           {[
             { id: 'timeline', label: 'TIMELINE', icon: <Clock className="w-4 h-4" />, count: items.length },
             { id: 'fnb', label: 'F&B SHEET', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
@@ -999,13 +999,13 @@ export default function RunsheetBuilder() {
               onClick={() => setActiveMainTab(tab.id as any)}
               className={`flex items-center gap-2 px-5 py-3 font-bebas tracking-widest text-sm border-b-2 transition-colors ${
                 activeMainTab === tab.id
-                  ? 'border-[#8b1a1a] text-[#8b1a1a] bg-white'
-                  : 'border-transparent text-[#1a1a1a]/50 hover:text-[#1a1a1a] hover:bg-[#f5f3ef]'
+                  ? 'border-forest text-forest bg-white'
+                  : 'border-transparent text-ink/50 hover:text-ink hover:bg-linen'
               }`}
             >
               {tab.icon} {tab.label}
               {tab.count !== undefined && tab.count !== 0 && (
-                <span className={`text-xs font-bebas px-1.5 py-0.5 ${activeMainTab === tab.id ? 'bg-[#8b1a1a]/10 text-[#8b1a1a]' : 'bg-[#1a1a1a]/10 text-[#1a1a1a]/60'}`}>
+                <span className={`text-xs font-bebas px-1.5 py-0.5 ${activeMainTab === tab.id ? 'bg-forest/10 text-forest' : 'bg-forest/10 text-ink/60'}`}>
                   {tab.count}
                 </span>
               )}
@@ -1015,58 +1015,58 @@ export default function RunsheetBuilder() {
 
         {/* ── TIMELINE TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'timeline' && (
-          <div className="bg-white border border-[#e8e0d0] border-t-0 shadow-sm print:shadow-none">
+          <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
             {/* Timeline header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-[#e8e0d0] no-print">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30 no-print">
               <div className="flex items-center gap-3">
-                <h2 className="font-bebas tracking-widest text-[#1a1a1a]/60 text-sm">EVENT TIMELINE</h2>
+                <h2 className="font-bebas tracking-widest text-ink/60 text-sm">EVENT TIMELINE</h2>
                 {items.length > 0 && (
-                  <span className="font-dm text-xs text-[#1a1a1a]/40">
+                  <span className="font-dm text-xs text-ink/40">
                     {formatTime12(items[0].time)} – {formatTime12(addMinutes(items[items.length-1].time, items[items.length-1].duration))}
                   </span>
                 )}
               </div>
               <button
                 onClick={addItem}
-                className="font-bebas tracking-widest text-xs text-[#8b1a1a] hover:text-[#8b1a1a]/80 flex items-center gap-1 transition-colors border border-[#8b1a1a]/30 px-3 py-1.5 hover:bg-[#8b1a1a]/5"
+                className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 transition-colors border border-forest/30 px-3 py-1.5 hover:bg-forest/5"
               >
                 <Plus className="w-3.5 h-3.5" /> ADD ITEM
               </button>
             </div>
 
             {/* Print timeline header */}
-            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-[#e8e0d0] bg-[#1a1a1a]">
+            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-forest">
               <Clock className="w-4 h-4 text-white" />
               <span className="font-bebas tracking-widest text-sm text-white">EVENT TIMELINE</span>
             </div>
 
             {items.length === 0 ? (
-              <div className="text-center py-16 text-[#1a1a1a]/30 font-dm text-sm">
+              <div className="text-center py-16 text-ink/30 font-dm text-sm">
                 <Clock className="w-10 h-10 mx-auto mb-3 opacity-20" />
                 No items yet. Click "Add Item" to build your runsheet.
               </div>
             ) : (
-              <div className="divide-y divide-[#e8e0d0]">
+              <div className="divide-y divide-gold/20">
                 {items.map((item, idx) => {
                   const key = getItemKey(item);
                   const isExpanded = expandedItem === key;
                   const endTime = addMinutes(item.time, item.duration);
                   const catInfo = CATEGORIES.find(c => c.value === item.category);
                   return (
-                    <div key={key} className="group hover:bg-[#f5f3ef]/50 transition-colors print:hover:bg-transparent">
+                    <div key={key} className="group hover:bg-linen/50 transition-colors print:hover:bg-transparent">
                       {/* Main row */}
                       <div className="flex items-center gap-0 print:gap-3">
                         {/* Time column */}
-                        <div className="w-[90px] flex-shrink-0 px-4 py-3 border-r border-[#e8e0d0] print:border-0">
+                        <div className="w-[90px] flex-shrink-0 px-4 py-3 border-r border-gold/30 print:border-0">
                           <input
                             type="time"
                             value={item.time}
                             onChange={e => updateItemField(idx, "time", e.target.value)}
-                            className="font-dm text-sm font-bold text-[#1a1a1a] bg-transparent border-0 focus:outline-none w-full no-print"
+                            className="font-dm text-sm font-bold text-ink bg-transparent border-0 focus:outline-none w-full no-print"
                           />
                           <div className="hidden print:block font-dm text-sm font-bold">{formatTime12(item.time)}</div>
-                          <div className="font-dm text-[10px] text-[#1a1a1a]/40 no-print">–{endTime}</div>
-                          <div className="hidden print:block font-dm text-[10px] text-[#1a1a1a]/40">–{formatTime12(endTime)}</div>
+                          <div className="font-dm text-[10px] text-ink/40 no-print">–{endTime}</div>
+                          <div className="hidden print:block font-dm text-[10px] text-ink/40">–{formatTime12(endTime)}</div>
                         </div>
 
                         {/* Category badge */}
@@ -1082,24 +1082,24 @@ export default function RunsheetBuilder() {
                             value={item.title}
                             onChange={e => updateItemField(idx, "title", e.target.value)}
                             placeholder="Item title..."
-                            className="w-full font-dm text-sm font-semibold text-[#1a1a1a] bg-transparent border-0 focus:outline-none no-print"
+                            className="w-full font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none no-print"
                           />
                           <div className="hidden print:block font-dm text-sm font-semibold">{item.title || "—"}</div>
                           {item.description && (
-                            <div className="font-dm text-xs text-[#1a1a1a]/50 mt-0.5 truncate print:whitespace-normal">{item.description}</div>
+                            <div className="font-dm text-xs text-ink/50 mt-0.5 truncate print:whitespace-normal">{item.description}</div>
                           )}
                         </div>
 
                         {/* Assigned to */}
                         {item.assignedTo && (
                           <div className="px-3 py-3 hidden md:block">
-                            <span className="font-dm text-xs text-[#1a1a1a]/50 bg-[#f5f3ef] px-2 py-0.5">{item.assignedTo}</span>
+                            <span className="font-dm text-xs text-ink/50 bg-linen px-2 py-0.5">{item.assignedTo}</span>
                           </div>
                         )}
 
                         {/* Duration */}
                         <div className="w-[50px] flex-shrink-0 px-2 py-3 text-right no-print">
-                          <span className="font-dm text-xs text-[#1a1a1a]/30">{item.duration}m</span>
+                          <span className="font-dm text-xs text-ink/30">{item.duration}m</span>
                         </div>
 
                         {/* Actions */}
@@ -1107,7 +1107,7 @@ export default function RunsheetBuilder() {
                           <button
                             onClick={() => moveItem(idx, 'up')}
                             disabled={idx === 0}
-                            className="p-1 text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60 disabled:opacity-20 transition-colors"
+                            className="p-1 text-ink/30 hover:text-ink/60 disabled:opacity-20 transition-colors"
                             title="Move up"
                           >
                             <MoveUp className="w-3.5 h-3.5" />
@@ -1115,27 +1115,27 @@ export default function RunsheetBuilder() {
                           <button
                             onClick={() => moveItem(idx, 'down')}
                             disabled={idx === items.length - 1}
-                            className="p-1 text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60 disabled:opacity-20 transition-colors"
+                            className="p-1 text-ink/30 hover:text-ink/60 disabled:opacity-20 transition-colors"
                             title="Move down"
                           >
                             <MoveDown className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => duplicateItem(idx)}
-                            className="p-1 text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60 transition-colors"
+                            className="p-1 text-ink/30 hover:text-ink/60 transition-colors"
                             title="Duplicate"
                           >
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setExpandedItem(isExpanded ? null : key)}
-                            className="p-1 text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60 transition-colors"
+                            className="p-1 text-ink/30 hover:text-ink/60 transition-colors"
                           >
                             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                           </button>
                           <button
                             onClick={() => removeItem(idx)}
-                            className="p-1 text-[#1a1a1a]/30 hover:text-red-500 transition-colors"
+                            className="p-1 text-ink/30 hover:text-red-500 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1144,22 +1144,22 @@ export default function RunsheetBuilder() {
 
                       {/* Expanded detail row */}
                       {isExpanded && (
-                        <div className="border-t border-[#e8e0d0] px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 bg-[#f5f3ef]/50 no-print">
+                        <div className="border-t border-gold/30 px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 bg-linen/50 no-print">
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">DURATION (MINS)</label>
+                            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DURATION (MINS)</label>
                             <Input
                               type="number"
                               value={item.duration}
                               onChange={e => updateItemField(idx, "duration", Number(e.target.value))}
-                              className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                             />
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">CATEGORY</label>
+                            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">CATEGORY</label>
                             <select
                               value={item.category}
                               onChange={e => updateItemField(idx, "category", e.target.value)}
-                              className="w-full border border-[#e8e0d0] rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-[#8b1a1a] bg-white h-9"
+                              className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
                             >
                               {CATEGORIES.map(c => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -1167,21 +1167,21 @@ export default function RunsheetBuilder() {
                             </select>
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">ASSIGNED TO</label>
+                            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">ASSIGNED TO</label>
                             <Input
                               value={item.assignedTo ?? ""}
                               onChange={e => updateItemField(idx, "assignedTo", e.target.value)}
                               placeholder="Staff member..."
-                              className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                             />
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">NOTES</label>
+                            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">NOTES</label>
                             <Input
                               value={item.description ?? ""}
                               onChange={e => updateItemField(idx, "description", e.target.value)}
                               placeholder="Additional notes..."
-                              className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                             />
                           </div>
                         </div>
@@ -1193,32 +1193,32 @@ export default function RunsheetBuilder() {
             )}
 
             {/* General notes */}
-            <div className="px-5 py-4 border-t border-[#e8e0d0]">
-              <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-2">GENERAL NOTES</label>
+            <div className="px-5 py-4 border-t border-gold/30">
+              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">GENERAL NOTES</label>
               <Textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Any additional notes for the event..."
                 rows={3}
-                className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] font-dm text-sm no-print"
+                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm no-print"
               />
-              {notes && <div className="hidden print:block font-dm text-sm text-[#1a1a1a]/70 whitespace-pre-wrap">{notes}</div>}
+              {notes && <div className="hidden print:block font-dm text-sm text-ink/70 whitespace-pre-wrap">{notes}</div>}
             </div>
           </div>
         )}
 
         {/* ── F&B SHEET TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'fnb' && (
-          <div className="bg-white border border-[#e8e0d0] border-t-0 shadow-sm print:shadow-none">
+          <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
             {/* FOH / Kitchen sub-tabs */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-[#e8e0d0] no-print">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30 no-print">
               <div className="flex gap-0">
                 <button
                   onClick={() => { setFnbSection('foh'); setNewFnbItem(p => ({ ...p, section: 'foh' })); }}
                   className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors border ${
                     fnbSection === 'foh'
-                      ? 'bg-[#d4a843] text-[#1a1a1a] border-[#d4a843]'
-                      : 'text-[#1a1a1a]/50 border-[#e8e0d0] hover:bg-[#f5f3ef]'
+                      ? 'bg-gold text-ink border-gold'
+                      : 'text-ink/50 border-gold/30 hover:bg-linen'
                   }`}
                 >
                   <UtensilsCrossed className="w-3.5 h-3.5" /> FOH SHEET
@@ -1228,8 +1228,8 @@ export default function RunsheetBuilder() {
                   onClick={() => { setFnbSection('kitchen'); setNewFnbItem(p => ({ ...p, section: 'kitchen' })); }}
                   className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors border border-l-0 ${
                     fnbSection === 'kitchen'
-                      ? 'bg-[#8b1a1a] text-white border-[#8b1a1a]'
-                      : 'text-[#1a1a1a]/50 border-[#e8e0d0] hover:bg-[#f5f3ef]'
+                      ? 'bg-forest text-white border-forest'
+                      : 'text-ink/50 border-gold/30 hover:bg-linen'
                   }`}
                 >
                   <ChefHat className="w-3.5 h-3.5" /> KITCHEN SHEET
@@ -1239,7 +1239,7 @@ export default function RunsheetBuilder() {
               <Button
                 onClick={saveFnb}
                 disabled={fnbSaving}
-                className="bg-[#d4a843] hover:bg-[#d4a843]/90 text-[#1a1a1a] font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
+                className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
                 {fnbSaving ? 'SAVING...' : 'SAVE F&B'}
@@ -1247,16 +1247,16 @@ export default function RunsheetBuilder() {
             </div>
 
             {/* Print F&B header */}
-            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-[#e8e0d0] bg-[#1a1a1a]">
+            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-forest">
               <UtensilsCrossed className="w-4 h-4 text-white" />
               <span className="font-bebas tracking-widest text-sm text-white">F&B SHEET — {fnbSection === 'foh' ? 'FRONT OF HOUSE' : 'KITCHEN'}</span>
             </div>
 
             {/* ── PROPOSAL F&B SUMMARY ─────────────────────────────────── */}
             {linkedProposalId && (proposalDrinks || (proposalQuote?.items && proposalQuote.items.length > 0) || (linkedProposal?.lineItems)) && (
-              <div className="mx-5 my-4 border border-[#d4a843]/40 bg-[#fffbf0] p-4 space-y-3">
+              <div className="mx-5 my-4 border border-gold/40 bg-[#fffbf0] p-4 space-y-3">
                 <div className="flex items-center gap-2 mb-1">
-                  <UtensilsCrossed className="w-3.5 h-3.5 text-[#d4a843]" />
+                  <UtensilsCrossed className="w-3.5 h-3.5 text-gold" />
                   <span className="font-bebas tracking-widest text-xs text-[#8b6914]">FOOD & BEVERAGE FROM PROPOSAL</span>
                 </div>
 
@@ -1268,15 +1268,15 @@ export default function RunsheetBuilder() {
                     if (!foodItems.length) return null;
                     return (
                       <div>
-                        <div className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 mb-1.5">FOOD & PRICING</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1.5">FOOD & PRICING</div>
                         <div className="space-y-1">
                           {foodItems.map((item: any, i: number) => (
                             <div key={i} className="flex justify-between items-start text-xs font-dm">
-                              <span className="text-[#1a1a1a]/80 flex-1">
+                              <span className="text-ink/80 flex-1">
                                 {item.description}
-                                {item.qty > 1 ? <span className="text-[#1a1a1a]/40 ml-1">× {item.qty}</span> : null}
+                                {item.qty > 1 ? <span className="text-ink/40 ml-1">× {item.qty}</span> : null}
                               </span>
-                              <span className="font-semibold text-[#1a1a1a] ml-3">${Number(item.total ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-ink ml-3">${Number(item.total ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
                             </div>
                           ))}
                         </div>
@@ -1288,16 +1288,16 @@ export default function RunsheetBuilder() {
                 {/* Quote items (hire, styling, etc.) */}
                 {proposalQuote?.items && proposalQuote.items.length > 0 && (
                   <div>
-                    <div className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 mb-1.5">ADDITIONAL ITEMS</div>
+                    <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1.5">ADDITIONAL ITEMS</div>
                     <div className="space-y-1">
                       {proposalQuote.items.map((item: any) => (
                         <div key={item.id} className="flex justify-between items-start text-xs font-dm">
                           <div className="flex-1">
-                            <span className="text-[#1a1a1a]/80">{item.name}</span>
-                            {item.description && <span className="text-[#1a1a1a]/40 ml-1">— {item.description}</span>}
-                            {Number(item.qty) > 1 && <span className="text-[#1a1a1a]/40 ml-1">× {item.qty}</span>}
+                            <span className="text-ink/80">{item.name}</span>
+                            {item.description && <span className="text-ink/40 ml-1">— {item.description}</span>}
+                            {Number(item.qty) > 1 && <span className="text-ink/40 ml-1">× {item.qty}</span>}
                           </div>
-                          <span className="font-semibold text-[#1a1a1a] ml-3">${(Number(item.qty) * Number(item.unitPrice)).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                          <span className="font-semibold text-ink ml-3">${(Number(item.qty) * Number(item.unitPrice)).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
                         </div>
                       ))}
                     </div>
@@ -1307,8 +1307,8 @@ export default function RunsheetBuilder() {
                 {/* Bar / Beverages */}
                 {proposalDrinks && (
                   <div>
-                    <div className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 mb-1.5">BAR & BEVERAGES</div>
-                    <div className="text-xs font-dm text-[#1a1a1a]/80 capitalize mb-1">
+                    <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1.5">BAR & BEVERAGES</div>
+                    <div className="text-xs font-dm text-ink/80 capitalize mb-1">
                       <span className="font-semibold">{proposalDrinks.barOption?.replace(/_/g, ' ')}</span>
                       {proposalDrinks.tabAmount ? ` — Bar tab: $${Number(proposalDrinks.tabAmount).toLocaleString('en-NZ')}` : ''}
                     </div>
@@ -1324,8 +1324,8 @@ export default function RunsheetBuilder() {
                     {(proposalDrinks.customDrinks as any[])?.length > 0 && (
                       <div className="space-y-0.5">
                         {(proposalDrinks.customDrinks as any[]).map((d: any, i: number) => (
-                          <div key={i} className="text-xs font-dm text-[#1a1a1a]/70 flex items-center gap-1">
-                            <span className="w-1 h-1 rounded-full bg-[#d4a843] inline-block flex-shrink-0" />
+                          <div key={i} className="text-xs font-dm text-ink/70 flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-gold inline-block flex-shrink-0" />
                             {d.name}{d.description ? ` — ${d.description}` : ''}{d.price ? ` ($${d.price})` : ''}
                           </div>
                         ))}
@@ -1336,9 +1336,9 @@ export default function RunsheetBuilder() {
 
                 {/* Guest count + dietary summary */}
                 {(linkedProposal?.guestCount || linkedProposal?.spaceName) && (
-                  <div className="flex gap-4 pt-1 border-t border-[#d4a843]/20 text-xs font-dm text-[#1a1a1a]/60">
-                    {linkedProposal.guestCount && <span><span className="font-semibold text-[#1a1a1a]/80">{linkedProposal.guestCount}</span> guests</span>}
-                    {linkedProposal.spaceName && <span>Space: <span className="font-semibold text-[#1a1a1a]/80">{linkedProposal.spaceName}</span></span>}
+                  <div className="flex gap-4 pt-1 border-t border-gold/20 text-xs font-dm text-ink/60">
+                    {linkedProposal.guestCount && <span><span className="font-semibold text-ink/80">{linkedProposal.guestCount}</span> guests</span>}
+                    {linkedProposal.spaceName && <span>Space: <span className="font-semibold text-ink/80">{linkedProposal.spaceName}</span></span>}
                   </div>
                 )}
               </div>
@@ -1346,81 +1346,81 @@ export default function RunsheetBuilder() {
 
             {/* No proposal linked notice */}
             {!linkedProposalId && (
-              <div className="mx-5 my-3 p-3 bg-[#f5f3ef] border border-[#e8e0d0] text-xs font-dm text-[#1a1a1a]/50 flex items-center gap-2">
+              <div className="mx-5 my-3 p-3 bg-linen border border-gold/30 text-xs font-dm text-ink/50 flex items-center gap-2">
                 <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
                 Link a proposal in the sidebar to automatically pull in food & beverage selections.
               </div>
             )}
 
             {/* Add new item form */}
-            <div className="px-5 py-4 border-b border-[#e8e0d0] bg-[#f5f3ef]/50 no-print">
-              <div className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 mb-3">
+            <div className="px-5 py-4 border-b border-gold/30 bg-linen/50 no-print">
+              <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-3">
                 ADD {fnbSection === 'foh' ? 'FOH' : 'KITCHEN'} ITEM
               </div>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
                 <div>
-                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">COURSE</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
                   <select
                     value={newFnbItem.course ?? 'Canapes'}
                     onChange={e => setNewFnbItem(p => ({ ...p, course: e.target.value }))}
-                    className="w-full border border-[#e8e0d0] rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-[#8b1a1a] bg-white h-9"
+                    className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
                   >
                     {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">DISH NAME *</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DISH NAME *</label>
                   <Input
                     value={newFnbItem.dishName ?? ''}
                     onChange={e => setNewFnbItem(p => ({ ...p, dishName: e.target.value }))}
                     placeholder="e.g. Beef Wellington"
-                    className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                     onKeyDown={e => e.key === 'Enter' && addFnbItem()}
                   />
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">SERVICE TIME</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
                   <Input
                     type="time"
                     value={newFnbItem.serviceTime ?? ''}
                     onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
-                    className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                   />
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">QTY / COVERS</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
                   <Input
                     type="number" min={1}
                     value={newFnbItem.qty ?? 1}
                     onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
-                    className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                   />
                 </div>
               </div>
               <div className="flex gap-3 items-end">
                 <div className="flex-1">
-                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">DIETARY FLAGS</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY FLAGS</label>
                   <Input
                     value={newFnbItem.dietary ?? ''}
                     onChange={e => setNewFnbItem(p => ({ ...p, dietary: e.target.value }))}
                     placeholder="GF, VG, DF, NF..."
-                    className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                   />
                 </div>
                 {fnbSection === 'foh' && (
                   <div className="flex-1">
-                    <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-1">STAFF ASSIGNED</label>
+                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">STAFF ASSIGNED</label>
                     <Input
                       value={newFnbItem.staffAssigned ?? ''}
                       onChange={e => setNewFnbItem(p => ({ ...p, staffAssigned: e.target.value }))}
                       placeholder="Name or section..."
-                      className="rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                     />
                   </div>
                 )}
                 <Button
                   onClick={addFnbItem}
-                  className="bg-[#1a1a1a] hover:bg-[#1a1a1a]/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5 h-9"
+                  className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5 h-9"
                 >
                   <Plus className="w-3.5 h-3.5" /> ADD
                 </Button>
@@ -1429,7 +1429,7 @@ export default function RunsheetBuilder() {
 
             {/* F&B items table */}
             {fnbItems.filter(i => i.section === fnbSection).length === 0 ? (
-              <div className="text-center py-16 text-[#1a1a1a]/30 font-dm text-sm">
+              <div className="text-center py-16 text-ink/30 font-dm text-sm">
                 <UtensilsCrossed className="w-10 h-10 mx-auto mb-3 opacity-20" />
                 No {fnbSection === 'foh' ? 'FOH' : 'kitchen'} items yet. Add dishes above.
               </div>
@@ -1437,7 +1437,7 @@ export default function RunsheetBuilder() {
               <div>
                 {/* Table header */}
                 <div className={`grid gap-2 px-5 py-2.5 text-xs font-bebas tracking-widest text-white ${
-                  fnbSection === 'foh' ? 'bg-[#d4a843]' : 'bg-[#8b1a1a]'
+                  fnbSection === 'foh' ? 'bg-gold' : 'bg-forest'
                 } ${
                   fnbSection === 'foh'
                     ? 'grid-cols-[90px_1fr_60px_80px_100px_90px_32px]'
@@ -1459,8 +1459,8 @@ export default function RunsheetBuilder() {
                   fnbItems.some(i => i.section === fnbSection && (i.course ?? 'Other') === course)
                 ).map(course => (
                   <div key={course}>
-                    <div className={`px-5 py-1.5 font-bebas tracking-widest text-xs border-b border-[#e8e0d0] ${
-                      fnbSection === 'foh' ? 'bg-[#d4a843]/10 text-[#a07820]' : 'bg-[#8b1a1a]/10 text-[#8b1a1a]'
+                    <div className={`px-5 py-1.5 font-bebas tracking-widest text-xs border-b border-gold/30 ${
+                      fnbSection === 'foh' ? 'bg-gold/10 text-[#a07820]' : 'bg-forest/10 text-forest'
                     }`}>
                       {course}
                     </div>
@@ -1470,30 +1470,30 @@ export default function RunsheetBuilder() {
                       .map(({ item, originalIdx }) => (
                         <div
                           key={item._tempId ?? originalIdx}
-                          className={`grid gap-2 px-5 py-2.5 items-center border-b border-[#e8e0d0] text-sm font-dm hover:bg-[#f5f3ef]/50 group ${
+                          className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/30 text-sm font-dm hover:bg-linen/50 group ${
                             fnbSection === 'foh'
                               ? 'grid-cols-[90px_1fr_60px_80px_100px_90px_32px]'
                               : 'grid-cols-[90px_1fr_60px_80px_1fr_1fr_32px]'
                           }`}
                         >
-                          <div className="text-xs text-[#1a1a1a]/40 font-bebas tracking-widest">{item.course}</div>
+                          <div className="text-xs text-ink/40 font-bebas tracking-widest">{item.course}</div>
                           <div>
                             <input
                               value={item.dishName}
                               onChange={e => updateFnbItem(originalIdx, 'dishName', e.target.value)}
-                              className="w-full font-dm text-sm text-[#1a1a1a] bg-transparent border-0 focus:outline-none font-semibold"
+                              className="w-full font-dm text-sm text-ink bg-transparent border-0 focus:outline-none font-semibold"
                             />
-                            {item.description && <div className="text-xs text-[#1a1a1a]/40">{item.description}</div>}
+                            {item.description && <div className="text-xs text-ink/40">{item.description}</div>}
                           </div>
                           <div>
                             <input
                               type="number" min={1}
                               value={item.qty}
                               onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
-                              className="w-12 font-dm text-sm text-[#1a1a1a] bg-transparent border-0 focus:outline-none text-center"
+                              className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center"
                             />
                           </div>
-                          <div className="text-xs text-[#1a1a1a]/50 font-dm">
+                          <div className="text-xs text-ink/50 font-dm">
                             {item.serviceTime ? formatTime12(item.serviceTime) : '—'}
                           </div>
                           {fnbSection === 'foh' ? (
@@ -1508,7 +1508,7 @@ export default function RunsheetBuilder() {
                                   value={item.staffAssigned ?? ''}
                                   onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)}
                                   placeholder="Staff..."
-                                  className="w-full font-dm text-xs text-[#1a1a1a]/70 bg-transparent border-0 focus:outline-none"
+                                  className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
                                 />
                               </div>
                             </>
@@ -1519,7 +1519,7 @@ export default function RunsheetBuilder() {
                                   value={item.prepNotes ?? ''}
                                   onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)}
                                   placeholder="Prep notes..."
-                                  className="w-full font-dm text-xs text-[#1a1a1a]/70 bg-transparent border-0 focus:outline-none"
+                                  className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
                                 />
                               </div>
                               <div>
@@ -1527,7 +1527,7 @@ export default function RunsheetBuilder() {
                                   value={item.platingNotes ?? ''}
                                   onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)}
                                   placeholder="Plating notes..."
-                                  className="w-full font-dm text-xs text-[#1a1a1a]/70 bg-transparent border-0 focus:outline-none"
+                                  className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
                                 />
                               </div>
                             </>
@@ -1535,7 +1535,7 @@ export default function RunsheetBuilder() {
                           <div className="no-print opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => removeFnbItem(originalIdx)}
-                              className="text-[#1a1a1a]/30 hover:text-red-500 transition-colors"
+                              className="text-ink/30 hover:text-red-500 transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1549,13 +1549,13 @@ export default function RunsheetBuilder() {
 
             {/* Dietary summary for kitchen */}
             {fnbSection === 'kitchen' && dietaries.length > 0 && (
-              <div className="px-5 py-4 border-t border-[#e8e0d0] bg-green-50/50">
-                <div className="font-bebas tracking-widest text-xs text-[#2d6a2d] mb-2">DIETARY SUMMARY FOR KITCHEN</div>
+              <div className="px-5 py-4 border-t border-gold/30 bg-green-50/50">
+                <div className="font-bebas tracking-widest text-xs text-forest mb-2">DIETARY SUMMARY FOR KITCHEN</div>
                 <div className="flex flex-wrap gap-2">
                   {dietaries.map((d, i) => (
                     <div key={i} className="bg-white border border-green-200 px-3 py-1.5 text-sm font-dm">
                       <span className="font-bold">{d.count}×</span> {d.name}
-                      {d.notes && <span className="text-[#1a1a1a]/50 ml-1">— {d.notes}</span>}
+                      {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
                     </div>
                   ))}
                 </div>
@@ -1566,37 +1566,37 @@ export default function RunsheetBuilder() {
 
         {/* ── CHECKLIST TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'checklist' && (
-          <div className="bg-white border border-[#e8e0d0] border-t-0 shadow-sm print:shadow-none">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-[#e8e0d0]">
+          <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
               <div className="flex items-center gap-3">
-                <h2 className="font-bebas tracking-widest text-[#1a1a1a]/60 text-sm">EVENT CHECKLIST</h2>
-                <span className="font-dm text-xs text-[#1a1a1a]/40">{checkedCount} of {checklistItems.length} complete</span>
+                <h2 className="font-bebas tracking-widest text-ink/60 text-sm">EVENT CHECKLIST</h2>
+                <span className="font-dm text-xs text-ink/40">{checkedCount} of {checklistItems.length} complete</span>
               </div>
               {checkedCount === checklistItems.length && checklistItems.length > 0 && (
-                <span className="font-bebas tracking-widest text-xs text-[#2d6a2d] flex items-center gap-1">
+                <span className="font-bebas tracking-widest text-xs text-forest flex items-center gap-1">
                   <CheckSquare className="w-3.5 h-3.5" /> ALL DONE
                 </span>
               )}
             </div>
 
             {/* Progress bar */}
-            <div className="h-1 bg-[#e8e0d0]">
+            <div className="h-1 bg-gold/20">
               <div
-                className="h-1 bg-[#2d6a2d] transition-all duration-300"
+                className="h-1 bg-forest transition-all duration-300"
                 style={{ width: checklistItems.length > 0 ? `${(checkedCount / checklistItems.length) * 100}%` : '0%' }}
               />
             </div>
 
-            <div className="divide-y divide-[#e8e0d0]">
+            <div className="divide-y divide-gold/20">
               {checklistItems.map(item => (
-                <div key={item.id} className="flex items-center gap-3 px-5 py-3 group hover:bg-[#f5f3ef]/50 transition-colors">
+                <div key={item.id} className="flex items-center gap-3 px-5 py-3 group hover:bg-linen/50 transition-colors">
                   <button
                     onClick={() => toggleChecklistItem(item.id)}
-                    className={`flex-shrink-0 transition-colors ${item.checked ? 'text-[#2d6a2d]' : 'text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60'}`}
+                    className={`flex-shrink-0 transition-colors ${item.checked ? 'text-forest' : 'text-ink/30 hover:text-ink/60'}`}
                   >
                     {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
                   </button>
-                  <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? 'line-through text-[#1a1a1a]/40' : 'text-[#1a1a1a]'}`}>
+                  <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? 'line-through text-ink/40' : 'text-ink'}`}>
                     {item.text}
                   </span>
                   <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${
@@ -1612,7 +1612,7 @@ export default function RunsheetBuilder() {
                   </span>
                   <button
                     onClick={() => removeChecklistItem(item.id)}
-                    className="opacity-0 group-hover:opacity-100 text-[#1a1a1a]/30 hover:text-red-500 transition-all"
+                    className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-500 transition-all"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -1621,17 +1621,17 @@ export default function RunsheetBuilder() {
             </div>
 
             {/* Add checklist item */}
-            <div className="px-5 py-4 border-t border-[#e8e0d0] flex gap-2">
+            <div className="px-5 py-4 border-t border-gold/30 flex gap-2">
               <Input
                 value={newChecklistText}
                 onChange={e => setNewChecklistText(e.target.value)}
                 placeholder="Add a checklist item..."
-                className="flex-1 rounded-none border border-[#e8e0d0] focus-visible:ring-0 focus-visible:border-[#8b1a1a] text-sm h-9"
+                className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                 onKeyDown={e => e.key === 'Enter' && addChecklistItem()}
               />
               <Button
                 onClick={addChecklistItem}
-                className="bg-[#1a1a1a] hover:bg-[#1a1a1a]/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 h-9 flex items-center gap-1.5"
+                className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 h-9 flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" /> ADD
               </Button>
@@ -1641,26 +1641,26 @@ export default function RunsheetBuilder() {
 
         {/* ── Linked Proposal (collapsible, at bottom) ──────────────────── */}
         {leadProposals && leadProposals.length > 0 && (
-          <div className="bg-white border border-[#e8e0d0] shadow-sm mt-4 no-print">
+          <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
             <button
               onClick={() => setProposalSectionOpen(v => !v)}
-              className="w-full flex items-center justify-between px-5 py-3 hover:bg-[#f5f3ef] transition-colors"
+              className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors"
             >
               <div className="flex items-center gap-2">
-                <LinkIcon className="w-4 h-4 text-[#8b1a1a]" />
-                <span className="font-bebas tracking-widest text-sm text-[#8b1a1a]">LINKED PROPOSAL</span>
-                {linkedProposalId && <span className="text-xs text-[#8b1a1a]/50 font-dm">(data auto-populated)</span>}
+                <LinkIcon className="w-4 h-4 text-forest" />
+                <span className="font-bebas tracking-widest text-sm text-forest">LINKED PROPOSAL</span>
+                {linkedProposalId && <span className="text-xs text-forest/50 font-dm">(data auto-populated)</span>}
               </div>
-              {proposalSectionOpen ? <ChevronUp className="w-4 h-4 text-[#1a1a1a]/30" /> : <ChevronDown className="w-4 h-4 text-[#1a1a1a]/30" />}
+              {proposalSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
             </button>
             {proposalSectionOpen && (
               <div className="px-5 pb-5 pt-2 space-y-4">
                 <div>
-                  <label className="font-bebas tracking-widest text-[10px] text-[#1a1a1a]/40 block mb-2">SELECT PROPOSAL</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">SELECT PROPOSAL</label>
                   <select
                     value={linkedProposalId ?? ""}
                     onChange={e => setLinkedProposalId(e.target.value ? Number(e.target.value) : undefined)}
-                    className="w-full border border-[#e8e0d0] rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-[#8b1a1a] bg-white"
+                    className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
                   >
                     <option value="">— No linked proposal —</option>
                     {leadProposals.map(p => (
@@ -1669,22 +1669,22 @@ export default function RunsheetBuilder() {
                   </select>
                 </div>
                 {linkedProposal && (
-                  <div className="bg-[#f5f3ef] border border-[#e8e0d0] p-4 space-y-3">
+                  <div className="bg-linen border border-gold/30 p-4 space-y-3">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
-                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest">TOTAL</div>
+                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest">TOTAL</div>
                         <div className="font-dm font-semibold">${Number(linkedProposal.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
                       </div>
                       <div>
-                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest">GUESTS</div>
+                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest">GUESTS</div>
                         <div className="font-dm font-semibold">{(linkedProposal.guestCount ?? guestCount) || "—"}</div>
                       </div>
                       <div>
-                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest">SPACE</div>
+                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest">SPACE</div>
                         <div className="font-dm font-semibold">{linkedProposal.spaceName ?? "—"}</div>
                       </div>
                       <div>
-                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest">STATUS</div>
+                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest">STATUS</div>
                         <div className="font-dm font-semibold capitalize">{linkedProposal.status}</div>
                       </div>
                     </div>
@@ -1693,11 +1693,11 @@ export default function RunsheetBuilder() {
                         const li = JSON.parse(linkedProposal.lineItems as string ?? "[]") as any[];
                         return li.length > 0 ? (
                           <div>
-                            <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest mb-1">PRICING ITEMS</div>
+                            <div className="font-bebas text-[10px] text-ink/40 tracking-widest mb-1">PRICING ITEMS</div>
                             <div className="space-y-0.5">
                               {li.map((item: any, i: number) => (
                                 <div key={i} className="flex justify-between text-xs font-dm">
-                                  <span className="text-[#1a1a1a]/70">{item.description}{item.qty > 1 ? ` × ${item.qty}` : ""}</span>
+                                  <span className="text-ink/70">{item.description}{item.qty > 1 ? ` × ${item.qty}` : ""}</span>
                                   <span className="font-medium">${Number(item.total).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
                                 </div>
                               ))}
@@ -1708,8 +1708,8 @@ export default function RunsheetBuilder() {
                     })()}
                     {proposalDrinks && (
                       <div>
-                        <div className="font-bebas text-[10px] text-[#1a1a1a]/40 tracking-widest mb-1">BAR</div>
-                        <div className="text-xs font-dm capitalize text-[#1a1a1a]/70">
+                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest mb-1">BAR</div>
+                        <div className="text-xs font-dm capitalize text-ink/70">
                           {proposalDrinks.barOption?.replace(/_/g, " ")}
                           {proposalDrinks.tabAmount ? ` — Tab: $${Number(proposalDrinks.tabAmount).toLocaleString("en-NZ")}` : ""}
                         </div>
@@ -1726,7 +1726,7 @@ export default function RunsheetBuilder() {
                       href={`/proposal/${linkedProposal.publicToken}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-bebas tracking-widest text-[#8b1a1a] hover:underline"
+                      className="inline-flex items-center gap-1.5 text-xs font-bebas tracking-widest text-forest hover:underline"
                     >
                       <FileText className="w-3 h-3" /> VIEW FULL PROPOSAL
                     </a>
@@ -1738,7 +1738,7 @@ export default function RunsheetBuilder() {
         )}
 
         {/* Print footer */}
-        <div className="hidden print:block mt-8 pt-4 border-t border-[#1a1a1a]/20 text-xs text-[#1a1a1a]/40 font-dm text-center">
+        <div className="hidden print:block mt-8 pt-4 border-t border-ink/20 text-xs text-ink/40 font-dm text-center">
           Prepared by HOSTit — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
         </div>
       </div>

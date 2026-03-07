@@ -755,6 +755,10 @@ export default function Dashboard() {
         minLeadTime: vs?.minLeadTime ?? "1 week",
         maxLeadTime: vs?.maxLeadTime ?? "6 months",
         bufferTime: vs?.bufferTime ?? "30 minutes",
+        primaryColor: vs?.primaryColor ?? "#2D4A3E",
+        themeKey: vs?.themeKey ?? "sage",
+        logoUrl: vs?.logoUrl ?? "",
+        coverImageUrl: vs?.coverImageUrl ?? "",
         operatingHours: vs?.operatingHours ?? JSON.stringify([
           { day: "Sunday", enabled: true, start: "08:00", end: "22:00" },
           { day: "Monday", enabled: true, start: "08:00", end: "22:00" },
@@ -766,6 +770,12 @@ export default function Dashboard() {
         ]),
       });
     }
+   }, [venueSettings]);
+
+  // Apply colour theme from venue settings
+  useEffect(() => {
+    const themeKey = (venueSettings as any)?.themeKey ?? 'sage';
+    document.documentElement.setAttribute('data-theme', themeKey);
   }, [venueSettings]);
 
   // Confirmed statuses are treated as Events (shown on Calendar), not Enquiries
@@ -2608,6 +2618,42 @@ export default function Dashboard() {
                     </div>
                   </div>
 
+                  {/* ── Theme Colour Scheme ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">COLOUR SCHEME</h2>
+                    <p className="font-dm text-sm text-ink/60 mb-4">Choose a colour palette for your HOSTit workspace. This applies across the dashboard, runsheets, and public forms.</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {[
+                        { key: 'sage', label: 'Sage Green', swatches: ['#2D4A3E','#C9A84C','#F5F0E8','#1a2e27'] },
+                        { key: 'forest', label: 'Deep Forest', swatches: ['#1B3A2D','#D4AF37','#FAF7F0','#0d1f18'] },
+                        { key: 'dusty-merlot', label: 'Dusty Merlot', swatches: ['#62202F','#C9DAA8','#FBF7E8','#3d1320'] },
+                        { key: 'brique', label: 'Brique', swatches: ['#741D28','#B9AC39','#FFD2D9','#4a1219'] },
+                        { key: 'charcoal', label: 'Charcoal', swatches: ['#1C1C1E','#C9A84C','#F5F0E8','#0a0a0b'] },
+                        { key: 'blush', label: 'Blush & Olive', swatches: ['#FF88BE','#B9AC39','#FFF5F8','#cc6699'] },
+                      ].map(theme => (
+                        <button
+                          key={theme.key}
+                          type="button"
+                          onClick={() => setSettingsForm((f: any) => ({ ...f, themeKey: theme.key }))}
+                          className={`p-3 border-2 transition-all text-left ${
+                            settingsForm.themeKey === theme.key
+                              ? 'border-forest bg-forest/5'
+                              : 'border-gold/20 hover:border-gold/50'
+                          }`}
+                        >
+                          <div className="flex gap-1 mb-2">
+                            {theme.swatches.map((c, i) => (
+                              <div key={i} className="h-5 flex-1 rounded-sm" style={{ backgroundColor: c }} />
+                            ))}
+                          </div>
+                          <span className="font-bebas text-xs tracking-widest text-ink">{theme.label}</span>
+                          {settingsForm.themeKey === theme.key && (
+                            <span className="ml-2 font-bebas text-xs text-forest">✓ ACTIVE</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <button type="submit" disabled={updateSettings.isPending}
                     className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
                     {updateSettings.isPending ? "SAVING..." : "SAVE VENUE DETAILS"}

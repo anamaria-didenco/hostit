@@ -84,15 +84,17 @@ export const appRouter = router({
         maxLeadTime: z.string().optional(),
         bufferTime: z.string().optional(),
         operatingHours: z.string().optional(),
+        primaryColor: z.string().optional(),
+        themeKey: z.string().optional(),
+        logoUrl: z.string().optional(),
+        coverImageUrl: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
         if (input.depositPercent !== undefined) data.depositPercent = input.depositPercent.toString();
         return upsertVenueSettings(ctx.user.id, data);
       }),
-
-    getOwn: protectedProcedure.query(async ({ ctx }) => {
-      return getVenueSettings(ctx.user.id);
+    getOwn: protectedProcedure.query(async ({ ctx }) => {      return getVenueSettings(ctx.user.id);
     }),
 
     upsert: protectedProcedure

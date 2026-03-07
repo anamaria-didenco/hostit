@@ -35,6 +35,7 @@ export const venueSettings = mysqlTable("venue_settings", {
   logoUrl: text("logoUrl"),
   coverImageUrl: text("coverImageUrl"),
   primaryColor: varchar("primaryColor", { length: 20 }).default("#C8102E"),
+  themeKey: varchar("themeKey", { length: 50 }).default("sage"),
   leadFormTitle: varchar("leadFormTitle", { length: 255 }).default("Book Your Event"),
   leadFormSubtitle: text("leadFormSubtitle"),
   depositPercent: decimal("depositPercent", { precision: 5, scale: 2 }).default("25.00"),

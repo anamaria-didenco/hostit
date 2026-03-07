@@ -585,3 +585,10 @@
 - [x] Rename 'booked' status to 'confirmed' throughout the app
 - [ ] Fix PDF saving (proposals, runsheets, staff sheets not saving/downloading)
 - [x] Add food & beverage selections to RunsheetBuilder (from linked proposal)
+
+## Multi-Theme Colour Scheme Switcher
+- [x] Define 5+ colour themes in index.css as data-theme attribute variants
+- [x] Add theme switcher UI in Dashboard Settings (Branding section)
+- [x] Persist selected theme in venue_settings.themeKey field (added to DB)
+- [x] Apply theme on app load from venue settings (useEffect sets data-theme on html element)
+- [x] Fix RunsheetBuilder to use CSS brand tokens (removed all 205 hardcoded hex colours)
