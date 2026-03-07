@@ -338,6 +338,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { id: "lead-form", label: "Contact Form" },
     { id: "integrations", label: "Integrations" },
     { id: "menu", label: "Menu" },
+    { id: "menu-catalogue", label: "Menu Catalogue" },
     { id: "templates", label: "Proposal" },
     { id: "email", label: "Email" },
     { id: "automated-tasks", label: "Automated Tasks" },
@@ -401,7 +402,7 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook">("overview");
-  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-contact-form"|"group-settings"|"profile"|"email-settings"|"floor-plans">("venue-details");
+  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"menu-catalogue"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-contact-form"|"group-settings"|"profile"|"email-settings"|"floor-plans">("venue-details");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
@@ -672,6 +673,40 @@ export default function Dashboard() {
   const deleteMenuSection = trpc.menuSections.delete.useMutation({ onSuccess: () => { refetchMenuSections(); toast.success('Section deleted'); } });
   const createSalesCategory = trpc.salesCategories.create.useMutation({ onSuccess: () => { refetchSalesCategories(); setShowCategoryForm(false); setCategoryForm({ name: '' }); toast.success('Category added!'); } });
   const deleteSalesCategory = trpc.salesCategories.delete.useMutation({ onSuccess: () => { refetchSalesCategories(); toast.success('Category deleted'); } });
+
+  // Menu Catalogue state
+  const { data: catalogCategories, refetch: refetchCatalogCategories } = trpc.menuCatalog.listCategories.useQuery({ type: 'all' }, { enabled: !!user?.id && settingsSubTab === 'menu-catalogue' });
+  const [catalogActiveType, setCatalogActiveType] = useState<'food'|'drink'>('food');
+  const [catalogActiveCategoryId, setCatalogActiveCategoryId] = useState<number|null>(null);
+  const { data: catalogItems, refetch: refetchCatalogItems } = trpc.menuCatalog.listItems.useQuery(
+    { categoryId: catalogActiveCategoryId ?? undefined },
+    { enabled: !!user?.id && settingsSubTab === 'menu-catalogue' && catalogActiveCategoryId !== null }
+  );
+  const [showCatalogCategoryForm, setShowCatalogCategoryForm] = useState(false);
+  const [catalogCategoryForm, setCatalogCategoryForm] = useState({ name: '', type: 'food' as 'food'|'drink', description: '' });
+  const [showCatalogItemForm, setShowCatalogItemForm] = useState(false);
+  const [editingCatalogItemId, setEditingCatalogItemId] = useState<number|null>(null);
+  const [catalogItemForm, setCatalogItemForm] = useState({ name: '', description: '', pricingType: 'per_person' as 'per_person'|'per_item', price: '', unit: 'person', allergens: '' });
+  const [catalogCsvText, setCatalogCsvText] = useState('');
+  const [showCatalogCsvImport, setShowCatalogCsvImport] = useState(false);
+  const createCatalogCategory = trpc.menuCatalog.createCategory.useMutation({
+    onSuccess: () => { refetchCatalogCategories(); setShowCatalogCategoryForm(false); setCatalogCategoryForm({ name: '', type: 'food', description: '' }); toast.success('Category created!'); }
+  });
+  const deleteCatalogCategory = trpc.menuCatalog.deleteCategory.useMutation({
+    onSuccess: () => { refetchCatalogCategories(); setCatalogActiveCategoryId(null); toast.success('Category deleted'); }
+  });
+  const createCatalogItem = trpc.menuCatalog.createItem.useMutation({
+    onSuccess: () => { refetchCatalogItems(); setShowCatalogItemForm(false); setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); toast.success('Item added!'); }
+  });
+  const updateCatalogItem = trpc.menuCatalog.updateItem.useMutation({
+    onSuccess: () => { refetchCatalogItems(); setShowCatalogItemForm(false); setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); toast.success('Item updated!'); }
+  });
+  const deleteCatalogItem = trpc.menuCatalog.deleteItem.useMutation({
+    onSuccess: () => { refetchCatalogItems(); toast.success('Item deleted'); }
+  });
+  const bulkCreateCatalogItems = trpc.menuCatalog.bulkCreateItems.useMutation({
+    onSuccess: (data) => { refetchCatalogItems(); setShowCatalogCsvImport(false); setCatalogCsvText(''); toast.success(`Imported ${data.count} items!`); }
+  });
 
   // Bar menu state
   const { data: barMenuItemsList, refetch: refetchBarMenu } = trpc.barMenu.list.useQuery(undefined, { enabled: isAuthenticated });
@@ -4106,6 +4141,215 @@ export default function Dashboard() {
               )}
 
               {/* ── BILLING ─────────────────────────────────────── */}
+              {/* ── MENU CATALOGUE ──────────────────────────────────── */}
+              {settingsSubTab === "menu-catalogue" && (
+              <div className="max-w-5xl mx-auto">
+                <div className="flex items-center justify-between mb-6">
+                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Menu Catalogue</h1>
+                  <p className="font-dm text-sm text-ink/50">Build your food and drink catalogue. Items can be selected when building proposals and runsheets.</p>
+                </div>
+
+                {/* Type tabs */}
+                <div className="flex gap-0 mb-6 border-b border-gold/20">
+                  {(['food','drink'] as const).map(t => (
+                    <button key={t} onClick={() => { setCatalogActiveType(t); setCatalogActiveCategoryId(null); }}
+                      className={`font-bebas tracking-widest text-sm px-6 py-2.5 border-b-2 transition-colors ${
+                        catalogActiveType === t ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink/70'
+                      }`}>
+                      {t === 'food' ? '🍽 FOOD' : '🍷 DRINKS'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-4">
+                  {/* Left: Category list */}
+                  <div className="w-56 flex-shrink-0">
+                    <div className="bg-white border border-gold/20 rounded">
+                      <div className="flex items-center justify-between px-3 py-2.5 border-b border-gold/10">
+                        <span className="font-bebas tracking-widest text-xs text-ink/50">CATEGORIES</span>
+                        <button onClick={() => { setCatalogCategoryForm({ name: '', type: catalogActiveType, description: '' }); setShowCatalogCategoryForm(true); }}
+                          className="text-forest hover:text-forest-dark"><Plus className="w-4 h-4" /></button>
+                      </div>
+                      {showCatalogCategoryForm && (
+                        <form onSubmit={e => { e.preventDefault(); createCatalogCategory.mutate({ name: catalogCategoryForm.name, type: catalogActiveType, description: catalogCategoryForm.description || undefined }); }}
+                          className="p-3 border-b border-gold/10 bg-linen/40 space-y-2">
+                          <Input required value={catalogCategoryForm.name} onChange={e => setCatalogCategoryForm(f => ({ ...f, name: e.target.value }))}
+                            placeholder={catalogActiveType === 'food' ? 'e.g. Canapés' : 'e.g. Wines'}
+                            className="rounded-none border border-gold/30 text-sm h-8" />
+                          <div className="flex gap-1.5">
+                            <button type="submit" disabled={createCatalogCategory.isPending} className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 py-1">ADD</button>
+                            <button type="button" onClick={() => setShowCatalogCategoryForm(false)} className="border border-gray-300 text-gray-500 text-xs px-3 py-1">Cancel</button>
+                          </div>
+                        </form>
+                      )}
+                      <div className="divide-y divide-gold/10">
+                        {(catalogCategories ?? []).filter((c: any) => c.type === catalogActiveType).length === 0 && !showCatalogCategoryForm && (
+                          <p className="p-4 text-xs text-center text-ink/40">No categories yet</p>
+                        )}
+                        {(catalogCategories ?? []).filter((c: any) => c.type === catalogActiveType).map((cat: any) => (
+                          <div key={cat.id}
+                            className={`flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors group ${
+                              catalogActiveCategoryId === cat.id ? 'bg-forest/8 border-l-2 border-forest' : 'hover:bg-linen/60'
+                            }`}
+                            onClick={() => setCatalogActiveCategoryId(cat.id)}>
+                            <span className={`font-dm text-sm truncate ${ catalogActiveCategoryId === cat.id ? 'text-forest font-semibold' : 'text-ink/70' }`}>{cat.name}</span>
+                            <button onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cat.name}" and all its items?`)) deleteCatalogCategory.mutate({ id: cat.id }); }}
+                              className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                              <Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Items panel */}
+                  <div className="flex-1 min-w-0">
+                    {catalogActiveCategoryId === null ? (
+                      <div className="bg-white border border-gold/20 rounded flex items-center justify-center h-48">
+                        <p className="font-dm text-sm text-ink/40">Select a category to view and manage its items</p>
+                      </div>
+                    ) : (
+                      <div className="bg-white border border-gold/20 rounded">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gold/10">
+                          <span className="font-bebas tracking-widest text-xs text-ink/50">
+                            {(catalogCategories ?? []).find((c: any) => c.id === catalogActiveCategoryId)?.name?.toUpperCase() ?? 'ITEMS'}
+                          </span>
+                          <div className="flex gap-2">
+                            <button onClick={() => setShowCatalogCsvImport(v => !v)}
+                              className="border border-gold/30 text-ink/60 font-bebas tracking-widest text-xs px-3 py-1.5 hover:border-forest hover:text-forest transition-colors">CSV IMPORT</button>
+                            <button onClick={() => { setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); setShowCatalogItemForm(true); }}
+                              className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 py-1.5">+ ADD ITEM</button>
+                          </div>
+                        </div>
+
+                        {/* CSV Import panel */}
+                        {showCatalogCsvImport && (
+                          <div className="p-4 border-b border-gold/10 bg-linen/40 space-y-3">
+                            <p className="font-dm text-xs text-ink/60">Paste CSV data below. Format: <code className="bg-gold/10 px-1">name, description, pricing_type (per_person/per_item), price, unit, allergens</code></p>
+                            <Textarea value={catalogCsvText} onChange={e => setCatalogCsvText(e.target.value)}
+                              placeholder="Smoked Salmon Blini, Served with crème fraîche, per_person, 8.50, person, gluten\nVegetable Spring Roll, Crispy and golden, per_item, 3.00, piece,"
+                              className="rounded-none border border-gold/30 font-mono text-xs h-28" />
+                            <div className="flex gap-2">
+                              <button onClick={() => {
+                                const rows = catalogCsvText.trim().split('\n').filter(Boolean).map(line => {
+                                  const [name, description, pricingType, price, unit, allergens] = line.split(',').map(s => s.trim());
+                                  return { categoryId: catalogActiveCategoryId!, name: name || '', description: description || undefined,
+                                    pricingType: (pricingType === 'per_item' ? 'per_item' : 'per_person') as 'per_person'|'per_item',
+                                    price: parseFloat(price) || 0, unit: unit || 'person', allergens: allergens || undefined };
+                                }).filter(r => r.name);
+                                if (rows.length) bulkCreateCatalogItems.mutate(rows);
+                              }} disabled={bulkCreateCatalogItems.isPending || !catalogCsvText.trim()}
+                                className="btn-forest text-cream font-bebas tracking-widest text-xs px-4 py-1.5">IMPORT {catalogCsvText.trim().split('\n').filter(Boolean).length} ROWS</button>
+                              <button onClick={() => { setShowCatalogCsvImport(false); setCatalogCsvText(''); }} className="border border-gray-300 text-gray-500 text-xs px-3 py-1.5">Cancel</button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Add/Edit item form */}
+                        {showCatalogItemForm && (
+                          <form onSubmit={e => { e.preventDefault();
+                            const data = { name: catalogItemForm.name, description: catalogItemForm.description || undefined,
+                              pricingType: catalogItemForm.pricingType, price: parseFloat(catalogItemForm.price) || 0,
+                              unit: catalogItemForm.unit || 'person', allergens: catalogItemForm.allergens || undefined };
+                            if (editingCatalogItemId) updateCatalogItem.mutate({ id: editingCatalogItemId, ...data });
+                            else createCatalogItem.mutate({ categoryId: catalogActiveCategoryId!, ...data });
+                          }} className="p-4 border-b border-gold/10 bg-linen/30 space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ITEM NAME *</label>
+                                <Input required value={catalogItemForm.name} onChange={e => setCatalogItemForm(f => ({ ...f, name: e.target.value }))}
+                                  placeholder="e.g. Smoked Salmon Blini" className="rounded-none border border-gold/30 text-sm h-9" />
+                              </div>
+                              <div>
+                                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE (NZD)</label>
+                                <Input type="number" step="0.01" value={catalogItemForm.price} onChange={e => setCatalogItemForm(f => ({ ...f, price: e.target.value }))}
+                                  placeholder="8.50" className="rounded-none border border-gold/30 text-sm h-9" />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+                              <Input value={catalogItemForm.description} onChange={e => setCatalogItemForm(f => ({ ...f, description: e.target.value }))}
+                                placeholder="Optional description" className="rounded-none border border-gold/30 text-sm h-9" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICING TYPE</label>
+                                <div className="flex">
+                                  <button type="button" onClick={() => setCatalogItemForm(f => ({ ...f, pricingType: 'per_person', unit: 'person' }))}
+                                    className={`flex-1 font-bebas tracking-widest text-xs py-2 border transition-colors ${
+                                      catalogItemForm.pricingType === 'per_person' ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/50 hover:border-forest'
+                                    }`}>PER PERSON</button>
+                                  <button type="button" onClick={() => setCatalogItemForm(f => ({ ...f, pricingType: 'per_item', unit: 'piece' }))}
+                                    className={`flex-1 font-bebas tracking-widest text-xs py-2 border border-l-0 transition-colors ${
+                                      catalogItemForm.pricingType === 'per_item' ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/50 hover:border-forest'
+                                    }`}>PER ITEM</button>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">UNIT LABEL</label>
+                                <Input value={catalogItemForm.unit} onChange={e => setCatalogItemForm(f => ({ ...f, unit: e.target.value }))}
+                                  placeholder={catalogItemForm.pricingType === 'per_person' ? 'person' : 'piece'}
+                                  className="rounded-none border border-gold/30 text-sm h-9" />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ALLERGENS</label>
+                              <Input value={catalogItemForm.allergens} onChange={e => setCatalogItemForm(f => ({ ...f, allergens: e.target.value }))}
+                                placeholder="e.g. gluten, dairy, nuts" className="rounded-none border border-gold/30 text-sm h-9" />
+                            </div>
+                            <div className="flex gap-2">
+                              <button type="submit" disabled={createCatalogItem.isPending || updateCatalogItem.isPending}
+                                className="btn-forest text-cream font-bebas tracking-widest text-xs px-4 py-2">{editingCatalogItemId ? 'UPDATE' : 'ADD ITEM'}</button>
+                              <button type="button" onClick={() => { setShowCatalogItemForm(false); setEditingCatalogItemId(null); }}
+                                className="border border-gray-300 text-gray-500 text-xs px-3 py-2">Cancel</button>
+                            </div>
+                          </form>
+                        )}
+
+                        {/* Items list */}
+                        <div className="divide-y divide-gold/10">
+                          {(catalogItems ?? []).length === 0 && !showCatalogItemForm && (
+                            <p className="p-6 text-center text-sm text-ink/40">No items yet. Click + Add Item to get started, or use CSV Import.</p>
+                          )}
+                          {(catalogItems ?? []).map((item: any) => (
+                            <div key={item.id} className="flex items-start justify-between px-4 py-3 hover:bg-linen/30 group">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-dm text-sm font-medium text-ink">{item.name}</span>
+                                  <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 ${
+                                    item.pricingType === 'per_person' ? 'bg-forest/10 text-forest' : 'bg-gold/15 text-amber-700'
+                                  }`}>{item.pricingType === 'per_person' ? 'PER PERSON' : 'PER ITEM'}</span>
+                                  {item.allergens && <span className="font-dm text-[10px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{item.allergens}</span>}
+                                </div>
+                                {item.description && <p className="font-dm text-xs text-ink/50 mt-0.5 truncate">{item.description}</p>}
+                              </div>
+                              <div className="flex items-center gap-3 ml-3 flex-shrink-0">
+                                {item.price > 0 && (
+                                  <span className="font-dm text-sm font-semibold text-ink">
+                                    ${(item.price / 100).toFixed(2)}
+                                    <span className="text-xs text-ink/40 font-normal"> /{item.unit ?? (item.pricingType === 'per_person' ? 'person' : 'item')}</span>
+                                  </span>
+                                )}
+                                <button onClick={() => {
+                                  setEditingCatalogItemId(item.id);
+                                  setCatalogItemForm({ name: item.name, description: item.description ?? '', pricingType: item.pricingType, price: item.price > 0 ? String(item.price / 100) : '', unit: item.unit ?? 'person', allergens: item.allergens ?? '' });
+                                  setShowCatalogItemForm(true);
+                                }} className="opacity-0 group-hover:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
+                                  <Edit2 className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteCatalogItem.mutate({ id: item.id }); }}
+                                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                                  <Trash2 className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              )}
+
               {settingsSubTab === "billing" && (
               <div className="max-w-3xl mx-auto">
                 <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Billing</h1>

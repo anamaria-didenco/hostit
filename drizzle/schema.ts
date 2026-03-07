@@ -586,3 +586,34 @@ export const runsheetTemplates = mysqlTable("runsheet_templates", {
 });
 export type RunsheetTemplate = typeof runsheetTemplates.$inferSelect;
 export type InsertRunsheetTemplate = typeof runsheetTemplates.$inferInsert;
+
+// ─── Menu Categories ──────────────────────────────────────────────────────────
+export const menuCategories = mysqlTable("menu_categories", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: mysqlEnum("type", ["food", "drink"]).notNull().default("food"),
+  description: text("description"),
+  sortOrder: int("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type MenuCategory = typeof menuCategories.$inferSelect;
+export type InsertMenuCategory = typeof menuCategories.$inferInsert;
+
+// ─── Menu Category Items ──────────────────────────────────────────────────────
+export const menuCategoryItems = mysqlTable("menu_category_items", {
+  id: int("id").autoincrement().primaryKey(),
+  categoryId: int("category_id").notNull(),
+  ownerId: int("owner_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  pricingType: mysqlEnum("pricing_type", ["per_person", "per_item"]).notNull().default("per_person"),
+  price: int("price").notNull().default(0), // stored in cents
+  unit: varchar("unit", { length: 50 }).default("person"), // e.g. "person", "piece", "bottle", "kg"
+  available: boolean("available").notNull().default(true),
+  allergens: varchar("allergens", { length: 500 }),
+  sortOrder: int("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type MenuCategoryItem = typeof menuCategoryItems.$inferSelect;
+export type InsertMenuCategoryItem = typeof menuCategoryItems.$inferInsert;

@@ -2410,5 +2410,234 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // ─── Menu Catalog ─────────────────────────────────────────────────────────────
+  menuCatalog: router({
+    // ── Categories ──
+    listCategories: protectedProcedure
+      .input(z.object({ type: z.enum(['food', 'drink', 'all']).optional() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategories } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const conditions: any[] = [eq(menuCategories.ownerId, ctx.user.id)];
+        if (input.type && input.type !== 'all') conditions.push(eq(menuCategories.type, input.type as any));
+        return db.select().from(menuCategories).where(and(...conditions)).orderBy(asc(menuCategories.sortOrder), asc(menuCategories.createdAt));
+      }),
+    createCategory: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+        type: z.enum(['food', 'drink']),
+        description: z.string().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategories } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(menuCategories).values({
+          ownerId: ctx.user.id,
+          name: input.name,
+          type: input.type,
+          description: input.description ?? null,
+          sortOrder: input.sortOrder ?? 0,
+          createdAt: Date.now(),
+        });
+        const rows = await db.select().from(menuCategories)
+          .where(eq(menuCategories.ownerId, ctx.user.id))
+          .orderBy((t: any) => t.createdAt);
+        return rows[rows.length - 1];
+      }),
+    updateCategory: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        type: z.enum(['food', 'drink']).optional(),
+        description: z.string().nullable().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategories } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        await db.update(menuCategories).set(rest as any).where(and(eq(menuCategories.id, id), eq(menuCategories.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    deleteCategory: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategories, menuCategoryItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { success: false };
+        await db.delete(menuCategoryItems).where(and(eq(menuCategoryItems.categoryId, input.id), eq(menuCategoryItems.ownerId, ctx.user.id)));
+        await db.delete(menuCategories).where(and(eq(menuCategories.id, input.id), eq(menuCategories.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    // ── Items ──
+    listItems: protectedProcedure
+      .input(z.object({ categoryId: z.number().optional(), type: z.enum(['food', 'drink', 'all']).optional() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategoryItems, menuCategories } = await import('../drizzle/schema');
+        const { eq, and, asc, inArray } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        if (input.categoryId) {
+          return db.select().from(menuCategoryItems)
+            .where(and(eq(menuCategoryItems.categoryId, input.categoryId), eq(menuCategoryItems.ownerId, ctx.user.id)))
+            .orderBy(asc(menuCategoryItems.sortOrder), asc(menuCategoryItems.createdAt));
+        }
+        if (input.type && input.type !== 'all') {
+          const cats = await db.select({ id: menuCategories.id }).from(menuCategories)
+            .where(and(eq(menuCategories.ownerId, ctx.user.id), eq(menuCategories.type, input.type as any)));
+          if (!cats.length) return [];
+          return db.select().from(menuCategoryItems)
+            .where(and(inArray(menuCategoryItems.categoryId, cats.map((c: any) => c.id)), eq(menuCategoryItems.ownerId, ctx.user.id)))
+            .orderBy(asc(menuCategoryItems.sortOrder));
+        }
+        return db.select().from(menuCategoryItems)
+          .where(eq(menuCategoryItems.ownerId, ctx.user.id))
+          .orderBy(asc(menuCategoryItems.sortOrder), asc(menuCategoryItems.createdAt));
+      }),
+    createItem: protectedProcedure
+      .input(z.object({
+        categoryId: z.number(),
+        name: z.string().min(1).max(255),
+        description: z.string().optional(),
+        pricingType: z.enum(['per_person', 'per_item']).default('per_person'),
+        price: z.number().min(0).default(0),
+        unit: z.string().optional(),
+        available: z.boolean().default(true),
+        allergens: z.string().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategoryItems } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(menuCategoryItems).values({
+          categoryId: input.categoryId,
+          ownerId: ctx.user.id,
+          name: input.name,
+          description: input.description ?? null,
+          pricingType: input.pricingType,
+          price: Math.round((input.price ?? 0) * 100),
+          unit: input.unit ?? 'person',
+          available: input.available ?? true,
+          allergens: input.allergens ?? null,
+          sortOrder: input.sortOrder ?? 0,
+          createdAt: Date.now(),
+        });
+        return { success: true };
+      }),
+    updateItem: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        description: z.string().nullable().optional(),
+        pricingType: z.enum(['per_person', 'per_item']).optional(),
+        price: z.number().min(0).optional(),
+        unit: z.string().optional(),
+        available: z.boolean().optional(),
+        allergens: z.string().nullable().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategoryItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, price, ...rest } = input;
+        const updateData: any = { ...rest };
+        if (price !== undefined) updateData.price = Math.round(price * 100);
+        await db.update(menuCategoryItems).set(updateData).where(and(eq(menuCategoryItems.id, id), eq(menuCategoryItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    deleteItem: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategoryItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { success: false };
+        await db.delete(menuCategoryItems).where(and(eq(menuCategoryItems.id, input.id), eq(menuCategoryItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    bulkCreateItems: protectedProcedure
+      .input(z.array(z.object({
+        categoryId: z.number(),
+        name: z.string().min(1),
+        description: z.string().optional(),
+        pricingType: z.enum(['per_person', 'per_item']).default('per_person'),
+        price: z.number().min(0).default(0),
+        unit: z.string().optional(),
+        allergens: z.string().optional(),
+      })))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategoryItems } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        const rows = input.map((item, i) => ({
+          categoryId: item.categoryId,
+          ownerId: ctx.user.id,
+          name: item.name,
+          description: item.description ?? null,
+          pricingType: item.pricingType,
+          price: Math.round((item.price ?? 0) * 100),
+          unit: item.unit ?? 'person',
+          available: true,
+          allergens: item.allergens ?? null,
+          sortOrder: i,
+          createdAt: now + i,
+        }));
+        if (rows.length > 0) await db.insert(menuCategoryItems).values(rows);
+        return { success: true, count: rows.length };
+      }),
+    // ── AI Runsheet Parse ──
+    parseRunsheetText: protectedProcedure
+      .input(z.object({ text: z.string().min(1), eventType: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm');
+        const prompt = `You are a venue event coordinator. Parse the following text into a structured runsheet timeline.
+Extract all time-based items and return them as a JSON object with an "items" array.
+Each item must have: time (HH:MM 24h), duration (minutes, estimate if not given), title (short), description (optional detail), category (one of: Setup, Service, Kitchen, Speech, Entertainment, Cleanup, Other).
+If a time is missing, estimate based on context. Event type: ${input.eventType ?? 'general event'}.
+
+Text to parse:
+${input.text}
+
+Return ONLY valid JSON like: {"items": [{"time":"09:00","duration":30,"title":"...","description":"...","category":"Setup"}]}`;
+        const response = await invokeLLM({
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant that outputs valid JSON only.' },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' } as any,
+        });
+        const rawContent = response.choices?.[0]?.message?.content ?? '{"items":[]}';
+        const raw = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
+        try {
+          const parsed = JSON.parse(raw);
+          const items = Array.isArray(parsed) ? parsed : (parsed.items ?? parsed.timeline ?? []);
+          return { items: items.slice(0, 60), success: true };
+        } catch {
+          return { items: [], success: false, error: 'Failed to parse response' };
+        }
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;

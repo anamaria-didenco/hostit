@@ -755,3 +755,68 @@ describe("proposal PDF generation", () => {
     await caller.leads.delete({ id: lead.id });
   });
 });
+
+// ─── Menu Catalogue Tests ─────────────────────────────────────────────────────
+describe("menuCatalog", () => {
+  it("menuCatalog.listCategories > requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.menuCatalog.listCategories({})).rejects.toThrow();
+  });
+
+  it("menuCatalog.listCategories > returns array for authenticated user", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.menuCatalog.listCategories({});
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("menuCatalog.listCategories > filters by type food", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.menuCatalog.listCategories({ type: "food" });
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("menuCatalog.listItems > requires authentication", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.menuCatalog.listItems({})).rejects.toThrow();
+  });
+
+  it("menuCatalog.listItems > returns array for authenticated user", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.menuCatalog.listItems({});
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("menuCatalog.createCategory > creates a food category", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const cat = await caller.menuCatalog.createCategory({ name: "Test Canapés", type: "food" });
+    expect(cat).toBeDefined();
+    expect(cat.name).toBe("Test Canapés");
+    // Cleanup
+    await caller.menuCatalog.deleteCategory({ id: cat.id });
+  });
+
+  it("menuCatalog.createItem > creates an item in a category and fetches it", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const cat = await caller.menuCatalog.createCategory({ name: "Test Mains", type: "food" });
+    await caller.menuCatalog.createItem({
+      categoryId: cat.id,
+      name: "Beef Wellington",
+      description: "Classic beef wellington with mushroom duxelles",
+      pricingType: "per_person",
+      price: 45,
+    });
+    // Fetch items for category
+    const items = await caller.menuCatalog.listItems({ categoryId: cat.id });
+    expect(items.length).toBeGreaterThan(0);
+    expect(items[0].name).toBe("Beef Wellington");
+    // Cleanup
+    await caller.menuCatalog.deleteCategory({ id: cat.id });
+  });
+});

@@ -186,6 +186,70 @@ export default function RunsheetBuilder() {
     setShowTemplates(false);
   }
 
+  // Menu Catalogue selector state
+  const [showCatalogSelector, setShowCatalogSelector] = useState(false);
+  const [catalogSelectorType, setCatalogSelectorType] = useState<'food'|'drink'>('food');
+  const [catalogSelectorCategoryId, setCatalogSelectorCategoryId] = useState<number|null>(null);
+  const [catalogSelectedItems, setCatalogSelectedItems] = useState<Set<number>>(new Set());
+  const { data: catalogCategories } = trpc.menuCatalog.listCategories.useQuery(
+    { type: catalogSelectorType },
+    { enabled: showCatalogSelector }
+  );
+  const { data: catalogItems } = trpc.menuCatalog.listItems.useQuery(
+    { categoryId: catalogSelectorCategoryId ?? undefined },
+    { enabled: showCatalogSelector && catalogSelectorCategoryId !== null }
+  );
+
+  // Smart paste-import state
+  const [showPasteImport, setShowPasteImport] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [parsedItems, setParsedItems] = useState<any[]|null>(null);
+  const parseRunsheetMutation = trpc.menuCatalog.parseRunsheetText.useMutation({
+    onSuccess: (data: any) => setParsedItems(data.items),
+    onError: () => toast.error('Failed to parse text — try again'),
+  });
+
+  function addCatalogItemsToFnb() {
+    if (!catalogItems || catalogSelectedItems.size === 0) return;
+    const toAdd: FnbItem[] = catalogItems
+      .filter((ci: any) => catalogSelectedItems.has(ci.id))
+      .map((ci: any, i: number) => ({
+        section: fnbSection,
+        course: catalogSelectorType === 'food' ? (catalogCategories?.find((c: any) => c.id === catalogSelectorCategoryId)?.name ?? 'Other') : 'Drinks',
+        dishName: ci.name,
+        description: ci.description ?? '',
+        qty: 1,
+        dietary: '',
+        serviceTime: '',
+        staffAssigned: '',
+        sortOrder: fnbItems.length + i,
+        _tempId: `cat-${Date.now()}-${i}`,
+      }));
+    setFnbItems(prev => [...prev, ...toAdd]);
+    setCatalogSelectedItems(new Set());
+    setShowCatalogSelector(false);
+    toast.success(`Added ${toAdd.length} item${toAdd.length > 1 ? 's' : ''} to F&B sheet`);
+  }
+
+  function applyParsedItems() {
+    if (!parsedItems) return;
+    const newItems: Item[] = parsedItems.map((pi: any, i: number) => ({
+      time: pi.time ?? '09:00',
+      duration: pi.duration ?? 30,
+      title: pi.title ?? 'Untitled',
+      description: pi.description ?? '',
+      assignedTo: pi.assignedTo ?? '',
+      category: pi.category ?? 'other',
+      sortOrder: items.length + i,
+      _tempId: `paste-${Date.now()}-${i}`,
+    }));
+    setItems(prev => [...prev, ...newItems]);
+    setParsedItems(null);
+    setPasteText('');
+    setShowPasteImport(false);
+    toast.success(`Added ${newItems.length} item${newItems.length > 1 ? 's' : ''} to timeline`);
+  }
+
   const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>([
     { id: "c1", text: "Confirm final guest numbers with client", checked: false, category: "admin" },
     { id: "c2", text: "Send final invoice / confirm payment", checked: false, category: "admin" },
@@ -1026,12 +1090,20 @@ export default function RunsheetBuilder() {
                   </span>
                 )}
               </div>
-              <button
-                onClick={addItem}
-                className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 transition-colors border border-forest/30 px-3 py-1.5 hover:bg-forest/5"
-              >
-                <Plus className="w-3.5 h-3.5" /> ADD ITEM
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowPasteImport(true); setParsedItems(null); setPasteText(''); }}
+                  className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
+                >
+                  <FileText className="w-3.5 h-3.5" /> IMPORT FROM TEXT
+                </button>
+                <button
+                  onClick={addItem}
+                  className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 transition-colors border border-forest/30 px-3 py-1.5 hover:bg-forest/5"
+                >
+                  <Plus className="w-3.5 h-3.5" /> ADD ITEM
+                </button>
+              </div>
             </div>
 
             {/* Print timeline header */}
@@ -1354,8 +1426,16 @@ export default function RunsheetBuilder() {
 
             {/* Add new item form */}
             <div className="px-5 py-4 border-b border-gold/30 bg-linen/50 no-print">
-              <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-3">
-                ADD {fnbSection === 'foh' ? 'FOH' : 'KITCHEN'} ITEM
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-bebas tracking-widest text-[10px] text-ink/40">
+                  ADD {fnbSection === 'foh' ? 'FOH' : 'KITCHEN'} ITEM
+                </div>
+                <button
+                  onClick={() => { setShowCatalogSelector(true); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Set()); }}
+                  className="font-bebas tracking-widest text-[10px] text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-2.5 py-1 hover:bg-forest/5 transition-colors"
+                >
+                  <UtensilsCrossed className="w-3 h-3" /> ADD FROM MENU CATALOGUE
+                </button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
                 <div>
@@ -1742,6 +1822,230 @@ export default function RunsheetBuilder() {
           Prepared by HOSTit — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
         </div>
       </div>
+
+      {/* ── SMART PASTE IMPORT MODAL ─────────────────────────────────────── */}
+      {showPasteImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
+          <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest">
+              <div>
+                <div className="font-bebas tracking-widest text-gold text-lg">IMPORT FROM TEXT</div>
+                <div className="font-dm text-white/60 text-xs mt-0.5">Paste an email, notes, or Word doc — AI will extract timeline items</div>
+              </div>
+              <button onClick={() => { setShowPasteImport(false); setParsedItems(null); setPasteText(''); }} className="text-white/50 hover:text-white transition-colors">
+                <span className="text-2xl leading-none">&times;</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {!parsedItems ? (
+                <>
+                  <div>
+                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">PASTE YOUR TEXT BELOW</label>
+                    <Textarea
+                      value={pasteText}
+                      onChange={e => setPasteText(e.target.value)}
+                      placeholder={`Example:\n\n6:00pm — Guests arrive, welcome drinks on arrival\n6:30pm — Speeches begin (30 mins)\n7:00pm — Entrée service\n7:45pm — Main course\n9:00pm — Cake cutting & dessert\n10:00pm — Dancing & bar\n12:00am — Event concludes`}
+                      rows={12}
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onClick={() => parseRunsheetMutation.mutate({ text: pasteText, eventType: eventType || undefined })}
+                      disabled={!pasteText.trim() || parseRunsheetMutation.isPending}
+                      className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2.5 flex items-center gap-2"
+                    >
+                      {parseRunsheetMutation.isPending ? (
+                        <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> PARSING...</>
+                      ) : (
+                        <><FileText className="w-4 h-4" /> PARSE WITH AI</>
+                      )}
+                    </Button>
+                    <span className="font-dm text-xs text-ink/40">AI will extract times, durations, titles and categories</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-bebas tracking-widest text-sm text-forest">{parsedItems.length} ITEMS FOUND — REVIEW BEFORE ADDING</div>
+                    <button onClick={() => setParsedItems(null)} className="font-dm text-xs text-ink/40 hover:text-ink underline">← Back to paste</button>
+                  </div>
+                  {parsedItems.length === 0 ? (
+                    <div className="text-center py-10 text-ink/40 font-dm text-sm">
+                      <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      No items could be extracted. Try pasting more structured text with times.
+                    </div>
+                  ) : (
+                    <div className="border border-gold/30 divide-y divide-gold/20">
+                      <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-linen">
+                        <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/50">TIME</div>
+                        <div className="col-span-1 font-bebas text-[10px] tracking-widest text-ink/50">MINS</div>
+                        <div className="col-span-5 font-bebas text-[10px] tracking-widest text-ink/50">TITLE</div>
+                        <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/50">CATEGORY</div>
+                        <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/50">DESCRIPTION</div>
+                      </div>
+                      {parsedItems.map((item: any, i: number) => (
+                        <div key={i} className="grid grid-cols-12 gap-2 px-3 py-2 items-start text-sm font-dm hover:bg-linen/50">
+                          <div className="col-span-2 font-mono text-xs text-forest font-semibold">{item.time ?? '—'}</div>
+                          <div className="col-span-1 text-ink/60 text-xs">{item.duration ?? 30}m</div>
+                          <div className="col-span-5 font-medium text-ink">{item.title ?? 'Untitled'}</div>
+                          <div className="col-span-2">
+                            <span className={`text-[10px] font-bebas px-1.5 py-0.5 ${catStyle(String(item.category ?? 'other').toLowerCase())}`}>
+                              {item.category ?? 'Other'}
+                            </span>
+                          </div>
+                          <div className="col-span-2 text-xs text-ink/50 truncate">{item.description ?? ''}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {parsedItems && parsedItems.length > 0 && (
+              <div className="px-6 py-4 border-t border-gold/30 flex items-center justify-between bg-linen/50">
+                <span className="font-dm text-sm text-ink/60">{parsedItems.length} items will be appended to the timeline</span>
+                <div className="flex gap-3">
+                  <button onClick={() => { setShowPasteImport(false); setParsedItems(null); setPasteText(''); }} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
+                  <Button onClick={applyParsedItems} className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2">
+                    <Plus className="w-4 h-4" /> ADD {parsedItems.length} ITEMS TO TIMELINE
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MENU CATALOGUE SELECTOR MODAL ────────────────────────────────── */}
+      {showCatalogSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
+          <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest">
+              <div>
+                <div className="font-bebas tracking-widest text-gold text-lg">ADD FROM MENU CATALOGUE</div>
+                <div className="font-dm text-white/60 text-xs mt-0.5">Select items to add to the {fnbSection === 'foh' ? 'FOH' : 'Kitchen'} F&B sheet</div>
+              </div>
+              <button onClick={() => setShowCatalogSelector(false)} className="text-white/50 hover:text-white transition-colors">
+                <span className="text-2xl leading-none">&times;</span>
+              </button>
+            </div>
+
+            {/* Type selector */}
+            <div className="flex border-b border-gold/30">
+              {(['food', 'drink'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => { setCatalogSelectorType(t); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Set()); }}
+                  className={`flex-1 py-3 font-bebas tracking-widest text-sm transition-colors ${
+                    catalogSelectorType === t ? 'bg-forest text-white' : 'text-ink/50 hover:bg-linen'
+                  }`}
+                >
+                  {t === 'food' ? '🍽 FOOD' : '🍷 DRINKS'}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-1 overflow-hidden">
+              {/* Category list */}
+              <div className="w-44 border-r border-gold/30 overflow-y-auto bg-linen/50">
+                <div className="font-bebas tracking-widest text-[10px] text-ink/40 px-3 pt-3 pb-1">CATEGORIES</div>
+                {!catalogCategories || catalogCategories.length === 0 ? (
+                  <div className="px-3 py-4 text-xs font-dm text-ink/40">No categories yet. Add them in Settings → Menu Catalogue.</div>
+                ) : (
+                  catalogCategories.map((cat: any) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => { setCatalogSelectorCategoryId(cat.id); setCatalogSelectedItems(new Set()); }}
+                      className={`w-full text-left px-3 py-2.5 font-dm text-sm transition-colors border-b border-gold/20 ${
+                        catalogSelectorCategoryId === cat.id ? 'bg-forest text-white' : 'hover:bg-linen text-ink'
+                      }`}
+                    >
+                      {cat.name}
+                      {cat.description && <div className={`text-[10px] mt-0.5 truncate ${catalogSelectorCategoryId === cat.id ? 'text-white/60' : 'text-ink/40'}`}>{cat.description}</div>}
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* Items list */}
+              <div className="flex-1 overflow-y-auto">
+                {!catalogSelectorCategoryId ? (
+                  <div className="flex flex-col items-center justify-center h-full text-ink/30 font-dm text-sm">
+                    <UtensilsCrossed className="w-8 h-8 mb-2 opacity-20" />
+                    Select a category to browse items
+                  </div>
+                ) : !catalogItems || catalogItems.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-ink/30 font-dm text-sm">
+                    <UtensilsCrossed className="w-8 h-8 mb-2 opacity-20" />
+                    No items in this category yet
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gold/20">
+                    {catalogItems.map((item: any) => {
+                      const isSelected = catalogSelectedItems.has(item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setCatalogSelectedItems(prev => {
+                              const next = new Set(prev);
+                              if (next.has(item.id)) next.delete(item.id);
+                              else next.add(item.id);
+                              return next;
+                            });
+                          }}
+                          className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors ${
+                            isSelected ? 'bg-forest/10 border-l-2 border-forest' : 'hover:bg-linen border-l-2 border-transparent'
+                          }`}
+                        >
+                          <div className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                            isSelected ? 'bg-forest border-forest' : 'border-ink/30'
+                          }`}>
+                            {isSelected && <span className="text-white text-[10px] leading-none">✓</span>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-dm text-sm font-medium text-ink">{item.name}</div>
+                            {item.description && <div className="font-dm text-xs text-ink/50 mt-0.5 truncate">{item.description}</div>}
+                            {item.allergens && <div className="font-dm text-[10px] text-amber-700 mt-0.5">⚠ {item.allergens}</div>}
+                          </div>
+                          {item.price > 0 && (
+                            <div className="text-right flex-shrink-0">
+                              <div className="font-dm text-sm font-semibold text-ink">${(item.price / 100).toFixed(2)}</div>
+                              <div className="font-bebas text-[9px] text-ink/40 tracking-widest">{item.pricingType === 'per_person' ? 'PP' : 'EACH'}</div>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gold/30 flex items-center justify-between bg-linen/50">
+              <span className="font-dm text-sm text-ink/60">
+                {catalogSelectedItems.size > 0 ? `${catalogSelectedItems.size} item${catalogSelectedItems.size > 1 ? 's' : ''} selected` : 'Select items to add'}
+              </span>
+              <div className="flex gap-3">
+                <button onClick={() => setShowCatalogSelector(false)} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
+                <Button
+                  onClick={addCatalogItemsToFnb}
+                  disabled={catalogSelectedItems.size === 0}
+                  className="bg-forest hover:bg-forest/90 disabled:opacity-40 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> ADD {catalogSelectedItems.size > 0 ? catalogSelectedItems.size : ''} ITEMS
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @media print {
