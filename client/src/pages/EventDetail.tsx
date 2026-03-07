@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   ArrowLeft, FileText, Clock, MapPin, Users, DollarSign, CheckCircle,
   Calendar, Mail, Phone, Edit3, Save, X, ExternalLink, Printer,
-  ClipboardList, LayoutGrid, ChefHat
+  ClipboardList, LayoutGrid, ChefHat, MessageSquare, Package, Layers,
+  Link2, PenLine, Plus, Trash2
 } from "lucide-react";
 
 const EVENT_TYPES = [
@@ -467,6 +468,599 @@ export default function EventDetail() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ─── Tabbed Modules ─────────────────────────────────────────────────── */}
+      <EventModuleTabs bookingId={bookingId} booking={booking} />
+    </div>
+  );
+}
+
+// ─── EventModuleTabs ──────────────────────────────────────────────────────────
+const MODULE_TABS = [
+  { id: 'comms', label: 'COMMS', icon: MessageSquare },
+  { id: 'contracts', label: 'CONTRACTS', icon: PenLine },
+  { id: 'budget', label: 'BUDGET', icon: DollarSign },
+  { id: 'equipment', label: 'EQUIPMENT', icon: Package },
+  { id: 'seating', label: 'SEATING', icon: Layers },
+  { id: 'portal', label: 'CLIENT PORTAL', icon: Link2 },
+];
+
+function EventModuleTabs({ bookingId, booking }: { bookingId: number; booking: any }) {
+  const [activeTab, setActiveTab] = useState('comms');
+  return (
+    <div className="max-w-6xl mx-auto px-4 pb-12">
+      <div className="flex border-b border-gold/20 mb-6 overflow-x-auto">
+        {MODULE_TABS.map(tab => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-5 py-3 font-bebas tracking-widest text-xs whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-gold text-amber-700'
+                  : 'border-transparent text-ink/40 hover:text-ink/70'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+      {activeTab === 'comms' && <CommsTab bookingId={bookingId} />}
+      {activeTab === 'contracts' && <ContractsTab bookingId={bookingId} booking={booking} />}
+      {activeTab === 'budget' && <BudgetTab bookingId={bookingId} />}
+      {activeTab === 'equipment' && <EquipmentTab bookingId={bookingId} />}
+      {activeTab === 'seating' && <SeatingTab bookingId={bookingId} booking={booking} />}
+      {activeTab === 'portal' && <PortalTab bookingId={bookingId} booking={booking} />}
+    </div>
+  );
+}
+
+// ─── Communications Tab ───────────────────────────────────────────────────────
+function CommsTab({ bookingId }: { bookingId: number }) {
+  const { data: comms, isLoading } = trpc.comms.list.useQuery({ bookingId });
+  const utils = trpc.useUtils();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ type: 'note' as const, subject: '', body: '', direction: 'internal' as const, contactName: '', contactEmail: '' });
+  const create = trpc.comms.create.useMutation({
+    onSuccess: () => { utils.comms.list.invalidate({ bookingId }); setShowForm(false); setForm({ type: 'note', subject: '', body: '', direction: 'internal', contactName: '', contactEmail: '' }); toast.success('Log entry added'); },
+  });
+  const del = trpc.comms.delete.useMutation({ onSuccess: () => utils.comms.list.invalidate({ bookingId }) });
+  const TYPE_ICONS: Record<string, string> = { note: '📝', email: '📧', call: '📞', sms: '💬', meeting: '🤝' };
+  const TYPE_COLORS: Record<string, string> = { note: 'bg-gray-100 text-gray-600', email: 'bg-blue-100 text-blue-700', call: 'bg-green-100 text-green-700', sms: 'bg-purple-100 text-purple-700', meeting: 'bg-amber-100 text-amber-700' };
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">COMMUNICATIONS LOG</h3>
+        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> ADD ENTRY</button>
+      </div>
+      {showForm && (
+        <div className="dante-card p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">TYPE</label>
+              <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+                <option value="note">Note</option>
+                <option value="email">Email</option>
+                <option value="call">Call</option>
+                <option value="sms">SMS</option>
+                <option value="meeting">Meeting</option>
+              </select>
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">DIRECTION</label>
+              <select value={form.direction} onChange={e => setForm(p => ({ ...p, direction: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+                <option value="internal">Internal</option>
+                <option value="inbound">Inbound</option>
+                <option value="outbound">Outbound</option>
+              </select>
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">SUBJECT</label>
+              <Input value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} placeholder="Optional subject" className="text-sm" />
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CONTACT NAME</label>
+              <Input value={form.contactName} onChange={e => setForm(p => ({ ...p, contactName: e.target.value }))} placeholder="Optional" className="text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">NOTES / BODY *</label>
+            <Textarea value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={3} placeholder="What was discussed or noted?" className="text-sm" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.body || create.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{create.isPending ? 'SAVING...' : 'SAVE'}</button>
+            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+          </div>
+        </div>
+      )}
+      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {!isLoading && (!comms || comms.length === 0) && (
+        <div className="text-center py-12 text-gray-400">
+          <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No communications logged yet.</p>
+        </div>
+      )}
+      <div className="space-y-2">
+        {(comms ?? []).map((c: any) => (
+          <div key={c.id} className="dante-card p-4 flex items-start gap-3">
+            <span className="text-lg">{TYPE_ICONS[c.type] ?? '📝'}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${TYPE_COLORS[c.type] ?? 'bg-gray-100 text-gray-600'}`}>{c.type}</span>
+                {c.direction !== 'internal' && <span className="text-xs text-gray-400">{c.direction}</span>}
+                {c.subject && <span className="text-sm font-medium text-ink">{c.subject}</span>}
+                <span className="text-xs text-gray-400 ml-auto">{new Date(c.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              <p className="text-sm text-ink/80 whitespace-pre-wrap">{c.body}</p>
+              {c.contactName && <p className="text-xs text-gray-400 mt-1">Contact: {c.contactName}{c.contactEmail ? ` · ${c.contactEmail}` : ''}</p>}
+            </div>
+            <button onClick={() => del.mutate({ id: c.id })} className="text-red-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Contracts Tab ────────────────────────────────────────────────────────────
+function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any }) {
+  const { data: contracts, isLoading } = trpc.contracts.list.useQuery({ bookingId });
+  const utils = trpc.useUtils();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: '', body: '', clientName: (booking?.firstName ?? '') + ' ' + (booking?.lastName ?? ''), clientEmail: booking?.email ?? '' });
+  const create = trpc.contracts.create.useMutation({
+    onSuccess: () => { utils.contracts.list.invalidate({ bookingId }); setShowForm(false); toast.success('Contract created'); },
+  });
+  const send = trpc.contracts.send.useMutation({ onSuccess: () => { utils.contracts.list.invalidate({ bookingId }); toast.success('Contract marked as sent'); } });
+  const del = trpc.contracts.delete.useMutation({ onSuccess: () => utils.contracts.list.invalidate({ bookingId }) });
+  const STATUS_COLORS: Record<string, string> = { draft: 'bg-gray-100 text-gray-600', sent: 'bg-blue-100 text-blue-700', signed: 'bg-green-100 text-green-700', declined: 'bg-red-100 text-red-700', expired: 'bg-gray-100 text-gray-400' };
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">CONTRACTS & E-SIGNATURES</h3>
+        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> NEW CONTRACT</button>
+      </div>
+      {showForm && (
+        <div className="dante-card p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CONTRACT TITLE *</label>
+              <Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Wedding Venue Agreement" className="text-sm" />
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CLIENT NAME</label>
+              <Input value={form.clientName} onChange={e => setForm(p => ({ ...p, clientName: e.target.value }))} className="text-sm" />
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CLIENT EMAIL</label>
+              <Input type="email" value={form.clientEmail} onChange={e => setForm(p => ({ ...p, clientEmail: e.target.value }))} className="text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CONTRACT BODY *</label>
+            <Textarea value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={8} placeholder="Paste or type the full contract text here…" className="text-sm font-mono" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => create.mutate({ ...form, bookingId })} disabled={!form.title || !form.body || create.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{create.isPending ? 'SAVING...' : 'CREATE CONTRACT'}</button>
+            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+          </div>
+        </div>
+      )}
+      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {!isLoading && (!contracts || contracts.length === 0) && (
+        <div className="text-center py-12 text-gray-400">
+          <PenLine className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No contracts yet. Create one to send to your client for signing.</p>
+        </div>
+      )}
+      <div className="space-y-3">
+        {(contracts ?? []).map((c: any) => (
+          <div key={c.id} className="dante-card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-semibold text-ink text-sm">{c.title}</span>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[c.status] ?? 'bg-gray-100 text-gray-600'}`}>{c.status}</span>
+                </div>
+                <div className="text-xs text-gray-400">
+                  {c.clientName && <span>For: {c.clientName}</span>}
+                  {c.clientEmail && <span> · {c.clientEmail}</span>}
+                  <span> · Created {new Date(c.createdAt).toLocaleDateString('en-NZ')}</span>
+                  {c.signedAt && <span className="text-green-600"> · Signed {new Date(c.signedAt).toLocaleDateString('en-NZ')} by {c.signerName}</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {c.status === 'draft' && (
+                  <button onClick={() => send.mutate({ id: c.id })} className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-blue-300 text-blue-600 hover:bg-blue-50">MARK SENT</button>
+                )}
+                <button onClick={() => del.mutate({ id: c.id })} className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+            {c.token && (
+              <div className="mt-2 pt-2 border-t border-gray-100">
+                <div className="text-xs text-gray-400 mb-1">Signing link (share with client):</div>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-gray-50 px-2 py-1 rounded flex-1 truncate">{window.location.origin}/portal/{c.token}</code>
+                  <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/portal/${c.token}`); toast.success('Link copied!'); }} className="text-xs font-bebas tracking-widest px-2 py-1 border border-gray-300 text-gray-500 hover:bg-gray-50">COPY</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Budget Tab ───────────────────────────────────────────────────────────────
+function BudgetTab({ bookingId }: { bookingId: number }) {
+  const { data: items, isLoading } = trpc.budgets.list.useQuery({ bookingId });
+  const utils = trpc.useUtils();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', category: 'venue', type: 'expense' as const, estimatedAmount: '', actualAmount: '' });
+  const create = trpc.budgets.create.useMutation({
+    onSuccess: () => { utils.budgets.list.invalidate({ bookingId }); setShowForm(false); setForm({ name: '', category: 'venue', type: 'expense', estimatedAmount: '', actualAmount: '' }); toast.success('Budget item added'); },
+  });
+  const update = trpc.budgets.update.useMutation({ onSuccess: () => utils.budgets.list.invalidate({ bookingId }) });
+  const del = trpc.budgets.delete.useMutation({ onSuccess: () => utils.budgets.list.invalidate({ bookingId }) });
+  const income = (items ?? []).filter((i: any) => i.type === 'income');
+  const expenses = (items ?? []).filter((i: any) => i.type === 'expense');
+  const totalEstIncome = income.reduce((s: number, i: any) => s + Number(i.estimatedAmount ?? 0), 0);
+  const totalEstExpense = expenses.reduce((s: number, i: any) => s + Number(i.estimatedAmount ?? 0), 0);
+  const totalActIncome = income.reduce((s: number, i: any) => s + Number(i.actualAmount ?? 0), 0);
+  const totalActExpense = expenses.reduce((s: number, i: any) => s + Number(i.actualAmount ?? 0), 0);
+  const CATEGORIES = ['venue', 'catering', 'beverages', 'staffing', 'entertainment', 'decor', 'photography', 'transport', 'accommodation', 'marketing', 'other'];
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">EVENT BUDGET</h3>
+        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> ADD ITEM</button>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[{ label: 'EST. INCOME', val: totalEstIncome, color: 'text-green-600' }, { label: 'ACT. INCOME', val: totalActIncome, color: 'text-green-700' }, { label: 'EST. EXPENSE', val: totalEstExpense, color: 'text-red-500' }, { label: 'ACT. EXPENSE', val: totalActExpense, color: 'text-red-600' }].map(s => (
+          <div key={s.label} className="dante-card p-3 text-center">
+            <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">{s.label}</div>
+            <div className={`font-cormorant text-xl font-semibold ${s.color}`}>${s.val.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+          </div>
+        ))}
+      </div>
+      {showForm && (
+        <div className="dante-card p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">ITEM NAME *</label>
+              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Venue hire, Catering" className="text-sm" />
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">TYPE</label>
+              <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+                <option value="expense">Expense</option>
+                <option value="income">Income</option>
+              </select>
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CATEGORY</label>
+              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+                {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">ESTIMATED ($)</label>
+              <Input type="number" value={form.estimatedAmount} onChange={e => setForm(p => ({ ...p, estimatedAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">ACTUAL ($)</label>
+              <Input type="number" value={form.actualAmount} onChange={e => setForm(p => ({ ...p, actualAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => create.mutate({ name: form.name, category: form.category, type: form.type, estimatedAmount: Number(form.estimatedAmount) || 0, actualAmount: Number(form.actualAmount) || 0, bookingId })} disabled={!form.name || create.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{create.isPending ? 'SAVING...' : 'ADD'}</button>
+            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+          </div>
+        </div>
+      )}
+      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {!isLoading && (!items || items.length === 0) && (
+        <div className="text-center py-12 text-gray-400">
+          <DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No budget items yet. Track estimated vs actual costs here.</p>
+        </div>
+      )}
+      {items && items.length > 0 && (
+        <div className="dante-card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/50">ITEM</th>
+                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/50">CATEGORY</th>
+                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/50">TYPE</th>
+                <th className="text-right p-3 font-bebas tracking-widest text-xs text-ink/50">ESTIMATED</th>
+                <th className="text-right p-3 font-bebas tracking-widest text-xs text-ink/50">ACTUAL</th>
+                <th className="p-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {(items ?? []).map((item: any) => (
+                <tr key={item.id} className="border-t border-gray-50 hover:bg-gray-50">
+                  <td className="p-3 font-medium text-ink">{item.name}</td>
+                  <td className="p-3 text-gray-500 capitalize">{item.category}</td>
+                  <td className="p-3">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{item.type}</span>
+                  </td>
+                  <td className="p-3 text-right text-gray-700">${Number(item.estimatedAmount ?? 0).toFixed(2)}</td>
+                  <td className="p-3 text-right">
+                    <input type="number" defaultValue={item.actualAmount ?? 0} onBlur={e => update.mutate({ id: item.id, actualAmount: Number(e.target.value) })} className="w-24 text-right border border-gray-200 rounded px-2 py-0.5 text-sm" />
+                  </td>
+                  <td className="p-3 text-right">
+                    <button onClick={() => del.mutate({ id: item.id })} className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Equipment Tab ────────────────────────────────────────────────────────────
+function EquipmentTab({ bookingId }: { bookingId: number }) {
+  const { data: items, isLoading } = trpc.equipment.listEvent.useQuery({ bookingId });
+  const utils = trpc.useUtils();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', category: 'av', quantity: '1', notes: '' });
+  const add = trpc.equipment.addToEvent.useMutation({
+    onSuccess: () => { utils.equipment.listEvent.invalidate({ bookingId }); setShowForm(false); setForm({ name: '', category: 'av', quantity: '1', notes: '' }); toast.success('Equipment added'); },
+  });
+  const updateItem = trpc.equipment.updateEvent.useMutation({ onSuccess: () => utils.equipment.listEvent.invalidate({ bookingId }) });
+  const del = trpc.equipment.deleteEvent.useMutation({ onSuccess: () => utils.equipment.listEvent.invalidate({ bookingId }) });
+  const STATUS_COLORS: Record<string, string> = { needed: 'bg-yellow-100 text-yellow-700', confirmed: 'bg-blue-100 text-blue-700', delivered: 'bg-green-100 text-green-700', returned: 'bg-gray-100 text-gray-500' };
+  const CATEGORIES = ['av', 'furniture', 'linen', 'lighting', 'catering', 'decor', 'transport', 'other'];
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">EQUIPMENT & INVENTORY</h3>
+        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> ADD ITEM</button>
+      </div>
+      {showForm && (
+        <div className="dante-card p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">ITEM NAME *</label>
+              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Round tables x 10, PA system" className="text-sm" />
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CATEGORY</label>
+              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+                {CATEGORIES.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">QUANTITY</label>
+              <Input type="number" value={form.quantity} onChange={e => setForm(p => ({ ...p, quantity: e.target.value }))} className="text-sm" />
+            </div>
+            <div className="col-span-2">
+              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">NOTES</label>
+              <Input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" className="text-sm" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => add.mutate({ name: form.name, category: form.category, quantity: Number(form.quantity) || 1, notes: form.notes || undefined, bookingId })} disabled={!form.name || add.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{add.isPending ? 'SAVING...' : 'ADD'}</button>
+            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+          </div>
+        </div>
+      )}
+      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {!isLoading && (!items || items.length === 0) && (
+        <div className="text-center py-12 text-gray-400">
+          <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No equipment tracked yet. Add items needed for this event.</p>
+        </div>
+      )}
+      <div className="space-y-2">
+        {(items ?? []).map((item: any) => (
+          <div key={item.id} className="dante-card p-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-ink text-sm">{item.name}</span>
+                <span className="text-xs text-gray-400">× {item.quantity}</span>
+                <span className="text-xs text-gray-400 capitalize">{item.category}</span>
+              </div>
+              {item.notes && <p className="text-xs text-gray-400 mt-0.5">{item.notes}</p>}
+            </div>
+            <select
+              value={item.status}
+              onChange={e => updateItem.mutate({ id: item.id, status: e.target.value as any })}
+              className={`text-xs font-semibold px-2 py-1 rounded-full border-0 ${STATUS_COLORS[item.status] ?? 'bg-gray-100 text-gray-500'}`}
+            >
+              <option value="needed">Needed</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="delivered">Delivered</option>
+              <option value="returned">Returned</option>
+            </select>
+            <button onClick={() => del.mutate({ id: item.id })} className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Seating Chart Tab ────────────────────────────────────────────────────────
+function SeatingTab({ bookingId, booking }: { bookingId: number; booking: any }) {
+  const { data: chart } = trpc.seating.get.useQuery({ bookingId });
+  const utils = trpc.useUtils();
+  const save = trpc.seating.save.useMutation({ onSuccess: () => { utils.seating.get.invalidate({ bookingId }); toast.success('Seating chart saved'); } });
+  const [tables, setTables] = useState<any[]>([]);
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const guestCount = booking?.guestCount ?? 0;
+
+  useEffect(() => {
+    if (chart?.canvasData) {
+      try { setTables(JSON.parse(chart.canvasData)); } catch {}
+    }
+  }, [chart]);
+
+  const addTable = (shape: 'round' | 'rect') => {
+    const id = Date.now();
+    setTables(prev => [...prev, { id, shape, x: 50 + Math.random() * 300, y: 50 + Math.random() * 300, seats: 8, label: `Table ${prev.length + 1}` }]);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent, id: number) => {
+    const t = tables.find(t => t.id === id);
+    if (!t) return;
+    setDragging(id);
+    setDragOffset({ x: e.clientX - t.x, y: e.clientY - t.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (dragging === null) return;
+    setTables(prev => prev.map(t => t.id === dragging ? { ...t, x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y } : t));
+  };
+
+  const totalSeats = tables.reduce((s, t) => s + (t.seats ?? 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">SEATING CHART</h3>
+        <div className="flex gap-2">
+          <button onClick={() => addTable('round')} className="border border-forest/30 text-forest text-xs font-bebas tracking-widest px-3 py-2 hover:bg-forest/5">+ ROUND TABLE</button>
+          <button onClick={() => addTable('rect')} className="border border-forest/30 text-forest text-xs font-bebas tracking-widest px-3 py-2 hover:bg-forest/5">+ RECT TABLE</button>
+          <button onClick={() => save.mutate({ bookingId, canvasData: JSON.stringify(tables), guestCount: totalSeats })} disabled={save.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{save.isPending ? 'SAVING...' : 'SAVE CHART'}</button>
+        </div>
+      </div>
+      <div className="flex gap-4 text-xs text-gray-500">
+        <span>Tables: {tables.length}</span>
+        <span>Total seats: {totalSeats}</span>
+        {guestCount > 0 && <span className={totalSeats >= guestCount ? 'text-green-600' : 'text-red-500'}>Guests: {guestCount} ({totalSeats >= guestCount ? '✓ Enough seats' : `${guestCount - totalSeats} more needed`})</span>}
+      </div>
+      <div
+        className="relative bg-[#f9f7f2] border-2 border-dashed border-gold/30 rounded-lg overflow-hidden select-none"
+        style={{ height: 500 }}
+        onMouseMove={handleMouseMove}
+        onMouseUp={() => setDragging(null)}
+        onMouseLeave={() => setDragging(null)}
+      >
+        {tables.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center text-gray-300">
+            <div className="text-center">
+              <Layers className="w-12 h-12 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">Add tables above to start building your seating chart</p>
+            </div>
+          </div>
+        )}
+        {tables.map(table => (
+          <div
+            key={table.id}
+            style={{ position: 'absolute', left: table.x, top: table.y, cursor: dragging === table.id ? 'grabbing' : 'grab' }}
+            onMouseDown={e => handleMouseDown(e, table.id)}
+          >
+            {table.shape === 'round' ? (
+              <div className="w-20 h-20 rounded-full bg-[#2d5a27]/10 border-2 border-[#2d5a27]/40 flex flex-col items-center justify-center">
+                <span className="text-xs font-bebas tracking-widest text-[#2d5a27]">{table.label}</span>
+                <span className="text-xs text-[#2d5a27]/60">{table.seats} seats</span>
+              </div>
+            ) : (
+              <div className="w-28 h-16 bg-[#c9a84c]/10 border-2 border-[#c9a84c]/40 flex flex-col items-center justify-center">
+                <span className="text-xs font-bebas tracking-widest text-[#c9a84c]">{table.label}</span>
+                <span className="text-xs text-[#c9a84c]/60">{table.seats} seats</span>
+              </div>
+            )}
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setTables(prev => prev.filter(t => t.id !== table.id))}
+              className="absolute -top-2 -right-2 w-5 h-5 bg-red-400 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-500"
+            >×</button>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-gray-400">Drag tables to position them. Click × to remove.</p>
+    </div>
+  );
+}
+
+// ─── Client Portal Tab ────────────────────────────────────────────────────────
+function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) {
+  const { data: tokens, isLoading } = trpc.portal.list.useQuery({ bookingId });
+  const utils = trpc.useUtils();
+  const [showForm, setShowForm] = useState(false);
+  const [perms, setPerms] = useState({ viewProposal: true, viewRunsheet: false, viewBudget: false, approveProposal: true, signContract: false });
+  const create = trpc.portal.create.useMutation({
+    onSuccess: () => { utils.portal.list.invalidate({ bookingId }); setShowForm(false); toast.success('Client portal link created!'); },
+  });
+  const del = trpc.portal.delete.useMutation({ onSuccess: () => utils.portal.list.invalidate({ bookingId }) });
+  const PERM_LABELS: Record<string, string> = { viewProposal: 'View Proposal', viewRunsheet: 'View Runsheet', viewBudget: 'View Budget', approveProposal: 'Approve Proposal', signContract: 'Sign Contract' };
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">CLIENT PORTAL LINKS</h3>
+        <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> CREATE LINK</button>
+      </div>
+      <p className="text-xs text-gray-400">Share a secure link with your client so they can view their event details, approve proposals, and sign contracts — no login required.</p>
+      {showForm && (
+        <div className="dante-card p-4 space-y-3">
+          <div className="font-bebas text-xs tracking-widest text-ink/50 mb-2">PERMISSIONS</div>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(PERM_LABELS).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={(perms as any)[key]} onChange={e => setPerms(p => ({ ...p, [key]: e.target.checked }))} className="w-4 h-4 accent-forest" />
+                <span className="text-sm text-ink/80">{label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => create.mutate({ bookingId, clientName: `${booking?.firstName ?? ''} ${booking?.lastName ?? ''}`.trim(), clientEmail: booking?.email, permissions: perms })}
+              disabled={create.isPending}
+              className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2"
+            >{create.isPending ? 'CREATING...' : 'CREATE PORTAL LINK'}</button>
+            <button onClick={() => setShowForm(false)} className="border border-gray-300 text-gray-600 text-xs px-4 py-2 hover:bg-gray-50">Cancel</button>
+          </div>
+        </div>
+      )}
+      {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
+      {!isLoading && (!tokens || tokens.length === 0) && (
+        <div className="text-center py-12 text-gray-400">
+          <Link2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No portal links yet. Create one to share with your client.</p>
+        </div>
+      )}
+      <div className="space-y-3">
+        {(tokens ?? []).map((t: any) => {
+          const url = `${window.location.origin}/portal/${t.token}`;
+          const permsObj = t.permissions ? (() => { try { return JSON.parse(t.permissions); } catch { return {}; } })() : {};
+          return (
+            <div key={t.id} className="dante-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-ink mb-1">{t.clientName || 'Client'}</div>
+                  <div className="text-xs text-gray-400 mb-2">
+                    Created {new Date(t.createdAt).toLocaleDateString('en-NZ')}
+                    {t.lastAccessedAt && ` · Last accessed ${new Date(t.lastAccessedAt).toLocaleDateString('en-NZ')}`}
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {Object.entries(PERM_LABELS).filter(([k]) => permsObj[k]).map(([k, label]) => (
+                      <span key={k} className="text-xs bg-forest/10 text-forest px-2 py-0.5 rounded-full">{label}</span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs bg-gray-50 px-2 py-1 rounded flex-1 truncate">{url}</code>
+                    <button onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied!'); }} className="text-xs font-bebas tracking-widest px-2 py-1 border border-gray-300 text-gray-500 hover:bg-gray-50 flex-shrink-0">COPY</button>
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-bebas tracking-widest px-2 py-1 border border-forest/30 text-forest hover:bg-forest/5 flex-shrink-0">PREVIEW</a>
+                  </div>
+                </div>
+                <button onClick={() => del.mutate({ id: t.id })} className="text-red-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

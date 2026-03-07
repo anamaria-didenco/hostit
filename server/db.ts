@@ -249,9 +249,11 @@ export async function createBooking(data: InsertBooking) {
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 export async function getDashboardStats(ownerId: number) {
   const db = await getDb();
-  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0 };
+  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0, upcomingEvents: 0, overdueTasks: 0, conversionRate: 0, totalRevenueAllTime: 0, pendingPayments: 0 };
+  const { tasks, bookings: bookingsTable, payments } = await import('../drizzle/schema');
+  const { gte, lte, and: andOp } = await import('drizzle-orm');
   const allLeads = await db.select().from(leads).where(eq(leads.ownerId, ownerId));
-  const newLeads = allLeads.filter(l => l.status === "new").length;
+  const newLeads = allLeads.filter(l => l.status === 'new').length;
   const now = new Date();
   const overdueFollowUps = allLeads.filter(l =>
     l.followUpDate &&
@@ -259,9 +261,26 @@ export async function getDashboardStats(ownerId: number) {
     !['booked', 'lost', 'cancelled'].includes(l.status)
   ).length;
   const allProposals = await db.select().from(proposals).where(eq(proposals.ownerId, ownerId));
-  const proposalsSent = allProposals.filter(p => ["sent", "viewed", "accepted"].includes(p.status)).length;
+  const proposalsSent = allProposals.filter(p => ['sent', 'viewed', 'accepted'].includes(p.status)).length;
   const monthBookings = await getBookingsByMonth(ownerId, now.getFullYear(), now.getMonth() + 1);
   const revenueThisMonth = monthBookings.reduce((sum, b) => sum + Number(b.totalNzd ?? 0), 0);
+  // Upcoming events (next 30 days)
+  const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const allBookings = await db.select().from(bookingsTable).where(eq(bookingsTable.ownerId, ownerId));
+  const upcomingEvents = allBookings.filter(b => b.eventDate && new Date(b.eventDate) >= now && new Date(b.eventDate) <= in30 && b.status !== 'cancelled').length;
+  // Overdue tasks
+  const allTasks = await db.select().from(tasks).where(eq(tasks.ownerId, ownerId));
+  const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && t.dueDate < now.getTime()).length;
+  // Conversion rate (leads -> booked)
+  const bookedLeads = allLeads.filter(l => l.status === 'booked').length;
+  const conversionRate = allLeads.length > 0 ? Math.round((bookedLeads / allLeads.length) * 100) : 0;
+  // Total revenue all time
+  const totalRevenueAllTime = allBookings.filter(b => b.status === 'confirmed').reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);
+  // Pending payments (bookings with outstanding balance)
+  const allPayments = await db.select().from(payments).where(eq(payments.ownerId, ownerId));
+  const paidByBooking: Record<number, number> = {};
+  allPayments.forEach(p => { paidByBooking[p.bookingId] = (paidByBooking[p.bookingId] ?? 0) + Number(p.amount); });
+  const pendingPayments = allBookings.filter(b => b.status === 'confirmed' && Number(b.totalNzd ?? 0) > (paidByBooking[b.id] ?? 0)).length;
   return {
     newLeads,
     totalLeads: allLeads.length,
@@ -269,5 +288,10 @@ export async function getDashboardStats(ownerId: number) {
     bookingsThisMonth: monthBookings.length,
     revenueThisMonth,
     overdueFollowUps,
+    upcomingEvents,
+    overdueTasks,
+    conversionRate,
+    totalRevenueAllTime,
+    pendingPayments,
   };
 }

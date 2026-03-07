@@ -2639,5 +2639,521 @@ Return ONLY valid JSON like: {"items": [{"time":"09:00","duration":30,"title":".
         }
       }),
   }),
+
+
+  // ─── Contracts ───────────────────────────────────────────────────────────────
+  contracts: router({
+    list: protectedProcedure
+      .input(z.object({ bookingId: z.number().optional(), leadId: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { contracts } = await import('../drizzle/schema');
+        const { eq, and, desc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const conditions: any[] = [eq(contracts.ownerId, ctx.user.id)];
+        if (input.bookingId) conditions.push(eq(contracts.bookingId, input.bookingId));
+        else if (input.leadId) conditions.push(eq(contracts.leadId, input.leadId));
+        return db.select().from(contracts).where(and(...conditions)).orderBy(desc(contracts.createdAt));
+      }),
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { contracts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const rows = await db.select().from(contracts).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id))).limit(1);
+        if (!rows[0]) throw new Error('Not found');
+        return rows[0];
+      }),
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { contracts } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const rows = await db.select().from(contracts).where(eq(contracts.token, input.token)).limit(1);
+        if (!rows[0]) throw new Error('Not found');
+        return rows[0];
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string(),
+        body: z.string(),
+        bookingId: z.number().optional(),
+        leadId: z.number().optional(),
+        clientName: z.string().optional(),
+        clientEmail: z.string().optional(),
+        expiresAt: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { contracts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { nanoid: nid } = await import('nanoid');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const token = nid(32);
+        const now = Date.now();
+        await db.insert(contracts).values({
+          ownerId: ctx.user.id,
+          bookingId: input.bookingId ?? null,
+          leadId: input.leadId ?? null,
+          title: input.title,
+          body: input.body,
+          status: 'draft',
+          clientName: input.clientName ?? null,
+          clientEmail: input.clientEmail ?? null,
+          expiresAt: input.expiresAt ?? null,
+          token,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const rows = await db.select().from(contracts).where(and(eq(contracts.ownerId, ctx.user.id), eq(contracts.token, token))).limit(1);
+        return rows[0];
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().optional(),
+        body: z.string().optional(),
+        status: z.enum(['draft','sent','signed','declined','expired']).optional(),
+        clientName: z.string().optional(),
+        clientEmail: z.string().optional(),
+        expiresAt: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { contracts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const updates: any = { updatedAt: Date.now() };
+        if (input.title !== undefined) updates.title = input.title;
+        if (input.body !== undefined) updates.body = input.body;
+        if (input.status !== undefined) updates.status = input.status;
+        if (input.clientName !== undefined) updates.clientName = input.clientName;
+        if (input.clientEmail !== undefined) updates.clientEmail = input.clientEmail;
+        if (input.expiresAt !== undefined) updates.expiresAt = input.expiresAt;
+        await db.update(contracts).set(updates).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    send: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { contracts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        await db.update(contracts).set({ status: 'sent', sentAt: now, updatedAt: now }).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    sign: publicProcedure
+      .input(z.object({ token: z.string(), signerName: z.string(), signatureData: z.string(), signerIp: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { contracts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        await db.update(contracts).set({
+          status: 'signed',
+          signedAt: now,
+          signatureData: input.signatureData,
+          signerName: input.signerName,
+          signerIp: input.signerIp ?? '',
+          updatedAt: now,
+        }).where(and(eq(contracts.token, input.token), eq(contracts.status, 'sent')));
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { contracts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(contracts).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Event Budgets ──────────────────────────────────────────────────────────
+  budgets: router({
+    list: protectedProcedure
+      .input(z.object({ bookingId: z.number().optional(), leadId: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { eventBudgets } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const conditions: any[] = [eq(eventBudgets.ownerId, ctx.user.id)];
+        if (input.bookingId) conditions.push(eq(eventBudgets.bookingId, input.bookingId));
+        else if (input.leadId) conditions.push(eq(eventBudgets.leadId, input.leadId));
+        return db.select().from(eventBudgets).where(and(...conditions)).orderBy(asc(eventBudgets.sortOrder), asc(eventBudgets.createdAt));
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        category: z.string().default('other'),
+        type: z.enum(['income','expense']).default('expense'),
+        estimatedAmount: z.number().default(0),
+        actualAmount: z.number().optional(),
+        notes: z.string().optional(),
+        bookingId: z.number().optional(),
+        leadId: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { eventBudgets } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(eventBudgets).values({
+          ownerId: ctx.user.id,
+          bookingId: input.bookingId ?? null,
+          leadId: input.leadId ?? null,
+          name: input.name,
+          category: input.category,
+          type: input.type,
+          estimatedAmount: input.estimatedAmount,
+          actualAmount: input.actualAmount ?? 0,
+          notes: input.notes ?? null,
+          isPaid: false,
+          sortOrder: 0,
+          createdAt: Date.now(),
+        });
+        return { success: true };
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        category: z.string().optional(),
+        type: z.enum(['income','expense']).optional(),
+        estimatedAmount: z.number().optional(),
+        actualAmount: z.number().optional(),
+        notes: z.string().optional(),
+        isPaid: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { eventBudgets } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const updates: any = {};
+        if (input.name !== undefined) updates.name = input.name;
+        if (input.category !== undefined) updates.category = input.category;
+        if (input.type !== undefined) updates.type = input.type;
+        if (input.estimatedAmount !== undefined) updates.estimatedAmount = input.estimatedAmount;
+        if (input.actualAmount !== undefined) updates.actualAmount = input.actualAmount;
+        if (input.notes !== undefined) updates.notes = input.notes;
+        if (input.isPaid !== undefined) updates.isPaid = input.isPaid;
+        if (Object.keys(updates).length > 0) {
+          await db.update(eventBudgets).set(updates).where(and(eq(eventBudgets.id, input.id), eq(eventBudgets.ownerId, ctx.user.id)));
+        }
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { eventBudgets } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(eventBudgets).where(and(eq(eventBudgets.id, input.id), eq(eventBudgets.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Equipment ──────────────────────────────────────────────────────────────
+  equipment: router({
+    listCatalog: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { equipment } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(equipment).where(eq(equipment.ownerId, ctx.user.id)).orderBy(asc(equipment.category), asc(equipment.name));
+    }),
+    createCatalog: protectedProcedure
+      .input(z.object({ name: z.string(), category: z.string().default('other'), description: z.string().optional(), quantity: z.number().default(1), unit: z.string().default('item'), notes: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { equipment } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(equipment).values({ ownerId: ctx.user.id, name: input.name, category: input.category, description: input.description ?? null, quantity: input.quantity, unit: input.unit, notes: input.notes ?? null, createdAt: Date.now() });
+        return { success: true };
+      }),
+    deleteCatalog: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { equipment } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(equipment).where(and(eq(equipment.id, input.id), eq(equipment.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    listEvent: protectedProcedure
+      .input(z.object({ bookingId: z.number().optional(), leadId: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { eventEquipment } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const conditions: any[] = [eq(eventEquipment.ownerId, ctx.user.id)];
+        if (input.bookingId) conditions.push(eq(eventEquipment.bookingId, input.bookingId));
+        else if (input.leadId) conditions.push(eq(eventEquipment.leadId, input.leadId));
+        return db.select().from(eventEquipment).where(and(...conditions)).orderBy(asc(eventEquipment.sortOrder), asc(eventEquipment.createdAt));
+      }),
+    addToEvent: protectedProcedure
+      .input(z.object({ name: z.string(), category: z.string().default('other'), quantity: z.number().default(1), notes: z.string().optional(), bookingId: z.number().optional(), leadId: z.number().optional(), equipmentId: z.number().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { eventEquipment } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(eventEquipment).values({ ownerId: ctx.user.id, bookingId: input.bookingId ?? null, leadId: input.leadId ?? null, equipmentId: input.equipmentId ?? null, name: input.name, category: input.category, quantity: input.quantity, notes: input.notes ?? null, status: 'needed', sortOrder: 0, createdAt: Date.now() });
+        return { success: true };
+      }),
+    updateEvent: protectedProcedure
+      .input(z.object({ id: z.number(), name: z.string().optional(), quantity: z.number().optional(), notes: z.string().optional(), status: z.enum(['needed','confirmed','delivered','returned']).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { eventEquipment } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const updates: any = {};
+        if (input.name !== undefined) updates.name = input.name;
+        if (input.quantity !== undefined) updates.quantity = input.quantity;
+        if (input.notes !== undefined) updates.notes = input.notes;
+        if (input.status !== undefined) updates.status = input.status;
+        if (Object.keys(updates).length > 0) {
+          await db.update(eventEquipment).set(updates).where(and(eq(eventEquipment.id, input.id), eq(eventEquipment.ownerId, ctx.user.id)));
+        }
+        return { success: true };
+      }),
+    deleteEvent: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { eventEquipment } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(eventEquipment).where(and(eq(eventEquipment.id, input.id), eq(eventEquipment.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Communications ──────────────────────────────────────────────────────────
+  comms: router({
+    list: protectedProcedure
+      .input(z.object({ bookingId: z.number().optional(), leadId: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { communications } = await import('../drizzle/schema');
+        const { eq, and, desc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const conditions: any[] = [eq(communications.ownerId, ctx.user.id)];
+        if (input.bookingId) conditions.push(eq(communications.bookingId, input.bookingId));
+        else if (input.leadId) conditions.push(eq(communications.leadId, input.leadId));
+        return db.select().from(communications).where(and(...conditions)).orderBy(desc(communications.createdAt));
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        type: z.enum(['note','email','call','sms','meeting']).default('note'),
+        subject: z.string().optional(),
+        body: z.string(),
+        direction: z.enum(['inbound','outbound','internal']).default('internal'),
+        contactName: z.string().optional(),
+        contactEmail: z.string().optional(),
+        bookingId: z.number().optional(),
+        leadId: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { communications } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(communications).values({
+          ownerId: ctx.user.id,
+          bookingId: input.bookingId ?? null,
+          leadId: input.leadId ?? null,
+          type: input.type,
+          subject: input.subject ?? null,
+          body: input.body,
+          direction: input.direction,
+          contactName: input.contactName ?? null,
+          contactEmail: input.contactEmail ?? null,
+          createdAt: Date.now(),
+        });
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { communications } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(communications).where(and(eq(communications.id, input.id), eq(communications.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Seating Charts ──────────────────────────────────────────────────────────
+  seating: router({
+    get: protectedProcedure
+      .input(z.object({ bookingId: z.number().optional(), leadId: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { seatingCharts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const conditions: any[] = [eq(seatingCharts.ownerId, ctx.user.id)];
+        if (input.bookingId) conditions.push(eq(seatingCharts.bookingId, input.bookingId));
+        else if (input.leadId) conditions.push(eq(seatingCharts.leadId, input.leadId));
+        const rows = await db.select().from(seatingCharts).where(and(...conditions)).limit(1);
+        return rows[0] ?? null;
+      }),
+    save: protectedProcedure
+      .input(z.object({
+        bookingId: z.number().optional(),
+        leadId: z.number().optional(),
+        canvasData: z.string(),
+        guestCount: z.number().default(0),
+        name: z.string().default('Seating Chart'),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { seatingCharts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        const conditions: any[] = [eq(seatingCharts.ownerId, ctx.user.id)];
+        if (input.bookingId) conditions.push(eq(seatingCharts.bookingId, input.bookingId));
+        else if (input.leadId) conditions.push(eq(seatingCharts.leadId, input.leadId));
+        const existing = await db.select().from(seatingCharts).where(and(...conditions)).limit(1);
+        if (existing[0]) {
+          await db.update(seatingCharts).set({ canvasData: input.canvasData, guestCount: input.guestCount, name: input.name, updatedAt: now }).where(and(eq(seatingCharts.id, existing[0].id), eq(seatingCharts.ownerId, ctx.user.id)));
+        } else {
+          await db.insert(seatingCharts).values({ ownerId: ctx.user.id, bookingId: input.bookingId ?? null, leadId: input.leadId ?? null, name: input.name, canvasData: input.canvasData, guestCount: input.guestCount, createdAt: now, updatedAt: now });
+        }
+        return { success: true };
+      }),
+  }),
+
+  // ─── Client Portal ───────────────────────────────────────────────────────────
+  portal: router({
+    create: protectedProcedure
+      .input(z.object({
+        bookingId: z.number().optional(),
+        leadId: z.number().optional(),
+        clientName: z.string().optional(),
+        clientEmail: z.string().optional(),
+        permissions: z.object({
+          viewProposal: z.boolean().default(true),
+          viewRunsheet: z.boolean().default(false),
+          viewBudget: z.boolean().default(false),
+          approveProposal: z.boolean().default(true),
+          signContract: z.boolean().default(false),
+        }).default({ viewProposal: true, viewRunsheet: false, viewBudget: false, approveProposal: true, signContract: false }),
+        expiresAt: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { clientPortalTokens } = await import('../drizzle/schema');
+        const { nanoid: nid } = await import('nanoid');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const token = nid(32);
+        const now = Date.now();
+        await db.insert(clientPortalTokens).values({
+          ownerId: ctx.user.id,
+          bookingId: input.bookingId ?? null,
+          leadId: input.leadId ?? null,
+          token,
+          clientName: input.clientName ?? null,
+          clientEmail: input.clientEmail ?? null,
+          permissions: JSON.stringify(input.permissions),
+          expiresAt: input.expiresAt ?? null,
+          createdAt: now,
+        });
+        return { token };
+      }),
+    list: protectedProcedure
+      .input(z.object({ bookingId: z.number().optional(), leadId: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { clientPortalTokens } = await import('../drizzle/schema');
+        const { eq, and, desc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const conditions: any[] = [eq(clientPortalTokens.ownerId, ctx.user.id)];
+        if (input.bookingId) conditions.push(eq(clientPortalTokens.bookingId, input.bookingId));
+        else if (input.leadId) conditions.push(eq(clientPortalTokens.leadId, input.leadId));
+        return db.select().from(clientPortalTokens).where(and(...conditions)).orderBy(desc(clientPortalTokens.createdAt));
+      }),
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { clientPortalTokens, bookings, leads, proposals } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const rows = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
+        const row = rows[0];
+        if (!row) throw new Error('Portal link not found or expired');
+        // Update last accessed
+        await db.update(clientPortalTokens).set({ lastAccessedAt: Date.now() }).where(eq(clientPortalTokens.token, input.token));
+        const permissions = row.permissions ? JSON.parse(row.permissions) : {};
+        let booking = null, lead = null, proposal = null;
+        if (row.bookingId) {
+          const br = await db.select().from(bookings).where(eq(bookings.id, row.bookingId)).limit(1);
+          booking = br[0] ?? null;
+        }
+        if (row.leadId) {
+          const lr = await db.select().from(leads).where(eq(leads.id, row.leadId)).limit(1);
+          lead = lr[0] ?? null;
+        }
+        if (permissions.viewProposal && row.leadId) {
+          const pr = await db.select().from(proposals).where(eq(proposals.leadId, row.leadId)).limit(1);
+          proposal = pr[0] ?? null;
+        }
+        return { token: row, permissions, booking, lead, proposal };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { clientPortalTokens } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(clientPortalTokens).where(and(eq(clientPortalTokens.id, input.id), eq(clientPortalTokens.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+   }),
 });
 export type AppRouter = typeof appRouter;

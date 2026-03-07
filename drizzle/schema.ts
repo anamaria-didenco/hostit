@@ -617,3 +617,128 @@ export const menuCategoryItems = mysqlTable("menu_category_items", {
 });
 export type MenuCategoryItem = typeof menuCategoryItems.$inferSelect;
 export type InsertMenuCategoryItem = typeof menuCategoryItems.$inferInsert;
+
+// ─── Contracts ────────────────────────────────────────────────────────────────
+export const contracts = mysqlTable("contracts", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  bookingId: int("booking_id"),
+  leadId: int("lead_id"),
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body").notNull(), // HTML/markdown contract body
+  status: mysqlEnum("status", ["draft", "sent", "signed", "declined", "expired"]).notNull().default("draft"),
+  clientName: varchar("client_name", { length: 255 }),
+  clientEmail: varchar("client_email", { length: 255 }),
+  signedAt: bigint("signed_at", { mode: "number" }),
+  signatureData: text("signature_data"), // base64 drawn signature
+  signerIp: varchar("signer_ip", { length: 100 }),
+  signerName: varchar("signer_name", { length: 255 }),
+  sentAt: bigint("sent_at", { mode: "number" }),
+  expiresAt: bigint("expires_at", { mode: "number" }),
+  token: varchar("token", { length: 100 }), // public signing token
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type Contract = typeof contracts.$inferSelect;
+export type InsertContract = typeof contracts.$inferInsert;
+
+// ─── Event Budgets ────────────────────────────────────────────────────────────
+export const eventBudgets = mysqlTable("event_budgets", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  bookingId: int("booking_id"),
+  leadId: int("lead_id"),
+  name: varchar("name", { length: 255 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull().default("other"),
+  type: mysqlEnum("type", ["income", "expense"]).notNull().default("expense"),
+  estimatedAmount: int("estimated_amount").notNull().default(0), // cents
+  actualAmount: int("actual_amount").default(0), // cents
+  notes: text("notes"),
+  isPaid: boolean("is_paid").notNull().default(false),
+  sortOrder: int("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type EventBudget = typeof eventBudgets.$inferSelect;
+export type InsertEventBudget = typeof eventBudgets.$inferInsert;
+
+// ─── Equipment / Inventory ────────────────────────────────────────────────────
+export const equipment = mysqlTable("equipment", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull().default("other"),
+  description: text("description"),
+  quantity: int("quantity").notNull().default(1),
+  unit: varchar("unit", { length: 50 }).default("item"),
+  notes: text("notes"),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type Equipment = typeof equipment.$inferSelect;
+export type InsertEquipment = typeof equipment.$inferInsert;
+
+// ─── Event Equipment Assignments ──────────────────────────────────────────────
+export const eventEquipment = mysqlTable("event_equipment", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  bookingId: int("booking_id"),
+  leadId: int("lead_id"),
+  equipmentId: int("equipment_id"), // null = ad-hoc item
+  name: varchar("name", { length: 255 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull().default("other"),
+  quantity: int("quantity").notNull().default(1),
+  notes: text("notes"),
+  status: mysqlEnum("status", ["needed", "confirmed", "delivered", "returned"]).notNull().default("needed"),
+  sortOrder: int("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type EventEquipmentItem = typeof eventEquipment.$inferSelect;
+export type InsertEventEquipmentItem = typeof eventEquipment.$inferInsert;
+
+// ─── Communications / Notes ───────────────────────────────────────────────────
+export const communications = mysqlTable("communications", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  bookingId: int("booking_id"),
+  leadId: int("lead_id"),
+  type: mysqlEnum("type", ["note", "email", "call", "sms", "meeting"]).notNull().default("note"),
+  subject: varchar("subject", { length: 255 }),
+  body: text("body").notNull(),
+  direction: mysqlEnum("direction", ["inbound", "outbound", "internal"]).notNull().default("internal"),
+  contactName: varchar("contact_name", { length: 255 }),
+  contactEmail: varchar("contact_email", { length: 255 }),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type Communication = typeof communications.$inferSelect;
+export type InsertCommunication = typeof communications.$inferInsert;
+
+// ─── Seating Charts ───────────────────────────────────────────────────────────
+export const seatingCharts = mysqlTable("seating_charts", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  bookingId: int("booking_id"),
+  leadId: int("lead_id"),
+  name: varchar("name", { length: 255 }).notNull().default("Seating Chart"),
+  canvasData: text("canvas_data"), // JSON: tables, seats, guests
+  guestCount: int("guest_count").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type SeatingChart = typeof seatingCharts.$inferSelect;
+export type InsertSeatingChart = typeof seatingCharts.$inferInsert;
+
+// ─── Client Portal Tokens ─────────────────────────────────────────────────────
+export const clientPortalTokens = mysqlTable("client_portal_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  bookingId: int("booking_id"),
+  leadId: int("lead_id"),
+  token: varchar("token", { length: 100 }).notNull(),
+  clientName: varchar("client_name", { length: 255 }),
+  clientEmail: varchar("client_email", { length: 255 }),
+  permissions: text("permissions"), // JSON: { viewProposal, viewRunsheet, viewBudget, approveProposal, signContract }
+  expiresAt: bigint("expires_at", { mode: "number" }),
+  lastAccessedAt: bigint("last_accessed_at", { mode: "number" }),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type ClientPortalToken = typeof clientPortalTokens.$inferSelect;
+export type InsertClientPortalToken = typeof clientPortalTokens.$inferInsert;

@@ -10,7 +10,7 @@ import {
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid, Image as ImageIcon, Edit2,
-  ArrowUpDown
+  ArrowUpDown, CreditCard, AlertCircle
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -973,19 +973,24 @@ export default function Dashboard() {
           {tab === "overview" && (
             <div className="flex flex-col min-h-full md:h-full md:overflow-hidden">
               {/* Stats bar */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 px-4 pt-4 pb-3 border-b border-border flex-shrink-0">
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-0 border-b border-border flex-shrink-0">
                 {[
-                  { label: "New Enquiries", value: stats?.newLeads ?? 0, sub: "awaiting reply", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-4 h-4" /> },
-                  { label: "Total Enquiries", value: stats?.totalLeads ?? 0, sub: "all time", iconBg: "bg-gray-100", iconColor: "text-gray-500", icon: <Users className="w-4 h-4" /> },
-                  { label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-sage-tint", iconColor: "text-sage-green", icon: <FileText className="w-4 h-4" /> },
-                  { label: "Bookings This Month", value: stats?.bookingsThisMonth ?? 0, sub: `$${(stats?.revenueThisMonth ?? 0).toLocaleString()} NZD`, iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <CheckCircle className="w-4 h-4" /> },
-                  { label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-100", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-4 h-4" /> },
-                ].map(s => (
-                  <div key={s.label} className="stat-card py-3">
-                    <div className={`w-8 h-8 rounded-lg ${s.iconBg} ${s.iconColor} flex items-center justify-center mb-2`}>{s.icon}</div>
-                    <div className="font-inter text-2xl text-gray-900" style={{ fontWeight: 700 }}>{s.value}</div>
-                    <div className="font-inter text-xs font-semibold text-gray-500 leading-tight">{s.label}</div>
-                    <div className="font-inter text-xs text-gray-400 mt-0.5">{s.sub}</div>
+                  { label: "New Enquiries", value: stats?.newLeads ?? 0, sub: "awaiting reply", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-3.5 h-3.5" /> },
+                  { label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", iconBg: "bg-blue-50", iconColor: "text-blue-600", icon: <Calendar className="w-3.5 h-3.5" /> },
+                  { label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-sage-tint", iconColor: "text-sage-green", icon: <FileText className="w-3.5 h-3.5" /> },
+                  { label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: <TrendingUp className="w-3.5 h-3.5" /> },
+                  { label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: <DollarSign className="w-3.5 h-3.5" /> },
+                  { label: "Pending Payments", value: stats?.pendingPayments ?? 0, sub: (stats?.pendingPayments ?? 0) > 0 ? "bookings outstanding" : "all clear", iconBg: (stats?.pendingPayments ?? 0) > 0 ? "bg-orange-50" : "bg-gray-50", iconColor: (stats?.pendingPayments ?? 0) > 0 ? "text-orange-500" : "text-gray-400", icon: <CreditCard className="w-3.5 h-3.5" /> },
+                  { label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueTasks ?? 0) > 0 ? "bg-red-50" : "bg-gray-50", iconColor: (stats?.overdueTasks ?? 0) > 0 ? "text-red-500" : "text-gray-400", icon: <AlertCircle className="w-3.5 h-3.5" /> },
+                  { label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-50", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-3.5 h-3.5" /> },
+                ].map((s, i) => (
+                  <div key={s.label} className={`px-3 py-3 border-r border-b border-border last:border-r-0 ${i % 4 === 3 ? 'sm:border-r-0 lg:border-r' : ''} ${i >= 4 ? 'lg:border-b-0' : ''}`}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className={`w-6 h-6 rounded ${s.iconBg} ${s.iconColor} flex items-center justify-center flex-shrink-0`}>{s.icon}</div>
+                      <div className="font-inter text-xs text-gray-400 leading-tight truncate">{s.label}</div>
+                    </div>
+                    <div className="font-inter text-xl text-gray-900 font-bold leading-none mb-0.5">{s.value}</div>
+                    <div className="font-inter text-xs text-gray-400">{s.sub}</div>
                   </div>
                 ))}
               </div>

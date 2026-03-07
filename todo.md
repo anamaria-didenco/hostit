@@ -602,3 +602,20 @@
 - [x] Editable parsed items in Smart Paste preview (inline edit time/title/category/duration before confirming)
 - [x] Quantity input in Menu Catalogue selector (set qty/covers at selection time)
 - [x] Fix PDF export for BEO and Staff Sheet (Puppeteer executablePath fixed: /usr/lib/chromium-browser/chromium-browser)
+
+## Planning Pod Parity Features
+- [ ] Schema: contracts, budgets, equipment, seating_charts, communications, client_portal_tokens tables
+- [ ] Backend: contracts tRPC procedures (create, get, sign, list)
+- [ ] Backend: budgets tRPC procedures (create, update, get)
+- [ ] Backend: equipment tRPC procedures (CRUD)
+- [ ] Backend: communications/notes tRPC procedures (CRUD)
+- [ ] Backend: client portal token generation and public view procedure
+- [ ] Backend: seating chart tRPC procedures (save, get)
+- [x] Client Portal page (public shareable event view with approve/sign)
+- [x] Contracts + e-Signatures module in EventDetail
+- [x] Event Budgeting module in EventDetail (estimated vs actual)
+- [x] Communications Hub in EventDetail (notes, email log, call log)
+- [ ] Equipment/Inventory tracking in EventDetail
+- [ ] Seating Chart module in EventDetail (drag-and-drop)
+- [ ] Dashboard KPI widgets (revenue, upcoming events, overdue tasks, conversion rate)
+- [ ] Improve Dashboard navigation with Contacts tab
