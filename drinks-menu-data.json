@@ -1,0 +1,73 @@
+{
+  "categories": [
+    {
+      "name": "Aperitivo",
+      "items": [
+        { "name": "Aperol Spritz", "description": "Aperol, Prosecco, Soda", "price": 20 },
+        { "name": "Campari Spritz", "description": "Campari, Prosecco, Soda", "price": 20 },
+        { "name": "Limoncello Spritz", "description": "Limoncello, Prosecco, Soda", "price": 20 },
+        { "name": "Hugo Spritz", "description": "Elderflower, Prosecco, Soda", "price": 20 },
+        { "name": "Classic Negroni", "description": "Campari, Rosso Vermouth, Gin", "price": 24 },
+        { "name": "Negroni Sbagliato", "description": "Campari, Rosso Vermouth, Prosecco", "price": 23 },
+        { "name": "Cherry Negroni", "description": "Campari, Amaro, Rosso Vermouth, Gin", "price": 25 },
+        { "name": "Americano", "description": "Campari, Rosso Vermouth, Soda", "price": 23 }
+      ]
+    },
+    {
+      "name": "Vino Spumante",
+      "items": [
+        { "name": "Tallero Prosecco Extra Dry", "description": "Veneto", "priceGlass": 17, "priceBottle": 85 },
+        { "name": "Paltrinieri Lambrusco Di Soraba Radice", "description": "Emiglia Romagna", "priceBottle": 105 }
+      ]
+    },
+    {
+      "name": "Vino Bianco",
+      "items": [
+        { "name": "Mezzacorona Castel Firmian Sauvignon Blanc", "description": "Trentino", "priceGlass": 17, "priceBottle": 85 },
+        { "name": "Fantini Primo Malvasia Chardonnay", "description": "Abruzzo", "priceGlass": 16, "priceBottle": 80 },
+        { "name": "Vigneti Romio Pinot Grigio Rubione IGT", "description": "Friuli", "priceGlass": 16, "priceBottle": 80 },
+        { "name": "Parthenium Grillo", "description": "Sicilia", "priceBottle": 85 },
+        { "name": "Pipoli Bianco Basilicata IGT", "description": "Basilicata", "priceBottle": 90 }
+      ]
+    },
+    {
+      "name": "Vino Rosato",
+      "items": [
+        { "name": "Fattoria Di Basciano Rosato", "description": "Toscana", "priceGlass": 17, "priceBottle": 85 }
+      ]
+    },
+    {
+      "name": "Vino Rosso",
+      "items": [
+        { "name": "Primo Sangiovese Merlot", "description": "Puglia", "priceGlass": 16, "priceBottle": 80 },
+        { "name": "Renzo Masi Chianti Cornioletta", "description": "Toscana", "priceGlass": 17, "priceBottle": 85 },
+        { "name": "Fantini Montepulciano", "description": "Abruzzo", "priceGlass": 17, "priceBottle": 85 },
+        { "name": "Ascheri Langhe Nebbiolo San Giacomo", "description": "Piemonte", "priceBottle": 110 },
+        { "name": "Fontanabianca Barbaresco DOCG", "description": "Piemonte", "priceBottle": 165 }
+      ]
+    },
+    {
+      "name": "Birra",
+      "items": [
+        { "name": "Peroni Tap", "description": "Italia", "price": 14 },
+        { "name": "Peroni 330ml", "description": "Italia", "price": 12 },
+        { "name": "Peroni 0%", "description": "Italia", "price": 12 }
+      ]
+    },
+    {
+      "name": "Non Alcolico",
+      "items": [
+        { "name": "Fever Tree Ginger Ale", "description": "", "price": 8 },
+        { "name": "Fever Tree Cola", "description": "", "price": 8 },
+        { "name": "Fever Tree Italian Blood Orange", "description": "", "price": 8 },
+        { "name": "Fever Tree Italian Lemonade", "description": "", "price": 8 }
+      ]
+    }
+  ],
+  "barOptions": [
+    { "key": "bar_tab", "label": "Bar Tab", "description": "Set a fixed dollar amount for the bar tab" },
+    { "key": "cash_bar", "label": "Cash Bar", "description": "Guests pay for their own drinks" },
+    { "key": "bar_tab_then_cash", "label": "Bar Tab followed by Cash Bar", "description": "Bar tab runs until a set amount, then guests pay" },
+    { "key": "unlimited", "label": "Unlimited Bar Tab", "description": "Unlimited drinks for the duration of the event" }
+  ]
+}
