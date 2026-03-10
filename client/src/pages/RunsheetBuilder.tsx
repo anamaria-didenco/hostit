@@ -87,6 +87,22 @@ type FnbItem = {
 };
 const COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Other'];
 
+type ParsedRunsheetData = {
+  eventDetails?: {
+    eventDate?: string;
+    guestCount?: number;
+    eventType?: string;
+    contactName?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    spaceName?: string;
+    venueSetup?: string;
+  } | null;
+  dietaries?: { name: string; count: number; notes?: string }[];
+  fnbItems?: { course?: string; dishName: string; qty: number; serviceTime?: string; dietary?: string }[];
+  timelineItems?: any[];
+};
+
 export default function RunsheetBuilder() {
   const [, navigate] = useLocation();
   const { user, loading: authLoading } = useAuth();
@@ -203,9 +219,22 @@ export default function RunsheetBuilder() {
   // Smart paste-import state
   const [showPasteImport, setShowPasteImport] = useState(false);
   const [pasteText, setPasteText] = useState('');
-  const [parsedItems, setParsedItems] = useState<any[]|null>(null);
+  const [parsedData, setParsedData] = useState<ParsedRunsheetData|null>(null);
+  const [includeEventDetails, setIncludeEventDetails] = useState(true);
+  const [includeDietaries, setIncludeDietaries] = useState(true);
+  const [includeFnb, setIncludeFnb] = useState(true);
+  const [includeTimeline, setIncludeTimeline] = useState(true);
+  const [editedParsedTimeline, setEditedParsedTimeline] = useState<any[]>([]);
   const parseRunsheetMutation = trpc.menuCatalog.parseRunsheetText.useMutation({
-    onSuccess: (data: any) => setParsedItems(data.items),
+    onSuccess: (data: any) => {
+      setParsedData({
+        eventDetails: data.eventDetails ?? null,
+        dietaries: data.dietaries ?? [],
+        fnbItems: data.fnbItems ?? [],
+        timelineItems: data.timelineItems ?? [],
+      });
+      setEditedParsedTimeline((data.timelineItems ?? []).map((it: any, i: number) => ({ ...it, _editId: String(i) })));
+    },
     onError: () => toast.error('Failed to parse text — try again'),
   });
 
@@ -231,23 +260,73 @@ export default function RunsheetBuilder() {
     toast.success(`Added ${toAdd.length} item${toAdd.length > 1 ? 's' : ''} to F&B sheet`);
   }
 
-  function applyParsedItems() {
-    if (!parsedItems) return;
-    const newItems: Item[] = parsedItems.map((pi: any, i: number) => ({
-      time: pi.time ?? '09:00',
-      duration: pi.duration ?? 30,
-      title: pi.title ?? 'Untitled',
-      description: pi.description ?? '',
-      assignedTo: pi.assignedTo ?? '',
-      category: pi.category ?? 'other',
-      sortOrder: items.length + i,
-      _tempId: `paste-${Date.now()}-${i}`,
-    }));
-    setItems(prev => [...prev, ...newItems]);
-    setParsedItems(null);
+  function applyParsedData() {
+    if (!parsedData) return;
+    let applied: string[] = [];
+
+    if (includeEventDetails && parsedData.eventDetails) {
+      const ed = parsedData.eventDetails;
+      if (ed.eventDate) setEventDate(ed.eventDate);
+      if (ed.guestCount) setGuestCount(String(ed.guestCount));
+      if (ed.eventType) setEventType(ed.eventType);
+      if (ed.contactName) setContactName(ed.contactName);
+      if (ed.contactEmail) setContactEmail(ed.contactEmail);
+      if (ed.contactPhone) setContactPhone(ed.contactPhone);
+      if (ed.spaceName) setSpaceName(ed.spaceName);
+      if (ed.venueSetup) setVenueSetup(ed.venueSetup);
+      applied.push('event details');
+    }
+
+    if (includeDietaries && parsedData.dietaries && parsedData.dietaries.length > 0) {
+      const newDiets: Dietary[] = parsedData.dietaries.map(d => ({
+        name: d.name,
+        count: d.count ?? 1,
+        notes: d.notes ?? '',
+      }));
+      setDietaries(prev => {
+        const existing = new Set(prev.map(d => d.name.toLowerCase()));
+        const toAdd = newDiets.filter(d => !existing.has(d.name.toLowerCase()));
+        return [...prev, ...toAdd];
+      });
+      applied.push(`${parsedData.dietaries.length} dietary req${parsedData.dietaries.length !== 1 ? 's' : ''}`);
+    }
+
+    if (includeFnb && parsedData.fnbItems && parsedData.fnbItems.length > 0) {
+      const newFnb: FnbItem[] = parsedData.fnbItems.map((fi, i) => ({
+        section: 'foh' as const,
+        course: fi.course ?? 'Other',
+        dishName: fi.dishName,
+        qty: fi.qty ?? 1,
+        dietary: fi.dietary ?? '',
+        serviceTime: fi.serviceTime ?? '',
+        staffAssigned: '',
+        sortOrder: fnbItems.length + i,
+        _tempId: `paste-fnb-${Date.now()}-${i}`,
+      }));
+      setFnbItems(prev => [...prev, ...newFnb]);
+      applied.push(`${parsedData.fnbItems.length} F&B item${parsedData.fnbItems.length !== 1 ? 's' : ''}`);
+    }
+
+    if (includeTimeline && editedParsedTimeline.length > 0) {
+      const newItems: Item[] = editedParsedTimeline.map((pi: any, i: number) => ({
+        time: pi.time ?? '09:00',
+        duration: pi.duration ?? 30,
+        title: pi.title ?? 'Untitled',
+        description: pi.description ?? '',
+        assignedTo: pi.assignedTo ?? '',
+        category: (pi.category ?? 'other').toLowerCase(),
+        sortOrder: items.length + i,
+        _tempId: `paste-${Date.now()}-${i}`,
+      }));
+      setItems(prev => [...prev, ...newItems]);
+      applied.push(`${editedParsedTimeline.length} timeline item${editedParsedTimeline.length !== 1 ? 's' : ''}`);
+    }
+
+    setParsedData(null);
+    setEditedParsedTimeline([]);
     setPasteText('');
     setShowPasteImport(false);
-    toast.success(`Added ${newItems.length} item${newItems.length > 1 ? 's' : ''} to timeline`);
+    if (applied.length > 0) toast.success(`Applied: ${applied.join(', ')}`);
   }
 
   const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>([
@@ -415,6 +494,10 @@ export default function RunsheetBuilder() {
     { proposalId: linkedProposalId! },
     { enabled: !!linkedProposalId }
   );
+  const { data: booking } = trpc.bookings.getById.useQuery(
+    { id: bookingId! },
+    { enabled: !!bookingId && !sheetId }
+  );
   useEffect(() => {
     if (existing) {
       setTitle(existing.title);
@@ -453,6 +536,56 @@ export default function RunsheetBuilder() {
       if (linkedProposal.spaceName) setSpaceName(linkedProposal.spaceName);
     }
   }, [linkedProposal, sheetId]);
+
+  // Auto-populate from booking
+  useEffect(() => {
+    if (booking && !sheetId) {
+      setTitle(`${booking.firstName} ${booking.lastName ?? ''} — ${booking.eventType ?? 'Event'}`.trim());
+      setEventDate(booking.eventDate ? new Date(booking.eventDate).toLocaleDateString("en-CA") : "");
+      setGuestCount(booking.guestCount ? String(booking.guestCount) : "");
+      setEventType(booking.eventType ?? "");
+      setContactName(`${booking.firstName} ${booking.lastName ?? ""}`.trim());
+      setContactEmail(booking.email ?? "");
+      if (booking.spaceName) setSpaceName(booking.spaceName);
+      seedDefaultItems(booking.eventType ?? "");
+    }
+  }, [booking, sheetId]);
+
+  // Auto-populate F&B from proposal quote items
+  const proposalFnbSeeded = React.useRef(false);
+  useEffect(() => {
+    if (proposalFnbSeeded.current || sheetId) return;
+    const qItems: any[] = (proposalQuote as any)?.items ?? [];
+    const drinks: any = proposalDrinks;
+    if (qItems.length === 0 && !drinks) return;
+    proposalFnbSeeded.current = true;
+    const foodRows: FnbItem[] = qItems.map((qi: any, i: number) => ({
+      section: 'foh' as const,
+      course: 'Menu',
+      dishName: qi.name ?? qi.description ?? 'Menu Item',
+      description: qi.description ?? '',
+      qty: Number(qi.qty) || 1,
+      dietary: '',
+      serviceTime: '',
+      staffAssigned: '',
+      sortOrder: i,
+      _tempId: `prop-qi-${i}`,
+    }));
+    const drinkRows: FnbItem[] = [];
+    if (drinks?.selectedDrinks) {
+      try {
+        const arr: string[] = typeof drinks.selectedDrinks === 'string' ? JSON.parse(drinks.selectedDrinks) : drinks.selectedDrinks;
+        arr.forEach((name: string, i: number) => {
+          drinkRows.push({ section: 'foh', course: 'Drinks', dishName: name, qty: 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: foodRows.length + i, _tempId: `prop-dr-${i}` });
+        });
+      } catch {}
+    }
+    const all = [...foodRows, ...drinkRows];
+    if (all.length > 0) {
+      setFnbItems(all);
+      toast.success(`${all.length} item${all.length !== 1 ? 's' : ''} auto-populated from proposal`);
+    }
+  }, [proposalQuote, proposalDrinks, sheetId]);
 
   function seedDefaultItems(type: string) {
     const t = type.toLowerCase();
@@ -1904,27 +2037,27 @@ export default function RunsheetBuilder() {
       {/* ── SMART PASTE IMPORT MODAL ─────────────────────────────────────── */}
       {showPasteImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest">
+          <div className="bg-white w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest shrink-0">
               <div>
-                <div className="font-bebas tracking-widest text-gold text-lg">IMPORT FROM TEXT</div>
-                <div className="font-dm text-white/60 text-xs mt-0.5">Paste an email, notes, or Word doc — AI will extract timeline items</div>
+                <div className="font-bebas tracking-widest text-gold text-lg">SMART PASTE — IMPORT FROM TEXT</div>
+                <div className="font-dm text-white/60 text-xs mt-0.5">Paste an email, booking notes, or Word doc — AI extracts everything relevant</div>
               </div>
-              <button onClick={() => { setShowPasteImport(false); setParsedItems(null); setPasteText(''); }} className="text-white/50 hover:text-white transition-colors">
+              <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="text-white/50 hover:text-white transition-colors">
                 <span className="text-2xl leading-none">&times;</span>
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {!parsedItems ? (
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {!parsedData ? (
                 <>
                   <div>
                     <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">PASTE YOUR TEXT BELOW</label>
                     <Textarea
                       value={pasteText}
                       onChange={e => setPasteText(e.target.value)}
-                      placeholder={`Example:\n\n6:00pm — Guests arrive, welcome drinks on arrival\n6:30pm — Speeches begin (30 mins)\n7:00pm — Entrée service\n7:45pm — Main course\n9:00pm — Cake cutting & dessert\n10:00pm — Dancing & bar\n12:00am — Event concludes`}
+                      placeholder={`Paste anything — an email, booking notes, a client brief, a Word doc...\n\nExamples of what gets extracted:\n• Event details (date, guests, contact info, space name)\n• Dietary requirements (e.g. "5 vegetarian, 2 gluten free")\n• Menu / F&B items (courses, dishes, quantities)\n• Event timeline (6pm – Guests arrive, 7pm – Dinner service...)`}
                       rows={12}
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm"
                     />
@@ -1936,114 +2069,167 @@ export default function RunsheetBuilder() {
                       className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2.5 flex items-center gap-2"
                     >
                       {parseRunsheetMutation.isPending ? (
-                        <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> PARSING...</>
+                        <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> ANALYSING...</>
                       ) : (
-                        <><FileText className="w-4 h-4" /> PARSE WITH AI</>
+                        <><FileText className="w-4 h-4" /> EXTRACT WITH AI</>
                       )}
                     </Button>
-                    <span className="font-dm text-xs text-ink/40">AI will extract times, durations, titles and categories</span>
+                    <span className="font-dm text-xs text-ink/40">AI will extract event details, dietaries, F&B items and timeline</span>
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="font-bebas tracking-widest text-sm text-forest">{parsedItems.length} ITEMS FOUND — REVIEW BEFORE ADDING</div>
-                    <button onClick={() => setParsedItems(null)} className="font-dm text-xs text-ink/40 hover:text-ink underline">← Back to paste</button>
+                  <div className="flex items-center justify-between">
+                    <div className="font-bebas tracking-widest text-sm text-forest">REVIEW EXTRACTED DATA — CHOOSE WHAT TO APPLY</div>
+                    <button onClick={() => { setParsedData(null); setEditedParsedTimeline([]); }} className="font-dm text-xs text-ink/40 hover:text-ink underline">← Back to paste</button>
                   </div>
-                  {parsedItems.length === 0 ? (
-                    <div className="text-center py-10 text-ink/40 font-dm text-sm">
-                      <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      No items could be extracted. Try pasting more structured text with times.
-                    </div>
-                  ) : (
-                    <div className="border border-gold/30 divide-y divide-gold/20">
-                      <div className="grid grid-cols-12 gap-1 px-3 py-2 bg-linen">
-                        <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/50">TIME</div>
-                        <div className="col-span-1 font-bebas text-[10px] tracking-widest text-ink/50">MINS</div>
-                        <div className="col-span-4 font-bebas text-[10px] tracking-widest text-ink/50">TITLE</div>
-                        <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/50">CATEGORY</div>
-                        <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/50">DESCRIPTION</div>
-                        <div className="col-span-1 font-bebas text-[10px] tracking-widest text-ink/50"></div>
+
+                  {/* ── EVENT DETAILS ── */}
+                  {parsedData.eventDetails && Object.values(parsedData.eventDetails).some(v => v) && (
+                    <div className="border border-gold/30">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-linen border-b border-gold/20">
+                        <input type="checkbox" checked={includeEventDetails} onChange={e => setIncludeEventDetails(e.target.checked)} className="accent-forest" />
+                        <span className="font-bebas tracking-widest text-xs text-forest">EVENT DETAILS</span>
+                        <span className="font-dm text-xs text-ink/40 ml-auto">Will overwrite existing fields</span>
                       </div>
-                      {parsedItems.map((item: any, i: number) => (
-                        <div key={i} className="grid grid-cols-12 gap-1 px-3 py-2 items-center text-sm font-dm hover:bg-linen/30 group">
-                          {/* TIME */}
-                          <div className="col-span-2">
-                            <input
-                              type="text"
-                              value={item.time ?? ''}
-                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, time: e.target.value } : p) : prev)}
-                              className="w-full font-mono text-xs text-forest font-semibold bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5"
-                              placeholder="HH:MM"
-                            />
+                      <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-2">
+                        {parsedData.eventDetails.eventDate && <div className="font-dm text-xs"><span className="text-ink/40">Date:</span> <span className="text-ink font-medium">{parsedData.eventDetails.eventDate}</span></div>}
+                        {parsedData.eventDetails.guestCount && <div className="font-dm text-xs"><span className="text-ink/40">Guests:</span> <span className="text-ink font-medium">{parsedData.eventDetails.guestCount}</span></div>}
+                        {parsedData.eventDetails.eventType && <div className="font-dm text-xs"><span className="text-ink/40">Event type:</span> <span className="text-ink font-medium">{parsedData.eventDetails.eventType}</span></div>}
+                        {parsedData.eventDetails.spaceName && <div className="font-dm text-xs"><span className="text-ink/40">Space:</span> <span className="text-ink font-medium">{parsedData.eventDetails.spaceName}</span></div>}
+                        {parsedData.eventDetails.contactName && <div className="font-dm text-xs"><span className="text-ink/40">Contact:</span> <span className="text-ink font-medium">{parsedData.eventDetails.contactName}</span></div>}
+                        {parsedData.eventDetails.contactEmail && <div className="font-dm text-xs"><span className="text-ink/40">Email:</span> <span className="text-ink font-medium">{parsedData.eventDetails.contactEmail}</span></div>}
+                        {parsedData.eventDetails.contactPhone && <div className="font-dm text-xs"><span className="text-ink/40">Phone:</span> <span className="text-ink font-medium">{parsedData.eventDetails.contactPhone}</span></div>}
+                        {parsedData.eventDetails.venueSetup && <div className="font-dm text-xs col-span-2"><span className="text-ink/40">Setup:</span> <span className="text-ink font-medium">{parsedData.eventDetails.venueSetup}</span></div>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── DIETARY REQUIREMENTS ── */}
+                  {parsedData.dietaries && parsedData.dietaries.length > 0 && (
+                    <div className="border border-gold/30">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-linen border-b border-gold/20">
+                        <input type="checkbox" checked={includeDietaries} onChange={e => setIncludeDietaries(e.target.checked)} className="accent-forest" />
+                        <span className="font-bebas tracking-widest text-xs text-forest">DIETARY REQUIREMENTS</span>
+                        <span className="font-dm text-xs text-ink/40 ml-1">({parsedData.dietaries.length})</span>
+                        <span className="font-dm text-xs text-ink/40 ml-auto">Added to existing requirements</span>
+                      </div>
+                      <div className="p-3 flex flex-wrap gap-2">
+                        {parsedData.dietaries.map((d, i) => (
+                          <div key={i} className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-dm">
+                            <span className="font-semibold text-emerald-800">{d.name}</span>
+                            <span className="text-emerald-600 ml-1">×{d.count}</span>
+                            {d.notes && <span className="text-emerald-500 ml-1">({d.notes})</span>}
                           </div>
-                          {/* DURATION */}
-                          <div className="col-span-1">
-                            <input
-                              type="number"
-                              value={item.duration ?? 30}
-                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, duration: parseInt(e.target.value) || 30 } : p) : prev)}
-                              className="w-full text-xs text-ink/60 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5"
-                              min={1}
-                            />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── F&B ITEMS ── */}
+                  {parsedData.fnbItems && parsedData.fnbItems.length > 0 && (
+                    <div className="border border-gold/30">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-linen border-b border-gold/20">
+                        <input type="checkbox" checked={includeFnb} onChange={e => setIncludeFnb(e.target.checked)} className="accent-forest" />
+                        <span className="font-bebas tracking-widest text-xs text-forest">F&B ITEMS</span>
+                        <span className="font-dm text-xs text-ink/40 ml-1">({parsedData.fnbItems.length})</span>
+                        <span className="font-dm text-xs text-ink/40 ml-auto">Appended to F&B sheet</span>
+                      </div>
+                      <div className="divide-y divide-gold/10">
+                        <div className="grid grid-cols-12 gap-1 px-3 py-1.5 bg-linen/60">
+                          <div className="col-span-3 font-bebas text-[9px] tracking-widest text-ink/40">COURSE</div>
+                          <div className="col-span-5 font-bebas text-[9px] tracking-widest text-ink/40">DISH</div>
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">QTY</div>
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">TIME</div>
+                        </div>
+                        {parsedData.fnbItems.map((fi, i) => (
+                          <div key={i} className="grid grid-cols-12 gap-1 px-3 py-1.5 font-dm text-xs text-ink items-center">
+                            <div className="col-span-3 text-ink/50">{fi.course ?? '—'}</div>
+                            <div className="col-span-5 font-medium">{fi.dishName}</div>
+                            <div className="col-span-2">{fi.qty}</div>
+                            <div className="col-span-2 text-ink/50">{fi.serviceTime ?? '—'}</div>
                           </div>
-                          {/* TITLE */}
-                          <div className="col-span-4">
-                            <input
-                              type="text"
-                              value={item.title ?? ''}
-                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, title: e.target.value } : p) : prev)}
-                              className="w-full font-medium text-ink text-sm bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5"
-                              placeholder="Title"
-                            />
-                          </div>
-                          {/* CATEGORY */}
-                          <div className="col-span-2">
-                            <select
-                              value={item.category ?? 'other'}
-                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, category: e.target.value } : p) : prev)}
-                              className={`w-full text-[10px] font-bebas px-1 py-0.5 border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none ${catStyle(String(item.category ?? 'other').toLowerCase())}`}
-                            >
-                              {CATEGORIES.map(c => (
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── TIMELINE ITEMS ── */}
+                  {editedParsedTimeline.length > 0 && (
+                    <div className="border border-gold/30">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-linen border-b border-gold/20">
+                        <input type="checkbox" checked={includeTimeline} onChange={e => setIncludeTimeline(e.target.checked)} className="accent-forest" />
+                        <span className="font-bebas tracking-widest text-xs text-forest">TIMELINE ITEMS</span>
+                        <span className="font-dm text-xs text-ink/40 ml-1">({editedParsedTimeline.length})</span>
+                        <span className="font-dm text-xs text-ink/40 ml-auto">Appended to timeline — click to edit</span>
+                      </div>
+                      <div className="divide-y divide-gold/10">
+                        <div className="grid grid-cols-12 gap-1 px-3 py-1.5 bg-linen/60">
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">TIME</div>
+                          <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/40">MINS</div>
+                          <div className="col-span-4 font-bebas text-[9px] tracking-widest text-ink/40">TITLE</div>
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">CATEGORY</div>
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">NOTES</div>
+                          <div className="col-span-1"></div>
+                        </div>
+                        {editedParsedTimeline.map((item: any, i: number) => (
+                          <div key={item._editId ?? i} className="grid grid-cols-12 gap-1 px-3 py-1.5 items-center text-sm font-dm hover:bg-linen/30 group">
+                            <div className="col-span-2">
+                              <input type="text" value={item.time ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, time: e.target.value } : p))}
+                                className="w-full font-mono text-xs text-forest font-semibold bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="HH:MM" />
+                            </div>
+                            <div className="col-span-1">
+                              <input type="number" value={item.duration ?? 30} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, duration: parseInt(e.target.value) || 30 } : p))}
+                                className="w-full text-xs text-ink/60 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" min={1} />
+                            </div>
+                            <div className="col-span-4">
+                              <input type="text" value={item.title ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, title: e.target.value } : p))}
+                                className="w-full font-medium text-ink text-sm bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Title" />
+                            </div>
+                            <div className="col-span-2">
+                              <select value={item.category ?? 'other'} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, category: e.target.value } : p))}
+                                className={`w-full text-[10px] font-bebas px-1 py-0.5 border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none ${catStyle(String(item.category ?? 'other').toLowerCase())}`}>
+                                {CATEGORIES.map(c => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
                               ))}
                             </select>
                           </div>
                           {/* DESCRIPTION */}
                           <div className="col-span-2">
-                            <input
-                              type="text"
-                              value={item.description ?? ''}
-                              onChange={e => setParsedItems(prev => prev ? prev.map((p, j) => j === i ? { ...p, description: e.target.value } : p) : prev)}
-                              className="w-full text-xs text-ink/50 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5"
-                              placeholder="Notes…"
-                            />
+                            <input type="text" value={item.description ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, description: e.target.value } : p))}
+                              className="w-full text-xs text-ink/50 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Notes…" />
                           </div>
                           {/* DELETE */}
                           <div className="col-span-1 flex justify-end">
-                            <button
-                              onClick={() => setParsedItems(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
-                              className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-500 transition-all p-0.5"
-                              title="Remove this item"
-                            >
+                            <button onClick={() => setEditedParsedTimeline(prev => prev.filter((_, j) => j !== i))}
+                              className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-500 transition-all p-0.5" title="Remove">
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
                         </div>
                       ))}
                     </div>
+                  </div>
+                  )}
+
+                  {/* No data found */}
+                  {!parsedData.eventDetails && (!parsedData.dietaries || parsedData.dietaries.length === 0) && (!parsedData.fnbItems || parsedData.fnbItems.length === 0) && editedParsedTimeline.length === 0 && (
+                    <div className="text-center py-10 text-ink/40 font-dm text-sm">
+                      <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      Nothing recognisable was found. Try pasting more detailed text with dates, times, guest counts, or a menu.
+                    </div>
                   )}
                 </>
               )}
             </div>
 
-            {parsedItems && parsedItems.length > 0 && (
-              <div className="px-6 py-4 border-t border-gold/30 flex items-center justify-between bg-linen/50">
-                <span className="font-dm text-sm text-ink/60">{parsedItems.length} items will be appended to the timeline</span>
+            {parsedData && (
+              <div className="px-6 py-4 border-t border-gold/30 flex items-center justify-between bg-linen/50 shrink-0">
+                <span className="font-dm text-xs text-ink/50">Selected sections will be applied to the runsheet</span>
                 <div className="flex gap-3">
-                  <button onClick={() => { setShowPasteImport(false); setParsedItems(null); setPasteText(''); }} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
-                  <Button onClick={applyParsedItems} className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2">
-                    <Plus className="w-4 h-4" /> ADD {parsedItems.length} ITEMS TO TIMELINE
+                  <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
+                  <Button onClick={applyParsedData} className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2">
+                    <Plus className="w-4 h-4" /> APPLY TO RUNSHEET
                   </Button>
                 </div>
               </div>

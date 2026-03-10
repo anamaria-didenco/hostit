@@ -2786,15 +2786,25 @@ export const appRouter = router({
       .input(z.object({ text: z.string().min(1), eventType: z.string().optional() }))
       .mutation(async ({ input }) => {
         const { invokeLLM } = await import('./_core/llm');
-        const prompt = `You are a venue event coordinator. Parse the following text into a structured runsheet timeline.
-Extract all time-based items and return them as a JSON object with an "items" array.
-Each item must have: time (HH:MM 24h), duration (minutes, estimate if not given), title (short), description (optional detail), category (one of: Setup, Service, Kitchen, Speech, Entertainment, Cleanup, Other).
-If a time is missing, estimate based on context. Event type: ${input.eventType ?? 'general event'}.
+        const prompt = `You are a venue event coordinator assistant. Parse the following text and extract ALL available event information into structured sections.
+
+Return a JSON object with any of these sections that have data in the text:
+- "eventDetails": an object with any of: eventDate (ISO date YYYY-MM-DD), guestCount (integer), eventType (string e.g. "Wedding", "Corporate"), contactName (string), contactEmail (string), contactPhone (string), spaceName (string), venueSetup (string describing room/table layout)
+- "dietaries": array of { name (string e.g. "Vegetarian"), count (integer, default 1), notes (string, optional) }
+- "fnbItems": array of { course (one of: Canapes, Entree, Main, Dessert, Cheese, Late Night Snack, Breakfast, Morning Tea, Lunch, Afternoon Tea, Drinks, Other), dishName (string), qty (integer), serviceTime (HH:MM 24h, optional), dietary (string, optional) }
+- "timelineItems": array of { time (HH:MM 24h format), duration (integer minutes), title (string), description (string, optional), category (one of: setup, guest, food, beverage, speech, entertainment, packdown, other) }
+
+Rules:
+- Only include sections for data actually present in the text
+- Estimate durations if not stated; estimate times from context if missing
+- For dietary counts, use the number mentioned or 1 if unspecified
+- Event type context: ${input.eventType ?? 'general event'}
 
 Text to parse:
 ${input.text}
 
-Return ONLY valid JSON like: {"items": [{"time":"09:00","duration":30,"title":"...","description":"...","category":"Setup"}]}`;
+Return ONLY valid JSON. Example structure:
+{"eventDetails":{"eventDate":"2026-06-15","guestCount":80,"eventType":"Wedding","contactName":"Jane Smith"},"dietaries":[{"name":"Vegetarian","count":5,"notes":"2 also vegan"}],"fnbItems":[{"course":"Canapes","dishName":"Smoked salmon blini","qty":80,"serviceTime":"17:00"}],"timelineItems":[{"time":"16:00","duration":60,"title":"Venue setup","category":"setup"}]}`;
         const response = await invokeLLM({
           messages: [
             { role: 'system', content: 'You are a helpful assistant that outputs valid JSON only.' },
@@ -2802,14 +2812,21 @@ Return ONLY valid JSON like: {"items": [{"time":"09:00","duration":30,"title":".
           ],
           response_format: { type: 'json_object' } as any,
         });
-        const rawContent = response.choices?.[0]?.message?.content ?? '{"items":[]}';
+        const rawContent = response.choices?.[0]?.message?.content ?? '{}';
         const raw = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
         try {
           const parsed = JSON.parse(raw);
-          const items = Array.isArray(parsed) ? parsed : (parsed.items ?? parsed.timeline ?? []);
-          return { items: items.slice(0, 60), success: true };
+          if (Array.isArray(parsed)) return { timelineItems: parsed, fnbItems: [], dietaries: [], eventDetails: null, success: true };
+          if (parsed.items || parsed.timeline) return { timelineItems: (parsed.items ?? parsed.timeline ?? []).slice(0, 60), fnbItems: [], dietaries: [], eventDetails: null, success: true };
+          return {
+            eventDetails: parsed.eventDetails ?? null,
+            dietaries: Array.isArray(parsed.dietaries) ? parsed.dietaries : [],
+            fnbItems: Array.isArray(parsed.fnbItems) ? parsed.fnbItems.slice(0, 60) : [],
+            timelineItems: Array.isArray(parsed.timelineItems) ? parsed.timelineItems.slice(0, 60) : [],
+            success: true,
+          };
         } catch {
-          return { items: [], success: false, error: 'Failed to parse response' };
+          return { timelineItems: [], fnbItems: [], dietaries: [], eventDetails: null, success: false, error: 'Failed to parse response' };
         }
       }),
   }),
