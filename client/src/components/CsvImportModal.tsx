@@ -39,7 +39,7 @@ function normalizeStatus(raw: string): typeof STATUS_VALUES[number] {
     booking: "booked", secured: "booked", accepted: "booked",
     functionpacksent: "proposal_sent", packsent: "proposal_sent", functionpack: "proposal_sent",
     sitevisit: "negotiating", sitevisitscheduled: "negotiating", sitevisitbooked: "negotiating",
-    followedup: "contacted", followup: "contacted",
+    followedup: "contacted",
     lost: "lost", declined: "lost", rejected: "lost", notproceeding: "lost",
     noproceeding: "lost", unsuccessful: "lost",
     cancelled: "cancelled", canceled: "cancelled", withdrawn: "cancelled",

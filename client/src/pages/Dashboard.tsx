@@ -10,7 +10,7 @@ import {
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid, Image as ImageIcon, Edit2,
-  ArrowUpDown, CreditCard, AlertCircle, Upload
+  ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -416,6 +416,7 @@ export default function Dashboard() {
   const [leadDateFilter, setLeadDateFilter] = useState<"all"|"month"|"year"|"custom">("all");
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
+  const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("list");
   const [eventSortBy, setEventSortBy] = useState<"event_date"|"date_booked"|"status">("event_date");
   const [eventSortDir, setEventSortDir] = useState<"asc"|"desc">("asc");
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -844,7 +845,7 @@ export default function Dashboard() {
   const activeEnquiries = allEnquiries.filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
   const newEnquiries = activeEnquiries.filter((l: any) => l.status === "new");
   const unreadCount = newEnquiries.filter((l: any) => !l.readAt).length;
-  const repliedLeads = activeEnquiries.filter((l: any) => l.status !== "new");
+  const repliedLeads = allEnquiries.filter((l: any) => l.status !== "new");
 
   function applyDateFilter(list: any[]) {
     if (leadDateFilter === "all") return list;
@@ -1253,8 +1254,12 @@ export default function Dashboard() {
           {/* ── ENQUIRIES INBOX ──────────────────────────────────────────────────── */}
           {tab === "enquiries" && (
             <div className="flex h-full">
-              {/* Lead List */}
-              <div className={`${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-gold/15 bg-warm-white flex-shrink-0`}>
+              {/* Lead List / Table / Kanban */}
+              <div className={`
+                ${leadViewMode === "kanban" ? "hidden" : ""}
+                ${leadViewMode === "table" ? `flex flex-col ${selectedLead ? "w-[55%] border-r border-gold/15" : "flex-1"} bg-warm-white overflow-hidden` : ""}
+                ${leadViewMode === "list" ? `${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-gold/15 bg-warm-white flex-shrink-0` : ""}
+              `}>
                 <div className="p-4 border-b border-gold/15">
                   {/* Sub-tab toggle */}
                   <div className="flex mb-3 bg-muted rounded-xl p-1 gap-1">
@@ -1283,22 +1288,33 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <h2 className="font-cormorant text-2xl font-semibold text-ink">{leadsSubTab === "new" ? "New Enquiries" : "Enquiries"}</h2>
+                      <h2 className="font-cormorant text-2xl font-semibold text-ink">
+                        {leadViewMode === "kanban" ? "Pipeline" : leadsSubTab === "new" ? "New Enquiries" : "All Records"}
+                      </h2>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {/* View mode toggle */}
+                      <div className="flex border border-gold/30 rounded-lg overflow-hidden">
+                        {([
+                          { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
+                          { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
+                          { mode: "kanban" as const, icon: <Columns className="w-3.5 h-3.5" />, title: "Kanban view" },
+                        ]).map(({ mode, icon, title }) => (
+                          <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
+                            title={title}
+                            className={`px-2 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/50 hover:bg-linen hover:text-ink"}`}>
+                            {icon}
+                          </button>
+                        ))}
+                      </div>
                       <button
-                        onClick={() => setCollapsedInboxSections(prev => { const n = new Set(prev); n.has(leadsSubTab) ? n.delete(leadsSubTab) : n.add(leadsSubTab); return n; })}
-                        className="p-1 text-ink/40 hover:text-ink transition-colors"
-                        title={collapsedInboxSections.has(leadsSubTab) ? "Show list" : "Collapse list"}
-                      >
-                        <ChevronDown className={`w-4 h-4 transition-transform ${collapsedInboxSections.has(leadsSubTab) ? "-rotate-90" : ""}`} />
+                        onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
+                        className={`font-bebas text-xs tracking-widest px-2.5 py-1 border transition-colors ${
+                          bulkSelectMode ? 'bg-forest text-cream border-forest' : 'border-gold/40 text-ink/60 hover:border-gold hover:text-ink'
+                        }`}>
+                        {bulkSelectMode ? 'CANCEL' : 'SELECT'}
                       </button>
                     </div>
-                    <button
-                      onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
-                      className={`font-bebas text-xs tracking-widest px-2.5 py-1 border transition-colors ${
-                        bulkSelectMode ? 'bg-forest text-cream border-forest' : 'border-gold/40 text-ink/60 hover:border-gold hover:text-ink'
-                      }`}>
-                      {bulkSelectMode ? 'CANCEL' : 'SELECT'}
-                    </button>
                   </div>
                   {/* Add Enquiry / Import buttons */}
                   <div className="flex gap-2 mb-2">
@@ -1409,7 +1425,71 @@ export default function Dashboard() {
                     </label>
                   </div>
                 )}
-                {!collapsedInboxSections.has(leadsSubTab) && <div className="flex-1 overflow-auto divide-y divide-border/40">
+                {/* ── TABLE VIEW ─────────────────────────────────────── */}
+                {leadViewMode === "table" && (
+                  <div className="flex-1 overflow-auto">
+                    {filteredLeads.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
+                        <p className="font-dm text-sage text-sm">No records found</p>
+                      </div>
+                    ) : (
+                      <table className="w-full text-sm border-collapse min-w-[700px]">
+                        <thead className="sticky top-0 bg-cream z-10 border-b border-gold/20">
+                          <tr>
+                            {bulkSelectMode && <th className="w-10 px-3 py-2"><input type="checkbox" checked={selectedLeadIds.size === filteredLeads.length} onChange={e => setSelectedLeadIds(e.target.checked ? new Set(filteredLeads.map((l: any) => l.id)) : new Set())} className="w-3.5 h-3.5 accent-forest" /></th>}
+                            {[
+                              { key: "name", label: "Name" },
+                              { key: "event", label: "Event" },
+                              { key: "event_date", label: "Date" },
+                              { key: "guests", label: "Guests" },
+                              { key: "status", label: "Status" },
+                              { key: "enquiry_date", label: "Enquiry" },
+                            ].map(col => (
+                              <th key={col.key}
+                                onClick={() => { if (["event_date","status","enquiry_date"].includes(col.key)) { setLeadSortBy(col.key === "enquiry_date" ? "enquiry_date" : col.key as any); setLeadSortDir(d => d === "asc" ? "desc" : "asc"); } }}
+                                className={`px-3 py-2.5 text-left font-bebas tracking-widest text-xs text-ink/60 whitespace-nowrap ${["event_date","status","enquiry_date"].includes(col.key) ? "cursor-pointer hover:text-ink select-none" : ""}`}>
+                                {col.label}
+                                {(col.key === "event_date" && leadSortBy === "event_date") || (col.key === "enquiry_date" && leadSortBy === "enquiry_date") || (col.key === "status" && leadSortBy === "status")
+                                  ? <span className="ml-1 opacity-60">{leadSortDir === "asc" ? "↑" : "↓"}</span> : null}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/30">
+                          {filteredLeads.map((lead: any) => {
+                            const statusStage = pipelineStages.find(s => s.key === lead.status);
+                            return (
+                              <tr key={lead.id}
+                                onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
+                                className={`hover:bg-linen transition-colors cursor-pointer ${selectedLead?.id === lead.id ? "bg-forest/5" : ""} ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}>
+                                {bulkSelectMode && (
+                                  <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                                    <input type="checkbox" checked={selectedLeadIds.has(lead.id)}
+                                      onChange={e => { setSelectedLeadIds(prev => { const n = new Set(prev); e.target.checked ? n.add(lead.id) : n.delete(lead.id); return n; }); }}
+                                      className="w-3.5 h-3.5 accent-forest cursor-pointer" />
+                                  </td>
+                                )}
+                                <td className="px-3 py-2.5 font-cormorant font-semibold text-ink whitespace-nowrap">{lead.firstName} {lead.lastName}</td>
+                                <td className="px-3 py-2.5 font-dm text-xs text-ink/70 max-w-[200px] truncate">{lead.eventType || lead.message?.split(" | ")?.[0]?.replace("Event: ","") || "—"}</td>
+                                <td className="px-3 py-2.5 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" }) : "—"}</td>
+                                <td className="px-3 py-2.5 font-dm text-xs text-ink/60 text-right">{lead.guestCount ?? "—"}</td>
+                                <td className="px-3 py-2.5">
+                                  <span className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border ${statusStage?.color ?? "bg-muted border-border"}`}>
+                                    {statusStage?.label ?? lead.status.replace(/_/g, " ")}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5 font-dm text-xs text-ink/50 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+                {/* ── LIST VIEW ──────────────────────────────────────── */}
+                {leadViewMode === "list" && !collapsedInboxSections.has(leadsSubTab) && <div className="flex-1 overflow-auto divide-y divide-border/40">
                   {filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
@@ -1467,6 +1547,58 @@ export default function Dashboard() {
                   ))}
                 </div>}
               </div>
+              {/* ── KANBAN VIEW ──────────────────────────────────────────── */}
+              {leadViewMode === "kanban" && (
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="px-6 py-3 border-b border-gold/15 bg-cream flex-shrink-0 flex items-center gap-3">
+                    <div className="flex border border-gold/30 rounded-lg overflow-hidden">
+                      {([
+                        { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
+                        { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
+                        { mode: "kanban" as const, icon: <Columns className="w-3.5 h-3.5" />, title: "Kanban view" },
+                      ]).map(({ mode, icon, title }) => (
+                        <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
+                          title={title}
+                          className={`px-2 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/50 hover:bg-linen hover:text-ink"}`}>
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                    <h2 className="font-cormorant text-xl font-semibold text-ink">Pipeline</h2>
+                    <span className="font-dm text-xs text-ink/40">{filteredLeads.length} records</span>
+                  </div>
+                  <div className="flex-1 overflow-x-auto p-6">
+                    <div className="flex gap-4 min-w-max h-full">
+                      {pipelineStages.map(stage => {
+                        const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
+                        return (
+                          <div key={stage.key} className="w-64 flex-shrink-0 flex flex-col">
+                            <div className={`font-bebas text-xs tracking-widest px-3 py-2 border mb-2 flex-shrink-0 ${stage.color}`}>
+                              {stage.label} <span className="opacity-60">({stageLeads.length})</span>
+                            </div>
+                            <div className="space-y-2 overflow-y-auto flex-1">
+                              {stageLeads.map((lead: any) => (
+                                <div key={lead.id} onClick={() => selectLead(lead)}
+                                  className="dante-card p-3 cursor-pointer hover:border-gold/40 transition-colors bg-white">
+                                  <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
+                                  <div className="font-dm text-xs text-sage mt-0.5">{lead.eventType || "Event"}</div>
+                                  {lead.eventDate && <div className="font-dm text-xs text-ink/50 mt-0.5">{new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}</div>}
+                                  {lead.guestCount && <div className="font-dm text-xs text-ink/50">{lead.guestCount} guests</div>}
+                                </div>
+                              ))}
+                              {stageLeads.length === 0 && (
+                                <div className="border border-dashed border-gold/20 p-4 text-center">
+                                  <p className="font-dm text-xs text-sage/40">No records</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Floating Bulk Action Toolbar */}
               {bulkSelectMode && selectedLeadIds.size > 0 && (
                 <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
