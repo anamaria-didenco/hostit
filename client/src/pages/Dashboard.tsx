@@ -797,8 +797,8 @@ export default function Dashboard() {
     onSuccess: (result) => {
       refetchFloorPlans();
       // Update the editing plan with the returned id (for new plans)
-      if (editingFloorPlan && !editingFloorPlan.id && result) {
-        setEditingFloorPlan((prev: any) => ({ ...prev, id: (result as any).insertId ?? prev.id }));
+      if (result?.id) {
+        setEditingFloorPlan((prev: any) => ({ ...prev, id: result.id }));
       }
       toast.success('Floor plan saved!');
     },
@@ -4275,12 +4275,20 @@ export default function Dashboard() {
                         key={editingFloorPlan.id ?? 'new'}
                         initialData={editingFloorPlan.canvasData ?? undefined}
                         name={editingFloorPlan.name ?? 'Floor Plan'}
+                        bgImageUrl={editingFloorPlan.bgImageUrl ?? undefined}
                         isSaving={saveFloorPlan.isPending}
-                        onSave={(canvasData: CanvasData, name: string) => {
+                        planId={editingFloorPlan.id ?? undefined}
+                        shareToken={editingFloorPlan.shareToken ?? undefined}
+                        onShareTokenGenerated={(token: string) => {
+                          setEditingFloorPlan((prev: any) => ({ ...prev, shareToken: token }));
+                          refetchFloorPlans();
+                        }}
+                        onSave={(canvasData: CanvasData, name: string, bgImageUrl?: string) => {
                           saveFloorPlan.mutate({
                             id: editingFloorPlan.id ?? undefined,
                             name,
                             canvasData,
+                            bgImageUrl,
                           });
                         }}
                       />

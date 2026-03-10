@@ -26,9 +26,11 @@ HOSTit is a full-stack venue management web application for New Zealand venues. 
 │   ├── _core/       # Core server utilities (auth, context, env)
 │   ├── db.ts        # Database queries
 │   ├── routers.ts   # tRPC routers
+│   ├── chromiumPath.ts  # Resolves Puppeteer/Chromium binary path
 │   ├── proposalPdf.ts
 │   ├── beoPdf.ts
-│   └── staffSheetPdf.ts
+│   ├── staffSheetPdf.ts
+│   └── floorPlanPdf.ts  # Floor plan PDF generator (SVG-based)
 ├── shared/          # Shared types between client and server
 ├── drizzle/         # Database schema and migrations
 └── vite.config.ts   # Vite configuration

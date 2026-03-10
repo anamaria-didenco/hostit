@@ -11,6 +11,7 @@ import ProposalBuilder from "./pages/ProposalBuilder";
 import ProposalView from "./pages/ProposalView";
 import LeadForm from "./pages/LeadForm";
 import FloorPlanBuilder from "./pages/FloorPlanBuilder";
+import FloorPlanShare from "./pages/FloorPlanShare";
 import Checklist from "./pages/Checklist";
 import RunsheetBuilder from "./pages/RunsheetBuilder";
 import PaymentTracker from "./pages/PaymentTracker";
@@ -34,6 +35,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/proposals/new" component={ProposalBuilder} />
       <Route path="/floor-plan" component={FloorPlanBuilder} />
+      <Route path="/floor-plan/share/:token" component={FloorPlanShare} />
       <Route path="/checklist" component={Checklist} />
       <Route path="/runsheet" component={RunsheetBuilder} />
       <Route path="/payments" component={PaymentTracker} />

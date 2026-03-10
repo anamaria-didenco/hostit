@@ -8,6 +8,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
 import { handleBeoPdf } from "../beoPdf";
 import { handleStaffSheetPdf } from "../staffSheetPdf";
+import { handleFloorPlanPdf } from "../floorPlanPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -84,6 +85,9 @@ async function startServer() {
 
   // Proposal PDF download (public — uses publicToken for auth)
   app.get("/api/proposal-pdf/:token", handleProposalPdf);
+
+  // Floor Plan PDF download (public — share token acts as auth)
+  app.get("/api/floor-plan-pdf/:token", handleFloorPlanPdf);
 
   // BEO PDF download (requires session auth)
   app.get("/api/beo/:bookingId", (req, res, next) => {
