@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { resolveChromiumPath } from "./chromiumPath";
 
 export async function handleStaffSheetPdf(req: Request, res: Response) {
   try {
@@ -200,8 +201,8 @@ ${kitchenHtml}
       return res.send(html);
     }
     const browser = await puppeteer.launch({
-      executablePath: "/usr/lib/chromium-browser/chromium-browser",
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      executablePath: await resolveChromiumPath(),
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
       headless: true,
     });
     try {

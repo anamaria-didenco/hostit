@@ -5,6 +5,7 @@
  * Requires authentication via session cookie.
  */
 import type { Request, Response } from "express";
+import { resolveChromiumPath } from "./chromiumPath";
 import { getDb } from "./db";
 import {
   bookings,
@@ -402,8 +403,8 @@ ${notesHtml}
     }
 
     const browser = await puppeteer.launch({
-      executablePath: "/usr/lib/chromium-browser/chromium-browser",
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      executablePath: await resolveChromiumPath(),
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
       headless: true,
     });
 
