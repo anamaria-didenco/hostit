@@ -68,7 +68,7 @@ function autoMapColumn(header: string): string {
   return map[n] ?? "";
 }
 
-type ParsedRow = Record<string, string>;
+type ParsedRow = Record<string, string | number | boolean | null>;
 
 interface Props {
   onClose: () => void;
@@ -152,7 +152,9 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
 
   function getMappedValue(row: ParsedRow, field: string): string {
     const col = Object.entries(mapping).find(([, v]) => v === field)?.[0];
-    return col ? (row[col] ?? "") : "";
+    const val = col ? row[col] : undefined;
+    if (val === null || val === undefined) return "";
+    return String(val);
   }
 
   function buildLeads() {
