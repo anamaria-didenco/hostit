@@ -1309,7 +1309,7 @@ export default function RunsheetBuilder() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setShowPasteImport(true); setParsedItems(null); setPasteText(''); }}
+                  onClick={() => { setShowPasteImport(true); setParsedData(null); setPasteText(''); }}
                   className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
                 >
                   <FileText className="w-3.5 h-3.5" /> IMPORT FROM TEXT

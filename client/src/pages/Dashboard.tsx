@@ -904,7 +904,7 @@ export default function Dashboard() {
     const now = new Date();
     return list.filter((l: any) => {
       const d = l.eventDate ? new Date(l.eventDate) : null;
-      if (!d) return leadDateFilter === "all";
+      if (!d) return false;
       if (leadDateFilter === "month") {
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
       }
