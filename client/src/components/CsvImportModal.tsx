@@ -23,6 +23,26 @@ const LEAD_FIELDS: LeadField[] = [
 
 const STATUS_VALUES = ["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"];
 
+function normalizeStatus(raw: string): typeof STATUS_VALUES[number] {
+  const s = raw.toLowerCase().replace(/[\s_\-]+/g, "");
+  const map: Record<string, typeof STATUS_VALUES[number]> = {
+    new: "new", enquiry: "new", newenquiry: "new", newinquiry: "new",
+    inquiry: "new", open: "new", received: "new", pending: "new",
+    contacted: "contacted", inprogress: "contacted", followup: "contacted",
+    followingup: "contacted", intouch: "contacted", active: "contacted",
+    proposalsent: "proposal_sent", proposal: "proposal_sent", quoted: "proposal_sent",
+    quote: "proposal_sent", quotesent: "proposal_sent", sent: "proposal_sent",
+    negotiating: "negotiating", negotiation: "negotiating", reviewing: "negotiating",
+    underreview: "negotiating", considering: "negotiating",
+    booked: "booked", confirmed: "booked", won: "booked", closed: "booked",
+    booking: "booked", secured: "booked", accepted: "booked",
+    lost: "lost", declined: "lost", rejected: "lost", notproceeding: "lost",
+    noproceeding: "lost", unsuccessful: "lost",
+    cancelled: "cancelled", canceled: "cancelled", withdrawn: "cancelled",
+  };
+  return map[s] ?? "new";
+}
+
 function normalizeHeader(h: string): string {
   return h.toLowerCase().replace(/[\s_\-\.&]+/g, "");
 }
@@ -115,8 +135,7 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
       const fullNameRaw = getMappedValue(row, "fullName").trim();
       const { firstName, lastName } = splitFullName(fullNameRaw || "Unknown");
       const guestStr = getMappedValue(row, "guestCount").replace(/[^0-9]/g, "");
-      const statusRaw = getMappedValue(row, "status").toLowerCase().replace(/\s+/g, "_");
-      const status = STATUS_VALUES.includes(statusRaw) ? statusRaw as any : "new";
+      const status = normalizeStatus(getMappedValue(row, "status"));
       const eventTitle = getMappedValue(row, "eventTitle").trim();
       const occasion = getMappedValue(row, "occasion").trim();
       const eventSpace = getMappedValue(row, "eventSpace").trim();
