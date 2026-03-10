@@ -9,8 +9,8 @@ import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
-  BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid, Image as ImageIcon, Edit2,
-  ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2
+  BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
+  ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -24,6 +24,37 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
+
+// ─── Contact Form Config ─────────────────────────────────────────────────────
+type FormFieldDef = {
+  id: string;
+  label: string;
+  type: 'text' | 'email' | 'tel' | 'number' | 'date' | 'select' | 'textarea';
+  required: boolean;
+  visible: boolean;
+  isDefault: boolean;
+};
+
+const DEFAULT_FORM_FIELDS: FormFieldDef[] = [
+  { id: 'firstName', label: 'First Name', type: 'text', required: true, visible: true, isDefault: true },
+  { id: 'lastName', label: 'Last Name', type: 'text', required: false, visible: true, isDefault: true },
+  { id: 'email', label: 'Email', type: 'email', required: true, visible: true, isDefault: true },
+  { id: 'phone', label: 'Phone', type: 'tel', required: false, visible: true, isDefault: true },
+  { id: 'company', label: 'Company / Organisation', type: 'text', required: false, visible: true, isDefault: true },
+  { id: 'eventType', label: 'Type of Event', type: 'select', required: false, visible: true, isDefault: true },
+  { id: 'eventDate', label: 'Preferred Date', type: 'date', required: false, visible: true, isDefault: true },
+  { id: 'guestCount', label: 'Guest Count', type: 'number', required: false, visible: true, isDefault: true },
+  { id: 'budget', label: 'Approximate Budget (NZD)', type: 'number', required: false, visible: true, isDefault: true },
+  { id: 'source', label: 'How did you hear about us?', type: 'select', required: false, visible: true, isDefault: true },
+  { id: 'message', label: 'Message / Tell us more', type: 'textarea', required: false, visible: true, isDefault: true },
+];
+
+const FORM_FONTS = [
+  { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
+  { key: 'serif', label: 'Elegant', sub: 'Georgia / Serif' },
+  { key: 'cormorant', label: 'Classic', sub: 'Cormorant Garamond' },
+  { key: 'dm', label: 'Refined', sub: 'DM Serif Display' },
+];
 
 // ─── Follow-Up Date Card ────────────────────────────────────────────────────
 function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date | null) => void }) {
@@ -350,7 +381,6 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { id: "team", label: "Team" },
     { id: "billing", label: "Billing" },
     { id: "floor-plans", label: "Floor Plans" },
-    { id: "group-contact-form", label: "Group Contact Form" },
     { id: "group-settings", label: "Group Settings" },
     { id: "statuses", label: "Enquiry Statuses" },
     { id: "profile", label: "Profile" },
@@ -407,7 +437,7 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook">("overview");
-  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"menu-catalogue"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-contact-form"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses">("venue-details");
+  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"menu-catalogue"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses">("venue-details");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
@@ -779,6 +809,22 @@ export default function Dashboard() {
   });
 
   const [settingsForm, setSettingsForm] = useState<any>(null);
+  const [formFields, setFormFields] = useState<FormFieldDef[] | null>(null);
+  const [newCustomFieldLabel, setNewCustomFieldLabel] = useState('');
+  const [newCustomFieldType, setNewCustomFieldType] = useState<FormFieldDef['type']>('text');
+
+  useEffect(() => {
+    if (settingsSubTab === 'lead-form' && settingsForm && formFields === null) {
+      if (settingsForm.customFormFields) {
+        try {
+          const parsed = JSON.parse(settingsForm.customFormFields);
+          if (Array.isArray(parsed)) { setFormFields(parsed); return; }
+        } catch {}
+      }
+      setFormFields(DEFAULT_FORM_FIELDS.map(f => ({ ...f })));
+    }
+  }, [settingsSubTab, settingsForm, formFields]);
+
   useMemo(() => {
     if (!settingsForm) {
       const vs = venueSettings as any;
@@ -3191,11 +3237,149 @@ export default function Dashboard() {
               {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
               {settingsSubTab === "lead-form" && (
               <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Contact Form</h1>
+                <div className="flex items-center justify-between mb-6">
+                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Contact Form</h1>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Form link copied!'); }}
+                      className="flex items-center gap-2 border border-gold/30 text-ink text-sm px-4 py-2 hover:bg-gold/10 font-bebas tracking-widest">
+                      <Copy className="w-4 h-4" /> COPY LINK
+                    </button>
+                    <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
+                      className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1.5">
+                      <ExternalLink className="w-3.5 h-3.5" /> OPEN FORM
+                    </a>
+                  </div>
+                </div>
 
-              {/* Form branding editor */}
               {settingsForm && (
-              <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-4">
+              <form onSubmit={e => {
+                e.preventDefault();
+                const payload = { ...settingsForm };
+                if (formFields) payload.customFormFields = JSON.stringify(formFields);
+                updateSettings.mutate(payload);
+              }} className="space-y-4">
+
+                {/* ── BRANDING ── */}
+                <div className="dante-card p-5 space-y-5">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage">BRANDING</h2>
+
+                  {/* Logo */}
+                  <div className="flex items-start gap-4">
+                    <div className="w-20 h-20 rounded border-2 border-dashed border-gold/40 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
+                      {settingsForm.logoUrl ? (
+                        <img src={settingsForm.logoUrl} alt="logo" className="w-full h-full object-contain" />
+                      ) : (
+                        <span className="text-[10px] text-gray-400 text-center px-1">No logo</span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">LOGO</label>
+                      <input type="file" accept="image/*"
+                        onChange={async e => {
+                          const file = e.target.files?.[0]; if (!file) return;
+                          const fd = new FormData(); fd.append('file', file);
+                          const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                          const { url } = await res.json();
+                          setSettingsForm((f: any) => ({ ...f, logoUrl: url }));
+                          toast.success('Logo uploaded!');
+                        }}
+                        className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
+                      <p className="font-dm text-xs text-ink/40 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
+                      {settingsForm.logoUrl && (
+                        <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, logoUrl: '' }))}
+                          className="mt-1 font-dm text-xs text-red-400 hover:text-red-600">Remove logo</button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Colour + Font row */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">HEADER COLOUR</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
+                          className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
+                        <Input value={settingsForm.primaryColor ?? '#2D4A3E'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
+                          placeholder="#2D4A3E" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2 flex items-center gap-1"><Type className="w-3 h-3" /> FONT</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {FORM_FONTS.map(font => (
+                          <button key={font.key} type="button"
+                            onClick={() => setSettingsForm((f: any) => ({ ...f, formFont: font.key }))}
+                            className={`text-left px-3 py-2 border text-xs transition-colors ${(settingsForm.formFont ?? 'inter') === font.key ? 'border-forest bg-forest/5 text-forest' : 'border-gold/30 hover:border-gold/60'}`}>
+                            <div className="font-dm font-semibold">{font.label}</div>
+                            <div className="text-ink/40">{font.sub}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Live preview */}
+                  <div className="border border-gold/20 overflow-hidden rounded">
+                    <div className="px-6 py-5 text-center" style={{ backgroundColor: settingsForm.primaryColor ?? '#2D4A3E' }}>
+                      {settingsForm.logoUrl && <img src={settingsForm.logoUrl} alt="logo" className="h-10 w-auto object-contain mx-auto mb-2" />}
+                      <div className="text-base font-bold text-white">{venueSettings?.name ?? 'Your Venue'}</div>
+                      <div className="text-sm text-white/80 mt-0.5">{settingsForm.leadFormTitle || 'Book Your Event'}</div>
+                    </div>
+                    <div className="bg-gray-50 py-1.5 text-center text-[10px] text-gray-400 font-bebas tracking-widest">HEADER PREVIEW</div>
+                  </div>
+                </div>
+
+                {/* ── PHOTOS ── */}
+                <div className="dante-card p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage">PHOTOS</h2>
+                    <span className="font-dm text-xs text-ink/40">
+                      {(() => { try { return JSON.parse(settingsForm.formGalleryImages || '[]').length; } catch { return 0; } })()} / 6 photos
+                    </span>
+                  </div>
+                  <p className="font-dm text-xs text-ink/50">Photos display as a gallery strip on your public contact form.</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {(() => {
+                      let imgs: string[] = [];
+                      try { imgs = JSON.parse(settingsForm.formGalleryImages || '[]'); } catch {}
+                      return [
+                        ...imgs.map((url, i) => (
+                          <div key={i} className="relative group aspect-video bg-gray-100 overflow-hidden border border-gold/20">
+                            <img src={url} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover" />
+                            <button type="button"
+                              onClick={() => {
+                                const newImgs = imgs.filter((_, j) => j !== i);
+                                setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify(newImgs) }));
+                              }}
+                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )),
+                        imgs.length < 6 ? (
+                          <label key="add" className="aspect-video bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors">
+                            <Upload className="w-5 h-5 text-ink/30 mb-1" />
+                            <span className="font-dm text-xs text-ink/40">Upload photo</span>
+                            <input type="file" accept="image/*" className="hidden"
+                              onChange={async e => {
+                                const file = e.target.files?.[0]; if (!file) return;
+                                const fd = new FormData(); fd.append('file', file);
+                                const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                                const { url } = await res.json();
+                                const current: string[] = (() => { try { return JSON.parse(settingsForm.formGalleryImages || '[]'); } catch { return []; } })();
+                                setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify([...current, url]) }));
+                                toast.success('Photo added!');
+                              }} />
+                          </label>
+                        ) : null,
+                      ];
+                    })()}
+                  </div>
+                </div>
+
+                {/* ── CONTENT ── */}
                 <div className="dante-card p-5 space-y-4">
                   <h2 className="font-bebas text-xs tracking-widest text-sage">FORM CONTENT</h2>
                   <div>
@@ -3210,48 +3394,107 @@ export default function Dashboard() {
                       rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                   </div>
                 </div>
-                <div className="dante-card p-5 space-y-4">
-                  <h2 className="font-bebas text-xs tracking-widest text-sage">FORM BRANDING</h2>
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">HEADER COLOUR</label>
-                      <div className="flex items-center gap-2">
-                        <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
-                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
-                          className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
-                        <Input value={settingsForm.primaryColor ?? '#2D4A3E'}
-                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
-                          placeholder="#2D4A3E" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+
+                {/* ── FORM FIELDS ── */}
+                <div className="dante-card p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage">FORM FIELDS</h2>
+                    <span className="font-dm text-xs text-ink/40">Toggle visibility, required, and labels</span>
+                  </div>
+                  {formFields && (
+                    <div className="border border-gold/20 divide-y divide-gold/10">
+                      {/* Header */}
+                      <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-linen">
+                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/40">VIS</div>
+                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/40">REQ</div>
+                        <div className="col-span-5 font-bebas text-[9px] tracking-widest text-ink/40">LABEL</div>
+                        <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">TYPE</div>
+                        <div className="col-span-3"></div>
                       </div>
-                      <p className="font-dm text-xs text-ink/40 mt-1">Used as the form header background colour</p>
-                    </div>
-                    {/* Live preview swatch */}
-                    <div className="flex-1">
-                      <div className="rounded border border-gold/20 overflow-hidden">
-                        <div className="p-4 text-center" style={{ backgroundColor: settingsForm.primaryColor ?? '#2D4A3E' }}>
-                          <div className="text-xs font-bold" style={{ color: '#ffffff' }}>{settingsForm.leadFormTitle || 'Book Your Event'}</div>
-                          <div className="text-xs mt-0.5 opacity-70" style={{ color: '#ffffff' }}>{venueSettings?.name ?? 'Your Venue'}</div>
+                      {formFields.map((field, i) => (
+                        <div key={field.id} className={`grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm ${!field.visible ? 'opacity-50' : ''}`}>
+                          {/* Visible toggle */}
+                          <div className="col-span-1">
+                            <button type="button" onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, visible: !f.visible } : f) : prev)}
+                              className={`${field.visible ? 'text-forest' : 'text-ink/30'} hover:opacity-80 transition-colors`}>
+                              {field.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          {/* Required toggle */}
+                          <div className="col-span-1">
+                            <button type="button"
+                              disabled={field.id === 'firstName' || field.id === 'email'}
+                              onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, required: !f.required } : f) : prev)}
+                              className={`${field.required ? 'text-amber-500' : 'text-ink/20'} hover:opacity-80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed`}>
+                              <Lock className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {/* Label */}
+                          <div className="col-span-5">
+                            <input type="text" value={field.label}
+                              onChange={e => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, label: e.target.value } : f) : prev)}
+                              className="w-full text-sm font-dm text-ink bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5 rounded-sm" />
+                          </div>
+                          {/* Type badge */}
+                          <div className="col-span-2">
+                            <span className="font-bebas text-[10px] tracking-wide text-ink/40 bg-linen px-1.5 py-0.5">{field.type}</span>
+                          </div>
+                          {/* Actions */}
+                          <div className="col-span-3 flex items-center gap-1 justify-end">
+                            <button type="button" disabled={i === 0}
+                              onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })}
+                              className="text-ink/30 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              <MoveUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button type="button" disabled={i === formFields.length - 1}
+                              onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })}
+                              className="text-ink/30 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              <MoveDown className="w-3.5 h-3.5" />
+                            </button>
+                            {!field.isDefault && (
+                              <button type="button"
+                                onClick={() => setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
+                                className="text-ink/30 hover:text-red-500 transition-colors p-0.5">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div className="bg-gray-50 p-2 text-center">
-                          <div className="text-xs text-gray-400">Preview</div>
-                        </div>
-                      </div>
+                      ))}
                     </div>
+                  )}
+                  {/* Add custom field */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Input value={newCustomFieldLabel} onChange={e => setNewCustomFieldLabel(e.target.value)}
+                      placeholder="New field label..."
+                      className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm" />
+                    <select value={newCustomFieldType} onChange={e => setNewCustomFieldType(e.target.value as FormFieldDef['type'])}
+                      className="border border-gold/30 text-sm font-dm px-2 py-2 focus:outline-none focus:border-forest">
+                      <option value="text">Text</option>
+                      <option value="number">Number</option>
+                      <option value="date">Date</option>
+                      <option value="textarea">Paragraph</option>
+                    </select>
+                    <Button type="button"
+                      onClick={() => {
+                        if (!newCustomFieldLabel.trim()) return;
+                        const newField: FormFieldDef = {
+                          id: `custom_${Date.now()}`,
+                          label: newCustomFieldLabel.trim(),
+                          type: newCustomFieldType,
+                          required: false,
+                          visible: true,
+                          isDefault: false,
+                        };
+                        setFormFields(prev => prev ? [...prev, newField] : [newField]);
+                        setNewCustomFieldLabel('');
+                      }}
+                      className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-3 gap-1">
+                      <Plus className="w-3.5 h-3.5" /> ADD
+                    </Button>
                   </div>
                 </div>
-                <div className="dante-card p-5">
-                  <h2 className="font-bebas text-xs tracking-widest text-sage mb-3">FORM LINK</h2>
-                  <p className="font-dm text-sm text-ink/70 mb-3">Your public enquiry form is available at:</p>
-                  <div className="flex items-center gap-2 bg-gold/5 border border-gold/20 rounded px-3 py-2">
-                    <span className="font-mono text-sm text-ink/70 flex-1 truncate">{window.location.origin}/enquire/{venueSettings?.slug || 'your-venue'}</span>
-                    <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Link copied!'); }}
-                      className="font-bebas tracking-widest text-xs px-3 py-1 border border-gold/30 text-ink hover:bg-gold/10 flex-shrink-0">COPY</button>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
-                      className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream">OPEN FORM</a>
-                  </div>
-                </div>
+
                 <button type="submit" disabled={updateSettings.isPending}
                   className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
                   {updateSettings.isPending ? 'SAVING...' : 'SAVE CHANGES'}
@@ -4003,107 +4246,6 @@ export default function Dashboard() {
               )}
 
               {/* ── GROUP CONTACT FORM ──────────────────────────── */}
-              {settingsSubTab === "group-contact-form" && settingsForm && (
-              <div className="max-w-3xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
-                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Group Contact Form</h1>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Form link copied!'); }}
-                      className="flex items-center gap-2 border border-gold/30 text-ink text-sm px-4 py-2 hover:bg-gold/10 font-bebas tracking-widest">
-                      <ExternalLink className="w-4 h-4" /> COPY FORM LINK
-                    </button>
-                    <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
-                      className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream">OPEN FORM</a>
-                  </div>
-                </div>
-
-                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-4">
-                  {/* Logo upload */}
-                  <div className="dante-card p-5">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">LOGO</h2>
-                    <div className="flex items-center gap-4">
-                      <div className="w-20 h-20 rounded-full border-2 border-dashed border-gold/40 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
-                        {settingsForm.logoUrl ? (
-                          <img src={settingsForm.logoUrl} alt="logo" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-xs text-gray-400 text-center px-2">No logo</span>
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">UPLOAD LOGO</label>
-                        <input type="file" accept="image/*"
-                          onChange={async e => {
-                            const file = e.target.files?.[0]; if (!file) return;
-                            const fd = new FormData(); fd.append('file', file);
-                            const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                            const { url } = await res.json();
-                            setSettingsForm((f: any) => ({ ...f, logoUrl: url }));
-                            toast.success('Logo uploaded!');
-                          }}
-                          className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
-                        <p className="font-dm text-xs text-ink/40 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Banner image upload */}
-                  <div className="dante-card p-5">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">BANNER IMAGE</h2>
-                    <div
-                      className="w-full h-28 border-2 border-dashed border-gold/40 rounded flex items-center justify-center overflow-hidden bg-gray-50 mb-3 relative cursor-pointer"
-                      onClick={() => document.getElementById('banner-upload')?.click()}
-                    >
-                      {settingsForm.coverImageUrl ? (
-                        <img src={settingsForm.coverImageUrl} alt="banner" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-xs text-gray-400">Click to upload banner (recommended: 1500 × 250px)</span>
-                      )}
-                    </div>
-                    <input id="banner-upload" type="file" accept="image/*" className="hidden"
-                      onChange={async e => {
-                        const file = e.target.files?.[0]; if (!file) return;
-                        const fd = new FormData(); fd.append('file', file);
-                        const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                        const { url } = await res.json();
-                        setSettingsForm((f: any) => ({ ...f, coverImageUrl: url }));
-                        toast.success('Banner uploaded!');
-                      }}
-                    />
-                    <p className="font-dm text-xs text-ink/40">Recommended size: 1500 × 250px. JPG or PNG.</p>
-                  </div>
-
-                  {/* Colours */}
-                  <div className="dante-card p-5 space-y-4">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage">FORM COLOURS</h2>
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">HEADER / BUTTON COLOUR</label>
-                        <div className="flex items-center gap-2">
-                          <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
-                            onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
-                            className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
-                          <Input value={settingsForm.primaryColor ?? '#2D4A3E'}
-                            onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
-                            placeholder="#2D4A3E" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
-                        </div>
-                      </div>
-                      {/* Preview swatch */}
-                      <div className="flex-1">
-                        <div className="rounded border border-gold/20 overflow-hidden">
-                          <div className="h-10" style={{ backgroundColor: settingsForm.primaryColor ?? '#2D4A3E' }} />
-                          <div className="bg-gray-50 p-2 text-center text-xs text-gray-400">Header preview</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button type="submit" disabled={updateSettings.isPending}
-                    className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
-                    {updateSettings.isPending ? 'SAVING...' : 'SAVE CHANGES'}
-                  </button>
-                </form>
-              </div>
-              )}
 
               {/* ── FLOOR PLANS ─────────────────────────────────── */}
               {settingsSubTab === "floor-plans" && (

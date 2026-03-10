@@ -92,6 +92,9 @@ export const venueSettings = pgTable("venue_settings", {
   customStatuses: text("customStatuses"),
   customDietaryOptions: text("customDietaryOptions"),
   customSetupTemplates: text("customSetupTemplates"),
+  formFont: varchar("formFont", { length: 50 }).default("inter"),
+  formGalleryImages: text("formGalleryImages"),
+  customFormFields: text("customFormFields"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
