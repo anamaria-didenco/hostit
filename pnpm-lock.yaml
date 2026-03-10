@@ -127,6 +127,9 @@ importers:
       '@types/multer':
         specifier: ^2.0.0
         version: 2.0.0
+      '@types/papaparse':
+        specifier: ^5.5.2
+        version: 5.5.2
       '@types/pg':
         specifier: ^8.18.0
         version: 8.18.0
@@ -187,6 +190,9 @@ importers:
       nodemailer:
         specifier: ^8.0.1
         version: 8.0.1
+      papaparse:
+        specifier: ^5.5.3
+        version: 5.5.3
       pg:
         specifier: ^8.20.0
         version: 8.20.0
@@ -2363,6 +2369,9 @@ packages:
   '@types/nodemailer@7.0.11':
     resolution: {integrity: sha512-E+U4RzR2dKrx+u3N4DlsmLaDC6mMZOM/TPROxA0UAPiTgI0y4CEFBmZE+coGWTjakDriRsXG368lNk1u9Q0a2g==}
 
+  '@types/papaparse@5.5.2':
+    resolution: {integrity: sha512-gFnFp/JMzLHCwRf7tQHrNnfhN4eYBVYYI897CGX4MY1tzY9l2aLkVyx2IlKZ/SAqDbB3I1AOZW5gTMGGsqWliA==}
+
   '@types/pg@8.18.0':
     resolution: {integrity: sha512-gT+oueVQkqnj6ajGJXblFR4iavIXWsGAFCk3dP4Kki5+a9R4NMt0JARdk6s8cUKcfUoqP5dAtDSLU8xYUTFV+Q==}
 
@@ -3906,6 +3915,9 @@ packages:
 
   package-manager-detector@1.5.0:
     resolution: {integrity: sha512-uBj69dVlYe/+wxj8JOpr97XfsxH/eumMt6HqjNTmJDf/6NO9s+0uxeOneIz3AsPt2m6y9PqzDzd3ATcU17MNfw==}
+
+  papaparse@5.5.3:
+    resolution: {integrity: sha512-5QvjGxYVjxO59MGU2lHVYpRWBBtKHnlIAcSe1uNFCkkptUh63NFRj0FJQm7nR67puEruUci/ZkjmEFrjCAyP4A==}
 
   parse-entities@4.0.2:
     resolution: {integrity: sha512-GG2AQYWoLgL877gQIKeRPGO1xF9+eG1ujIb5soS5gPvLQ1y2o8FL90w2QWNdf9I361Mpp7726c+lj3U0qK1uGw==}
@@ -7137,6 +7149,10 @@ snapshots:
     dependencies:
       '@types/node': 24.7.0
 
+  '@types/papaparse@5.5.2':
+    dependencies:
+      '@types/node': 24.7.0
+
   '@types/pg@8.18.0':
     dependencies:
       '@types/node': 24.7.0
@@ -8954,6 +8970,8 @@ snapshots:
       netmask: 2.0.2
 
   package-manager-detector@1.5.0: {}
+
+  papaparse@5.5.3: {}
 
   parse-entities@4.0.2:
     dependencies:

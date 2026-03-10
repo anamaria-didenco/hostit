@@ -10,7 +10,7 @@ import {
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid, Image as ImageIcon, Edit2,
-  ArrowUpDown, CreditCard, AlertCircle
+  ArrowUpDown, CreditCard, AlertCircle, Upload
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -18,6 +18,7 @@ import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
+import CsvImportModal from "@/components/CsvImportModal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
@@ -431,6 +432,7 @@ export default function Dashboard() {
   const [widgetSizes, setWidgetSizes] = useState<Record<string, 'half' | 'full'>>({});
   const [collapsedInboxSections, setCollapsedInboxSections] = useState<Set<string>>(new Set());
   const [showAddLead, setShowAddLead] = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
   const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', guestCount: '', budget: '', message: '', status: 'new' as const });
 
   const utils = trpc.useUtils();
@@ -1252,13 +1254,22 @@ export default function Dashboard() {
                       {bulkSelectMode ? 'CANCEL' : 'SELECT'}
                     </button>
                   </div>
-                  {/* Add Enquiry button */}
-                  <button
-                    onClick={() => setShowAddLead(true)}
-                    className="w-full mb-2 bg-sage-green text-white font-inter font-medium text-sm py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-sage-dark transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Enquiry
-                  </button>
+                  {/* Add Enquiry / Import buttons */}
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      onClick={() => setShowAddLead(true)}
+                      className="flex-1 bg-sage-green text-white font-inter font-medium text-sm py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-sage-dark transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Enquiry
+                    </button>
+                    <button
+                      onClick={() => setShowCsvImport(true)}
+                      title="Import from CSV"
+                      className="px-3 py-2 rounded-xl border border-gold/40 text-ink/60 hover:border-gold hover:text-ink hover:bg-white/60 transition-colors text-xs font-inter font-medium flex items-center gap-1.5"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> CSV
+                    </button>
+                  </div>
                   <div className="relative mb-2">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/60" />
                     <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
@@ -4561,6 +4572,14 @@ export default function Dashboard() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* CSV Import Modal */}
+      {showCsvImport && (
+        <CsvImportModal
+          onClose={() => setShowCsvImport(false)}
+          onImported={() => { refetchLeads(); }}
+        />
+      )}
 
       {/* Add Enquiry Modal */}
       <Dialog open={showAddLead} onOpenChange={setShowAddLead}>

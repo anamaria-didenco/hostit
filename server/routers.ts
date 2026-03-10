@@ -501,6 +501,53 @@ export const appRouter = router({
         ));
         return { updated: input.ids.length };
       }),
+
+    // Bulk import leads from CSV
+    bulkCreate: protectedProcedure
+      .input(z.array(z.object({
+        firstName: z.string().min(1),
+        lastName: z.string().optional(),
+        email: z.string().optional(),
+        phone: z.string().optional(),
+        company: z.string().optional(),
+        eventType: z.string().optional(),
+        eventDate: z.string().optional(),
+        guestCount: z.number().optional(),
+        budget: z.number().optional(),
+        message: z.string().optional(),
+        status: z.enum(["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"]).optional(),
+        source: z.string().optional(),
+        internalNotes: z.string().optional(),
+      })).min(1).max(500))
+      .mutation(async ({ input, ctx }) => {
+        const { createLead } = await import('./db');
+        let imported = 0;
+        const errors: string[] = [];
+        for (const row of input) {
+          try {
+            await createLead({
+              ownerId: ctx.user.id,
+              firstName: row.firstName,
+              lastName: row.lastName,
+              email: row.email ?? '',
+              phone: row.phone,
+              company: row.company,
+              eventType: row.eventType,
+              eventDate: row.eventDate ? new Date(row.eventDate) : undefined,
+              guestCount: row.guestCount,
+              budget: row.budget?.toString() as any,
+              message: row.message,
+              internalNotes: row.internalNotes,
+              source: row.source ?? "csv_import",
+              status: row.status ?? "new",
+            });
+            imported++;
+          } catch (err: any) {
+            errors.push(`Row ${imported + errors.length + 1}: ${err?.message ?? 'Unknown error'}`);
+          }
+        }
+        return { imported, errors };
+      }),
   }),
   // ─── Proposals ─────────────────────────────────────────────────────────────
   proposals: router({

@@ -65,7 +65,23 @@ pnpm run db:push
 
 ## Authentication
 
-The app uses a Manus-specific OAuth system. Without `VITE_OAUTH_PORTAL_URL` and `VITE_APP_ID` configured, the login buttons will point to `#` (no-op). The app still loads and displays the landing page.
+The app supports two authentication modes:
+
+1. **Local password auth** (active): POST `/api/auth/local-login` with `{ password }` matching `ADMIN_PASSWORD` env var. Creates a session user with openId `local-admin` and role `admin`.
+2. **Manus OAuth** (optional): Requires `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID`, and `OAUTH_SERVER_URL` env vars.
+
+The Login page is at `/login` (`client/src/pages/Login.tsx`).
+
+## CSV Bulk Import
+
+Enquiries/leads can be bulk-imported via CSV from the Enquiries sidebar in the dashboard. The "CSV" button opens a 3-step modal:
+
+1. **Upload** — drag-and-drop or file picker; CSV template download available
+2. **Map columns** — auto-detects common column names from other platforms; user can override
+3. **Preview & import** — shows first 5 rows, then calls `leads.bulkCreate` tRPC mutation (max 500 rows)
+
+Backend mutation: `trpc.leads.bulkCreate` in `server/routers.ts`.
+Frontend component: `client/src/components/CsvImportModal.tsx` (uses `papaparse` for parsing).
 
 ## Deployment
 
