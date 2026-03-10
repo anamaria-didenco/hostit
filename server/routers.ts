@@ -88,6 +88,7 @@ export const appRouter = router({
         themeKey: z.string().optional(),
         logoUrl: z.string().optional(),
         coverImageUrl: z.string().optional(),
+        customStatuses: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -228,7 +229,7 @@ export const appRouter = router({
         guestCount: z.number().optional(),
         budget: z.number().optional(),
         message: z.string().optional(),
-        status: z.enum(["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"]).optional(),
+        status: z.string().optional(),
         source: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -299,7 +300,7 @@ export const appRouter = router({
     updateStatus: protectedProcedure
       .input(z.object({
         id: z.number(),
-        status: z.enum(["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"]),
+        status: z.string(),
         note: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -478,7 +479,7 @@ export const appRouter = router({
     bulkUpdateStatus: protectedProcedure
       .input(z.object({
         ids: z.array(z.number()).min(1),
-        status: z.enum(['new', 'contacted', 'proposal_sent', 'negotiating', 'booked', 'lost', 'cancelled']),
+        status: z.string(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb, addLeadActivity } = await import('./db');
@@ -515,7 +516,7 @@ export const appRouter = router({
         guestCount: z.number().optional(),
         budget: z.number().optional(),
         message: z.string().optional(),
-        status: z.enum(["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"]).optional(),
+        status: z.string().optional(),
         source: z.string().optional(),
         internalNotes: z.string().optional(),
       })).min(1).max(500))

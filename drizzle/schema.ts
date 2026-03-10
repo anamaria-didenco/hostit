@@ -89,6 +89,7 @@ export const venueSettings = pgTable("venue_settings", {
   maxLeadTime: varchar("maxLeadTime", { length: 20 }).default("6 months"),
   bufferTime: varchar("bufferTime", { length: 20 }).default("30 minutes"),
   operatingHours: text("operatingHours"),
+  customStatuses: text("customStatuses"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -144,7 +145,7 @@ export const leads = pgTable("leads", {
   spaceId: integer("spaceId"),
   budget: decimal("budget", { precision: 10, scale: 2 }),
   message: text("message"),
-  status: leadStatusEnum("status").default("new").notNull(),
+  status: text("status").default("new").notNull(),
   assignedTo: integer("assignedTo"),
   source: varchar("source", { length: 100 }).default("lead_form"),
   internalNotes: text("internalNotes"),

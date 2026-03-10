@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
 import CsvImportModal from "@/components/CsvImportModal";
+import StatusManager, { parseCustomStatuses, getStatusClasses, type StatusDef } from "@/components/StatusManager";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
@@ -297,8 +298,9 @@ function NewEnquiriesWidget({ newEnquiries, overdueLeads, onSelectLead, onViewAl
   );
 }
 
-function PipelineSnapshotWidget({ allLeads, onViewLeads }: { allLeads: any; onViewLeads: () => void }) {
-  const counts = PIPELINE_STAGES.map(s => ({
+function PipelineSnapshotWidget({ allLeads, onViewLeads, stages }: { allLeads: any; onViewLeads: () => void; stages?: { key: string; label: string; color: string }[] }) {
+  const stageList = stages ?? PIPELINE_STAGES;
+  const counts = stageList.map(s => ({
     ...s,
     count: (allLeads ?? []).filter((l: any) => l.status === s.key).length,
   }));
@@ -350,6 +352,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { id: "floor-plans", label: "Floor Plans" },
     { id: "group-contact-form", label: "Group Contact Form" },
     { id: "group-settings", label: "Group Settings" },
+    { id: "statuses", label: "Enquiry Statuses" },
     { id: "profile", label: "Profile" },
   ];
   const currentLabel = items.find(i => i.id === settingsSubTab)?.label ?? 'Settings';
@@ -404,7 +407,7 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook">("overview");
-  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"menu-catalogue"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-contact-form"|"group-settings"|"profile"|"email-settings"|"floor-plans">("venue-details");
+  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"menu-catalogue"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-contact-form"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses">("venue-details");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
@@ -452,6 +455,10 @@ export default function Dashboard() {
     { ownerId: user?.id },
     { enabled: !!user?.id }
   );
+  const pipelineStages = React.useMemo(() => {
+    const defs = parseCustomStatuses((venueSettings as any)?.customStatuses);
+    return defs.map(d => ({ key: d.key, label: d.label, color: getStatusClasses(d.colorId) }));
+  }, [venueSettings]);
   const { data: contacts, refetch: refetchContacts } = trpc.contacts.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: monthBookings } = trpc.bookings.byMonth.useQuery(
@@ -1301,7 +1308,7 @@ export default function Dashboard() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="font-inter text-xs">All Statuses</SelectItem>
-                      {PIPELINE_STAGES.map(s => (
+                      {pipelineStages.map(s => (
                         <SelectItem key={s.key} value={s.key} className="font-inter text-xs">{s.label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1369,7 +1376,7 @@ export default function Dashboard() {
                       className={`flex-1 p-4 text-left hover:bg-linen transition-colors ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5 border-l-2 border-gold" : "border-l-2 border-transparent"}`}>
                       <div className="flex items-start justify-between mb-1">
                         <div className="font-cormorant font-semibold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
-                        <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border flex-shrink-0 ml-2 ${PIPELINE_STAGES.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
+                        <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border flex-shrink-0 ml-2 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
                           {lead.status === 'booked' ? 'CONFIRMED' : lead.status.replace(/_/g, " ").toUpperCase()}
                         </div>
                       </div>
@@ -1406,7 +1413,7 @@ export default function Dashboard() {
                   <span className="text-cream/30">|</span>
                   <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
                   <div className="flex items-center gap-1.5">
-                    {PIPELINE_STAGES.map(s => (
+                    {pipelineStages.map(s => (
                       <button key={s.key}
                         onClick={() => bulkUpdateStatus.mutate({ ids: Array.from(selectedLeadIds), status: s.key as any })}
                         disabled={bulkUpdateStatus.isPending}
@@ -1553,7 +1560,7 @@ export default function Dashboard() {
                         </div>
                       )}
                       <div className="space-y-1.5">
-                        {PIPELINE_STAGES.map(stage => (
+                        {pipelineStages.map(stage => (
                           <button key={stage.key}
                             onClick={() => updateStatus.mutate({ id: selectedLead.id, status: stage.key as any })}
                             className={`w-full text-left px-3 py-2 rounded-lg border font-inter text-xs font-medium transition-all ${
@@ -1745,7 +1752,7 @@ export default function Dashboard() {
               <div className="gold-rule max-w-xs mb-3"><span>CRM</span></div>
               <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Pipeline</h1>
               <div className="flex gap-4 min-w-max">
-                {PIPELINE_STAGES.slice(0, 5).map(stage => {
+                {pipelineStages.slice(0, 5).map(stage => {
                   const stageLeads = (allLeads ?? []).filter((l: any) => l.status === stage.key);
                   return (
                     <div key={stage.key} className="w-64 flex-shrink-0">
@@ -4387,6 +4394,19 @@ export default function Dashboard() {
               </div>
               )}
 
+              {settingsSubTab === "statuses" && (
+              <div className="max-w-2xl mx-auto">
+                <h1 className="font-cormorant text-ink mb-2" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Enquiry Statuses</h1>
+                <p className="text-sm text-gray-500 mb-6">Define the pipeline stages your enquiries move through. Rename, reorder, add or remove stages to match your workflow.</p>
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <StatusManager
+                    initialStatuses={parseCustomStatuses((venueSettings as any)?.customStatuses)}
+                    onSaved={() => refetchSettings()}
+                  />
+                </div>
+              </div>
+              )}
+
               {settingsSubTab === "billing" && (
               <div className="max-w-3xl mx-auto">
                 <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Billing</h1>
@@ -4705,7 +4725,7 @@ export default function Dashboard() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PIPELINE_STAGES.map(s => (
+                  {pipelineStages.map(s => (
                     <SelectItem key={s.key} value={s.key} className="font-bebas text-xs tracking-widest">{s.label}</SelectItem>
                   ))}
                 </SelectContent>
