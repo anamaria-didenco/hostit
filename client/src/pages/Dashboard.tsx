@@ -647,6 +647,7 @@ export default function Dashboard() {
   });
   const updateSettings = trpc.venue.update.useMutation({
     onSuccess: () => { refetchSettings(); toast.success("Settings saved!"); },
+    onError: (err) => toast.error(err.message || "Failed to save settings"),
   });
   const createSpace = trpc.spaces.create.useMutation({
     onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
@@ -869,6 +870,8 @@ export default function Dashboard() {
         themeKey: vs?.themeKey ?? "sage",
         logoUrl: vs?.logoUrl ?? "",
         coverImageUrl: vs?.coverImageUrl ?? "",
+        formFont: vs?.formFont ?? "inter",
+        formGalleryImages: vs?.formGalleryImages ?? "[]",
         operatingHours: vs?.operatingHours ?? JSON.stringify([
           { day: "Sunday", enabled: true, start: "08:00", end: "22:00" },
           { day: "Monday", enabled: true, start: "08:00", end: "22:00" },
@@ -3254,9 +3257,15 @@ export default function Dashboard() {
               {settingsForm && (
               <form onSubmit={e => {
                 e.preventDefault();
-                const payload = { ...settingsForm };
-                if (formFields) payload.customFormFields = JSON.stringify(formFields);
-                updateSettings.mutate(payload);
+                updateSettings.mutate({
+                  logoUrl: settingsForm.logoUrl,
+                  primaryColor: settingsForm.primaryColor,
+                  formFont: settingsForm.formFont,
+                  formGalleryImages: settingsForm.formGalleryImages,
+                  leadFormTitle: settingsForm.leadFormTitle,
+                  leadFormSubtitle: settingsForm.leadFormSubtitle,
+                  ...(formFields ? { customFormFields: JSON.stringify(formFields) } : {}),
+                });
               }} className="space-y-4">
 
                 {/* ── BRANDING ── */}
