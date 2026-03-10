@@ -1,0 +1,90 @@
+{
+  "query": "SELECT id, firstName, lastName, status, eventDate, ownerId FROM leads LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute SELECT id, firstName, lastName, status, eventDate, ownerId FROM leads LIMIT 10;",
+  "rows": [
+    {
+      "id": "1",
+      "firstName": "Kiri",
+      "lastName": "Morgan",
+      "status": "proposal_sent",
+      "eventDate": "2026-03-06 00:00:00",
+      "ownerId": "1"
+    },
+    {
+      "id": "2",
+      "firstName": "Keeraty",
+      "lastName": "C",
+      "status": "booked",
+      "eventDate": "2026-03-07 00:00:00",
+      "ownerId": "1"
+    },
+    {
+      "id": "3",
+      "firstName": "Casey",
+      "lastName": "",
+      "status": "booked",
+      "eventDate": "2026-03-13 00:00:00",
+      "ownerId": "1"
+    },
+    {
+      "id": "4",
+      "firstName": "Grace",
+      "lastName": "Jensen",
+      "status": "proposal_sent",
+      "eventDate": "2026-03-14 00:00:00",
+      "ownerId": "1"
+    },
+    {
+      "id": "5",
+      "firstName": "niamh",
+      "lastName": "baxter",
+      "status": "booked",
+      "eventDate": "2026-03-14 00:00:00",
+      "ownerId": "1"
+    },
+    {
+      "id": "6",
+      "firstName": "Bernadette",
+      "lastName": "Ramos",
+      "status": "booked",
+      "eventDate": "2026-03-18 00:00:00",
+      "ownerId": "1"
+    },
+    {
+      "id": "7",
+      "firstName": "Isabella",
+      "lastName": "O'Keefe",
+      "status": "proposal_sent",
+      "eventDate": "2026-03-21 00:00:00",
+      "ownerId": "1"
+    },
+    {
+      "id": "8",
+      "firstName": "Caitlyn",
+      "lastName": "Stewart",
+      "status": "proposal_sent",
+      "eventDate": "2026-03-28 00:00:00",
+      "ownerId": "1"
+    },
+    {
+      "id": "9",
+      "firstName": "Gentz,Thomas",
+      "lastName": "",
+      "status": "proposal_sent",
+      "eventDate": "2026-03-31 00:00:00",
+      "ownerId": "1"
+    },
+    {
+      "id": "10",
+      "firstName": "Rhonda",
+      "lastName": "Binnie",
+      "status": "booked",
+      "eventDate": "2026-04-09 00:00:00",
+      "ownerId": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tfirstName\tlastName\tstatus\teventDate\townerId\n1\tKiri\tMorgan\tproposal_sent\t2026-03-06 00:00:00\t1\n2\tKeeraty\tC\tbooked\t2026-03-07 00:00:00\t1\n3\tCasey\t\tbooked\t2026-03-13 00:00:00\t1\n4\tGrace\tJensen\tproposal_sent\t2026-03-14 00:00:00\t1\n5\tniamh\tbaxter\tbooked\t2026-03-14 00:00:00\t1\n6\tBernadette\tRamos\tbooked\t2026-03-18 00:00:00\t1\n7\tIsabella\tO'Keefe\tproposal_sent\t2026-03-21 00:00:00\t1\n8\tCaitlyn\tStewart\tproposal_sent\t2026-03-28 00:00:00\t1\n9\tGentz,Thomas\t\tproposal_sent\t2026-03-31 00:00:00\t1\n10\tRhonda\tBinnie\tbooked\t2026-04-09 00:00:00\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1622
+}

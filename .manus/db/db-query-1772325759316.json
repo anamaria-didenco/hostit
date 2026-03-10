@@ -1,0 +1,9 @@
+{
+  "query": "SELECT id, firstName, lastName, eventDate, status, ownerId FROM bookings ORDER BY eventDate DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute SELECT id, firstName, lastName, eventDate, status, ownerId FROM bookings ORDER BY eventDate DESC LIMIT 20;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1713
+}

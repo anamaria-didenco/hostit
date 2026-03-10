@@ -1,0 +1,9 @@
+{
+  "query": "\nALTER TABLE runsheets \n  ADD COLUMN IF NOT EXISTS leadId INT,\n  ADD COLUMN IF NOT EXISTS title VARCHAR(255),\n  ADD COLUMN IF NOT EXISTS eventDate TIMESTAMP,\n  ADD COLUMN IF NOT EXISTS venueName VARCHAR(255),\n  ADD COLUMN IF NOT EXISTS spaceName VARCHAR(255),\n  ADD COLUMN IF NOT EXISTS guestCount INT,\n  ADD COLUMN IF NOT EXISTS eventType VARCHAR(100),\n  ADD COLUMN IF NOT EXISTS publicToken VARCHAR(64);\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute \nALTER TABLE runsheets \n  ADD COLUMN IF NOT EXISTS leadId INT,\n  ADD COLUMN IF NOT EXISTS title VARCHAR(255),\n  ADD COLUMN IF NOT EXISTS eventDate TIMESTAMP,\n  ADD COLUMN IF NOT EXISTS venueName VARCHAR(255),\n  ADD COLUMN IF NOT EXISTS spaceName VARCHAR(255),\n  ADD COLUMN IF NOT EXISTS guestCount INT,\n  ADD COLUMN IF NOT EXISTS eventType VARCHAR(100),\n  ADD COLUMN IF NOT EXISTS publicToken VARCHAR(64);\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 3953
+}

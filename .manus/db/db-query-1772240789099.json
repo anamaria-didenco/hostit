@@ -1,0 +1,9 @@
+{
+  "query": "\nUPDATE runsheets SET title = 'Runsheet' WHERE title IS NULL;\nALTER TABLE runsheets MODIFY COLUMN title VARCHAR(255) NOT NULL DEFAULT '';\nALTER TABLE runsheet_items ADD COLUMN IF NOT EXISTS ownerId INT NOT NULL DEFAULT 0;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute \nUPDATE runsheets SET title = 'Runsheet' WHERE title IS NULL;\nALTER TABLE runsheets MODIFY COLUMN title VARCHAR(255) NOT NULL DEFAULT '';\nALTER TABLE runsheet_items ADD COLUMN IF NOT EXISTS ownerId INT NOT NULL DEFAULT 0;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2614
+}
