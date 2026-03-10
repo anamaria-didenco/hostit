@@ -11,43 +11,38 @@ type LeadField = {
 };
 
 const LEAD_FIELDS: LeadField[] = [
-  { key: "firstName", label: "First Name", required: true },
-  { key: "lastName", label: "Last Name" },
-  { key: "email", label: "Email" },
-  { key: "phone", label: "Phone" },
-  { key: "company", label: "Company / Organisation" },
-  { key: "eventType", label: "Event Type" },
+  { key: "fullName", label: "First & Last Name", required: true },
+  { key: "eventTitle", label: "Event Title" },
   { key: "eventDate", label: "Event Date" },
-  { key: "guestCount", label: "Guest Count" },
-  { key: "budget", label: "Budget" },
-  { key: "message", label: "Message / Notes" },
+  { key: "occasion", label: "Occasion" },
+  { key: "guestCount", label: "Guests" },
+  { key: "eventSpace", label: "Event Space" },
   { key: "status", label: "Status" },
-  { key: "internalNotes", label: "Internal Notes" },
-  { key: "source", label: "Source" },
+  { key: "email", label: "Contact Email Address" },
 ];
 
 const STATUS_VALUES = ["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"];
 
 function normalizeHeader(h: string): string {
-  return h.toLowerCase().replace(/[\s_\-\.]+/g, "");
+  return h.toLowerCase().replace(/[\s_\-\.&]+/g, "");
 }
 
 function autoMapColumn(header: string): string {
   const n = normalizeHeader(header);
   const map: Record<string, string> = {
-    firstname: "firstName", first: "firstName", forename: "firstName", givenname: "firstName",
-    lastname: "lastName", last: "lastName", surname: "lastName", familyname: "lastName",
-    email: "email", emailaddress: "email",
-    phone: "phone", mobile: "phone", telephone: "phone", tel: "phone", contact: "phone",
-    company: "company", organisation: "company", organization: "company", business: "company",
-    eventtype: "eventType", type: "eventType", eventkind: "eventType", function: "eventType",
-    eventdate: "eventDate", date: "eventDate", functiondate: "eventDate",
-    guests: "guestCount", guestcount: "guestCount", pax: "guestCount", attendees: "guestCount", headcount: "guestCount",
-    budget: "budget", price: "budget", cost: "budget", spend: "budget",
-    message: "message", notes: "message", enquiry: "message", comments: "message", description: "message",
-    status: "status",
-    internalnotes: "internalNotes", internalcomments: "internalNotes", staffnotes: "internalNotes",
-    source: "source", leadsource: "source", origin: "source",
+    firstlastname: "fullName", name: "fullName", fullname: "fullName", clientname: "fullName",
+    firstname: "fullName", attendeename: "fullName", guestname: "fullName",
+    eventtitle: "eventTitle", title: "eventTitle", eventname: "eventTitle", functionname: "eventTitle",
+    eventdate: "eventDate", date: "eventDate", functiondate: "eventDate", eventday: "eventDate",
+    occasion: "occasion", eventtype: "occasion", type: "occasion", function: "occasion",
+    eventkind: "occasion", category: "occasion", packagetype: "occasion",
+    guests: "guestCount", guestcount: "guestCount", pax: "guestCount",
+    attendees: "guestCount", headcount: "guestCount", numberofguests: "guestCount",
+    eventspace: "eventSpace", space: "eventSpace", room: "eventSpace", venue: "eventSpace",
+    hall: "eventSpace", area: "eventSpace", location: "eventSpace",
+    status: "status", enquirystatus: "status", leadstatus: "status",
+    email: "email", emailaddress: "email", contactemail: "email",
+    contactemailaddress: "email", emailcontact: "email",
   };
   return map[n] ?? "";
 }
@@ -59,20 +54,26 @@ interface Props {
   onImported: () => void;
 }
 
+function splitFullName(full: string): { firstName: string; lastName?: string } {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0] };
+  const firstName = parts[0];
+  const lastName = parts.slice(1).join(" ");
+  return { firstName, lastName };
+}
+
 export default function CsvImportModal({ onClose, onImported }: Props) {
   const [step, setStep] = useState<"upload" | "map" | "preview" | "done">("upload");
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [dragging, setDragging] = useState(false);
-  const [fileName, setFileName] = useState("");
   const [result, setResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const bulkCreate = trpc.leads.bulkCreate.useMutation();
 
   const parseFile = useCallback((file: File) => {
-    setFileName(file.name);
     Papa.parse<ParsedRow>(file, {
       header: true,
       skipEmptyLines: true,
@@ -111,28 +112,31 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
 
   function buildLeads() {
     return rows.map(row => {
-      const firstName = getMappedValue(row, "firstName").trim();
+      const fullNameRaw = getMappedValue(row, "fullName").trim();
+      const { firstName, lastName } = splitFullName(fullNameRaw || "Unknown");
       const guestStr = getMappedValue(row, "guestCount").replace(/[^0-9]/g, "");
-      const budgetStr = getMappedValue(row, "budget").replace(/[^0-9.]/g, "");
       const statusRaw = getMappedValue(row, "status").toLowerCase().replace(/\s+/g, "_");
       const status = STATUS_VALUES.includes(statusRaw) ? statusRaw as any : "new";
+      const eventTitle = getMappedValue(row, "eventTitle").trim();
+      const occasion = getMappedValue(row, "occasion").trim();
+      const eventSpace = getMappedValue(row, "eventSpace").trim();
 
       return {
-        firstName: firstName || "Unknown",
-        lastName: getMappedValue(row, "lastName").trim() || undefined,
+        firstName,
+        lastName: lastName || undefined,
         email: getMappedValue(row, "email").trim() || undefined,
-        phone: getMappedValue(row, "phone").trim() || undefined,
-        company: getMappedValue(row, "company").trim() || undefined,
-        eventType: getMappedValue(row, "eventType").trim() || undefined,
+        eventType: occasion || eventTitle || undefined,
         eventDate: getMappedValue(row, "eventDate").trim() || undefined,
         guestCount: guestStr ? parseInt(guestStr) : undefined,
-        budget: budgetStr ? parseFloat(budgetStr) : undefined,
-        message: getMappedValue(row, "message").trim() || undefined,
-        internalNotes: getMappedValue(row, "internalNotes").trim() || undefined,
-        source: getMappedValue(row, "source").trim() || "csv_import",
+        message: [
+          eventTitle ? `Event: ${eventTitle}` : "",
+          eventSpace ? `Space: ${eventSpace}` : "",
+        ].filter(Boolean).join(" | ") || undefined,
+        company: eventSpace || undefined,
+        source: "csv_import",
         status,
       };
-    }).filter(r => r.firstName);
+    }).filter(r => r.firstName && r.firstName !== "Unknown" || r.email);
   }
 
   async function handleImport() {
@@ -150,6 +154,14 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
 
   const previewLeads = buildLeads().slice(0, 5);
   const totalValid = buildLeads().length;
+
+  const templateCsv =
+    "data:text/csv;charset=utf-8," +
+    encodeURIComponent(
+      "First & Last Name,Event Title,Event Date,Occasion,Guests,Event Space,Status,Contact Email Address\n" +
+      "Jane Smith,Smith Wedding,2025-08-15,Wedding,80,The Grand Ballroom,new,jane@example.com\n" +
+      "Acme Corp,Annual Gala,2025-09-20,Corporate Dinner,120,Garden Pavilion,contacted,events@acme.co.nz"
+    );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -240,8 +252,7 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
                     <tr>
                       <th className="px-3 py-2 text-left">Name</th>
                       <th className="px-3 py-2 text-left">Email</th>
-                      <th className="px-3 py-2 text-left">Phone</th>
-                      <th className="px-3 py-2 text-left">Event Type</th>
+                      <th className="px-3 py-2 text-left">Occasion</th>
                       <th className="px-3 py-2 text-left">Event Date</th>
                       <th className="px-3 py-2 text-left">Guests</th>
                       <th className="px-3 py-2 text-left">Status</th>
@@ -252,7 +263,6 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
                       <tr key={i} className="hover:bg-gray-50/50">
                         <td className="px-3 py-2 font-medium text-gray-900">{r.firstName} {r.lastName}</td>
                         <td className="px-3 py-2 text-gray-500">{r.email || "—"}</td>
-                        <td className="px-3 py-2 text-gray-500">{r.phone || "—"}</td>
                         <td className="px-3 py-2 text-gray-500">{r.eventType || "—"}</td>
                         <td className="px-3 py-2 text-gray-500">{r.eventDate || "—"}</td>
                         <td className="px-3 py-2 text-gray-500">{r.guestCount ?? "—"}</td>
@@ -292,7 +302,7 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
             <>
               <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
               <a
-                href="data:text/csv;charset=utf-8,First%20Name%2CLast%20Name%2CEmail%2CPhone%2CCompany%2CEvent%20Type%2CEvent%20Date%2CGuest%20Count%2CBudget%2CMessage%2CStatus%0AJane%2CDoe%2Cjane%40example.com%2C021123456%2CABC%20Ltd%2CWedding%2C2025-06-15%2C80%2C5000%2CLooking%20for%20a%20beautiful%20venue%2Cnew"
+                href={templateCsv}
                 download="hostit-import-template.csv"
                 className="text-sm text-[#8D957E] hover:underline"
               >
@@ -306,7 +316,7 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
               <button onClick={() => setStep("upload")} className="text-sm text-gray-500 hover:text-gray-700">Back</button>
               <button
                 onClick={() => setStep("preview")}
-                disabled={!Object.values(mapping).includes("firstName")}
+                disabled={!Object.values(mapping).some(v => v === "fullName" || v === "email")}
                 className="bg-[#8D957E] text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-[#7a8269] disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 Preview import ({rows.length} rows)
