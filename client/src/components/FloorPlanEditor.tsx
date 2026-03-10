@@ -536,13 +536,24 @@ export default function FloorPlanEditor({
             <label className="cursor-pointer flex items-center gap-1 px-2 py-1.5 rounded border border-dashed border-gold/40 hover:border-gold hover:bg-gold/5 transition-colors" title="Upload background photo (blueprint, venue photo to trace over)">
               <Upload className="w-3 h-3 text-ink/40" />
               <span className="text-xs font-bebas tracking-wider text-ink/50">BG PHOTO</span>
-              <input type="file" accept="image/*" className="hidden" onChange={async e => {
+              <input type="file" accept="image/*" className="hidden" onChange={e => {
                 const file = e.target.files?.[0]; if (!file) return;
-                const fd = new FormData(); fd.append("file", file);
-                const res = await fetch("/api/upload-image", { method: "POST", body: fd });
-                const data = await res.json();
-                if (data.url) { setBgImageUrl(data.url); toast.success("Background photo set!"); }
-                else toast.error("Upload failed");
+                const img = new Image();
+                const objectUrl = URL.createObjectURL(file);
+                img.onload = () => {
+                  const MAX = 1600;
+                  const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                  const canvas = document.createElement("canvas");
+                  canvas.width = Math.round(img.width * scale);
+                  canvas.height = Math.round(img.height * scale);
+                  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                  const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+                  setBgImageUrl(dataUrl);
+                  URL.revokeObjectURL(objectUrl);
+                  toast.success("Background photo set!");
+                };
+                img.onerror = () => { URL.revokeObjectURL(objectUrl); toast.error("Could not read image"); };
+                img.src = objectUrl;
               }} />
             </label>
             {bgImageUrl && (
