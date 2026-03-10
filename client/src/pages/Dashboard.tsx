@@ -413,6 +413,9 @@ export default function Dashboard() {
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
   const [leadSortBy, setLeadSortBy] = useState<"enquiry_date"|"event_date"|"status">("enquiry_date");
   const [leadSortDir, setLeadSortDir] = useState<"desc"|"asc">("desc");
+  const [leadDateFilter, setLeadDateFilter] = useState<"all"|"month"|"year"|"custom">("all");
+  const [customDateFrom, setCustomDateFrom] = useState("");
+  const [customDateTo, setCustomDateTo] = useState("");
   const [eventSortBy, setEventSortBy] = useState<"event_date"|"date_booked"|"status">("event_date");
   const [eventSortDir, setEventSortDir] = useState<"asc"|"desc">("asc");
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -837,14 +840,38 @@ export default function Dashboard() {
 
   // Confirmed statuses are treated as Events (shown on Calendar), not Enquiries
   const CONFIRMED_STATUSES = ['booked', 'confirmed'];
-  const activeEnquiries = (allLeads ?? []).filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
+  const allEnquiries = (allLeads ?? []);
+  const activeEnquiries = allEnquiries.filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
   const newEnquiries = activeEnquiries.filter((l: any) => l.status === "new");
   const unreadCount = newEnquiries.filter((l: any) => !l.readAt).length;
   const repliedLeads = activeEnquiries.filter((l: any) => l.status !== "new");
-  // When a specific status filter is active, show all active enquiries from the server (don't re-filter by leadsSubTab)
+
+  function applyDateFilter(list: any[]) {
+    if (leadDateFilter === "all") return list;
+    const now = new Date();
+    return list.filter((l: any) => {
+      const d = l.eventDate ? new Date(l.eventDate) : null;
+      if (!d) return leadDateFilter === "all";
+      if (leadDateFilter === "month") {
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      }
+      if (leadDateFilter === "year") {
+        return d.getFullYear() === now.getFullYear();
+      }
+      if (leadDateFilter === "custom") {
+        const from = customDateFrom ? new Date(customDateFrom) : null;
+        const to = customDateTo ? new Date(customDateTo) : null;
+        if (from && d < from) return false;
+        if (to) { const toEnd = new Date(to); toEnd.setHours(23,59,59,999); if (d > toEnd) return false; }
+        return true;
+      }
+      return true;
+    });
+  }
+
   const leadsToShow = leadStatusFilter !== "all"
-    ? activeEnquiries
-    : leadsSubTab === "new" ? newEnquiries : repliedLeads;
+    ? applyDateFilter(allEnquiries)
+    : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const filteredLeads = leadsToShow
     .filter((l: any) =>
       !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
@@ -859,7 +886,7 @@ export default function Dashboard() {
         const bDate = b.eventDate ? new Date(b.eventDate).getTime() : 0;
         cmp = aDate - bDate;
       } else if (leadSortBy === 'status') {
-        const order = ['new','contacted','proposal_sent','site_visit','negotiating','booked','confirmed','lost','cancelled'];
+        const order = ['new','contacted','proposal_sent','site_visit','negotiating','function_pack_sent','booked','confirmed','lost','cancelled'];
         cmp = (order.indexOf(a.status) ?? 99) - (order.indexOf(b.status) ?? 99);
       }
       return leadSortDir === 'asc' ? cmp : -cmp;
@@ -1313,6 +1340,40 @@ export default function Dashboard() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {/* Date range filter */}
+                  <Select value={leadDateFilter} onValueChange={(v: any) => { setLeadDateFilter(v); if (v !== "custom") { setCustomDateFrom(""); setCustomDateTo(""); } }}>
+                    <SelectTrigger className={`mt-2 rounded-xl border text-xs font-inter font-medium focus:ring-1 focus:ring-sage-green/40 transition-colors ${
+                      leadDateFilter !== "all"
+                        ? "border-sage-green bg-sage-green/10 text-sage-dark"
+                        : "border-gray-200 bg-white text-ink"
+                    }`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="font-inter text-xs">All Time</SelectItem>
+                      <SelectItem value="month" className="font-inter text-xs">This Month</SelectItem>
+                      <SelectItem value="year" className="font-inter text-xs">This Year</SelectItem>
+                      <SelectItem value="custom" className="font-inter text-xs">Custom Range</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {leadDateFilter === "custom" && (
+                    <div className="flex gap-1.5 mt-1.5">
+                      <input
+                        type="date"
+                        value={customDateFrom}
+                        onChange={e => setCustomDateFrom(e.target.value)}
+                        className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink focus:outline-none focus:border-sage-green"
+                        placeholder="From"
+                      />
+                      <input
+                        type="date"
+                        value={customDateTo}
+                        onChange={e => setCustomDateTo(e.target.value)}
+                        className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink focus:outline-none focus:border-sage-green"
+                        placeholder="To"
+                      />
+                    </div>
+                  )}
                   {/* Sort controls */}
                   <div className="flex items-center gap-1.5 mt-2">
                     <Select value={leadSortBy} onValueChange={(v: any) => setLeadSortBy(v)}>
