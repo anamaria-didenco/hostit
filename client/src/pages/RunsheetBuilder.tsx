@@ -10,7 +10,7 @@ import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
-  MoveUp, MoveDown, Copy, AlertCircle,
+  MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
@@ -122,7 +122,6 @@ export default function RunsheetBuilder() {
 
   // F&B
   const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'checklist'>('timeline');
-  const [fnbSection, setFnbSection] = useState<'foh' | 'kitchen'>('foh');
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
   const [fnbSaving, setFnbSaving] = useState(false);
   const [newFnbItem, setNewFnbItem] = useState<Partial<FnbItem>>({
@@ -215,7 +214,7 @@ export default function RunsheetBuilder() {
     const toAdd: FnbItem[] = catalogItems
       .filter((ci: any) => catalogSelectedItems.has(ci.id))
       .map((ci: any, i: number) => ({
-        section: fnbSection,
+        section: 'foh' as const,
         course: catalogSelectorType === 'food' ? (catalogCategories?.find((c: any) => c.id === catalogSelectorCategoryId)?.name ?? 'Other') : 'Drinks',
         dishName: ci.name,
         description: ci.description ?? '',
@@ -265,6 +264,69 @@ export default function RunsheetBuilder() {
   ]);
   const [newChecklistText, setNewChecklistText] = useState("");
 
+  // Venue settings for customisable dietaries and setup templates
+  const { data: venueSettings, refetch: refetchVenueSettings } = trpc.venue.getOwn.useQuery();
+  const updateVenueMutation = trpc.venue.update.useMutation({
+    onSuccess: () => { toast.success('Options saved'); refetchVenueSettings(); },
+    onError: () => toast.error('Failed to save options'),
+  });
+
+  // Parsed dietary options from venue settings (with fallback)
+  const activeDietaryOptions: string[] = (() => {
+    if (venueSettings?.customDietaryOptions) {
+      try {
+        const parsed = JSON.parse(venueSettings.customDietaryOptions);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return COMMON_DIETARIES;
+  })();
+
+  // Parsed setup templates from venue settings (with fallback)
+  const activeSetupTemplates: { label: string; value: string }[] = (() => {
+    if (venueSettings?.customSetupTemplates) {
+      try {
+        const parsed = JSON.parse(venueSettings.customSetupTemplates);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return VENUE_SETUP_TEMPLATES;
+  })();
+
+  // State for managing dietary options
+  const [showDietaryManager, setShowDietaryManager] = useState(false);
+  const [editingDietaries, setEditingDietaries] = useState<string[]>([]);
+  const [newDietaryOption, setNewDietaryOption] = useState('');
+
+  function openDietaryManager() {
+    setEditingDietaries([...activeDietaryOptions]);
+    setShowDietaryManager(true);
+  }
+  function saveDietaryOptions() {
+    updateVenueMutation.mutate({ customDietaryOptions: JSON.stringify(editingDietaries) });
+    setShowDietaryManager(false);
+  }
+
+  // State for managing setup templates
+  const [showSetupManager, setShowSetupManager] = useState(false);
+  const [editingSetups, setEditingSetups] = useState<{ label: string; value: string }[]>([]);
+  const [newSetupLabel, setNewSetupLabel] = useState('');
+  const [newSetupValue, setNewSetupValue] = useState('');
+
+  function openSetupManager() {
+    setEditingSetups([...activeSetupTemplates]);
+    setShowSetupManager(true);
+  }
+  function saveSetupTemplates() {
+    updateVenueMutation.mutate({ customSetupTemplates: JSON.stringify(editingSetups) });
+    setShowSetupManager(false);
+  }
+
+  // Custom item mode for F&B add form
+  const [fnbCustomMode, setFnbCustomMode] = useState(false);
+  const [fnbCustomName, setFnbCustomName] = useState('');
+  const [fnbCustomCourse, setFnbCustomCourse] = useState('Other');
+
   // F&B mutations
   const saveFnbMutation = trpc.fnb.save.useMutation({
     onSuccess: () => toast.success('F&B sheet saved'),
@@ -307,11 +369,12 @@ export default function RunsheetBuilder() {
   }
 
   function addFnbItem() {
-    if (!newFnbItem.dishName?.trim()) { toast.error('Enter a dish name'); return; }
+    const name = fnbCustomMode ? fnbCustomName.trim() : newFnbItem.dishName?.trim();
+    if (!name) { toast.error('Enter a dish name'); return; }
     const item: FnbItem = {
-      section: (newFnbItem.section ?? 'foh') as 'foh' | 'kitchen',
-      course: newFnbItem.course,
-      dishName: newFnbItem.dishName.trim(),
+      section: 'foh',
+      course: fnbCustomMode ? fnbCustomCourse : newFnbItem.course,
+      dishName: name,
       qty: newFnbItem.qty ?? 1,
       dietary: newFnbItem.dietary,
       serviceTime: newFnbItem.serviceTime,
@@ -320,7 +383,9 @@ export default function RunsheetBuilder() {
       _tempId: String(Date.now()),
     };
     setFnbItems(prev => [...prev, item]);
-    setNewFnbItem({ section: fnbSection, course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '' });
+    setNewFnbItem({ section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '' });
+    setFnbCustomName('');
+    if (fnbCustomMode) setFnbCustomMode(false);
   }
 
   function updateFnbItem(idx: number, field: keyof FnbItem, value: any) {
@@ -903,8 +968,17 @@ export default function RunsheetBuilder() {
           </div>
           {setupSectionOpen && (
             <div className="px-5 pb-4 pt-2 space-y-3 no-print">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bebas tracking-widest text-[10px] text-ink/40">QUICK FILL TEMPLATES</span>
+                <button
+                  onClick={openSetupManager}
+                  className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
+                >
+                  <Settings2 className="w-3 h-3" /> CUSTOMISE
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2">
-                {VENUE_SETUP_TEMPLATES.map(t => (
+                {activeSetupTemplates.map(t => (
                   <button
                     key={t.label}
                     onClick={() => setVenueSetup(t.value)}
@@ -949,8 +1023,17 @@ export default function RunsheetBuilder() {
           </div>
           {dietarySectionOpen && (
             <div className="px-5 pb-4 pt-2 space-y-4 no-print">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bebas tracking-widest text-[10px] text-ink/40">QUICK ADD</span>
+                <button
+                  onClick={openDietaryManager}
+                  className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
+                >
+                  <Settings2 className="w-3 h-3" /> CUSTOMISE OPTIONS
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2">
-                {COMMON_DIETARIES.map(d => (
+                {activeDietaryOptions.map(d => (
                   <button
                     key={d}
                     onClick={() => {
@@ -1283,31 +1366,12 @@ export default function RunsheetBuilder() {
         {/* ── F&B SHEET TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'fnb' && (
           <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
-            {/* FOH / Kitchen sub-tabs */}
+            {/* F&B unified header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30 no-print">
-              <div className="flex gap-0">
-                <button
-                  onClick={() => { setFnbSection('foh'); setNewFnbItem(p => ({ ...p, section: 'foh' })); }}
-                  className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors border ${
-                    fnbSection === 'foh'
-                      ? 'bg-gold text-ink border-gold'
-                      : 'text-ink/50 border-gold/30 hover:bg-linen'
-                  }`}
-                >
-                  <UtensilsCrossed className="w-3.5 h-3.5" /> FOH SHEET
-                  <span className="ml-0.5 text-xs">({fnbItems.filter(i => i.section === 'foh').length})</span>
-                </button>
-                <button
-                  onClick={() => { setFnbSection('kitchen'); setNewFnbItem(p => ({ ...p, section: 'kitchen' })); }}
-                  className={`flex items-center gap-2 px-4 py-2 font-bebas tracking-widest text-xs transition-colors border border-l-0 ${
-                    fnbSection === 'kitchen'
-                      ? 'bg-forest text-white border-forest'
-                      : 'text-ink/50 border-gold/30 hover:bg-linen'
-                  }`}
-                >
-                  <ChefHat className="w-3.5 h-3.5" /> KITCHEN SHEET
-                  <span className="ml-0.5 text-xs">({fnbItems.filter(i => i.section === 'kitchen').length})</span>
-                </button>
+              <div className="flex items-center gap-2">
+                <UtensilsCrossed className="w-4 h-4 text-gold" />
+                <span className="font-bebas tracking-widest text-sm text-ink">F&B SHEET</span>
+                <span className="text-xs text-ink/40 font-dm">({fnbItems.length} items)</span>
               </div>
               <Button
                 onClick={saveFnb}
@@ -1322,7 +1386,7 @@ export default function RunsheetBuilder() {
             {/* Print F&B header */}
             <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-forest">
               <UtensilsCrossed className="w-4 h-4 text-white" />
-              <span className="font-bebas tracking-widest text-sm text-white">F&B SHEET — {fnbSection === 'foh' ? 'FRONT OF HOUSE' : 'KITCHEN'}</span>
+              <span className="font-bebas tracking-widest text-sm text-white">F&B SHEET</span>
             </div>
 
             {/* ── PROPOSAL F&B SUMMARY ─────────────────────────────────── */}
@@ -1428,134 +1492,156 @@ export default function RunsheetBuilder() {
             {/* Add new item form */}
             <div className="px-5 py-4 border-b border-gold/30 bg-linen/50 no-print">
               <div className="flex items-center justify-between mb-3">
-                <div className="font-bebas tracking-widest text-[10px] text-ink/40">
-                  ADD {fnbSection === 'foh' ? 'FOH' : 'KITCHEN'} ITEM
-                </div>
-                <button
-                  onClick={() => { setShowCatalogSelector(true); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); }}
-                  className="font-bebas tracking-widest text-[10px] text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-2.5 py-1 hover:bg-forest/5 transition-colors"
-                >
-                  <UtensilsCrossed className="w-3 h-3" /> ADD FROM MENU CATALOGUE
-                </button>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
-                <div>
-                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
-                  <select
-                    value={newFnbItem.course ?? 'Canapes'}
-                    onChange={e => setNewFnbItem(p => ({ ...p, course: e.target.value }))}
-                    className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                <div className="font-bebas tracking-widest text-[10px] text-ink/40">ADD ITEM</div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setFnbCustomMode(true); setFnbCustomName(''); }}
+                    className={`font-bebas tracking-widest text-[10px] flex items-center gap-1 border px-2.5 py-1 transition-colors ${
+                      fnbCustomMode ? 'bg-gold/20 border-gold text-ink' : 'border-gold/30 text-ink/50 hover:bg-linen'
+                    }`}
                   >
-                    {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DISH NAME *</label>
-                  <Input
-                    value={newFnbItem.dishName ?? ''}
-                    onChange={e => setNewFnbItem(p => ({ ...p, dishName: e.target.value }))}
-                    placeholder="e.g. Beef Wellington"
-                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
-                    onKeyDown={e => e.key === 'Enter' && addFnbItem()}
-                  />
-                </div>
-                <div>
-                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
-                  <Input
-                    type="time"
-                    value={newFnbItem.serviceTime ?? ''}
-                    onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
-                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
-                  />
-                </div>
-                <div>
-                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
-                  <Input
-                    type="number" min={1}
-                    value={newFnbItem.qty ?? 1}
-                    onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
-                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
-                  />
+                    <Plus className="w-3 h-3" /> CUSTOM ITEM
+                  </button>
+                  <button
+                    onClick={() => { setShowCatalogSelector(true); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); setFnbCustomMode(false); }}
+                    className="font-bebas tracking-widest text-[10px] text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-2.5 py-1 hover:bg-forest/5 transition-colors"
+                  >
+                    <UtensilsCrossed className="w-3 h-3" /> ADD FROM CATALOGUE
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-3 items-end">
-                <div className="flex-1">
-                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY FLAGS</label>
-                  <Input
-                    value={newFnbItem.dietary ?? ''}
-                    onChange={e => setNewFnbItem(p => ({ ...p, dietary: e.target.value }))}
-                    placeholder="GF, VG, DF, NF..."
-                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
-                  />
+
+              {fnbCustomMode ? (
+                /* Custom item entry */
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
+                      <select
+                        value={fnbCustomCourse}
+                        onChange={e => setFnbCustomCourse(e.target.value)}
+                        className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                      >
+                        {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DISH NAME *</label>
+                      <Input
+                        value={fnbCustomName}
+                        onChange={e => setFnbCustomName(e.target.value)}
+                        placeholder="e.g. Beef Wellington"
+                        className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                        onKeyDown={e => e.key === 'Enter' && addFnbItem()}
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
+                      <Input
+                        type="time"
+                        value={newFnbItem.serviceTime ?? ''}
+                        onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
+                        className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
+                      <Input
+                        type="number" min={1}
+                        value={newFnbItem.qty ?? 1}
+                        onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
+                        className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY FLAGS</label>
+                      <Input
+                        value={newFnbItem.dietary ?? ''}
+                        onChange={e => setNewFnbItem(p => ({ ...p, dietary: e.target.value }))}
+                        placeholder="GF, VG, DF, NF..."
+                        className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                      />
+                    </div>
+                    <Button
+                      onClick={() => setFnbCustomMode(false)}
+                      variant="outline"
+                      className="rounded-none border-gold/30 font-bebas tracking-widest text-xs h-9 px-3"
+                    >
+                      CANCEL
+                    </Button>
+                    <Button
+                      onClick={addFnbItem}
+                      className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5 h-9"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> ADD
+                    </Button>
+                  </div>
                 </div>
-                {fnbSection === 'foh' && (
-                  <div className="flex-1">
-                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">STAFF ASSIGNED</label>
+              ) : (
+                /* Shared time/qty fields always shown for post-catalogue add */
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
                     <Input
-                      value={newFnbItem.staffAssigned ?? ''}
-                      onChange={e => setNewFnbItem(p => ({ ...p, staffAssigned: e.target.value }))}
-                      placeholder="Name or section..."
+                      type="time"
+                      value={newFnbItem.serviceTime ?? ''}
+                      onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                     />
                   </div>
-                )}
-                <Button
-                  onClick={addFnbItem}
-                  className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5 h-9"
-                >
-                  <Plus className="w-3.5 h-3.5" /> ADD
-                </Button>
-              </div>
+                  <div>
+                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
+                    <Input
+                      type="number" min={1}
+                      value={newFnbItem.qty ?? 1}
+                      onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <p className="font-dm text-xs text-ink/40 pb-2">Use ADD FROM CATALOGUE to add dishes, or CUSTOM ITEM for one-off items.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* F&B items table */}
-            {fnbItems.filter(i => i.section === fnbSection).length === 0 ? (
+            {fnbItems.length === 0 ? (
               <div className="text-center py-16 text-ink/30 font-dm text-sm">
                 <UtensilsCrossed className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                No {fnbSection === 'foh' ? 'FOH' : 'kitchen'} items yet. Add dishes above.
+                No items yet. Add from catalogue or use Custom Item above.
               </div>
             ) : (
               <div>
                 {/* Table header */}
-                <div className={`grid gap-2 px-5 py-2.5 text-xs font-bebas tracking-widest text-white ${
-                  fnbSection === 'foh' ? 'bg-gold' : 'bg-forest'
-                } ${
-                  fnbSection === 'foh'
-                    ? 'grid-cols-[90px_1fr_60px_80px_100px_90px_32px]'
-                    : 'grid-cols-[90px_1fr_60px_80px_1fr_1fr_32px]'
-                }`}>
+                <div className="grid gap-2 px-5 py-2.5 text-xs font-bebas tracking-widest text-white bg-gold grid-cols-[90px_1fr_60px_80px_90px_1fr_1fr_32px]">
                   <div>COURSE</div>
                   <div>DISH</div>
                   <div>QTY</div>
                   <div>TIME</div>
-                  {fnbSection === 'foh' ? (
-                    <><div>DIETARY</div><div>STAFF</div></>
-                  ) : (
-                    <><div>PREP NOTES</div><div>PLATING</div></>
-                  )}
+                  <div>DIETARY</div>
+                  <div>STAFF</div>
+                  <div>PREP / PLATING</div>
                   <div className="no-print"></div>
                 </div>
                 {/* Group by course */}
                 {COURSES.filter(course =>
-                  fnbItems.some(i => i.section === fnbSection && (i.course ?? 'Other') === course)
+                  fnbItems.some(i => (i.course ?? 'Other') === course)
                 ).map(course => (
                   <div key={course}>
-                    <div className={`px-5 py-1.5 font-bebas tracking-widest text-xs border-b border-gold/30 ${
-                      fnbSection === 'foh' ? 'bg-gold/10 text-[#a07820]' : 'bg-forest/10 text-forest'
-                    }`}>
+                    <div className="px-5 py-1.5 font-bebas tracking-widest text-xs border-b border-gold/30 bg-gold/10 text-[#a07820]">
                       {course}
                     </div>
                     {fnbItems
                       .map((item, originalIdx) => ({ item, originalIdx }))
-                      .filter(({ item }) => item.section === fnbSection && (item.course ?? 'Other') === course)
+                      .filter(({ item }) => (item.course ?? 'Other') === course)
                       .map(({ item, originalIdx }) => (
                         <div
                           key={item._tempId ?? originalIdx}
-                          className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/30 text-sm font-dm hover:bg-linen/50 group ${
-                            fnbSection === 'foh'
-                              ? 'grid-cols-[90px_1fr_60px_80px_100px_90px_32px]'
-                              : 'grid-cols-[90px_1fr_60px_80px_1fr_1fr_32px]'
-                          }`}
+                          className="grid gap-2 px-5 py-2.5 items-center border-b border-gold/30 text-sm font-dm hover:bg-linen/50 group grid-cols-[90px_1fr_60px_80px_90px_1fr_1fr_32px]"
                         >
                           <div className="text-xs text-ink/40 font-bebas tracking-widest">{item.course}</div>
                           <div>
@@ -1577,42 +1663,33 @@ export default function RunsheetBuilder() {
                           <div className="text-xs text-ink/50 font-dm">
                             {item.serviceTime ? formatTime12(item.serviceTime) : '—'}
                           </div>
-                          {fnbSection === 'foh' ? (
-                            <>
-                              <div>
-                                {item.dietary && (
-                                  <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>
-                                )}
-                              </div>
-                              <div>
-                                <input
-                                  value={item.staffAssigned ?? ''}
-                                  onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)}
-                                  placeholder="Staff..."
-                                  className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
-                                />
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div>
-                                <input
-                                  value={item.prepNotes ?? ''}
-                                  onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)}
-                                  placeholder="Prep notes..."
-                                  className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
-                                />
-                              </div>
-                              <div>
-                                <input
-                                  value={item.platingNotes ?? ''}
-                                  onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)}
-                                  placeholder="Plating notes..."
-                                  className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
-                                />
-                              </div>
-                            </>
-                          )}
+                          <div>
+                            {item.dietary && (
+                              <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>
+                            )}
+                          </div>
+                          <div>
+                            <input
+                              value={item.staffAssigned ?? ''}
+                              onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)}
+                              placeholder="Staff..."
+                              className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
+                            />
+                          </div>
+                          <div className="space-y-0.5">
+                            <input
+                              value={item.prepNotes ?? ''}
+                              onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)}
+                              placeholder="Prep..."
+                              className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
+                            />
+                            <input
+                              value={item.platingNotes ?? ''}
+                              onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)}
+                              placeholder="Plating..."
+                              className="w-full font-dm text-xs text-ink/50 bg-transparent border-0 focus:outline-none"
+                            />
+                          </div>
                           <div className="no-print opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => removeFnbItem(originalIdx)}
@@ -1628,10 +1705,10 @@ export default function RunsheetBuilder() {
               </div>
             )}
 
-            {/* Dietary summary for kitchen */}
-            {fnbSection === 'kitchen' && dietaries.length > 0 && (
+            {/* Dietary summary */}
+            {dietaries.length > 0 && (
               <div className="px-5 py-4 border-t border-gold/30 bg-green-50/50">
-                <div className="font-bebas tracking-widest text-xs text-forest mb-2">DIETARY SUMMARY FOR KITCHEN</div>
+                <div className="font-bebas tracking-widest text-xs text-forest mb-2">DIETARY SUMMARY</div>
                 <div className="flex flex-wrap gap-2">
                   {dietaries.map((d, i) => (
                     <div key={i} className="bg-white border border-green-200 px-3 py-1.5 text-sm font-dm">
@@ -1975,6 +2052,129 @@ export default function RunsheetBuilder() {
         </div>
       )}
 
+      {/* ── DIETARY OPTIONS MANAGER MODAL ────────────────────────────────── */}
+      {showDietaryManager && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gold/30 bg-forest">
+              <div className="flex items-center gap-2">
+                <Leaf className="w-4 h-4 text-cream" />
+                <span className="font-bebas tracking-widest text-cream">MANAGE DIETARY OPTIONS</span>
+              </div>
+              <button onClick={() => setShowDietaryManager(false)} className="text-cream/60 hover:text-cream transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
+              <p className="font-dm text-xs text-ink/50">These options appear as quick-add buttons in the Dietary Requirements section.</p>
+              <div className="space-y-2">
+                {editingDietaries.map((d, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="flex-1 font-dm text-sm text-ink bg-linen px-3 py-1.5 border border-gold/30">{d}</span>
+                    <button onClick={() => setEditingDietaries(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/30 hover:text-red-500 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Input
+                  value={newDietaryOption}
+                  onChange={e => setNewDietaryOption(e.target.value)}
+                  placeholder="Add new option..."
+                  className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newDietaryOption.trim()) {
+                      setEditingDietaries(prev => [...prev, newDietaryOption.trim()]);
+                      setNewDietaryOption('');
+                    }
+                  }}
+                />
+                <Button
+                  onClick={() => { if (newDietaryOption.trim()) { setEditingDietaries(prev => [...prev, newDietaryOption.trim()]); setNewDietaryOption(''); } }}
+                  className="bg-forest hover:bg-forest/90 text-white rounded-none font-bebas tracking-widest text-xs px-3 gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" /> ADD
+                </Button>
+              </div>
+            </div>
+            <div className="flex gap-2 px-5 py-4 border-t border-gold/30">
+              <Button variant="outline" onClick={() => setShowDietaryManager(false)} className="flex-1 rounded-none border-gold/30 font-bebas tracking-widest text-xs">CANCEL</Button>
+              <Button onClick={saveDietaryOptions} disabled={updateVenueMutation.isPending} className="flex-1 bg-forest hover:bg-forest/90 text-white rounded-none font-bebas tracking-widest text-xs">
+                {updateVenueMutation.isPending ? 'SAVING...' : 'SAVE OPTIONS'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SETUP TEMPLATES MANAGER MODAL ─────────────────────────────────── */}
+      {showSetupManager && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white w-full max-w-lg shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gold/30 bg-forest">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-cream" />
+                <span className="font-bebas tracking-widest text-cream">MANAGE SETUP TEMPLATES</span>
+              </div>
+              <button onClick={() => setShowSetupManager(false)} className="text-cream/60 hover:text-cream transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3 max-h-[50vh] overflow-y-auto">
+              <p className="font-dm text-xs text-ink/50">These templates appear as quick-fill buttons in the Venue Setup section.</p>
+              <div className="space-y-2">
+                {editingSetups.map((t, i) => (
+                  <div key={i} className="flex items-start gap-2 p-3 border border-gold/30 bg-linen/50">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bebas tracking-widest text-xs text-ink mb-1">{t.label}</div>
+                      <div className="font-dm text-xs text-ink/50 truncate">{t.value}</div>
+                    </div>
+                    <button onClick={() => setEditingSetups(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/30 hover:text-red-500 transition-colors flex-shrink-0 mt-0.5">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2 pt-1 border-t border-gold/20">
+                <div className="font-bebas tracking-widest text-[10px] text-ink/40">ADD NEW TEMPLATE</div>
+                <Input
+                  value={newSetupLabel}
+                  onChange={e => setNewSetupLabel(e.target.value)}
+                  placeholder="Template name (e.g. Cocktail)"
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                />
+                <Textarea
+                  value={newSetupValue}
+                  onChange={e => setNewSetupValue(e.target.value)}
+                  placeholder="Setup description..."
+                  rows={2}
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                />
+                <Button
+                  onClick={() => {
+                    if (newSetupLabel.trim() && newSetupValue.trim()) {
+                      setEditingSetups(prev => [...prev, { label: newSetupLabel.trim(), value: newSetupValue.trim() }]);
+                      setNewSetupLabel('');
+                      setNewSetupValue('');
+                    }
+                  }}
+                  className="w-full bg-gold hover:bg-gold/90 text-ink rounded-none font-bebas tracking-widest text-xs gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" /> ADD TEMPLATE
+                </Button>
+              </div>
+            </div>
+            <div className="flex gap-2 px-5 py-4 border-t border-gold/30">
+              <Button variant="outline" onClick={() => setShowSetupManager(false)} className="flex-1 rounded-none border-gold/30 font-bebas tracking-widest text-xs">CANCEL</Button>
+              <Button onClick={saveSetupTemplates} disabled={updateVenueMutation.isPending} className="flex-1 bg-forest hover:bg-forest/90 text-white rounded-none font-bebas tracking-widest text-xs">
+                {updateVenueMutation.isPending ? 'SAVING...' : 'SAVE TEMPLATES'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── MENU CATALOGUE SELECTOR MODAL ────────────────────────────────── */}
       {showCatalogSelector && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
@@ -1983,7 +2183,7 @@ export default function RunsheetBuilder() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest">
               <div>
                 <div className="font-bebas tracking-widest text-gold text-lg">ADD FROM MENU CATALOGUE</div>
-                <div className="font-dm text-white/60 text-xs mt-0.5">Select items to add to the {fnbSection === 'foh' ? 'FOH' : 'Kitchen'} F&B sheet</div>
+                <div className="font-dm text-white/60 text-xs mt-0.5">Select items to add to the F&B sheet</div>
               </div>
               <button onClick={() => setShowCatalogSelector(false)} className="text-white/50 hover:text-white transition-colors">
                 <span className="text-2xl leading-none">&times;</span>

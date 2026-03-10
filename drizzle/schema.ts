@@ -90,6 +90,8 @@ export const venueSettings = pgTable("venue_settings", {
   bufferTime: varchar("bufferTime", { length: 20 }).default("30 minutes"),
   operatingHours: text("operatingHours"),
   customStatuses: text("customStatuses"),
+  customDietaryOptions: text("customDietaryOptions"),
+  customSetupTemplates: text("customSetupTemplates"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

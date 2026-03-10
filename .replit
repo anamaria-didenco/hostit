@@ -47,3 +47,4 @@ externalPort = 3000
 deploymentTarget = "autoscale"
 run = ["node", "dist/index.js"]
 build = ["pnpm", "run", "build"]
+publicDir = "dist/public"

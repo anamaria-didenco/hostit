@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
 import CsvImportModal from "@/components/CsvImportModal";
-import StatusManager, { parseCustomStatuses, getStatusClasses, type StatusDef } from "@/components/StatusManager";
+import StatusManager, { parseCustomStatuses, getStatusClasses, COLOR_PRESETS, type StatusDef } from "@/components/StatusManager";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
@@ -461,7 +461,10 @@ export default function Dashboard() {
   );
   const pipelineStages = React.useMemo(() => {
     const defs = parseCustomStatuses((venueSettings as any)?.customStatuses);
-    return defs.map(d => ({ key: d.key, label: d.label, color: getStatusClasses(d.colorId) }));
+    return defs.map(d => {
+      const preset = COLOR_PRESETS.find(c => c.id === d.colorId) ?? COLOR_PRESETS[0];
+      return { key: d.key, label: d.label, color: preset.classes, swatch: preset.swatch };
+    });
   }, [venueSettings]);
   const { data: contacts, refetch: refetchContacts } = trpc.contacts.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
@@ -1462,7 +1465,8 @@ export default function Dashboard() {
                             return (
                               <tr key={lead.id}
                                 onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                                className={`hover:bg-linen transition-colors cursor-pointer ${selectedLead?.id === lead.id ? "bg-forest/5" : ""} ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}>
+                                className={`hover:bg-linen transition-colors cursor-pointer border-l-4 ${selectedLead?.id === lead.id ? "bg-forest/5" : ""} ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}
+                                style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
                                 {bulkSelectMode && (
                                   <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                                     <input type="checkbox" checked={selectedLeadIds.has(lead.id)}
@@ -1475,7 +1479,14 @@ export default function Dashboard() {
                                 <td className="px-3 py-2.5 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" }) : "—"}</td>
                                 <td className="px-3 py-2.5 font-dm text-xs text-ink/60 text-right">{lead.guestCount ?? "—"}</td>
                                 <td className="px-3 py-2.5">
-                                  <span className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border ${statusStage?.color ?? "bg-muted border-border"}`}>
+                                  <span
+                                    className="font-bebas text-xs tracking-widest px-1.5 py-0.5 border"
+                                    style={{
+                                      backgroundColor: statusStage?.swatch ? `${statusStage.swatch}18` : undefined,
+                                      borderColor: statusStage?.swatch ?? '#d4c5a9',
+                                      color: statusStage?.swatch ?? '#5a4a3a',
+                                    }}
+                                  >
                                     {statusStage?.label ?? lead.status.replace(/_/g, " ")}
                                   </span>
                                 </td>
@@ -1514,11 +1525,12 @@ export default function Dashboard() {
                         </label>
                       )}
                     <button onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                      className={`flex-1 p-4 text-left hover:bg-linen transition-colors ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5 border-l-2 border-gold" : "border-l-2 border-transparent"}`}>
+                      className={`flex-1 p-4 text-left hover:bg-linen transition-colors border-l-4 ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5" : ""}`}
+                      style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
                       <div className="flex items-start justify-between mb-1">
                         <div className="font-cormorant font-semibold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
                         <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border flex-shrink-0 ml-2 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
-                          {lead.status === 'booked' ? 'CONFIRMED' : lead.status.replace(/_/g, " ").toUpperCase()}
+                          {pipelineStages.find(s => s.key === lead.status)?.label ?? lead.status.replace(/_/g, " ").toUpperCase()}
                         </div>
                       </div>
                       <div className="font-dm text-xs text-ink/60 truncate">{lead.email}</div>
@@ -1573,7 +1585,14 @@ export default function Dashboard() {
                         const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
                         return (
                           <div key={stage.key} className="w-64 flex-shrink-0 flex flex-col">
-                            <div className={`font-bebas text-xs tracking-widest px-3 py-2 border mb-2 flex-shrink-0 ${stage.color}`}>
+                            <div
+                              className="font-bebas text-xs tracking-widest px-3 py-2 border mb-2 flex-shrink-0"
+                              style={{
+                                backgroundColor: stage.swatch ? `${stage.swatch}18` : undefined,
+                                borderColor: stage.swatch ?? '#d4c5a9',
+                                color: stage.swatch ?? '#5a4a3a',
+                              }}
+                            >
                               {stage.label} <span className="opacity-60">({stageLeads.length})</span>
                             </div>
                             <div className="space-y-2 overflow-y-auto flex-1">

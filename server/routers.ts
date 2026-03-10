@@ -89,6 +89,8 @@ export const appRouter = router({
         logoUrl: z.string().optional(),
         coverImageUrl: z.string().optional(),
         customStatuses: z.string().optional(),
+        customDietaryOptions: z.string().optional(),
+        customSetupTemplates: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
