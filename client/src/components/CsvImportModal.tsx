@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { X, Upload, FileText, AlertCircle, CheckCircle2, ChevronDown } from "lucide-react";
@@ -93,25 +94,49 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
 
   const bulkCreate = trpc.leads.bulkCreate.useMutation();
 
-  const parseFile = useCallback((file: File) => {
-    Papa.parse<ParsedRow>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (res) => {
-        const hdrs = res.meta.fields ?? [];
-        setHeaders(hdrs);
-        setRows(res.data as ParsedRow[]);
-        const autoMap: Record<string, string> = {};
-        hdrs.forEach(h => {
-          const mapped = autoMapColumn(h);
-          if (mapped) autoMap[h] = mapped;
-        });
-        setMapping(autoMap);
-        setStep("map");
-      },
-      error: () => toast.error("Failed to parse CSV file."),
+  const processRows = useCallback((hdrs: string[], data: ParsedRow[]) => {
+    setHeaders(hdrs);
+    setRows(data);
+    const autoMap: Record<string, string> = {};
+    hdrs.forEach(h => {
+      const mapped = autoMapColumn(h);
+      if (mapped) autoMap[h] = mapped;
     });
+    setMapping(autoMap);
+    setStep("map");
   }, []);
+
+  const parseFile = useCallback((file: File) => {
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json: ParsedRow[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+          if (!json.length) { toast.error("Spreadsheet appears to be empty."); return; }
+          const hdrs = Object.keys(json[0]);
+          processRows(hdrs, json);
+        } catch {
+          toast.error("Failed to read Excel file.");
+        }
+      };
+      reader.onerror = () => toast.error("Failed to read file.");
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse<ParsedRow>(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (res) => {
+          const hdrs = res.meta.fields ?? [];
+          processRows(hdrs, res.data as ParsedRow[]);
+        },
+        error: () => toast.error("Failed to parse CSV file."),
+      });
+    }
+  }, [processRows]);
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -190,7 +215,7 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Import Enquiries from CSV</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              {step === "upload" && "Upload a CSV file exported from another platform"}
+              {step === "upload" && "Upload a CSV, XLS or XLSX file"}
               {step === "map" && `${rows.length} rows found — map your columns below`}
               {step === "preview" && `Preview ${totalValid} valid rows before importing`}
               {step === "done" && "Import complete"}
@@ -215,9 +240,10 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
               }`}
             >
               <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="font-medium text-gray-700 mb-1">Drop your CSV file here</p>
-              <p className="text-sm text-gray-400">or click to browse — supports files from any platform</p>
-              <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
+              <p className="font-medium text-gray-700 mb-1">Drop your file here</p>
+              <p className="text-sm text-gray-400">or click to browse</p>
+              <p className="text-xs text-gray-300 mt-1">CSV, XLS or XLSX — exported from any platform</p>
+              <input ref={fileRef} type="file" accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleFileChange} />
             </div>
           )}
 
