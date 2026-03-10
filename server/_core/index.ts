@@ -12,6 +12,11 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { storagePut } from "../storage";
+import { sdk } from "./sdk";
+import { upsertUser } from "../db";
+import { ENV } from "./env";
+import { getSessionCookieOptions } from "./cookies";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -40,6 +45,42 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Local password login (for trial/dev use — no external OAuth needed)
+  app.post("/api/auth/local-login", async (req, res) => {
+    try {
+      const { password } = req.body ?? {};
+      const adminPassword = ENV.adminPassword;
+
+      if (!adminPassword) {
+        res.status(503).json({ error: "Local login is not configured. Set the ADMIN_PASSWORD environment variable." });
+        return;
+      }
+
+      if (!password || password !== adminPassword) {
+        res.status(401).json({ error: "Incorrect password." });
+        return;
+      }
+
+      const openId = "local-admin";
+      await upsertUser({
+        openId,
+        name: "Admin",
+        email: null,
+        loginMethod: "local",
+        role: "admin",
+        lastSignedIn: new Date(),
+      });
+
+      const token = await sdk.createSessionToken(openId, { name: "Admin" });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error("[LocalLogin] Error:", e);
+      res.status(500).json({ error: "Login failed." });
+    }
+  });
 
   // Proposal PDF download (public — uses publicToken for auth)
   app.get("/api/proposal-pdf/:token", handleProposalPdf);
