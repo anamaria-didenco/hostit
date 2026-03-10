@@ -88,6 +88,12 @@ export const appRouter = router({
         themeKey: z.string().optional(),
         logoUrl: z.string().optional(),
         coverImageUrl: z.string().optional(),
+        customStatuses: z.string().optional(),
+        customDietaryOptions: z.string().optional(),
+        customSetupTemplates: z.string().optional(),
+        formFont: z.string().optional(),
+        formGalleryImages: z.string().optional(),
+        customFormFields: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -228,7 +234,7 @@ export const appRouter = router({
         guestCount: z.number().optional(),
         budget: z.number().optional(),
         message: z.string().optional(),
-        status: z.enum(["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"]).optional(),
+        status: z.string().optional(),
         source: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -299,7 +305,7 @@ export const appRouter = router({
     updateStatus: protectedProcedure
       .input(z.object({
         id: z.number(),
-        status: z.enum(["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"]),
+        status: z.string(),
         note: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -478,7 +484,7 @@ export const appRouter = router({
     bulkUpdateStatus: protectedProcedure
       .input(z.object({
         ids: z.array(z.number()).min(1),
-        status: z.enum(['new', 'contacted', 'proposal_sent', 'negotiating', 'booked', 'lost', 'cancelled']),
+        status: z.string(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb, addLeadActivity } = await import('./db');
@@ -500,6 +506,67 @@ export const appRouter = router({
           })
         ));
         return { updated: input.ids.length };
+      }),
+
+    // Bulk import leads from CSV
+    bulkCreate: protectedProcedure
+      .input(z.array(z.object({
+        firstName: z.string().min(1),
+        lastName: z.string().optional(),
+        email: z.string().optional(),
+        phone: z.string().optional(),
+        company: z.string().optional(),
+        eventType: z.string().optional(),
+        eventDate: z.string().optional(),
+        guestCount: z.number().optional(),
+        budget: z.number().optional(),
+        message: z.string().optional(),
+        status: z.string().optional(),
+        source: z.string().optional(),
+        internalNotes: z.string().optional(),
+      })).min(1).max(500))
+      .mutation(async ({ input, ctx }) => {
+        const { createLead } = await import('./db');
+        let imported = 0;
+        const errors: string[] = [];
+        for (const row of input) {
+          try {
+            await createLead({
+              ownerId: ctx.user.id,
+              firstName: row.firstName,
+              lastName: row.lastName,
+              email: row.email ?? '',
+              phone: row.phone,
+              company: row.company,
+              eventType: row.eventType,
+              eventDate: row.eventDate ? new Date(row.eventDate) : undefined,
+              guestCount: row.guestCount,
+              budget: row.budget?.toString() as any,
+              message: row.message,
+              internalNotes: row.internalNotes,
+              source: row.source ?? "csv_import",
+              status: row.status ?? "new",
+            });
+            imported++;
+          } catch (err: any) {
+            errors.push(`Row ${imported + errors.length + 1}: ${err?.message ?? 'Unknown error'}`);
+          }
+        }
+        return { imported, errors };
+      }),
+
+    bulkDelete: protectedProcedure
+      .input(z.object({ ids: z.array(z.number()).min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { leads, leadActivity } = await import('../drizzle/schema');
+        const { eq, and, inArray } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { deleted: 0 };
+        await db.delete(leadActivity).where(inArray(leadActivity.leadId, input.ids));
+        const result = await db.delete(leads)
+          .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
+        return { deleted: input.ids.length };
       }),
   }),
   // ─── Proposals ─────────────────────────────────────────────────────────────
@@ -902,8 +969,8 @@ export const appRouter = router({
           description: input.description ?? null,
           type: input.type,
           pricePerHead: input.pricePerHead ? String(input.pricePerHead) : null,
-        });
-        return { id: (result as any).insertId };
+        }).returning({ id: menuPackages.id });
+        return { id: result.id };
       }),
     // Update a package
     updatePackage: protectedProcedure
@@ -968,8 +1035,8 @@ export const appRouter = router({
           category: input.category ?? null,
           portionSize: input.portionSize ?? null,
           sortOrder: input.sortOrder ?? 0,
-        });
-        return { id: (result as any).insertId };
+        }).returning({ id: menuItems.id });
+        return { id: result.id };
       }),
     // Update an item
     updateItem: protectedProcedure
@@ -1044,8 +1111,8 @@ export const appRouter = router({
           unit: input.unit ?? 'per drink',
           sortOrder: input.sortOrder ?? 0,
           createdAt: Date.now(),
-        });
-        return { id: (result as any).insertId };
+        }).returning({ id: barMenuItems.id });
+        return { id: result.id };
       }),
     update: protectedProcedure
       .input(z.object({
@@ -1343,8 +1410,8 @@ export const appRouter = router({
           await db.update(floorPlans).set({ name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData, bookingId: input.bookingId }).where(and(eq(floorPlans.id, input.id), eq(floorPlans.ownerId, ctx.user.id)));
           return { id: input.id };
         } else {
-          const [result] = await db.insert(floorPlans).values({ ownerId: ctx.user.id, bookingId: input.bookingId, name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData });
-          return { id: (result as any).insertId };
+          const [result] = await db.insert(floorPlans).values({ ownerId: ctx.user.id, bookingId: input.bookingId, name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData }).returning({ id: floorPlans.id });
+          return { id: result.id };
         }
       }),
     delete: protectedProcedure
@@ -1356,6 +1423,116 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         await db.delete(floorPlans).where(and(eq(floorPlans.id, input.id), eq(floorPlans.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    generateShareLink: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { floorPlans } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { randomBytes } = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const token = randomBytes(20).toString('hex');
+        await db.update(floorPlans).set({ shareToken: token }).where(and(eq(floorPlans.id, input.id), eq(floorPlans.ownerId, ctx.user.id)));
+        return { token };
+      }),
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { floorPlans } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [plan] = await db.select().from(floorPlans).where(eq(floorPlans.shareToken, input.token)).limit(1);
+        return plan ?? null;
+      }),
+  }),
+
+  // ─── Setup Instructions ──────────────────────────────────────────────────────
+  setupInstructions: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { setupInstructions } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(setupInstructions).where(eq(setupInstructions.ownerId, ctx.user.id)).orderBy(asc(setupInstructions.sortOrder), asc(setupInstructions.createdAt));
+    }),
+    create: protectedProcedure
+      .input(z.object({ title: z.string().min(1), content: z.string().optional(), category: z.string().optional(), images: z.array(z.string()).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { setupInstructions } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        await db.insert(setupInstructions).values({ ownerId: ctx.user.id, title: input.title, content: input.content ?? null, category: input.category ?? 'general', images: input.images ?? [], sortOrder: 0, createdAt: now, updatedAt: now });
+        return { success: true };
+      }),
+    update: protectedProcedure
+      .input(z.object({ id: z.number(), title: z.string().min(1).optional(), content: z.string().nullable().optional(), category: z.string().optional(), images: z.array(z.string()).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { setupInstructions } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        await db.update(setupInstructions).set({ ...rest, updatedAt: Date.now() }).where(and(eq(setupInstructions.id, id), eq(setupInstructions.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { setupInstructions } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(setupInstructions).where(and(eq(setupInstructions.id, input.id), eq(setupInstructions.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Table Setups ────────────────────────────────────────────────────────────
+  tableSetups: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { tableSetups } = await import('../drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(tableSetups).where(eq(tableSetups.ownerId, ctx.user.id)).orderBy(desc(tableSetups.createdAt));
+    }),
+    save: protectedProcedure
+      .input(z.object({ id: z.number().optional(), name: z.string().default('Table Setup'), description: z.string().optional(), canvasData: z.any().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { tableSetups } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        if (input.id) {
+          await db.update(tableSetups).set({ name: input.name, description: input.description ?? null, canvasData: input.canvasData, updatedAt: now }).where(and(eq(tableSetups.id, input.id), eq(tableSetups.ownerId, ctx.user.id)));
+          return { id: input.id };
+        } else {
+          const [result] = await db.insert(tableSetups).values({ ownerId: ctx.user.id, name: input.name, description: input.description ?? null, canvasData: input.canvasData, createdAt: now, updatedAt: now }).returning({ id: tableSetups.id });
+          return { id: result.id };
+        }
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { tableSetups } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(tableSetups).where(and(eq(tableSetups.id, input.id), eq(tableSetups.ownerId, ctx.user.id)));
         return { success: true };
       }),
   }),
@@ -1381,8 +1558,8 @@ export const appRouter = router({
         const { checklistTemplates } = await import('../drizzle/schema');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const [result] = await db.insert(checklistTemplates).values({ ownerId: ctx.user.id, name: input.name, description: input.description, items: input.items });
-        return { id: (result as any).insertId, ...input };
+        const [result] = await db.insert(checklistTemplates).values({ ownerId: ctx.user.id, name: input.name, description: input.description, items: input.items }).returning({ id: checklistTemplates.id });
+        return { id: result.id, ...input };
       }),
     updateTemplate: protectedProcedure
       .input(z.object({
@@ -1427,8 +1604,8 @@ export const appRouter = router({
         const [template] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, input.templateId)).limit(1);
         if (!template) throw new Error('Template not found');
         const items = (template.items as any[]).map(item => ({ ...item, checked: false }));
-        const [result] = await db.insert(checklistInstances).values({ templateId: input.templateId, bookingId: input.bookingId, ownerId: ctx.user.id, name: input.name ?? template.name, items });
-        return { id: (result as any).insertId };
+        const [result] = await db.insert(checklistInstances).values({ templateId: input.templateId, bookingId: input.bookingId, ownerId: ctx.user.id, name: input.name ?? template.name, items }).returning({ id: checklistInstances.id });
+        return { id: result.id };
       }),
     getForBooking: protectedProcedure
       .input(z.object({ bookingId: z.number() }))
@@ -1549,8 +1726,8 @@ export const appRouter = router({
           venueSetup: input.venueSetup ?? null,
           proposalId: input.proposalId ?? null,
           publicToken: token,
-        });
-        const id = (result as any).insertId as number;
+        }).returning({ id: runsheets.id });
+        const id = result.id;
         if (input.items?.length) {
           await db.insert(runsheetItems).values(
             input.items.map((item, i) => ({
@@ -1632,8 +1809,8 @@ export const appRouter = router({
           assignedTo: input.assignedTo ?? null,
           category: input.category ?? 'other',
           sortOrder: input.sortOrder,
-        });
-        return { id: (result as any).insertId as number };
+        }).returning({ id: runsheetItems.id });
+        return { id: result.id };
       }),
 
     updateItem: protectedProcedure
@@ -1723,8 +1900,8 @@ export const appRouter = router({
           method: input.method,
           paidAt: new Date(input.paidAt),
           notes: input.notes,
-        });
-        return { id: (result as any).insertId, success: true };
+        }).returning({ id: payments.id });
+        return { id: result.id, success: true };
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -1999,7 +2176,7 @@ export const appRouter = router({
           internalNotes: input.spaceName ? `Space preference: ${input.spaceName}` : undefined,
           status: 'new',
           source: 'express_book',
-        });
+        }).returning({ id: leads.id });
         // Notify owner
         try {
           const { notifyOwner } = await import('./_core/notification');
@@ -2008,7 +2185,7 @@ export const appRouter = router({
             content: `${input.eventType} on ${input.eventDate} for ${input.guestCount} guests. Email: ${input.email}`,
           });
         } catch {}
-        return { success: true, leadId: (result as any).insertId };
+        return { success: true, leadId: result.id };
       }),
   }),
 
@@ -2393,8 +2570,8 @@ export const appRouter = router({
           items: input.items,
           createdAt: now,
           updatedAt: now,
-        });
-        return { id: (result as any).insertId, success: true };
+        }).returning({ id: runsheetTemplates.id });
+        return { id: result.id, success: true };
       }),
 
     delete: protectedProcedure
@@ -2612,15 +2789,25 @@ export const appRouter = router({
       .input(z.object({ text: z.string().min(1), eventType: z.string().optional() }))
       .mutation(async ({ input }) => {
         const { invokeLLM } = await import('./_core/llm');
-        const prompt = `You are a venue event coordinator. Parse the following text into a structured runsheet timeline.
-Extract all time-based items and return them as a JSON object with an "items" array.
-Each item must have: time (HH:MM 24h), duration (minutes, estimate if not given), title (short), description (optional detail), category (one of: Setup, Service, Kitchen, Speech, Entertainment, Cleanup, Other).
-If a time is missing, estimate based on context. Event type: ${input.eventType ?? 'general event'}.
+        const prompt = `You are a venue event coordinator assistant. Parse the following text and extract ALL available event information into structured sections.
+
+Return a JSON object with any of these sections that have data in the text:
+- "eventDetails": an object with any of: eventDate (ISO date YYYY-MM-DD), guestCount (integer), eventType (string e.g. "Wedding", "Corporate"), contactName (string), contactEmail (string), contactPhone (string), spaceName (string), venueSetup (string describing room/table layout)
+- "dietaries": array of { name (string e.g. "Vegetarian"), count (integer, default 1), notes (string, optional) }
+- "fnbItems": array of { course (one of: Canapes, Entree, Main, Dessert, Cheese, Late Night Snack, Breakfast, Morning Tea, Lunch, Afternoon Tea, Drinks, Other), dishName (string), qty (integer), serviceTime (HH:MM 24h, optional), dietary (string, optional) }
+- "timelineItems": array of { time (HH:MM 24h format), duration (integer minutes), title (string), description (string, optional), category (one of: setup, guest, food, beverage, speech, entertainment, packdown, other) }
+
+Rules:
+- Only include sections for data actually present in the text
+- Estimate durations if not stated; estimate times from context if missing
+- For dietary counts, use the number mentioned or 1 if unspecified
+- Event type context: ${input.eventType ?? 'general event'}
 
 Text to parse:
 ${input.text}
 
-Return ONLY valid JSON like: {"items": [{"time":"09:00","duration":30,"title":"...","description":"...","category":"Setup"}]}`;
+Return ONLY valid JSON. Example structure:
+{"eventDetails":{"eventDate":"2026-06-15","guestCount":80,"eventType":"Wedding","contactName":"Jane Smith"},"dietaries":[{"name":"Vegetarian","count":5,"notes":"2 also vegan"}],"fnbItems":[{"course":"Canapes","dishName":"Smoked salmon blini","qty":80,"serviceTime":"17:00"}],"timelineItems":[{"time":"16:00","duration":60,"title":"Venue setup","category":"setup"}]}`;
         const response = await invokeLLM({
           messages: [
             { role: 'system', content: 'You are a helpful assistant that outputs valid JSON only.' },
@@ -2628,14 +2815,21 @@ Return ONLY valid JSON like: {"items": [{"time":"09:00","duration":30,"title":".
           ],
           response_format: { type: 'json_object' } as any,
         });
-        const rawContent = response.choices?.[0]?.message?.content ?? '{"items":[]}';
+        const rawContent = response.choices?.[0]?.message?.content ?? '{}';
         const raw = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
         try {
           const parsed = JSON.parse(raw);
-          const items = Array.isArray(parsed) ? parsed : (parsed.items ?? parsed.timeline ?? []);
-          return { items: items.slice(0, 60), success: true };
+          if (Array.isArray(parsed)) return { timelineItems: parsed, fnbItems: [], dietaries: [], eventDetails: null, success: true };
+          if (parsed.items || parsed.timeline) return { timelineItems: (parsed.items ?? parsed.timeline ?? []).slice(0, 60), fnbItems: [], dietaries: [], eventDetails: null, success: true };
+          return {
+            eventDetails: parsed.eventDetails ?? null,
+            dietaries: Array.isArray(parsed.dietaries) ? parsed.dietaries : [],
+            fnbItems: Array.isArray(parsed.fnbItems) ? parsed.fnbItems.slice(0, 60) : [],
+            timelineItems: Array.isArray(parsed.timelineItems) ? parsed.timelineItems.slice(0, 60) : [],
+            success: true,
+          };
         } catch {
-          return { items: [], success: false, error: 'Failed to parse response' };
+          return { timelineItems: [], fnbItems: [], dietaries: [], eventDetails: null, success: false, error: 'Failed to parse response' };
         }
       }),
   }),
@@ -3155,277 +3349,5 @@ Return ONLY valid JSON like: {"items": [{"time":"09:00","duration":30,"title":".
         return { success: true };
       }),
    }),
-
-  // ─── Runsheet Auto-Populate ───────────────────────────────────────────────
-  runsheetAutoPopulate: router({
-    getEventData: protectedProcedure
-      .input(z.object({
-        bookingId: z.number().optional(),
-        leadId: z.number().optional(),
-      }))
-      .query(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { bookings, leads, proposals } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return null;
-
-        let eventData: Record<string, any> = {};
-
-        if (input.bookingId) {
-          const [booking] = await db.select().from(bookings)
-            .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
-          if (booking) {
-            eventData = {
-              title: `${booking.eventType || 'Event'} – ${booking.firstName} ${booking.lastName || ''}`.trim(),
-              clientName: `${booking.firstName} ${booking.lastName || ''}`.trim(),
-              clientEmail: booking.email,
-              eventType: booking.eventType,
-              eventDate: booking.eventDate,
-              eventEndDate: booking.eventEndDate,
-              guestCount: booking.guestCount,
-              spaceName: booking.spaceName,
-              notes: booking.notes,
-              source: 'booking',
-            };
-          }
-        } else if (input.leadId) {
-          const [lead] = await db.select().from(leads)
-            .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
-          if (lead) {
-            // Also try to get the latest proposal for this lead
-            const [proposal] = await db.select().from(proposals)
-              .where(and(eq(proposals.leadId, input.leadId), eq(proposals.ownerId, ctx.user.id)))
-              .orderBy(proposals.createdAt);
-            eventData = {
-              title: `${lead.eventType || 'Event'} – ${lead.firstName} ${lead.lastName || ''}`.trim(),
-              clientName: `${lead.firstName} ${lead.lastName || ''}`.trim(),
-              clientEmail: lead.email,
-              clientPhone: lead.phone,
-              clientCompany: lead.company,
-              eventType: lead.eventType,
-              eventDate: lead.eventDate || proposal?.eventDate,
-              eventEndDate: lead.eventEndDate || proposal?.eventEndDate,
-              guestCount: lead.guestCount || proposal?.guestCount,
-              spaceName: proposal?.spaceName,
-              budget: lead.budget,
-              notes: lead.message,
-              source: 'lead',
-            };
-          }
-        }
-
-        // Generate suggested timeline items based on event type
-        const eventType = (eventData.eventType || '').toLowerCase();
-        const suggestedItems: Array<{ time: string; title: string; category: string; description: string }> = [];
-
-        if (eventType.includes('wedding')) {
-          suggestedItems.push(
-            { time: '14:00', title: 'Venue setup & decoration', category: 'setup', description: 'Florist, decorator, and venue team arrive' },
-            { time: '16:00', title: 'Bridal party arrival', category: 'arrival', description: 'Bridal party photos and preparation' },
-            { time: '17:00', title: 'Guest arrival & welcome drinks', category: 'drinks', description: `Welcome drinks for ${eventData.guestCount || ''} guests` },
-            { time: '17:30', title: 'Ceremony', category: 'ceremony', description: 'Wedding ceremony begins' },
-            { time: '18:00', title: 'Canapés & cocktail hour', category: 'food', description: 'Canapés served during cocktail hour' },
-            { time: '19:00', title: 'Guests seated', category: 'setup', description: 'Guests move to reception room' },
-            { time: '19:15', title: 'Bridal party entrance', category: 'ceremony', description: 'Bridal party and couple entrance' },
-            { time: '19:30', title: 'Entrée service', category: 'food', description: 'Entrée course served' },
-            { time: '20:00', title: 'Speeches', category: 'ceremony', description: 'Welcome speech, best man, maid of honour' },
-            { time: '20:30', title: 'Main course service', category: 'food', description: 'Main course served' },
-            { time: '21:30', title: 'Cake cutting', category: 'ceremony', description: 'Wedding cake cutting ceremony' },
-            { time: '21:45', title: 'Dessert service', category: 'food', description: 'Dessert and wedding cake served' },
-            { time: '22:00', title: 'First dance', category: 'entertainment', description: 'First dance and dance floor opens' },
-            { time: '23:30', title: 'Last drinks', category: 'drinks', description: 'Bar closes, last drinks served' },
-            { time: '00:00', title: 'Event conclusion', category: 'setup', description: 'Guests depart, venue pack-down begins' },
-          );
-        } else if (eventType.includes('corporate') || eventType.includes('conference') || eventType.includes('meeting')) {
-          suggestedItems.push(
-            { time: '07:30', title: 'Venue setup', category: 'setup', description: 'AV, seating, and signage setup' },
-            { time: '08:00', title: 'Catering team arrival', category: 'setup', description: 'Catering team set up tea/coffee station' },
-            { time: '08:30', title: 'Guest registration opens', category: 'arrival', description: 'Registration desk opens, welcome tea & coffee' },
-            { time: '09:00', title: 'Event commences', category: 'ceremony', description: 'Welcome address and program begins' },
-            { time: '10:30', title: 'Morning tea break', category: 'food', description: 'Morning tea served — 20 min break' },
-            { time: '12:30', title: 'Lunch service', category: 'food', description: `Buffet/plated lunch for ${eventData.guestCount || ''} guests` },
-            { time: '13:30', title: 'Afternoon session begins', category: 'ceremony', description: 'Afternoon program resumes' },
-            { time: '15:00', title: 'Afternoon tea break', category: 'food', description: 'Afternoon tea served — 20 min break' },
-            { time: '17:00', title: 'Event concludes', category: 'ceremony', description: 'Closing remarks and networking drinks' },
-            { time: '18:00', title: 'Pack-down', category: 'setup', description: 'Venue pack-down and equipment return' },
-          );
-        } else if (eventType.includes('birthday') || eventType.includes('party') || eventType.includes('celebration')) {
-          suggestedItems.push(
-            { time: '15:00', title: 'Venue setup', category: 'setup', description: 'Decorations, tables, and AV setup' },
-            { time: '17:00', title: 'Catering team arrival', category: 'setup', description: 'Catering team set up food and bar stations' },
-            { time: '18:00', title: 'Guest arrival & welcome drinks', category: 'drinks', description: 'Guests arrive, welcome drinks served' },
-            { time: '18:30', title: 'Canapés service', category: 'food', description: 'Canapés circulated' },
-            { time: '19:00', title: 'Guests seated', category: 'setup', description: 'Guests move to dining area' },
-            { time: '19:15', title: 'Welcome speech', category: 'ceremony', description: 'Host welcome speech' },
-            { time: '19:30', title: 'Dinner service', category: 'food', description: `Dinner service for ${eventData.guestCount || ''} guests` },
-            { time: '21:00', title: 'Cake & dessert', category: 'food', description: 'Birthday cake presentation and dessert' },
-            { time: '21:30', title: 'Dancing & entertainment', category: 'entertainment', description: 'Dance floor opens' },
-            { time: '23:30', title: 'Last drinks', category: 'drinks', description: 'Bar closes' },
-            { time: '00:00', title: 'Event conclusion', category: 'setup', description: 'Guests depart' },
-          );
-        } else if (eventType.includes('cocktail') || eventType.includes('function') || eventType.includes('gala')) {
-          suggestedItems.push(
-            { time: '15:00', title: 'Venue setup', category: 'setup', description: 'Room setup, linen, and styling' },
-            { time: '17:00', title: 'Bar team arrival', category: 'setup', description: 'Bar setup and stock check' },
-            { time: '18:00', title: 'Doors open', category: 'arrival', description: 'Guests arrive, welcome drinks at door' },
-            { time: '18:15', title: 'Canapés round 1', category: 'food', description: 'First round of canapés circulated' },
-            { time: '18:45', title: 'Canapés round 2', category: 'food', description: 'Second round of canapés circulated' },
-            { time: '19:15', title: 'Canapés round 3', category: 'food', description: 'Third round of canapés circulated' },
-            { time: '19:30', title: 'Speeches / formalities', category: 'ceremony', description: 'Welcome address' },
-            { time: '20:00', title: 'Substantial food service', category: 'food', description: 'Grazing stations / substantial canapés' },
-            { time: '21:30', title: 'Last drinks call', category: 'drinks', description: 'Last drinks announced' },
-            { time: '22:00', title: 'Event conclusion', category: 'setup', description: 'Guests depart, pack-down begins' },
-          );
-        } else {
-          // Generic event template
-          suggestedItems.push(
-            { time: '08:00', title: 'Venue setup', category: 'setup', description: 'Venue team setup and preparation' },
-            { time: '09:00', title: 'Catering team arrival', category: 'setup', description: 'Catering team arrive and set up' },
-            { time: '10:00', title: 'Guest arrival', category: 'arrival', description: 'Guests arrive and are welcomed' },
-            { time: '12:00', title: 'Lunch / refreshments', category: 'food', description: `Refreshments for ${eventData.guestCount || ''} guests` },
-            { time: '17:00', title: 'Event conclusion', category: 'ceremony', description: 'Event wraps up' },
-            { time: '17:30', title: 'Pack-down', category: 'setup', description: 'Venue pack-down' },
-          );
-        }
-
-        return { eventData, suggestedItems };
-      }),
-  }),
-
-  // ─── Menu Catalogue CSV Import ────────────────────────────────────────────
-  menuCatalogImport: router({
-    bulkCreateItems: protectedProcedure
-      .input(z.object({
-        items: z.array(z.object({
-          categoryId: z.number(),
-          name: z.string().min(1).max(255),
-          description: z.string().optional(),
-          pricingType: z.enum(['per_person', 'per_item']).default('per_person'),
-          price: z.number().min(0).default(0),
-          unit: z.string().optional(),
-          allergens: z.string().optional(),
-          available: z.boolean().default(true),
-          sortOrder: z.number().optional(),
-        }))
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { menuCategoryItems } = await import('../drizzle/schema');
-        const db = await getDb();
-        if (!db) throw new Error('DB not available');
-        const rows = input.items.map((item, i) => ({
-          categoryId: item.categoryId,
-          ownerId: ctx.user.id,
-          name: item.name,
-          description: item.description ?? null,
-          pricingType: item.pricingType,
-          price: Math.round((item.price ?? 0) * 100),
-          unit: item.unit ?? 'person',
-          available: item.available ?? true,
-          allergens: item.allergens ?? null,
-          sortOrder: item.sortOrder ?? i,
-          createdAt: Date.now(),
-        }));
-        if (rows.length > 0) {
-          await db.insert(menuCategoryItems).values(rows);
-        }
-        return { inserted: rows.length };
-      }),
-  }),
-
-  // ─── Staff Portal ─────────────────────────────────────────────────────────
-  staffPortal: router({
-    // Generate a magic link for a runsheet
-    createLink: protectedProcedure
-      .input(z.object({
-        runsheetId: z.number(),
-        label: z.string().optional(),
-        expiresInDays: z.number().min(1).max(365).default(30),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { staffPortalLinks, runsheets } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const crypto = await import('crypto');
-        const db = await getDb();
-        if (!db) throw new Error('DB not available');
-        // Verify runsheet belongs to owner
-        const [sheet] = await db.select().from(runsheets)
-          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id)));
-        if (!sheet) throw new Error('Runsheet not found');
-        const token = crypto.randomBytes(32).toString('hex');
-        const expiresAt = Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000;
-        await db.insert(staffPortalLinks).values({
-          ownerId: ctx.user.id,
-          runsheetId: input.runsheetId,
-          token,
-          label: input.label ?? 'Staff Link',
-          expiresAt,
-          createdAt: Date.now(),
-        });
-        return { token, expiresAt };
-      }),
-
-    listLinks: protectedProcedure
-      .input(z.object({ runsheetId: z.number() }))
-      .query(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { staffPortalLinks } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return [];
-        return db.select().from(staffPortalLinks)
-          .where(and(eq(staffPortalLinks.runsheetId, input.runsheetId), eq(staffPortalLinks.ownerId, ctx.user.id)))
-          .orderBy(staffPortalLinks.createdAt);
-      }),
-
-    deleteLink: protectedProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { staffPortalLinks } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) throw new Error('DB not available');
-        await db.delete(staffPortalLinks)
-          .where(and(eq(staffPortalLinks.id, input.id), eq(staffPortalLinks.ownerId, ctx.user.id)));
-        return { success: true };
-      }),
-
-    // Public endpoint — no auth required, just a valid token
-    getByToken: publicProcedure
-      .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
-        const { getDb } = await import('./db');
-        const { staffPortalLinks, runsheets, runsheetItems, fnbItems } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return null;
-        const [link] = await db.select().from(staffPortalLinks)
-          .where(eq(staffPortalLinks.token, input.token));
-        if (!link) return null;
-        // Check expiry
-        if (link.expiresAt && link.expiresAt < Date.now()) return { expired: true };
-        // Update last accessed
-        await db.update(staffPortalLinks)
-          .set({ lastAccessedAt: Date.now() })
-          .where(eq(staffPortalLinks.id, link.id));
-        // Fetch runsheet + items
-        const [sheet] = await db.select().from(runsheets)
-          .where(eq(runsheets.id, link.runsheetId));
-        if (!sheet) return null;
-        const items = await db.select().from(runsheetItems)
-          .where(eq(runsheetItems.runsheetId, link.runsheetId))
-          .orderBy(runsheetItems.sortOrder);
-        const fnb = await db.select().from(fnbItems)
-          .where(eq(fnbItems.runsheetId, link.runsheetId));
-        return {
-          expired: false,
-          label: link.label,
-          runsheet: { ...sheet, items, fnbItems: fnb },
-        };
-      }),
-  }),
 });
 export type AppRouter = typeof appRouter;

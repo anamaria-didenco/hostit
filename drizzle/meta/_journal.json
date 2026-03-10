@@ -1,26 +1,39 @@
 {
   "version": "7",
-  "dialect": "mysql",
   "entries": [
     {
       "idx": 0,
-      "version": "5",
-      "when": 1771811225553,
-      "tag": "0000_colorful_shockwave",
+      "version": "7",
+      "when": 1773119338634,
+      "tag": "0000_oval_argent",
       "breakpoints": true
     },
     {
       "idx": 1,
-      "version": "5",
-      "when": 1771811355074,
-      "tag": "0001_fresh_wallow",
+      "version": "7",
+      "when": 1773124325176,
+      "tag": "0001_third_invaders",
       "breakpoints": true
     },
     {
       "idx": 2,
-      "version": "5",
-      "when": 1771811372635,
-      "tag": "0002_foamy_swordsman",
+      "version": "7",
+      "when": 1773126519269,
+      "tag": "0002_clumsy_sabretooth",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773129614014,
+      "tag": "0003_silly_viper",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773130788097,
+      "tag": "0004_public_silver_centurion",
       "breakpoints": true
     }
   ]

@@ -9,8 +9,8 @@ import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
-  BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, Grid, Image as ImageIcon, Edit2,
-  ArrowUpDown, CreditCard, AlertCircle
+  BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
+  ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -18,10 +18,43 @@ import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
+import CsvImportModal from "@/components/CsvImportModal";
+import StatusManager, { parseCustomStatuses, getStatusClasses, COLOR_PRESETS, type StatusDef } from "@/components/StatusManager";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
+
+// ─── Contact Form Config ─────────────────────────────────────────────────────
+type FormFieldDef = {
+  id: string;
+  label: string;
+  type: 'text' | 'email' | 'tel' | 'number' | 'date' | 'select' | 'textarea';
+  required: boolean;
+  visible: boolean;
+  isDefault: boolean;
+};
+
+const DEFAULT_FORM_FIELDS: FormFieldDef[] = [
+  { id: 'firstName', label: 'First Name', type: 'text', required: true, visible: true, isDefault: true },
+  { id: 'lastName', label: 'Last Name', type: 'text', required: false, visible: true, isDefault: true },
+  { id: 'email', label: 'Email', type: 'email', required: true, visible: true, isDefault: true },
+  { id: 'phone', label: 'Phone', type: 'tel', required: false, visible: true, isDefault: true },
+  { id: 'company', label: 'Company / Organisation', type: 'text', required: false, visible: true, isDefault: true },
+  { id: 'eventType', label: 'Type of Event', type: 'select', required: false, visible: true, isDefault: true },
+  { id: 'eventDate', label: 'Preferred Date', type: 'date', required: false, visible: true, isDefault: true },
+  { id: 'guestCount', label: 'Guest Count', type: 'number', required: false, visible: true, isDefault: true },
+  { id: 'budget', label: 'Approximate Budget (NZD)', type: 'number', required: false, visible: true, isDefault: true },
+  { id: 'source', label: 'How did you hear about us?', type: 'select', required: false, visible: true, isDefault: true },
+  { id: 'message', label: 'Message / Tell us more', type: 'textarea', required: false, visible: true, isDefault: true },
+];
+
+const FORM_FONTS = [
+  { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
+  { key: 'serif', label: 'Elegant', sub: 'Georgia / Serif' },
+  { key: 'cormorant', label: 'Classic', sub: 'Cormorant Garamond' },
+  { key: 'dm', label: 'Refined', sub: 'DM Serif Display' },
+];
 
 // ─── Follow-Up Date Card ────────────────────────────────────────────────────
 function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date | null) => void }) {
@@ -296,8 +329,9 @@ function NewEnquiriesWidget({ newEnquiries, overdueLeads, onSelectLead, onViewAl
   );
 }
 
-function PipelineSnapshotWidget({ allLeads, onViewLeads }: { allLeads: any; onViewLeads: () => void }) {
-  const counts = PIPELINE_STAGES.map(s => ({
+function PipelineSnapshotWidget({ allLeads, onViewLeads, stages }: { allLeads: any; onViewLeads: () => void; stages?: { key: string; label: string; color: string }[] }) {
+  const stageList = stages ?? PIPELINE_STAGES;
+  const counts = stageList.map(s => ({
     ...s,
     count: (allLeads ?? []).filter((l: any) => l.status === s.key).length,
   }));
@@ -347,8 +381,8 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { id: "team", label: "Team" },
     { id: "billing", label: "Billing" },
     { id: "floor-plans", label: "Floor Plans" },
-    { id: "group-contact-form", label: "Group Contact Form" },
     { id: "group-settings", label: "Group Settings" },
+    { id: "statuses", label: "Enquiry Statuses" },
     { id: "profile", label: "Profile" },
   ];
   const currentLabel = items.find(i => i.id === settingsSubTab)?.label ?? 'Settings';
@@ -403,17 +437,22 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook">("overview");
-  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"menu-catalogue"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-contact-form"|"group-settings"|"profile"|"email-settings"|"floor-plans">("venue-details");
+  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"menu-catalogue"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses">("venue-details");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
   const [leadSortBy, setLeadSortBy] = useState<"enquiry_date"|"event_date"|"status">("enquiry_date");
   const [leadSortDir, setLeadSortDir] = useState<"desc"|"asc">("desc");
+  const [leadDateFilter, setLeadDateFilter] = useState<"all"|"month"|"year"|"custom">("all");
+  const [customDateFrom, setCustomDateFrom] = useState("");
+  const [customDateTo, setCustomDateTo] = useState("");
+  const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("list");
   const [eventSortBy, setEventSortBy] = useState<"event_date"|"date_booked"|"status">("event_date");
   const [eventSortDir, setEventSortDir] = useState<"asc"|"desc">("asc");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
@@ -431,6 +470,7 @@ export default function Dashboard() {
   const [widgetSizes, setWidgetSizes] = useState<Record<string, 'half' | 'full'>>({});
   const [collapsedInboxSections, setCollapsedInboxSections] = useState<Set<string>>(new Set());
   const [showAddLead, setShowAddLead] = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
   const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', guestCount: '', budget: '', message: '', status: 'new' as const });
 
   const utils = trpc.useUtils();
@@ -449,6 +489,13 @@ export default function Dashboard() {
     { ownerId: user?.id },
     { enabled: !!user?.id }
   );
+  const pipelineStages = React.useMemo(() => {
+    const defs = parseCustomStatuses((venueSettings as any)?.customStatuses);
+    return defs.map(d => {
+      const preset = COLOR_PRESETS.find(c => c.id === d.colorId) ?? COLOR_PRESETS[0];
+      return { key: d.key, label: d.label, color: preset.classes, swatch: preset.swatch };
+    });
+  }, [venueSettings]);
   const { data: contacts, refetch: refetchContacts } = trpc.contacts.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: monthBookings } = trpc.bookings.byMonth.useQuery(
@@ -524,6 +571,17 @@ export default function Dashboard() {
     },
     onError: (err) => toast.error(err.message || 'Bulk update failed'),
   });
+  const bulkDelete = trpc.leads.bulkDelete.useMutation({
+    onSuccess: (data) => {
+      refetchLeads();
+      refetchOverdue();
+      setSelectedLeadIds(new Set());
+      setBulkSelectMode(false);
+      setShowBulkDeleteConfirm(false);
+      toast.success(`${data.deleted} enquir${data.deleted === 1 ? 'y' : 'ies'} deleted`);
+    },
+    onError: (err) => toast.error(err.message || 'Delete failed'),
+  });
   const addNote = trpc.leads.addNote.useMutation({
     onSuccess: () => { setNoteText(""); utils.leads.getActivity.invalidate({ leadId: selectedLead?.id }); toast.success("Note added"); },
   });
@@ -589,6 +647,7 @@ export default function Dashboard() {
   });
   const updateSettings = trpc.venue.update.useMutation({
     onSuccess: () => { refetchSettings(); toast.success("Settings saved!"); },
+    onError: (err) => toast.error(err.message || "Failed to save settings"),
   });
   const createSpace = trpc.spaces.create.useMutation({
     onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
@@ -738,8 +797,8 @@ export default function Dashboard() {
     onSuccess: (result) => {
       refetchFloorPlans();
       // Update the editing plan with the returned id (for new plans)
-      if (editingFloorPlan && !editingFloorPlan.id && result) {
-        setEditingFloorPlan((prev: any) => ({ ...prev, id: (result as any).insertId ?? prev.id }));
+      if (result?.id) {
+        setEditingFloorPlan((prev: any) => ({ ...prev, id: result.id }));
       }
       toast.success('Floor plan saved!');
     },
@@ -751,6 +810,22 @@ export default function Dashboard() {
   });
 
   const [settingsForm, setSettingsForm] = useState<any>(null);
+  const [formFields, setFormFields] = useState<FormFieldDef[] | null>(null);
+  const [newCustomFieldLabel, setNewCustomFieldLabel] = useState('');
+  const [newCustomFieldType, setNewCustomFieldType] = useState<FormFieldDef['type']>('text');
+
+  useEffect(() => {
+    if (settingsSubTab === 'lead-form' && settingsForm && formFields === null) {
+      if (settingsForm.customFormFields) {
+        try {
+          const parsed = JSON.parse(settingsForm.customFormFields);
+          if (Array.isArray(parsed)) { setFormFields(parsed); return; }
+        } catch {}
+      }
+      setFormFields(DEFAULT_FORM_FIELDS.map(f => ({ ...f })));
+    }
+  }, [settingsSubTab, settingsForm, formFields]);
+
   useMemo(() => {
     if (!settingsForm) {
       const vs = venueSettings as any;
@@ -795,6 +870,8 @@ export default function Dashboard() {
         themeKey: vs?.themeKey ?? "sage",
         logoUrl: vs?.logoUrl ?? "",
         coverImageUrl: vs?.coverImageUrl ?? "",
+        formFont: vs?.formFont ?? "inter",
+        formGalleryImages: vs?.formGalleryImages ?? "[]",
         operatingHours: vs?.operatingHours ?? JSON.stringify([
           { day: "Sunday", enabled: true, start: "08:00", end: "22:00" },
           { day: "Monday", enabled: true, start: "08:00", end: "22:00" },
@@ -816,14 +893,38 @@ export default function Dashboard() {
 
   // Confirmed statuses are treated as Events (shown on Calendar), not Enquiries
   const CONFIRMED_STATUSES = ['booked', 'confirmed'];
-  const activeEnquiries = (allLeads ?? []).filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
+  const allEnquiries = (allLeads ?? []);
+  const activeEnquiries = allEnquiries.filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
   const newEnquiries = activeEnquiries.filter((l: any) => l.status === "new");
   const unreadCount = newEnquiries.filter((l: any) => !l.readAt).length;
-  const repliedLeads = activeEnquiries.filter((l: any) => l.status !== "new");
-  // When a specific status filter is active, show all active enquiries from the server (don't re-filter by leadsSubTab)
+  const repliedLeads = allEnquiries.filter((l: any) => l.status !== "new");
+
+  function applyDateFilter(list: any[]) {
+    if (leadDateFilter === "all") return list;
+    const now = new Date();
+    return list.filter((l: any) => {
+      const d = l.eventDate ? new Date(l.eventDate) : null;
+      if (!d) return leadDateFilter === "all";
+      if (leadDateFilter === "month") {
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      }
+      if (leadDateFilter === "year") {
+        return d.getFullYear() === now.getFullYear();
+      }
+      if (leadDateFilter === "custom") {
+        const from = customDateFrom ? new Date(customDateFrom) : null;
+        const to = customDateTo ? new Date(customDateTo) : null;
+        if (from && d < from) return false;
+        if (to) { const toEnd = new Date(to); toEnd.setHours(23,59,59,999); if (d > toEnd) return false; }
+        return true;
+      }
+      return true;
+    });
+  }
+
   const leadsToShow = leadStatusFilter !== "all"
-    ? activeEnquiries
-    : leadsSubTab === "new" ? newEnquiries : repliedLeads;
+    ? applyDateFilter(allEnquiries)
+    : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const filteredLeads = leadsToShow
     .filter((l: any) =>
       !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
@@ -838,7 +939,7 @@ export default function Dashboard() {
         const bDate = b.eventDate ? new Date(b.eventDate).getTime() : 0;
         cmp = aDate - bDate;
       } else if (leadSortBy === 'status') {
-        const order = ['new','contacted','proposal_sent','site_visit','negotiating','booked','confirmed','lost','cancelled'];
+        const order = ['new','contacted','proposal_sent','site_visit','negotiating','function_pack_sent','booked','confirmed','lost','cancelled'];
         cmp = (order.indexOf(a.status) ?? 99) - (order.indexOf(b.status) ?? 99);
       }
       return leadSortDir === 'asc' ? cmp : -cmp;
@@ -1205,8 +1306,12 @@ export default function Dashboard() {
           {/* ── ENQUIRIES INBOX ──────────────────────────────────────────────────── */}
           {tab === "enquiries" && (
             <div className="flex h-full">
-              {/* Lead List */}
-              <div className={`${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-gold/15 bg-warm-white flex-shrink-0`}>
+              {/* Lead List / Table / Kanban */}
+              <div className={`
+                ${leadViewMode === "kanban" ? "hidden" : ""}
+                ${leadViewMode === "table" ? `flex flex-col ${selectedLead ? "w-[55%] border-r border-gold/15" : "flex-1"} bg-warm-white overflow-hidden` : ""}
+                ${leadViewMode === "list" ? `${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-gold/15 bg-warm-white flex-shrink-0` : ""}
+              `}>
                 <div className="p-4 border-b border-gold/15">
                   {/* Sub-tab toggle */}
                   <div className="flex mb-3 bg-muted rounded-xl p-1 gap-1">
@@ -1235,30 +1340,50 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <h2 className="font-cormorant text-2xl font-semibold text-ink">{leadsSubTab === "new" ? "New Enquiries" : "Enquiries"}</h2>
+                      <h2 className="font-cormorant text-2xl font-semibold text-ink">
+                        {leadViewMode === "kanban" ? "Pipeline" : leadsSubTab === "new" ? "New Enquiries" : "All Records"}
+                      </h2>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {/* View mode toggle */}
+                      <div className="flex border border-gold/30 rounded-lg overflow-hidden">
+                        {([
+                          { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
+                          { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
+                          { mode: "kanban" as const, icon: <Columns className="w-3.5 h-3.5" />, title: "Kanban view" },
+                        ]).map(({ mode, icon, title }) => (
+                          <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
+                            title={title}
+                            className={`px-2 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/50 hover:bg-linen hover:text-ink"}`}>
+                            {icon}
+                          </button>
+                        ))}
+                      </div>
                       <button
-                        onClick={() => setCollapsedInboxSections(prev => { const n = new Set(prev); n.has(leadsSubTab) ? n.delete(leadsSubTab) : n.add(leadsSubTab); return n; })}
-                        className="p-1 text-ink/40 hover:text-ink transition-colors"
-                        title={collapsedInboxSections.has(leadsSubTab) ? "Show list" : "Collapse list"}
-                      >
-                        <ChevronDown className={`w-4 h-4 transition-transform ${collapsedInboxSections.has(leadsSubTab) ? "-rotate-90" : ""}`} />
+                        onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
+                        className={`font-bebas text-xs tracking-widest px-2.5 py-1 border transition-colors ${
+                          bulkSelectMode ? 'bg-forest text-cream border-forest' : 'border-gold/40 text-ink/60 hover:border-gold hover:text-ink'
+                        }`}>
+                        {bulkSelectMode ? 'CANCEL' : 'SELECT'}
                       </button>
                     </div>
+                  </div>
+                  {/* Add Enquiry / Import buttons */}
+                  <div className="flex gap-2 mb-2">
                     <button
-                      onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
-                      className={`font-bebas text-xs tracking-widest px-2.5 py-1 border transition-colors ${
-                        bulkSelectMode ? 'bg-forest text-cream border-forest' : 'border-gold/40 text-ink/60 hover:border-gold hover:text-ink'
-                      }`}>
-                      {bulkSelectMode ? 'CANCEL' : 'SELECT'}
+                      onClick={() => setShowAddLead(true)}
+                      className="flex-1 bg-sage-green text-white font-inter font-medium text-sm py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-sage-dark transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Enquiry
+                    </button>
+                    <button
+                      onClick={() => setShowCsvImport(true)}
+                      title="Import from CSV"
+                      className="px-3 py-2 rounded-xl border border-gold/40 text-ink/60 hover:border-gold hover:text-ink hover:bg-white/60 transition-colors text-xs font-inter font-medium flex items-center gap-1.5"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> CSV
                     </button>
                   </div>
-                  {/* Add Enquiry button */}
-                  <button
-                    onClick={() => setShowAddLead(true)}
-                    className="w-full mb-2 bg-sage-green text-white font-inter font-medium text-sm py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-sage-dark transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Enquiry
-                  </button>
                   <div className="relative mb-2">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/60" />
                     <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
@@ -1278,11 +1403,45 @@ export default function Dashboard() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="font-inter text-xs">All Statuses</SelectItem>
-                      {PIPELINE_STAGES.map(s => (
+                      {pipelineStages.map(s => (
                         <SelectItem key={s.key} value={s.key} className="font-inter text-xs">{s.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {/* Date range filter */}
+                  <Select value={leadDateFilter} onValueChange={(v: any) => { setLeadDateFilter(v); if (v !== "custom") { setCustomDateFrom(""); setCustomDateTo(""); } }}>
+                    <SelectTrigger className={`mt-2 rounded-xl border text-xs font-inter font-medium focus:ring-1 focus:ring-sage-green/40 transition-colors ${
+                      leadDateFilter !== "all"
+                        ? "border-sage-green bg-sage-green/10 text-sage-dark"
+                        : "border-gray-200 bg-white text-ink"
+                    }`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="font-inter text-xs">All Time</SelectItem>
+                      <SelectItem value="month" className="font-inter text-xs">This Month</SelectItem>
+                      <SelectItem value="year" className="font-inter text-xs">This Year</SelectItem>
+                      <SelectItem value="custom" className="font-inter text-xs">Custom Range</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {leadDateFilter === "custom" && (
+                    <div className="flex gap-1.5 mt-1.5">
+                      <input
+                        type="date"
+                        value={customDateFrom}
+                        onChange={e => setCustomDateFrom(e.target.value)}
+                        className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink focus:outline-none focus:border-sage-green"
+                        placeholder="From"
+                      />
+                      <input
+                        type="date"
+                        value={customDateTo}
+                        onChange={e => setCustomDateTo(e.target.value)}
+                        className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink focus:outline-none focus:border-sage-green"
+                        placeholder="To"
+                      />
+                    </div>
+                  )}
                   {/* Sort controls */}
                   <div className="flex items-center gap-1.5 mt-2">
                     <Select value={leadSortBy} onValueChange={(v: any) => setLeadSortBy(v)}>
@@ -1318,7 +1477,79 @@ export default function Dashboard() {
                     </label>
                   </div>
                 )}
-                {!collapsedInboxSections.has(leadsSubTab) && <div className="flex-1 overflow-auto divide-y divide-border/40">
+                {/* ── TABLE VIEW ─────────────────────────────────────── */}
+                {leadViewMode === "table" && (
+                  <div className="flex-1 overflow-auto">
+                    {filteredLeads.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
+                        <p className="font-dm text-sage text-sm">No records found</p>
+                      </div>
+                    ) : (
+                      <table className="w-full text-sm border-collapse min-w-[700px]">
+                        <thead className="sticky top-0 bg-cream z-10 border-b border-gold/20">
+                          <tr>
+                            {bulkSelectMode && <th className="w-10 px-3 py-2"><input type="checkbox" checked={selectedLeadIds.size === filteredLeads.length} onChange={e => setSelectedLeadIds(e.target.checked ? new Set(filteredLeads.map((l: any) => l.id)) : new Set())} className="w-3.5 h-3.5 accent-forest" /></th>}
+                            {[
+                              { key: "name", label: "Name" },
+                              { key: "event", label: "Event" },
+                              { key: "event_date", label: "Date" },
+                              { key: "guests", label: "Guests" },
+                              { key: "status", label: "Status" },
+                              { key: "enquiry_date", label: "Enquiry" },
+                            ].map(col => (
+                              <th key={col.key}
+                                onClick={() => { if (["event_date","status","enquiry_date"].includes(col.key)) { setLeadSortBy(col.key === "enquiry_date" ? "enquiry_date" : col.key as any); setLeadSortDir(d => d === "asc" ? "desc" : "asc"); } }}
+                                className={`px-3 py-2.5 text-left font-bebas tracking-widest text-xs text-ink/60 whitespace-nowrap ${["event_date","status","enquiry_date"].includes(col.key) ? "cursor-pointer hover:text-ink select-none" : ""}`}>
+                                {col.label}
+                                {(col.key === "event_date" && leadSortBy === "event_date") || (col.key === "enquiry_date" && leadSortBy === "enquiry_date") || (col.key === "status" && leadSortBy === "status")
+                                  ? <span className="ml-1 opacity-60">{leadSortDir === "asc" ? "↑" : "↓"}</span> : null}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/30">
+                          {filteredLeads.map((lead: any) => {
+                            const statusStage = pipelineStages.find(s => s.key === lead.status);
+                            return (
+                              <tr key={lead.id}
+                                onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
+                                className={`hover:bg-linen transition-colors cursor-pointer border-l-4 ${selectedLead?.id === lead.id ? "bg-forest/5" : ""} ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}
+                                style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
+                                {bulkSelectMode && (
+                                  <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                                    <input type="checkbox" checked={selectedLeadIds.has(lead.id)}
+                                      onChange={e => { setSelectedLeadIds(prev => { const n = new Set(prev); e.target.checked ? n.add(lead.id) : n.delete(lead.id); return n; }); }}
+                                      className="w-3.5 h-3.5 accent-forest cursor-pointer" />
+                                  </td>
+                                )}
+                                <td className="px-3 py-2.5 font-cormorant font-semibold text-ink whitespace-nowrap">{lead.firstName} {lead.lastName}</td>
+                                <td className="px-3 py-2.5 font-dm text-xs text-ink/70 max-w-[200px] truncate">{lead.eventType || lead.message?.split(" | ")?.[0]?.replace("Event: ","") || "—"}</td>
+                                <td className="px-3 py-2.5 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" }) : "—"}</td>
+                                <td className="px-3 py-2.5 font-dm text-xs text-ink/60 text-right">{lead.guestCount ?? "—"}</td>
+                                <td className="px-3 py-2.5">
+                                  <span
+                                    className="font-bebas text-xs tracking-widest px-1.5 py-0.5 border"
+                                    style={{
+                                      backgroundColor: statusStage?.swatch ? `${statusStage.swatch}18` : undefined,
+                                      borderColor: statusStage?.swatch ?? '#d4c5a9',
+                                      color: statusStage?.swatch ?? '#5a4a3a',
+                                    }}
+                                  >
+                                    {statusStage?.label ?? lead.status.replace(/_/g, " ")}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5 font-dm text-xs text-ink/50 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+                {/* ── LIST VIEW ──────────────────────────────────────── */}
+                {leadViewMode === "list" && !collapsedInboxSections.has(leadsSubTab) && <div className="flex-1 overflow-auto divide-y divide-border/40">
                   {filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
@@ -1343,11 +1574,12 @@ export default function Dashboard() {
                         </label>
                       )}
                     <button onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                      className={`flex-1 p-4 text-left hover:bg-linen transition-colors ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5 border-l-2 border-gold" : "border-l-2 border-transparent"}`}>
+                      className={`flex-1 p-4 text-left hover:bg-linen transition-colors border-l-4 ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5" : ""}`}
+                      style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
                       <div className="flex items-start justify-between mb-1">
                         <div className="font-cormorant font-semibold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
-                        <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border flex-shrink-0 ml-2 ${PIPELINE_STAGES.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
-                          {lead.status === 'booked' ? 'CONFIRMED' : lead.status.replace(/_/g, " ").toUpperCase()}
+                        <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border flex-shrink-0 ml-2 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
+                          {pipelineStages.find(s => s.key === lead.status)?.label ?? lead.status.replace(/_/g, " ").toUpperCase()}
                         </div>
                       </div>
                       <div className="font-dm text-xs text-ink/60 truncate">{lead.email}</div>
@@ -1376,6 +1608,65 @@ export default function Dashboard() {
                   ))}
                 </div>}
               </div>
+              {/* ── KANBAN VIEW ──────────────────────────────────────────── */}
+              {leadViewMode === "kanban" && (
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="px-6 py-3 border-b border-gold/15 bg-cream flex-shrink-0 flex items-center gap-3">
+                    <div className="flex border border-gold/30 rounded-lg overflow-hidden">
+                      {([
+                        { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
+                        { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
+                        { mode: "kanban" as const, icon: <Columns className="w-3.5 h-3.5" />, title: "Kanban view" },
+                      ]).map(({ mode, icon, title }) => (
+                        <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
+                          title={title}
+                          className={`px-2 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/50 hover:bg-linen hover:text-ink"}`}>
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                    <h2 className="font-cormorant text-xl font-semibold text-ink">Pipeline</h2>
+                    <span className="font-dm text-xs text-ink/40">{filteredLeads.length} records</span>
+                  </div>
+                  <div className="flex-1 overflow-x-auto p-6">
+                    <div className="flex gap-4 min-w-max h-full">
+                      {pipelineStages.map(stage => {
+                        const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
+                        return (
+                          <div key={stage.key} className="w-64 flex-shrink-0 flex flex-col">
+                            <div
+                              className="font-bebas text-xs tracking-widest px-3 py-2 border mb-2 flex-shrink-0"
+                              style={{
+                                backgroundColor: stage.swatch ? `${stage.swatch}18` : undefined,
+                                borderColor: stage.swatch ?? '#d4c5a9',
+                                color: stage.swatch ?? '#5a4a3a',
+                              }}
+                            >
+                              {stage.label} <span className="opacity-60">({stageLeads.length})</span>
+                            </div>
+                            <div className="space-y-2 overflow-y-auto flex-1">
+                              {stageLeads.map((lead: any) => (
+                                <div key={lead.id} onClick={() => selectLead(lead)}
+                                  className="dante-card p-3 cursor-pointer hover:border-gold/40 transition-colors bg-white">
+                                  <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
+                                  <div className="font-dm text-xs text-sage mt-0.5">{lead.eventType || "Event"}</div>
+                                  {lead.eventDate && <div className="font-dm text-xs text-ink/50 mt-0.5">{new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}</div>}
+                                  {lead.guestCount && <div className="font-dm text-xs text-ink/50">{lead.guestCount} guests</div>}
+                                </div>
+                              ))}
+                              {stageLeads.length === 0 && (
+                                <div className="border border-dashed border-gold/20 p-4 text-center">
+                                  <p className="font-dm text-xs text-sage/40">No records</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Floating Bulk Action Toolbar */}
               {bulkSelectMode && selectedLeadIds.size > 0 && (
                 <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
@@ -1383,7 +1674,7 @@ export default function Dashboard() {
                   <span className="text-cream/30">|</span>
                   <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
                   <div className="flex items-center gap-1.5">
-                    {PIPELINE_STAGES.map(s => (
+                    {pipelineStages.map(s => (
                       <button key={s.key}
                         onClick={() => bulkUpdateStatus.mutate({ ids: Array.from(selectedLeadIds), status: s.key as any })}
                         disabled={bulkUpdateStatus.isPending}
@@ -1403,6 +1694,13 @@ export default function Dashboard() {
                   <button onClick={() => { setSelectedLeadIds(new Set()); setBulkSelectMode(false); }}
                     className="ml-2 text-cream/50 hover:text-cream font-bebas text-xs tracking-widest">
                     CLEAR
+                  </button>
+                  <span className="text-cream/30">|</span>
+                  <button
+                    onClick={() => setShowBulkDeleteConfirm(true)}
+                    className="font-bebas text-xs tracking-widest px-2.5 py-1.5 border border-red-400/50 text-red-400 hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors"
+                  >
+                    DELETE
                   </button>
                 </div>
               )}
@@ -1523,7 +1821,7 @@ export default function Dashboard() {
                         </div>
                       )}
                       <div className="space-y-1.5">
-                        {PIPELINE_STAGES.map(stage => (
+                        {pipelineStages.map(stage => (
                           <button key={stage.key}
                             onClick={() => updateStatus.mutate({ id: selectedLead.id, status: stage.key as any })}
                             className={`w-full text-left px-3 py-2 rounded-lg border font-inter text-xs font-medium transition-all ${
@@ -1715,7 +2013,7 @@ export default function Dashboard() {
               <div className="gold-rule max-w-xs mb-3"><span>CRM</span></div>
               <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Pipeline</h1>
               <div className="flex gap-4 min-w-max">
-                {PIPELINE_STAGES.slice(0, 5).map(stage => {
+                {pipelineStages.slice(0, 5).map(stage => {
                   const stageLeads = (allLeads ?? []).filter((l: any) => l.status === stage.key);
                   return (
                     <div key={stage.key} className="w-64 flex-shrink-0">
@@ -2942,11 +3240,155 @@ export default function Dashboard() {
               {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
               {settingsSubTab === "lead-form" && (
               <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Contact Form</h1>
+                <div className="flex items-center justify-between mb-6">
+                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Contact Form</h1>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Form link copied!'); }}
+                      className="flex items-center gap-2 border border-gold/30 text-ink text-sm px-4 py-2 hover:bg-gold/10 font-bebas tracking-widest">
+                      <Copy className="w-4 h-4" /> COPY LINK
+                    </button>
+                    <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
+                      className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1.5">
+                      <ExternalLink className="w-3.5 h-3.5" /> OPEN FORM
+                    </a>
+                  </div>
+                </div>
 
-              {/* Form branding editor */}
               {settingsForm && (
-              <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-4">
+              <form onSubmit={e => {
+                e.preventDefault();
+                updateSettings.mutate({
+                  logoUrl: settingsForm.logoUrl,
+                  primaryColor: settingsForm.primaryColor,
+                  formFont: settingsForm.formFont,
+                  formGalleryImages: settingsForm.formGalleryImages,
+                  leadFormTitle: settingsForm.leadFormTitle,
+                  leadFormSubtitle: settingsForm.leadFormSubtitle,
+                  ...(formFields ? { customFormFields: JSON.stringify(formFields) } : {}),
+                });
+              }} className="space-y-4">
+
+                {/* ── BRANDING ── */}
+                <div className="dante-card p-5 space-y-5">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage">BRANDING</h2>
+
+                  {/* Logo */}
+                  <div className="flex items-start gap-4">
+                    <div className="w-20 h-20 rounded border-2 border-dashed border-gold/40 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
+                      {settingsForm.logoUrl ? (
+                        <img src={settingsForm.logoUrl} alt="logo" className="w-full h-full object-contain" />
+                      ) : (
+                        <span className="text-[10px] text-gray-400 text-center px-1">No logo</span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">LOGO</label>
+                      <input type="file" accept="image/*"
+                        onChange={async e => {
+                          const file = e.target.files?.[0]; if (!file) return;
+                          const fd = new FormData(); fd.append('file', file);
+                          const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                          const { url } = await res.json();
+                          setSettingsForm((f: any) => ({ ...f, logoUrl: url }));
+                          toast.success('Logo uploaded!');
+                        }}
+                        className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
+                      <p className="font-dm text-xs text-ink/40 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
+                      {settingsForm.logoUrl && (
+                        <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, logoUrl: '' }))}
+                          className="mt-1 font-dm text-xs text-red-400 hover:text-red-600">Remove logo</button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Colour + Font row */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">HEADER COLOUR</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
+                          className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
+                        <Input value={settingsForm.primaryColor ?? '#2D4A3E'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
+                          placeholder="#2D4A3E" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2 flex items-center gap-1"><Type className="w-3 h-3" /> FONT</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {FORM_FONTS.map(font => (
+                          <button key={font.key} type="button"
+                            onClick={() => setSettingsForm((f: any) => ({ ...f, formFont: font.key }))}
+                            className={`text-left px-3 py-2 border text-xs transition-colors ${(settingsForm.formFont ?? 'inter') === font.key ? 'border-forest bg-forest/5 text-forest' : 'border-gold/30 hover:border-gold/60'}`}>
+                            <div className="font-dm font-semibold">{font.label}</div>
+                            <div className="text-ink/40">{font.sub}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Live preview */}
+                  <div className="border border-gold/20 overflow-hidden rounded">
+                    <div className="px-6 py-5 text-center" style={{ backgroundColor: settingsForm.primaryColor ?? '#2D4A3E' }}>
+                      {settingsForm.logoUrl && <img src={settingsForm.logoUrl} alt="logo" className="h-10 w-auto object-contain mx-auto mb-2" />}
+                      <div className="text-base font-bold text-white">{venueSettings?.name ?? 'Your Venue'}</div>
+                      <div className="text-sm text-white/80 mt-0.5">{settingsForm.leadFormTitle || 'Book Your Event'}</div>
+                    </div>
+                    <div className="bg-gray-50 py-1.5 text-center text-[10px] text-gray-400 font-bebas tracking-widest">HEADER PREVIEW</div>
+                  </div>
+                </div>
+
+                {/* ── PHOTOS ── */}
+                <div className="dante-card p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage">PHOTOS</h2>
+                    <span className="font-dm text-xs text-ink/40">
+                      {(() => { try { return JSON.parse(settingsForm.formGalleryImages || '[]').length; } catch { return 0; } })()} / 6 photos
+                    </span>
+                  </div>
+                  <p className="font-dm text-xs text-ink/50">Photos display as a gallery strip on your public contact form.</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {(() => {
+                      let imgs: string[] = [];
+                      try { imgs = JSON.parse(settingsForm.formGalleryImages || '[]'); } catch {}
+                      return [
+                        ...imgs.map((url, i) => (
+                          <div key={i} className="relative group aspect-video bg-gray-100 overflow-hidden border border-gold/20">
+                            <img src={url} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover" />
+                            <button type="button"
+                              onClick={() => {
+                                const newImgs = imgs.filter((_, j) => j !== i);
+                                setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify(newImgs) }));
+                              }}
+                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )),
+                        imgs.length < 6 ? (
+                          <label key="add" className="aspect-video bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors">
+                            <Upload className="w-5 h-5 text-ink/30 mb-1" />
+                            <span className="font-dm text-xs text-ink/40">Upload photo</span>
+                            <input type="file" accept="image/*" className="hidden"
+                              onChange={async e => {
+                                const file = e.target.files?.[0]; if (!file) return;
+                                const fd = new FormData(); fd.append('file', file);
+                                const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                                const { url } = await res.json();
+                                const current: string[] = (() => { try { return JSON.parse(settingsForm.formGalleryImages || '[]'); } catch { return []; } })();
+                                setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify([...current, url]) }));
+                                toast.success('Photo added!');
+                              }} />
+                          </label>
+                        ) : null,
+                      ];
+                    })()}
+                  </div>
+                </div>
+
+                {/* ── CONTENT ── */}
                 <div className="dante-card p-5 space-y-4">
                   <h2 className="font-bebas text-xs tracking-widest text-sage">FORM CONTENT</h2>
                   <div>
@@ -2961,48 +3403,107 @@ export default function Dashboard() {
                       rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                   </div>
                 </div>
-                <div className="dante-card p-5 space-y-4">
-                  <h2 className="font-bebas text-xs tracking-widest text-sage">FORM BRANDING</h2>
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">HEADER COLOUR</label>
-                      <div className="flex items-center gap-2">
-                        <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
-                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
-                          className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
-                        <Input value={settingsForm.primaryColor ?? '#2D4A3E'}
-                          onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
-                          placeholder="#2D4A3E" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+
+                {/* ── FORM FIELDS ── */}
+                <div className="dante-card p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage">FORM FIELDS</h2>
+                    <span className="font-dm text-xs text-ink/40">Toggle visibility, required, and labels</span>
+                  </div>
+                  {formFields && (
+                    <div className="border border-gold/20 divide-y divide-gold/10">
+                      {/* Header */}
+                      <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-linen">
+                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/40">VIS</div>
+                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/40">REQ</div>
+                        <div className="col-span-5 font-bebas text-[9px] tracking-widest text-ink/40">LABEL</div>
+                        <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">TYPE</div>
+                        <div className="col-span-3"></div>
                       </div>
-                      <p className="font-dm text-xs text-ink/40 mt-1">Used as the form header background colour</p>
-                    </div>
-                    {/* Live preview swatch */}
-                    <div className="flex-1">
-                      <div className="rounded border border-gold/20 overflow-hidden">
-                        <div className="p-4 text-center" style={{ backgroundColor: settingsForm.primaryColor ?? '#2D4A3E' }}>
-                          <div className="text-xs font-bold" style={{ color: '#ffffff' }}>{settingsForm.leadFormTitle || 'Book Your Event'}</div>
-                          <div className="text-xs mt-0.5 opacity-70" style={{ color: '#ffffff' }}>{venueSettings?.name ?? 'Your Venue'}</div>
+                      {formFields.map((field, i) => (
+                        <div key={field.id} className={`grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm ${!field.visible ? 'opacity-50' : ''}`}>
+                          {/* Visible toggle */}
+                          <div className="col-span-1">
+                            <button type="button" onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, visible: !f.visible } : f) : prev)}
+                              className={`${field.visible ? 'text-forest' : 'text-ink/30'} hover:opacity-80 transition-colors`}>
+                              {field.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          {/* Required toggle */}
+                          <div className="col-span-1">
+                            <button type="button"
+                              disabled={field.id === 'firstName' || field.id === 'email'}
+                              onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, required: !f.required } : f) : prev)}
+                              className={`${field.required ? 'text-amber-500' : 'text-ink/20'} hover:opacity-80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed`}>
+                              <Lock className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {/* Label */}
+                          <div className="col-span-5">
+                            <input type="text" value={field.label}
+                              onChange={e => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, label: e.target.value } : f) : prev)}
+                              className="w-full text-sm font-dm text-ink bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5 rounded-sm" />
+                          </div>
+                          {/* Type badge */}
+                          <div className="col-span-2">
+                            <span className="font-bebas text-[10px] tracking-wide text-ink/40 bg-linen px-1.5 py-0.5">{field.type}</span>
+                          </div>
+                          {/* Actions */}
+                          <div className="col-span-3 flex items-center gap-1 justify-end">
+                            <button type="button" disabled={i === 0}
+                              onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })}
+                              className="text-ink/30 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              <MoveUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button type="button" disabled={i === formFields.length - 1}
+                              onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })}
+                              className="text-ink/30 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              <MoveDown className="w-3.5 h-3.5" />
+                            </button>
+                            {!field.isDefault && (
+                              <button type="button"
+                                onClick={() => setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
+                                className="text-ink/30 hover:text-red-500 transition-colors p-0.5">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div className="bg-gray-50 p-2 text-center">
-                          <div className="text-xs text-gray-400">Preview</div>
-                        </div>
-                      </div>
+                      ))}
                     </div>
+                  )}
+                  {/* Add custom field */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Input value={newCustomFieldLabel} onChange={e => setNewCustomFieldLabel(e.target.value)}
+                      placeholder="New field label..."
+                      className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm" />
+                    <select value={newCustomFieldType} onChange={e => setNewCustomFieldType(e.target.value as FormFieldDef['type'])}
+                      className="border border-gold/30 text-sm font-dm px-2 py-2 focus:outline-none focus:border-forest">
+                      <option value="text">Text</option>
+                      <option value="number">Number</option>
+                      <option value="date">Date</option>
+                      <option value="textarea">Paragraph</option>
+                    </select>
+                    <Button type="button"
+                      onClick={() => {
+                        if (!newCustomFieldLabel.trim()) return;
+                        const newField: FormFieldDef = {
+                          id: `custom_${Date.now()}`,
+                          label: newCustomFieldLabel.trim(),
+                          type: newCustomFieldType,
+                          required: false,
+                          visible: true,
+                          isDefault: false,
+                        };
+                        setFormFields(prev => prev ? [...prev, newField] : [newField]);
+                        setNewCustomFieldLabel('');
+                      }}
+                      className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-3 gap-1">
+                      <Plus className="w-3.5 h-3.5" /> ADD
+                    </Button>
                   </div>
                 </div>
-                <div className="dante-card p-5">
-                  <h2 className="font-bebas text-xs tracking-widest text-sage mb-3">FORM LINK</h2>
-                  <p className="font-dm text-sm text-ink/70 mb-3">Your public enquiry form is available at:</p>
-                  <div className="flex items-center gap-2 bg-gold/5 border border-gold/20 rounded px-3 py-2">
-                    <span className="font-mono text-sm text-ink/70 flex-1 truncate">{window.location.origin}/enquire/{venueSettings?.slug || 'your-venue'}</span>
-                    <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Link copied!'); }}
-                      className="font-bebas tracking-widest text-xs px-3 py-1 border border-gold/30 text-ink hover:bg-gold/10 flex-shrink-0">COPY</button>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
-                      className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream">OPEN FORM</a>
-                  </div>
-                </div>
+
                 <button type="submit" disabled={updateSettings.isPending}
                   className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
                   {updateSettings.isPending ? 'SAVING...' : 'SAVE CHANGES'}
@@ -3754,107 +4255,6 @@ export default function Dashboard() {
               )}
 
               {/* ── GROUP CONTACT FORM ──────────────────────────── */}
-              {settingsSubTab === "group-contact-form" && settingsForm && (
-              <div className="max-w-3xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
-                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Group Contact Form</h1>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Form link copied!'); }}
-                      className="flex items-center gap-2 border border-gold/30 text-ink text-sm px-4 py-2 hover:bg-gold/10 font-bebas tracking-widest">
-                      <ExternalLink className="w-4 h-4" /> COPY FORM LINK
-                    </button>
-                    <a href={`/enquire/${venueSettings?.slug || ''}`} target="_blank" rel="noopener noreferrer"
-                      className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream">OPEN FORM</a>
-                  </div>
-                </div>
-
-                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-4">
-                  {/* Logo upload */}
-                  <div className="dante-card p-5">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">LOGO</h2>
-                    <div className="flex items-center gap-4">
-                      <div className="w-20 h-20 rounded-full border-2 border-dashed border-gold/40 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
-                        {settingsForm.logoUrl ? (
-                          <img src={settingsForm.logoUrl} alt="logo" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-xs text-gray-400 text-center px-2">No logo</span>
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">UPLOAD LOGO</label>
-                        <input type="file" accept="image/*"
-                          onChange={async e => {
-                            const file = e.target.files?.[0]; if (!file) return;
-                            const fd = new FormData(); fd.append('file', file);
-                            const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                            const { url } = await res.json();
-                            setSettingsForm((f: any) => ({ ...f, logoUrl: url }));
-                            toast.success('Logo uploaded!');
-                          }}
-                          className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
-                        <p className="font-dm text-xs text-ink/40 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Banner image upload */}
-                  <div className="dante-card p-5">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">BANNER IMAGE</h2>
-                    <div
-                      className="w-full h-28 border-2 border-dashed border-gold/40 rounded flex items-center justify-center overflow-hidden bg-gray-50 mb-3 relative cursor-pointer"
-                      onClick={() => document.getElementById('banner-upload')?.click()}
-                    >
-                      {settingsForm.coverImageUrl ? (
-                        <img src={settingsForm.coverImageUrl} alt="banner" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-xs text-gray-400">Click to upload banner (recommended: 1500 × 250px)</span>
-                      )}
-                    </div>
-                    <input id="banner-upload" type="file" accept="image/*" className="hidden"
-                      onChange={async e => {
-                        const file = e.target.files?.[0]; if (!file) return;
-                        const fd = new FormData(); fd.append('file', file);
-                        const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                        const { url } = await res.json();
-                        setSettingsForm((f: any) => ({ ...f, coverImageUrl: url }));
-                        toast.success('Banner uploaded!');
-                      }}
-                    />
-                    <p className="font-dm text-xs text-ink/40">Recommended size: 1500 × 250px. JPG or PNG.</p>
-                  </div>
-
-                  {/* Colours */}
-                  <div className="dante-card p-5 space-y-4">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage">FORM COLOURS</h2>
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">HEADER / BUTTON COLOUR</label>
-                        <div className="flex items-center gap-2">
-                          <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
-                            onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
-                            className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
-                          <Input value={settingsForm.primaryColor ?? '#2D4A3E'}
-                            onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
-                            placeholder="#2D4A3E" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
-                        </div>
-                      </div>
-                      {/* Preview swatch */}
-                      <div className="flex-1">
-                        <div className="rounded border border-gold/20 overflow-hidden">
-                          <div className="h-10" style={{ backgroundColor: settingsForm.primaryColor ?? '#2D4A3E' }} />
-                          <div className="bg-gray-50 p-2 text-center text-xs text-gray-400">Header preview</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button type="submit" disabled={updateSettings.isPending}
-                    className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
-                    {updateSettings.isPending ? 'SAVING...' : 'SAVE CHANGES'}
-                  </button>
-                </form>
-              </div>
-              )}
 
               {/* ── FLOOR PLANS ─────────────────────────────────── */}
               {settingsSubTab === "floor-plans" && (
@@ -3875,12 +4275,20 @@ export default function Dashboard() {
                         key={editingFloorPlan.id ?? 'new'}
                         initialData={editingFloorPlan.canvasData ?? undefined}
                         name={editingFloorPlan.name ?? 'Floor Plan'}
+                        bgImageUrl={editingFloorPlan.bgImageUrl ?? undefined}
                         isSaving={saveFloorPlan.isPending}
-                        onSave={(canvasData: CanvasData, name: string) => {
+                        planId={editingFloorPlan.id ?? undefined}
+                        shareToken={editingFloorPlan.shareToken ?? undefined}
+                        onShareTokenGenerated={(token: string) => {
+                          setEditingFloorPlan((prev: any) => ({ ...prev, shareToken: token }));
+                          refetchFloorPlans();
+                        }}
+                        onSave={(canvasData: CanvasData, name: string, bgImageUrl?: string) => {
                           saveFloorPlan.mutate({
                             id: editingFloorPlan.id ?? undefined,
                             name,
                             canvasData,
+                            bgImageUrl,
                           });
                         }}
                       />
@@ -4357,6 +4765,19 @@ export default function Dashboard() {
               </div>
               )}
 
+              {settingsSubTab === "statuses" && (
+              <div className="max-w-2xl mx-auto">
+                <h1 className="font-cormorant text-ink mb-2" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Enquiry Statuses</h1>
+                <p className="text-sm text-gray-500 mb-6">Define the pipeline stages your enquiries move through. Rename, reorder, add or remove stages to match your workflow.</p>
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <StatusManager
+                    initialStatuses={parseCustomStatuses((venueSettings as any)?.customStatuses)}
+                    onSaved={() => refetchSettings()}
+                  />
+                </div>
+              </div>
+              )}
+
               {settingsSubTab === "billing" && (
               <div className="max-w-3xl mx-auto">
                 <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Billing</h1>
@@ -4562,6 +4983,39 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
+      {/* Bulk Delete Confirmation */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedLeadIds.size} enquir{selectedLeadIds.size === 1 ? 'y' : 'ies'}?</h3>
+            <p className="text-sm text-gray-500 mb-6">This will permanently remove the selected enquiries and all their activity history. This cannot be undone.</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => bulkDelete.mutate({ ids: Array.from(selectedLeadIds) })}
+                disabled={bulkDelete.isPending}
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg disabled:opacity-50 transition-colors"
+              >
+                {bulkDelete.isPending ? 'Deleting…' : `Delete ${selectedLeadIds.size}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
+      {showCsvImport && (
+        <CsvImportModal
+          onClose={() => setShowCsvImport(false)}
+          onImported={() => { refetchLeads(); }}
+        />
+      )}
+
       {/* Add Enquiry Modal */}
       <Dialog open={showAddLead} onOpenChange={setShowAddLead}>
         <DialogContent className="max-w-lg rounded-none border border-gold/30">
@@ -4642,7 +5096,7 @@ export default function Dashboard() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PIPELINE_STAGES.map(s => (
+                  {pipelineStages.map(s => (
                     <SelectItem key={s.key} value={s.key} className="font-bebas text-xs tracking-widest">{s.label}</SelectItem>
                   ))}
                 </SelectContent>

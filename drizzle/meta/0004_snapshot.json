@@ -1,6 +1,6 @@
 {
-  "id": "85693bdd-7147-4dac-8bb2-742a5d2506b2",
-  "prevId": "5aa5cc60-e217-46c6-b00c-205e87f81aad",
+  "id": "d5031854-25b6-4611-8d9d-6d8ce2d383ea",
+  "prevId": "7fe9cc04-1269-4b17-8883-eda2d9eb1497",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1178,6 +1178,12 @@
         "bgImageUrl": {
           "name": "bgImageUrl",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shareToken": {
+          "name": "shareToken",
+          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },
@@ -2865,6 +2871,76 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.setup_instructions": {
+      "name": "setup_instructions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "images": {
+          "name": "images",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'[]'::json"
+        },
+        "category": {
+          "name": "category",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'general'"
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.standalone_menu_items": {
       "name": "standalone_menu_items",
       "schema": "",
@@ -2961,6 +3037,62 @@
         },
         "created_at": {
           "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.table_setups": {
+      "name": "table_setups",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Table Setup'"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canvas_data": {
+          "name": "canvas_data",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
           "type": "bigint",
           "primaryKey": false,
           "notNull": true
@@ -3592,6 +3724,37 @@
         },
         "customStatuses": {
           "name": "customStatuses",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "customDietaryOptions": {
+          "name": "customDietaryOptions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "customSetupTemplates": {
+          "name": "customSetupTemplates",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "formFont": {
+          "name": "formFont",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'inter'"
+        },
+        "formGalleryImages": {
+          "name": "formGalleryImages",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "customFormFields": {
+          "name": "customFormFields",
           "type": "text",
           "primaryKey": false,
           "notNull": false

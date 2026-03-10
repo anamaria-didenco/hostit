@@ -1,5 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Trash2, RotateCw, ZoomIn, ZoomOut, Move, MousePointer, Download, Save, Plus } from "lucide-react";
+import {
+  Trash2, RotateCw, ZoomIn, ZoomOut, MousePointer,
+  Save, Plus, Share2, Copy, Check, Download, Upload, X,
+} from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type FPElement = {
@@ -19,6 +24,16 @@ export type CanvasData = {
   width: number;
   height: number;
   elements: FPElement[];
+};
+
+type CustomPaletteItem = {
+  type: string;
+  label: string;
+  w: number;
+  h: number;
+  color: string;
+  seats: number;
+  round: boolean;
 };
 
 // ─── Palette items ────────────────────────────────────────────────────────────
@@ -44,44 +59,31 @@ const PALETTE = [
   { type: "pillar", label: "Pillar", w: 24, h: 24, seats: 0, color: "#888", icon: "●" },
 ];
 
-const ELEMENT_COLORS: Record<string, string> = {
-  "round-table-6": "#d4b896",
-  "round-table-8": "#d4b896",
-  "rect-table-6": "#c8a97e",
-  "rect-table-8": "#c8a97e",
-  "rect-table-10": "#c8a97e",
-  "cocktail-table": "#b8956a",
-  "bar": "#8B4513",
-  "stage": "#4a4a4a",
-  "dance-floor": "#6b6b6b",
-  "dj-booth": "#333",
-  "chair": "#a0856c",
-  "sofa": "#8B7355",
-  "entrance": "#2d6a4f",
-  "plant": "#40916c",
-  "buffet": "#9c6644",
-  "photo-booth": "#7b2d8b",
-  "text": "#1a1a1a",
-  "wall": "#555",
-  "pillar": "#888",
-};
+const ELEMENT_COLORS: Record<string, string> = Object.fromEntries(PALETTE.map(p => [p.type, p.color]));
 
 function isRound(type: string) {
-  return type === "round-table-6" || type === "round-table-8" || type === "cocktail-table" || type === "chair" || type === "plant" || type === "pillar";
+  return ["round-table-6","round-table-8","cocktail-table","chair","plant","pillar"].includes(type)
+    || type.startsWith("custom-round");
 }
 
-function getLabel(type: string) {
-  return PALETTE.find(p => p.type === type)?.label ?? type;
+function getLabel(type: string, customPalette: CustomPaletteItem[]) {
+  return PALETTE.find(p => p.type === type)?.label
+    ?? customPalette.find(p => p.type === type)?.label
+    ?? type;
 }
 
 // ─── Render a single element on the canvas ───────────────────────────────────
-function ElementShape({ el, selected, onSelect, onDragStart }: {
+function ElementShape({ el, selected, onSelect, onDragStart, customPalette }: {
   el: FPElement;
   selected: boolean;
   onSelect: (id: string) => void;
   onDragStart: (e: React.MouseEvent, id: string) => void;
+  customPalette: CustomPaletteItem[];
 }) {
-  const color = el.color ?? ELEMENT_COLORS[el.type] ?? "#888";
+  const color = el.color
+    ?? ELEMENT_COLORS[el.type]
+    ?? customPalette.find(p => p.type === el.type)?.color
+    ?? "#888";
   const round = isRound(el.type);
   const borderRadius = round ? "50%" : el.type === "stage" || el.type === "dance-floor" ? "4px" : "3px";
   const isText = el.type === "text";
@@ -91,47 +93,29 @@ function ElementShape({ el, selected, onSelect, onDragStart }: {
       onMouseDown={(e) => { onSelect(el.id); onDragStart(e, el.id); }}
       style={{
         position: "absolute",
-        left: el.x,
-        top: el.y,
-        width: el.width,
-        height: el.height,
+        left: el.x, top: el.y, width: el.width, height: el.height,
         transform: `rotate(${el.rotation}deg)`,
         transformOrigin: "center center",
-        cursor: "grab",
-        userSelect: "none",
-        zIndex: selected ? 10 : 1,
+        cursor: "grab", userSelect: "none", zIndex: selected ? 10 : 1,
       }}
     >
       {isText ? (
         <div style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "12px",
-          fontWeight: 600,
-          color: color,
+          width: "100%", height: "100%",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "12px", fontWeight: 600, color,
           border: selected ? "2px dashed #C8102E" : "1px dashed #ccc",
-          borderRadius: "2px",
-          padding: "2px 4px",
-          whiteSpace: "nowrap",
-          overflow: "hidden",
+          borderRadius: "2px", padding: "2px 4px", whiteSpace: "nowrap", overflow: "hidden",
         }}>
           {el.label ?? "Label"}
         </div>
       ) : (
         <div style={{
-          width: "100%",
-          height: "100%",
-          backgroundColor: color,
+          width: "100%", height: "100%", backgroundColor: color,
           borderRadius,
           border: selected ? "2px solid #C8102E" : "1.5px solid rgba(0,0,0,0.2)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: "column",
-          gap: "1px",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexDirection: "column", gap: "1px",
           boxShadow: selected ? "0 0 0 2px rgba(200,16,46,0.3)" : "0 1px 3px rgba(0,0,0,0.15)",
         }}>
           {el.label && (
@@ -156,37 +140,58 @@ interface FloorPlanEditorProps {
   onSave?: (data: CanvasData, name: string, bgImageUrl?: string) => void;
   isSaving?: boolean;
   readOnly?: boolean;
+  planId?: number;
+  shareToken?: string;
+  onShareTokenGenerated?: (token: string) => void;
 }
 
-export default function FloorPlanEditor({ initialData, name: initialName = "Floor Plan", bgImageUrl: initialBgImageUrl, onSave, isSaving, readOnly }: FloorPlanEditorProps) {
+export default function FloorPlanEditor({
+  initialData,
+  name: initialName = "Floor Plan",
+  bgImageUrl: initialBgImageUrl,
+  onSave,
+  isSaving,
+  readOnly,
+  planId,
+  shareToken: initialShareToken,
+  onShareTokenGenerated,
+}: FloorPlanEditorProps) {
   const [canvasData, setCanvasData] = useState<CanvasData>(initialData ?? { width: 900, height: 600, elements: [] });
   const [planName, setPlanName] = useState(initialName);
   const [bgImageUrl, setBgImageUrl] = useState(initialBgImageUrl ?? "");
   const [bgOpacity, setBgOpacity] = useState(0.3);
   const [selected, setSelected] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [tool, setTool] = useState<"select" | "pan">("select");
-  const [editingLabel, setEditingLabel] = useState(false);
-  const [labelValue, setLabelValue] = useState("");
+  const [tool] = useState<"select">("select");
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const GRID = 20;
 
+  // Share state
+  const [shareToken, setShareToken] = useState(initialShareToken ?? "");
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  // Custom palette items
+  const [customPalette, setCustomPalette] = useState<CustomPaletteItem[]>([]);
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customForm, setCustomForm] = useState({ label: "", w: 80, h: 80, color: "#5b7c6c", seats: 0, round: false });
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
-  const panRef = useRef<{ startX: number; startY: number; origScrollX: number; origScrollY: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const snap = useCallback((v: number) => snapToGrid ? Math.round(v / GRID) * GRID : v, [snapToGrid]);
 
-  // ── Drag element ─────────────────────────────────────────────────────────
+  // ── Drag element ────────────────────────────────────────────────────────
   const handleDragStart = useCallback((e: React.MouseEvent, id: string) => {
-    if (readOnly || tool !== "select") return;
+    if (readOnly) return;
     e.preventDefault();
     const el = canvasData.elements.find(x => x.id === id);
     if (!el) return;
     dragRef.current = { id, startX: e.clientX, startY: e.clientY, origX: el.x, origY: el.y };
-  }, [canvasData.elements, tool, readOnly]);
+  }, [canvasData.elements, readOnly]);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -209,11 +214,29 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
   }, [zoom, snap]);
 
   // ── Drop from palette ────────────────────────────────────────────────────
+  const addItem = useCallback((type: string, palette: typeof PALETTE[0] | CustomPaletteItem, atCenter = false) => {
+    const w = palette.w; const h = palette.h;
+    const x = atCenter ? snap(canvasData.width / 2 - w / 2) : snap(40);
+    const y = atCenter ? snap(canvasData.height / 2 - h / 2) : snap(40);
+    const newEl: FPElement = {
+      id: `${type}-${Date.now()}`,
+      type,
+      x: Math.max(0, x), y: Math.max(0, y),
+      width: w, height: h,
+      rotation: 0,
+      label: palette.label,
+      color: palette.color,
+      seats: palette.seats,
+    };
+    setCanvasData(prev => ({ ...prev, elements: [...prev.elements, newEl] }));
+    setSelected(newEl.id);
+  }, [canvasData.width, canvasData.height, snap]);
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const type = e.dataTransfer.getData("fp-type");
     if (!type) return;
-    const palette = PALETTE.find(p => p.type === type);
+    const palette = PALETTE.find(p => p.type === type) ?? customPalette.find(p => p.type === type);
     if (!palette) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -222,10 +245,8 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
     const newEl: FPElement = {
       id: `${type}-${Date.now()}`,
       type,
-      x: Math.max(0, x),
-      y: Math.max(0, y),
-      width: palette.w,
-      height: palette.h,
+      x: Math.max(0, x), y: Math.max(0, y),
+      width: palette.w, height: palette.h,
       rotation: 0,
       label: palette.label,
       color: palette.color,
@@ -233,7 +254,7 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
     };
     setCanvasData(prev => ({ ...prev, elements: [...prev.elements, newEl] }));
     setSelected(newEl.id);
-  }, [zoom, snap]);
+  }, [zoom, snap, customPalette]);
 
   // ── Selected element ─────────────────────────────────────────────────────
   const selectedEl = canvasData.elements.find(el => el.id === selected);
@@ -276,14 +297,98 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
     return () => window.removeEventListener("keydown", onKey);
   }, [selected]);
 
+  // ── Share & PDF ──────────────────────────────────────────────────────────
+  const generateLink = trpc.floorPlans.generateShareLink.useMutation({
+    onSuccess: (data) => {
+      setShareToken(data.token);
+      onShareTokenGenerated?.(data.token);
+      setShowShareDialog(true);
+    },
+    onError: () => toast.error("Failed to generate share link"),
+  });
+
+  const handleShare = () => {
+    if (shareToken) { setShowShareDialog(true); return; }
+    if (!planId) { toast.error("Save the floor plan first, then share it."); return; }
+    generateLink.mutate({ id: planId });
+  };
+
+  const shareUrl = shareToken ? `${window.location.origin}/floor-plan/share/${shareToken}` : "";
+
+  const handleDownloadPdf = async () => {
+    let token = shareToken;
+    if (!token) {
+      if (!planId) { toast.error("Save the floor plan first, then export to PDF."); return; }
+      setPdfLoading(true);
+      try {
+        const result = await new Promise<{ token: string }>((resolve, reject) => {
+          generateLink.mutate({ id: planId }, {
+            onSuccess: resolve,
+            onError: reject,
+          });
+        });
+        token = result.token;
+        setShareToken(token);
+        onShareTokenGenerated?.(token);
+      } catch {
+        toast.error("Could not generate share link for PDF");
+        setPdfLoading(false);
+        return;
+      }
+    }
+    setPdfLoading(true);
+    try {
+      const res = await fetch(`/api/floor-plan-pdf/${token}`);
+      if (!res.ok) throw new Error("PDF generation failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${planName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF downloaded!");
+    } catch {
+      toast.error("Failed to generate PDF");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // ── Custom item creator ──────────────────────────────────────────────────
+  const handleAddCustomItem = () => {
+    if (!customForm.label.trim()) { toast.error("Enter a label for the item"); return; }
+    const newItem: CustomPaletteItem = {
+      type: `custom-${customForm.round ? "round" : "rect"}-${Date.now()}`,
+      label: customForm.label.trim(),
+      w: Math.max(10, customForm.w),
+      h: Math.max(10, customForm.h),
+      color: customForm.color,
+      seats: customForm.seats,
+      round: customForm.round,
+    };
+    setCustomPalette(prev => [...prev, newItem]);
+    addItem(newItem.type, newItem, true);
+    setCustomForm({ label: "", w: 80, h: 80, color: "#5b7c6c", seats: 0, round: false });
+    setShowCustomForm(false);
+    toast.success(`"${newItem.label}" added`);
+  };
+
   const totalSeats = canvasData.elements.reduce((sum, el) => sum + (el.seats ?? 0), 0);
   const tableCount = canvasData.elements.filter(el => el.type.includes("table")).length;
 
   return (
     <div className="flex h-full" style={{ minHeight: 0 }}>
-      {/* ── Left palette ──────────────────────────────────────────────────── */}
+
+      {/* ── Left palette ────────────────────────────────────────────────── */}
       {!readOnly && (
-        <div className="w-44 bg-ivory border-r border-border flex flex-col flex-shrink-0 overflow-y-auto">
+        <div className="w-48 bg-ivory border-r border-border flex flex-col flex-shrink-0">
           <div className="px-3 py-2 border-b border-border">
             <p className="font-bebas tracking-widest text-xs text-sage">ELEMENTS</p>
             <p className="text-[10px] text-ink/40 mt-0.5">Drag onto canvas</p>
@@ -296,19 +401,114 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
                 onDragStart={e => e.dataTransfer.setData("fp-type", item.type)}
                 className="flex items-center gap-2 px-3 py-1.5 cursor-grab hover:bg-burgundy/5 transition-colors group"
               >
-                <span style={{ color: item.color, fontSize: "14px", flexShrink: 0 }}>{item.icon}</span>
+                <span style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.icon}</span>
                 <span className="font-dm text-xs text-ink/70 group-hover:text-ink truncate">{item.label}</span>
               </div>
             ))}
+
+            {/* Custom items */}
+            {customPalette.length > 0 && (
+              <>
+                <div className="px-3 pt-3 pb-1">
+                  <p className="font-bebas tracking-widest text-[10px] text-sage/60">CUSTOM</p>
+                </div>
+                {customPalette.map(item => (
+                  <div
+                    key={item.type}
+                    draggable
+                    onDragStart={e => e.dataTransfer.setData("fp-type", item.type)}
+                    className="flex items-center gap-2 px-3 py-1.5 cursor-grab hover:bg-burgundy/5 transition-colors group"
+                  >
+                    <span style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.round ? "●" : "▬"}</span>
+                    <span className="font-dm text-xs text-ink/70 group-hover:text-ink truncate flex-1">{item.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCustomPalette(prev => prev.filter(p => p.type !== item.type))}
+                      className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-400 transition-all flex-shrink-0"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* Custom item creator */}
+          <div className="border-t border-border">
+            {!showCustomForm ? (
+              <button
+                type="button"
+                onClick={() => setShowCustomForm(true)}
+                className="w-full flex items-center gap-1.5 px-3 py-2.5 text-xs font-bebas tracking-widest text-ink/50 hover:text-ink hover:bg-gold/5 transition-colors"
+              >
+                <Plus className="w-3 h-3" /> ADD CUSTOM ITEM
+              </button>
+            ) : (
+              <div className="p-3 space-y-2 bg-linen/60">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="font-bebas text-[10px] tracking-widest text-sage">NEW ITEM</p>
+                  <button type="button" onClick={() => setShowCustomForm(false)} className="text-ink/30 hover:text-ink">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={customForm.label}
+                  onChange={e => setCustomForm(f => ({ ...f, label: e.target.value }))}
+                  placeholder="Label (e.g. VIP Table)"
+                  className="w-full border border-border rounded px-2 py-1 text-xs font-dm focus:outline-none focus:border-gold"
+                />
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">W</label>
+                    <input type="number" value={customForm.w} onChange={e => setCustomForm(f => ({ ...f, w: parseInt(e.target.value) || 80 }))}
+                      className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">H</label>
+                    <input type="number" value={customForm.h} onChange={e => setCustomForm(f => ({ ...f, h: parseInt(e.target.value) || 80 }))}
+                      className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 items-end">
+                  <div>
+                    <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">COLOUR</label>
+                    <input type="color" value={customForm.color} onChange={e => setCustomForm(f => ({ ...f, color: e.target.value }))}
+                      className="w-full h-7 border border-border rounded cursor-pointer" />
+                  </div>
+                  <div>
+                    <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">SEATS</label>
+                    <input type="number" value={customForm.seats} min={0}
+                      onChange={e => setCustomForm(f => ({ ...f, seats: parseInt(e.target.value) || 0 }))}
+                      className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={customForm.round} onChange={e => setCustomForm(f => ({ ...f, round: e.target.checked }))}
+                      className="accent-forest w-3 h-3" />
+                    <span className="font-dm text-xs text-ink/60">Round shape</span>
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddCustomItem}
+                  className="w-full bg-forest text-white font-bebas tracking-widest text-xs py-1.5 rounded-sm hover:bg-forest/90 transition-colors"
+                >
+                  ADD TO CANVAS
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* ── Main canvas area ──────────────────────────────────────────────── */}
+      {/* ── Main canvas area ───────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Toolbar */}
         {!readOnly && (
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-white flex-shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-white flex-shrink-0 flex-wrap gap-y-1">
             {/* Plan name */}
             <input
               value={planName}
@@ -319,14 +519,11 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
             {/* Stats */}
             <span className="text-xs text-ink/50 font-dm">{tableCount} tables · {totalSeats} seats</span>
             <div className="h-4 w-px bg-border" />
-            {/* Tools */}
-            <button onClick={() => setTool("select")} title="Select (S)" className={`p-1.5 rounded ${tool === "select" ? "bg-burgundy/10 text-burgundy" : "text-ink/40 hover:text-ink"}`}>
-              <MousePointer className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => setShowGrid(g => !g)} title="Toggle grid" className={`p-1.5 rounded text-xs font-bebas tracking-wider ${showGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/40 hover:text-ink"}`}>
+            {/* Grid / Snap */}
+            <button onClick={() => setShowGrid(g => !g)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${showGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/40 hover:text-ink"}`}>
               GRID
             </button>
-            <button onClick={() => setSnapToGrid(s => !s)} title="Snap to grid" className={`p-1.5 rounded text-xs font-bebas tracking-wider ${snapToGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/40 hover:text-ink"}`}>
+            <button onClick={() => setSnapToGrid(s => !s)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${snapToGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/40 hover:text-ink"}`}>
               SNAP
             </button>
             <div className="h-4 w-px bg-border" />
@@ -335,27 +532,59 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
             <span className="text-xs font-dm text-ink/50 w-10 text-center">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom(z => Math.min(3, z + 0.1))} className="p-1.5 rounded text-ink/40 hover:text-ink"><ZoomIn className="w-3.5 h-3.5" /></button>
             <div className="h-4 w-px bg-border" />
-            {/* Background image upload */}
-            <label className="cursor-pointer p-1.5 rounded text-ink/40 hover:text-ink flex items-center gap-1" title="Upload background image (venue photo or floor plan to trace)">
-              <input type="file" accept="image/*" className="hidden" onChange={async e => {
+            {/* Background upload */}
+            <label className="cursor-pointer flex items-center gap-1 px-2 py-1.5 rounded border border-dashed border-gold/40 hover:border-gold hover:bg-gold/5 transition-colors" title="Upload background photo (blueprint, venue photo to trace over)">
+              <Upload className="w-3 h-3 text-ink/40" />
+              <span className="text-xs font-bebas tracking-wider text-ink/50">BG PHOTO</span>
+              <input type="file" accept="image/*" className="hidden" onChange={e => {
                 const file = e.target.files?.[0]; if (!file) return;
-                const fd = new FormData(); fd.append('file', file);
-                const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                const data = await res.json();
-                if (data.url) setBgImageUrl(data.url);
+                const img = new Image();
+                const objectUrl = URL.createObjectURL(file);
+                img.onload = () => {
+                  const MAX = 1600;
+                  const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                  const canvas = document.createElement("canvas");
+                  canvas.width = Math.round(img.width * scale);
+                  canvas.height = Math.round(img.height * scale);
+                  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                  const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+                  setBgImageUrl(dataUrl);
+                  URL.revokeObjectURL(objectUrl);
+                  toast.success("Background photo set!");
+                };
+                img.onerror = () => { URL.revokeObjectURL(objectUrl); toast.error("Could not read image"); };
+                img.src = objectUrl;
               }} />
-              <span className="text-xs font-bebas tracking-wider">BG</span>
             </label>
             {bgImageUrl && (
               <>
                 <input type="range" min={0.1} max={1} step={0.05} value={bgOpacity}
                   onChange={e => setBgOpacity(Number(e.target.value))}
-                  className="w-16" title="Background opacity" />
-                <button onClick={() => setBgImageUrl("")} className="p-1 text-ink/30 hover:text-tomato" title="Remove background">
-                  <span className="text-xs">✕</span>
+                  className="w-16 accent-forest" title="Background opacity" />
+                <button onClick={() => setBgImageUrl("")} className="p-1 text-ink/30 hover:text-red-500 transition-colors" title="Remove background">
+                  <X className="w-3 h-3" />
                 </button>
               </>
             )}
+            <div className="h-4 w-px bg-border" />
+            {/* Share */}
+            <button
+              onClick={handleShare}
+              disabled={generateLink.isPending}
+              title="Share floor plan via link"
+              className="flex items-center gap-1 px-2 py-1.5 border border-gold/30 text-ink/60 hover:text-ink hover:border-gold text-xs font-bebas tracking-wider transition-colors disabled:opacity-40"
+            >
+              <Share2 className="w-3 h-3" /> SHARE
+            </button>
+            {/* PDF */}
+            <button
+              onClick={handleDownloadPdf}
+              disabled={pdfLoading}
+              title="Export floor plan as PDF"
+              className="flex items-center gap-1 px-2 py-1.5 border border-gold/30 text-ink/60 hover:text-ink hover:border-gold text-xs font-bebas tracking-wider transition-colors disabled:opacity-40"
+            >
+              <Download className="w-3 h-3" /> {pdfLoading ? "EXPORTING..." : "PDF"}
+            </button>
             <div className="h-4 w-px bg-border" />
             {/* Save */}
             <button onClick={handleSave} disabled={isSaving} className="btn-forest text-cream font-bebas tracking-widest text-xs px-4 py-1.5 flex items-center gap-1 disabled:opacity-50">
@@ -366,16 +595,12 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
         )}
 
         {/* Canvas scroll container */}
-        <div
-          ref={containerRef}
-          className="flex-1 overflow-auto bg-gray-100"
-          style={{ minHeight: 0 }}
-        >
+        <div ref={containerRef} className="flex-1 overflow-auto bg-gray-100" style={{ minHeight: 0 }}>
           <div style={{ padding: "24px", minWidth: canvasData.width * zoom + 48, minHeight: canvasData.height * zoom + 48 }}>
             <div
               ref={canvasRef}
               onDragOver={e => e.preventDefault()}
-              onDrop={handleDrop}
+              onDrop={readOnly ? undefined : handleDrop}
               onClick={e => { if (e.target === canvasRef.current) setSelected(null); }}
               style={{
                 width: canvasData.width,
@@ -390,24 +615,17 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
                 backgroundSize: showGrid ? `${GRID}px ${GRID}px` : undefined,
                 border: "1px solid #d1c9bc",
                 boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-                cursor: tool === "pan" ? "grab" : "default",
+                cursor: "default",
               }}
             >
-              {/* Background image for tracing */}
               {bgImageUrl && (
                 <img
-                  src={bgImageUrl}
-                  alt="Background"
+                  src={bgImageUrl} alt="Background"
                   style={{
-                    position: "absolute",
-                    top: 0, left: 0,
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    opacity: bgOpacity,
-                    pointerEvents: "none",
-                    userSelect: "none",
-                    zIndex: 0,
+                    position: "absolute", top: 0, left: 0,
+                    width: "100%", height: "100%",
+                    objectFit: "cover", opacity: bgOpacity,
+                    pointerEvents: "none", userSelect: "none", zIndex: 0,
                   }}
                 />
               )}
@@ -416,8 +634,9 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
                   key={el.id}
                   el={el}
                   selected={selected === el.id}
-                  onSelect={setSelected}
-                  onDragStart={handleDragStart}
+                  onSelect={readOnly ? () => {} : setSelected}
+                  onDragStart={readOnly ? () => {} : handleDragStart}
+                  customPalette={customPalette}
                 />
               ))}
             </div>
@@ -425,17 +644,16 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
         </div>
       </div>
 
-      {/* ── Right properties panel ────────────────────────────────────────── */}
+      {/* ── Right properties panel ─────────────────────────────────────── */}
       {!readOnly && (
         <div className="w-52 bg-white border-l border-border flex-shrink-0 flex flex-col overflow-y-auto">
           {selectedEl ? (
             <>
               <div className="px-3 py-2 border-b border-border bg-ivory">
                 <p className="font-bebas tracking-widest text-xs text-sage">PROPERTIES</p>
-                <p className="font-cormorant text-sm font-semibold text-ink mt-0.5 truncate">{getLabel(selectedEl.type)}</p>
+                <p className="font-cormorant text-sm font-semibold text-ink mt-0.5 truncate">{getLabel(selectedEl.type, customPalette)}</p>
               </div>
               <div className="p-3 space-y-3 flex-1">
-                {/* Label */}
                 <div>
                   <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">LABEL</label>
                   <input
@@ -444,7 +662,6 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
                     className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
                   />
                 </div>
-                {/* Color */}
                 <div>
                   <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">COLOR</label>
                   <div className="flex items-center gap-2">
@@ -457,74 +674,51 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
                     <span className="text-xs font-mono text-ink/50">{selectedEl.color}</span>
                   </div>
                 </div>
-                {/* Seats */}
                 {(selectedEl.seats !== undefined) && (
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">SEATS</label>
                     <input
-                      type="number"
-                      min={0}
+                      type="number" min={0}
                       value={selectedEl.seats ?? 0}
                       onChange={e => updateSelected({ seats: parseInt(e.target.value) || 0 })}
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
                     />
                   </div>
                 )}
-                {/* Size */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">WIDTH</label>
-                    <input
-                      type="number"
-                      value={selectedEl.width}
+                    <input type="number" value={selectedEl.width}
                       onChange={e => updateSelected({ width: parseInt(e.target.value) || 40 })}
-                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
-                    />
+                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">HEIGHT</label>
-                    <input
-                      type="number"
-                      value={selectedEl.height}
+                    <input type="number" value={selectedEl.height}
                       onChange={e => updateSelected({ height: parseInt(e.target.value) || 40 })}
-                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
-                    />
+                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                 </div>
-                {/* Position */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">X</label>
-                    <input
-                      type="number"
-                      value={Math.round(selectedEl.x)}
+                    <input type="number" value={Math.round(selectedEl.x)}
                       onChange={e => updateSelected({ x: parseInt(e.target.value) || 0 })}
-                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
-                    />
+                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">Y</label>
-                    <input
-                      type="number"
-                      value={Math.round(selectedEl.y)}
+                    <input type="number" value={Math.round(selectedEl.y)}
                       onChange={e => updateSelected({ y: parseInt(e.target.value) || 0 })}
-                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
-                    />
+                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                 </div>
-                {/* Rotation */}
                 <div>
                   <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">ROTATION ({selectedEl.rotation}°)</label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={359}
-                    value={selectedEl.rotation}
+                  <input type="range" min={0} max={359} value={selectedEl.rotation}
                     onChange={e => updateSelected({ rotation: parseInt(e.target.value) })}
-                    className="w-full accent-burgundy"
-                  />
+                    className="w-full accent-burgundy" />
                 </div>
-                {/* Actions */}
                 <div className="flex gap-2 pt-1">
                   <button onClick={rotateSelected} className="flex-1 flex items-center justify-center gap-1 border border-border rounded py-1.5 text-xs font-bebas tracking-wider text-ink/60 hover:text-ink hover:border-gold transition-colors">
                     <RotateCw className="w-3 h-3" /> ROTATE
@@ -545,27 +739,58 @@ export default function FloorPlanEditor({ initialData, name: initialName = "Floo
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">WIDTH</label>
-                    <input
-                      type="number"
-                      value={canvasData.width}
+                    <input type="number" value={canvasData.width}
                       onChange={e => setCanvasData(prev => ({ ...prev, width: parseInt(e.target.value) || 900 }))}
-                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
-                    />
+                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">HEIGHT</label>
-                    <input
-                      type="number"
-                      value={canvasData.height}
+                    <input type="number" value={canvasData.height}
                       onChange={e => setCanvasData(prev => ({ ...prev, height: parseInt(e.target.value) || 600 }))}
-                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
-                    />
+                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                 </div>
-                <p className="font-dm text-[10px] text-ink/30 mt-2">Keyboard: Del=delete, R=rotate, Esc=deselect</p>
+                <p className="font-dm text-[10px] text-ink/30 mt-2">Del=delete, R=rotate, Esc=deselect</p>
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Share dialog overlay ────────────────────────────────────────── */}
+      {showShareDialog && shareUrl && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowShareDialog(false)}>
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-cormorant text-xl font-semibold text-ink">Share Floor Plan</h3>
+              <button onClick={() => setShowShareDialog(false)} className="text-ink/30 hover:text-ink">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="font-dm text-sm text-ink/60 mb-4">
+              Anyone with this link can view a read-only version of this floor plan.
+            </p>
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded px-3 py-2 mb-4">
+              <span className="font-mono text-xs text-ink/60 flex-1 break-all">{shareUrl}</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCopyLink}
+                className="flex-1 flex items-center justify-center gap-2 bg-forest text-white font-bebas tracking-widest text-sm py-2.5 rounded-sm hover:bg-forest/90 transition-colors"
+              >
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? "COPIED!" : "COPY LINK"}
+              </button>
+              <button
+                onClick={handleDownloadPdf}
+                disabled={pdfLoading}
+                className="flex items-center justify-center gap-2 border border-gold/30 text-ink px-4 font-bebas tracking-widest text-sm py-2.5 rounded-sm hover:bg-gold/5 transition-colors disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                {pdfLoading ? "..." : "PDF"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

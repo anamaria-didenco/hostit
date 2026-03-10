@@ -8,10 +8,16 @@ import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
 import { handleBeoPdf } from "../beoPdf";
 import { handleStaffSheetPdf } from "../staffSheetPdf";
+import { handleFloorPlanPdf } from "../floorPlanPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { storagePut } from "../storage";
+import { sdk } from "./sdk";
+import { upsertUser } from "../db";
+import { ENV } from "./env";
+import { getSessionCookieOptions } from "./cookies";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,8 +47,47 @@ async function startServer() {
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 
+  // Local password login (for trial/dev use — no external OAuth needed)
+  app.post("/api/auth/local-login", async (req, res) => {
+    try {
+      const { password } = req.body ?? {};
+      const adminPassword = ENV.adminPassword;
+
+      if (!adminPassword) {
+        res.status(503).json({ error: "Local login is not configured. Set the ADMIN_PASSWORD environment variable." });
+        return;
+      }
+
+      if (!password || password !== adminPassword) {
+        res.status(401).json({ error: "Incorrect password." });
+        return;
+      }
+
+      const openId = "local-admin";
+      await upsertUser({
+        openId,
+        name: "Admin",
+        email: null,
+        loginMethod: "local",
+        role: "admin",
+        lastSignedIn: new Date(),
+      });
+
+      const token = await sdk.createSessionToken(openId, { name: "Admin" });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error("[LocalLogin] Error:", e);
+      res.status(500).json({ error: "Login failed." });
+    }
+  });
+
   // Proposal PDF download (public — uses publicToken for auth)
   app.get("/api/proposal-pdf/:token", handleProposalPdf);
+
+  // Floor Plan PDF download (public — share token acts as auth)
+  app.get("/api/floor-plan-pdf/:token", handleFloorPlanPdf);
 
   // BEO PDF download (requires session auth)
   app.get("/api/beo/:bookingId", (req, res, next) => {
@@ -90,7 +135,7 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
+  const preferredPort = parseInt(process.env.PORT || "5000");
   const port = await findAvailablePort(preferredPort);
 
   if (port !== preferredPort) {

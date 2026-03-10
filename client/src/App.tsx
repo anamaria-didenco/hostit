@@ -5,11 +5,13 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ProposalBuilder from "./pages/ProposalBuilder";
 import ProposalView from "./pages/ProposalView";
 import LeadForm from "./pages/LeadForm";
 import FloorPlanBuilder from "./pages/FloorPlanBuilder";
+import FloorPlanShare from "./pages/FloorPlanShare";
 import Checklist from "./pages/Checklist";
 import RunsheetBuilder from "./pages/RunsheetBuilder";
 import PaymentTracker from "./pages/PaymentTracker";
@@ -24,6 +26,7 @@ function Router() {
     <Switch>
       {/* Public pages */}
       <Route path="/" component={Home} />
+      <Route path="/login" component={Login} />
       <Route path="/enquire" component={LeadForm} />
       <Route path="/enquire/:slug" component={LeadForm} />
       <Route path="/proposal/:token" component={ProposalView} />
@@ -32,6 +35,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/proposals/new" component={ProposalBuilder} />
       <Route path="/floor-plan" component={FloorPlanBuilder} />
+      <Route path="/floor-plan/share/:token" component={FloorPlanShare} />
       <Route path="/checklist" component={Checklist} />
       <Route path="/runsheet" component={RunsheetBuilder} />
       <Route path="/payments" component={PaymentTracker} />

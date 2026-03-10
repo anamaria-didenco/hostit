@@ -4,6 +4,7 @@
  * Called from a dedicated Express route: GET /api/proposal-pdf/:token
  */
 import type { Request, Response } from "express";
+import { resolveChromiumPath } from "./chromiumPath";
 import { getDb } from "./db";
 import {
   proposals,
@@ -347,9 +348,10 @@ export async function handleProposalPdf(req: Request, res: Response) {
 
     // Generate PDF with Puppeteer + system Chromium
     const puppeteer = await import("puppeteer-core");
+    const chromiumPath = await resolveChromiumPath();
     const browser = await puppeteer.launch({
-      executablePath: "/usr/bin/chromium-browser",
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      executablePath: chromiumPath,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
       headless: true,
     });
     const page = await browser.newPage();
