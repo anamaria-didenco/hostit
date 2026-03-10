@@ -83,6 +83,19 @@ Enquiries/leads can be bulk-imported via CSV from the Enquiries sidebar in the d
 Backend mutation: `trpc.leads.bulkCreate` in `server/routers.ts`.
 Frontend component: `client/src/components/CsvImportModal.tsx` (uses `papaparse` for parsing).
 
+## Proposal Theming & Appearance
+
+Proposals are fully theme-aware. The venue's `themeKey` (stored in `venueSettings`) drives all proposal colours and fonts.
+
+- **ProposalView** (`client/src/pages/ProposalView.tsx`): Maps venue `themeKey` to color tokens via `getThemeTokens()`. Displays the venue logo in the header and a venue hero/banner image at the top (falls back to HOSTit defaults when not set).
+- **ProposalBuilder** (`client/src/pages/ProposalBuilder.tsx`): Has a collapsible "Proposal Appearance" panel in the right sidebar. Allows selecting from all 12 themes (with swatch previews), entering a venue logo URL, and entering a venue photo URL. Changes are saved to venue settings via `trpc.venue.update`.
+- **ThemeContext** (`client/src/contexts/ThemeContext.tsx`): Defines `COLOUR_THEMES` array (12 themes: sage, forest, dusty-merlot, brique, charcoal, olivie, seafoam, retro-warm, claret, midnight-rose, matcha, champagne) with `id`, `label`, and `swatches` colour arrays.
+- Venue settings columns used: `themeKey`, `logoUrl`, `coverImageUrl`, `bannerImageUrl`.
+
+## PostgreSQL Insert Pattern
+
+Drizzle ORM with PostgreSQL requires `.returning({ id: table.id })` after `.values()` to get the inserted row's ID back. Never use `(result as any).insertId` (MySQL-only). All 11 insert locations in `server/routers.ts` follow this pattern.
+
 ## Deployment
 
 Configured for autoscale deployment:

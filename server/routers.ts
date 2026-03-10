@@ -964,8 +964,8 @@ export const appRouter = router({
           description: input.description ?? null,
           type: input.type,
           pricePerHead: input.pricePerHead ? String(input.pricePerHead) : null,
-        });
-        return { id: (result as any).insertId };
+        }).returning({ id: menuPackages.id });
+        return { id: result.id };
       }),
     // Update a package
     updatePackage: protectedProcedure
@@ -1030,8 +1030,8 @@ export const appRouter = router({
           category: input.category ?? null,
           portionSize: input.portionSize ?? null,
           sortOrder: input.sortOrder ?? 0,
-        });
-        return { id: (result as any).insertId };
+        }).returning({ id: menuItems.id });
+        return { id: result.id };
       }),
     // Update an item
     updateItem: protectedProcedure
@@ -1106,8 +1106,8 @@ export const appRouter = router({
           unit: input.unit ?? 'per drink',
           sortOrder: input.sortOrder ?? 0,
           createdAt: Date.now(),
-        });
-        return { id: (result as any).insertId };
+        }).returning({ id: barMenuItems.id });
+        return { id: result.id };
       }),
     update: protectedProcedure
       .input(z.object({
@@ -1405,8 +1405,8 @@ export const appRouter = router({
           await db.update(floorPlans).set({ name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData, bookingId: input.bookingId }).where(and(eq(floorPlans.id, input.id), eq(floorPlans.ownerId, ctx.user.id)));
           return { id: input.id };
         } else {
-          const [result] = await db.insert(floorPlans).values({ ownerId: ctx.user.id, bookingId: input.bookingId, name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData });
-          return { id: (result as any).insertId };
+          const [result] = await db.insert(floorPlans).values({ ownerId: ctx.user.id, bookingId: input.bookingId, name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData }).returning({ id: floorPlans.id });
+          return { id: result.id };
         }
       }),
     delete: protectedProcedure
@@ -1553,8 +1553,8 @@ export const appRouter = router({
         const { checklistTemplates } = await import('../drizzle/schema');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const [result] = await db.insert(checklistTemplates).values({ ownerId: ctx.user.id, name: input.name, description: input.description, items: input.items });
-        return { id: (result as any).insertId, ...input };
+        const [result] = await db.insert(checklistTemplates).values({ ownerId: ctx.user.id, name: input.name, description: input.description, items: input.items }).returning({ id: checklistTemplates.id });
+        return { id: result.id, ...input };
       }),
     updateTemplate: protectedProcedure
       .input(z.object({
@@ -1599,8 +1599,8 @@ export const appRouter = router({
         const [template] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, input.templateId)).limit(1);
         if (!template) throw new Error('Template not found');
         const items = (template.items as any[]).map(item => ({ ...item, checked: false }));
-        const [result] = await db.insert(checklistInstances).values({ templateId: input.templateId, bookingId: input.bookingId, ownerId: ctx.user.id, name: input.name ?? template.name, items });
-        return { id: (result as any).insertId };
+        const [result] = await db.insert(checklistInstances).values({ templateId: input.templateId, bookingId: input.bookingId, ownerId: ctx.user.id, name: input.name ?? template.name, items }).returning({ id: checklistInstances.id });
+        return { id: result.id };
       }),
     getForBooking: protectedProcedure
       .input(z.object({ bookingId: z.number() }))
@@ -1721,8 +1721,8 @@ export const appRouter = router({
           venueSetup: input.venueSetup ?? null,
           proposalId: input.proposalId ?? null,
           publicToken: token,
-        });
-        const id = (result as any).insertId as number;
+        }).returning({ id: runsheets.id });
+        const id = result.id;
         if (input.items?.length) {
           await db.insert(runsheetItems).values(
             input.items.map((item, i) => ({
@@ -1804,8 +1804,8 @@ export const appRouter = router({
           assignedTo: input.assignedTo ?? null,
           category: input.category ?? 'other',
           sortOrder: input.sortOrder,
-        });
-        return { id: (result as any).insertId as number };
+        }).returning({ id: runsheetItems.id });
+        return { id: result.id };
       }),
 
     updateItem: protectedProcedure
@@ -1895,8 +1895,8 @@ export const appRouter = router({
           method: input.method,
           paidAt: new Date(input.paidAt),
           notes: input.notes,
-        });
-        return { id: (result as any).insertId, success: true };
+        }).returning({ id: payments.id });
+        return { id: result.id, success: true };
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -2171,7 +2171,7 @@ export const appRouter = router({
           internalNotes: input.spaceName ? `Space preference: ${input.spaceName}` : undefined,
           status: 'new',
           source: 'express_book',
-        });
+        }).returning({ id: leads.id });
         // Notify owner
         try {
           const { notifyOwner } = await import('./_core/notification');
@@ -2180,7 +2180,7 @@ export const appRouter = router({
             content: `${input.eventType} on ${input.eventDate} for ${input.guestCount} guests. Email: ${input.email}`,
           });
         } catch {}
-        return { success: true, leadId: (result as any).insertId };
+        return { success: true, leadId: result.id };
       }),
   }),
 
@@ -2565,8 +2565,8 @@ export const appRouter = router({
           items: input.items,
           createdAt: now,
           updatedAt: now,
-        });
-        return { id: (result as any).insertId, success: true };
+        }).returning({ id: runsheetTemplates.id });
+        return { id: result.id, success: true };
       }),
 
     delete: protectedProcedure

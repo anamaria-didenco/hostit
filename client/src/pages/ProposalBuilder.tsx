@@ -3,11 +3,12 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp, Download, Palette, Image } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
+import { COLOUR_THEMES } from "@/contexts/ThemeContext";
 
 interface LineItem {
   description: string;
@@ -51,6 +52,25 @@ export default function ProposalBuilder() {
   const [savedProposal, setSavedProposal] = useState<any>(null);
   const [sent, setSent] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  // ── Appearance state ────────────────────────────────────────────────────────
+  const [appearanceSectionOpen, setAppearanceSectionOpen] = useState(false);
+  const [appearanceLogoUrl, setAppearanceLogoUrl] = useState("");
+  const [appearanceVenuePhotoUrl, setAppearanceVenuePhotoUrl] = useState("");
+  const [appearanceThemeKey, setAppearanceThemeKey] = useState("sage");
+
+  const updateVenue = trpc.venue.update.useMutation({
+    onSuccess: () => toast.success("Appearance settings saved!"),
+    onError: () => toast.error("Failed to save appearance settings"),
+  });
+
+  const handleSaveAppearance = () => {
+    updateVenue.mutate({
+      themeKey: appearanceThemeKey,
+      logoUrl: appearanceLogoUrl || undefined,
+      coverImageUrl: appearanceVenuePhotoUrl || undefined,
+    });
+  };
 
   const handleDownloadPdf = async () => {
     if (!savedProposal?.publicToken) return toast.error("Save the proposal first, then download the PDF.");
@@ -227,6 +247,9 @@ export default function ProposalBuilder() {
 
   useEffect(() => {
     if (venueSettings?.depositPercent) setDepositPercent(Number(venueSettings.depositPercent));
+    if (venueSettings?.themeKey) setAppearanceThemeKey(venueSettings.themeKey);
+    if (venueSettings?.logoUrl) setAppearanceLogoUrl(venueSettings.logoUrl);
+    if (venueSettings?.coverImageUrl) setAppearanceVenuePhotoUrl(venueSettings.coverImageUrl);
   }, [venueSettings]);
 
   useEffect(() => {
@@ -945,6 +968,99 @@ export default function ProposalBuilder() {
 
         {/* Right: Summary & Actions */}
         <div className="space-y-4">
+
+          {/* Appearance */}
+          <div className="bg-cream-card border border-border shadow-sm">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-amber/5 transition-colors"
+              onClick={() => setAppearanceSectionOpen(o => !o)}
+            >
+              <div className="flex items-center gap-2">
+                <Palette className="w-4 h-4 text-amber" />
+                <span className="font-bebas text-xs tracking-widest text-muted-foreground">PROPOSAL APPEARANCE</span>
+              </div>
+              {appearanceSectionOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            </button>
+            {appearanceSectionOpen && (
+              <div className="px-4 pb-4 space-y-4 border-t border-border">
+                {/* Theme Selector */}
+                <div className="pt-3">
+                  <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">COLOUR THEME</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {COLOUR_THEMES.map(theme => (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => setAppearanceThemeKey(theme.id)}
+                        className={`p-2 border-2 text-left transition-all rounded-sm ${
+                          appearanceThemeKey === theme.id ? 'border-tomato' : 'border-border hover:border-tomato/40'
+                        }`}
+                      >
+                        <div className="flex gap-0.5 mb-1">
+                          {theme.swatches.slice(0, 3).map((s, i) => (
+                            <div key={i} className="w-3 h-3 rounded-full" style={{ backgroundColor: s }} />
+                          ))}
+                        </div>
+                        <div className="font-bebas text-xs tracking-wide text-ink leading-tight">{theme.label}</div>
+                        {appearanceThemeKey === theme.id && (
+                          <div className="font-bebas text-xs text-tomato tracking-widest">✓</div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Logo URL */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Image className="w-3.5 h-3.5 text-muted-foreground" />
+                    <label className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE LOGO URL</label>
+                  </div>
+                  <Input
+                    value={appearanceLogoUrl}
+                    onChange={e => setAppearanceLogoUrl(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-xs h-8"
+                  />
+                  {appearanceLogoUrl && (
+                    <div className="mt-1.5 p-2 bg-ink rounded-sm flex items-center justify-center h-12">
+                      <img src={appearanceLogoUrl} alt="Logo preview" className="max-h-8 w-auto object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Venue Photo URL */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Image className="w-3.5 h-3.5 text-muted-foreground" />
+                    <label className="font-bebas text-xs tracking-widest text-muted-foreground">VENUE PHOTO URL</label>
+                  </div>
+                  <Input
+                    value={appearanceVenuePhotoUrl}
+                    onChange={e => setAppearanceVenuePhotoUrl(e.target.value)}
+                    placeholder="https://example.com/venue.jpg"
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-xs h-8"
+                  />
+                  {appearanceVenuePhotoUrl && (
+                    <div className="mt-1.5 h-16 bg-cover bg-center rounded-sm border border-border" style={{ backgroundImage: `url(${appearanceVenuePhotoUrl})` }} />
+                  )}
+                  <p className="font-dm text-xs text-muted-foreground mt-1">This photo appears as a banner at the top of the proposal</p>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={handleSaveAppearance}
+                  disabled={updateVenue.isPending}
+                  className="w-full bg-amber hover:bg-amber/90 text-white font-bebas tracking-widest rounded-none h-9 text-xs gap-1"
+                >
+                  <Palette className="w-3.5 h-3.5" />
+                  {updateVenue.isPending ? "SAVING..." : "SAVE APPEARANCE"}
+                </Button>
+              </div>
+            )}
+          </div>
+
           {/* Expiry */}
           <div className="bg-cream-card border border-border p-4 shadow-sm">
             <h3 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL EXPIRY</h3>
