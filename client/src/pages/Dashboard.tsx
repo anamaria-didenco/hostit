@@ -1462,7 +1462,8 @@ export default function Dashboard() {
                             return (
                               <tr key={lead.id}
                                 onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                                className={`hover:bg-linen transition-colors cursor-pointer ${selectedLead?.id === lead.id ? "bg-forest/5" : ""} ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}>
+                                className={`hover:brightness-95 transition-all cursor-pointer ${selectedLead?.id === lead.id ? "ring-2 ring-inset ring-gold/50" : ""} ${selectedLeadIds.has(lead.id) ? "bg-forest/10" : ""} ${statusStage?.color ?? "bg-muted"}`}
+                                style={{ backgroundColor: statusStage?.color?.includes('bg-') ? undefined : statusStage?.color }}>
                                 {bulkSelectMode && (
                                   <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                                     <input type="checkbox" checked={selectedLeadIds.has(lead.id)}
@@ -1495,12 +1496,15 @@ export default function Dashboard() {
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
                       <p className="font-dm text-sage text-sm">No leads found</p>
                     </div>
-                  ) : filteredLeads.map((lead: any) => (
-                    <div key={lead.id} className={`flex items-stretch ${
-                      selectedLeadIds.has(lead.id) ? 'bg-forest/5' : ''
-                    }`}>
-                      {bulkSelectMode && (
-                        <label className="flex items-center px-3 cursor-pointer">
+                  ) : filteredLeads.map((lead: any) => {
+                    const statusStage = pipelineStages.find(s => s.key === lead.status);
+                    return (
+                      <div key={lead.id} className={`flex items-stretch mb-2 rounded-xl overflow-hidden shadow-sm border border-gold/10 transition-all hover:scale-[1.01] ${
+                        selectedLeadIds.has(lead.id) ? 'ring-2 ring-forest' : ''
+                      } ${statusStage?.color ?? "bg-white"}`}
+                      style={{ backgroundColor: statusStage?.color?.includes('bg-') ? undefined : statusStage?.color }}>
+                        {bulkSelectMode && (
+                          <label className="flex items-center px-3 cursor-pointer bg-white/20">
                           <input type="checkbox"
                             checked={selectedLeadIds.has(lead.id)}
                             onChange={(e) => {
@@ -1514,10 +1518,10 @@ export default function Dashboard() {
                         </label>
                       )}
                     <button onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                      className={`flex-1 p-4 text-left hover:bg-linen transition-colors ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5 border-l-2 border-gold" : "border-l-2 border-transparent"}`}>
+                      className={`flex-1 p-4 text-left transition-colors ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-white/30 backdrop-blur-sm" : ""}`}>
                       <div className="flex items-start justify-between mb-1">
-                        <div className="font-cormorant font-semibold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
-                        <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border flex-shrink-0 ml-2 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
+                        <div className="font-cormorant font-bold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
+                        <div className="font-bebas text-xs tracking-widest px-1.5 py-0.5 bg-white/40 border border-ink/10 flex-shrink-0 ml-2">
                           {lead.status === 'booked' ? 'CONFIRMED' : lead.status.replace(/_/g, " ").toUpperCase()}
                         </div>
                       </div>
