@@ -548,6 +548,20 @@ export const appRouter = router({
         }
         return { imported, errors };
       }),
+
+    bulkDelete: protectedProcedure
+      .input(z.object({ ids: z.array(z.number()).min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { leads, leadActivity } = await import('../drizzle/schema');
+        const { eq, and, inArray } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { deleted: 0 };
+        await db.delete(leadActivity).where(inArray(leadActivity.leadId, input.ids));
+        const result = await db.delete(leads)
+          .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
+        return { deleted: input.ids.length };
+      }),
   }),
   // ─── Proposals ─────────────────────────────────────────────────────────────
   proposals: router({

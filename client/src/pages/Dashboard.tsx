@@ -415,6 +415,7 @@ export default function Dashboard() {
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
@@ -525,6 +526,17 @@ export default function Dashboard() {
       toast.success(`${data.updated} lead${data.updated === 1 ? '' : 's'} updated`);
     },
     onError: (err) => toast.error(err.message || 'Bulk update failed'),
+  });
+  const bulkDelete = trpc.leads.bulkDelete.useMutation({
+    onSuccess: (data) => {
+      refetchLeads();
+      refetchOverdue();
+      setSelectedLeadIds(new Set());
+      setBulkSelectMode(false);
+      setShowBulkDeleteConfirm(false);
+      toast.success(`${data.deleted} enquir${data.deleted === 1 ? 'y' : 'ies'} deleted`);
+    },
+    onError: (err) => toast.error(err.message || 'Delete failed'),
   });
   const addNote = trpc.leads.addNote.useMutation({
     onSuccess: () => { setNoteText(""); utils.leads.getActivity.invalidate({ leadId: selectedLead?.id }); toast.success("Note added"); },
@@ -1414,6 +1426,13 @@ export default function Dashboard() {
                   <button onClick={() => { setSelectedLeadIds(new Set()); setBulkSelectMode(false); }}
                     className="ml-2 text-cream/50 hover:text-cream font-bebas text-xs tracking-widest">
                     CLEAR
+                  </button>
+                  <span className="text-cream/30">|</span>
+                  <button
+                    onClick={() => setShowBulkDeleteConfirm(true)}
+                    className="font-bebas text-xs tracking-widest px-2.5 py-1.5 border border-red-400/50 text-red-400 hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors"
+                  >
+                    DELETE
                   </button>
                 </div>
               )}
@@ -4572,6 +4591,31 @@ export default function Dashboard() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Confirmation */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedLeadIds.size} enquir{selectedLeadIds.size === 1 ? 'y' : 'ies'}?</h3>
+            <p className="text-sm text-gray-500 mb-6">This will permanently remove the selected enquiries and all their activity history. This cannot be undone.</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => bulkDelete.mutate({ ids: Array.from(selectedLeadIds) })}
+                disabled={bulkDelete.isPending}
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg disabled:opacity-50 transition-colors"
+              >
+                {bulkDelete.isPending ? 'Deleting…' : `Delete ${selectedLeadIds.size}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CSV Import Modal */}
       {showCsvImport && (
