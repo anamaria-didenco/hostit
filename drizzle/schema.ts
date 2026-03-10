@@ -368,6 +368,7 @@ export const floorPlans = pgTable("floor_plans", {
   ownerId: integer("ownerId").notNull(),
   name: varchar("name", { length: 255 }).default("Floor Plan").notNull(),
   bgImageUrl: text("bgImageUrl"),
+  shareToken: varchar("shareToken", { length: 100 }),
   canvasData: json("canvasData").$type<{
     width: number; height: number;
     elements: Array<{
@@ -749,3 +750,39 @@ export const clientPortalTokens = pgTable("client_portal_tokens", {
 });
 export type ClientPortalToken = typeof clientPortalTokens.$inferSelect;
 export type InsertClientPortalToken = typeof clientPortalTokens.$inferInsert;
+
+// ─── Setup Instructions ───────────────────────────────────────────────────────
+export const setupInstructions = pgTable("setup_instructions", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content"),
+  images: json("images").$type<string[]>().default([]),
+  category: varchar("category", { length: 100 }).default("general"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type SetupInstruction = typeof setupInstructions.$inferSelect;
+export type InsertSetupInstruction = typeof setupInstructions.$inferInsert;
+
+// ─── Table Setups ─────────────────────────────────────────────────────────────
+export const tableSetups = pgTable("table_setups", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull().default("Table Setup"),
+  description: text("description"),
+  canvasData: json("canvas_data").$type<{
+    width: number;
+    height: number;
+    elements: Array<{
+      id: string; type: string; x: number; y: number;
+      width: number; height: number; rotation: number;
+      label?: string; color?: string;
+    }>;
+  }>(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type TableSetup = typeof tableSetups.$inferSelect;
+export type InsertTableSetup = typeof tableSetups.$inferInsert;

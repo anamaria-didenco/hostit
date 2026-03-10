@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Trash2, RotateCw, ZoomIn, ZoomOut, Move, MousePointer, Download, Save, Plus } from "lucide-react";
+import { Trash2, RotateCw, ZoomIn, ZoomOut, Move, MousePointer, Download, Save, Plus, Share2, Copy, Check } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type FPElement = {

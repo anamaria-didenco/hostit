@@ -1420,6 +1420,116 @@ export const appRouter = router({
         await db.delete(floorPlans).where(and(eq(floorPlans.id, input.id), eq(floorPlans.ownerId, ctx.user.id)));
         return { success: true };
       }),
+    generateShareLink: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { floorPlans } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { randomBytes } = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const token = randomBytes(20).toString('hex');
+        await db.update(floorPlans).set({ shareToken: token }).where(and(eq(floorPlans.id, input.id), eq(floorPlans.ownerId, ctx.user.id)));
+        return { token };
+      }),
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { floorPlans } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [plan] = await db.select().from(floorPlans).where(eq(floorPlans.shareToken, input.token)).limit(1);
+        return plan ?? null;
+      }),
+  }),
+
+  // ─── Setup Instructions ──────────────────────────────────────────────────────
+  setupInstructions: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { setupInstructions } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(setupInstructions).where(eq(setupInstructions.ownerId, ctx.user.id)).orderBy(asc(setupInstructions.sortOrder), asc(setupInstructions.createdAt));
+    }),
+    create: protectedProcedure
+      .input(z.object({ title: z.string().min(1), content: z.string().optional(), category: z.string().optional(), images: z.array(z.string()).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { setupInstructions } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        await db.insert(setupInstructions).values({ ownerId: ctx.user.id, title: input.title, content: input.content ?? null, category: input.category ?? 'general', images: input.images ?? [], sortOrder: 0, createdAt: now, updatedAt: now });
+        return { success: true };
+      }),
+    update: protectedProcedure
+      .input(z.object({ id: z.number(), title: z.string().min(1).optional(), content: z.string().nullable().optional(), category: z.string().optional(), images: z.array(z.string()).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { setupInstructions } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        await db.update(setupInstructions).set({ ...rest, updatedAt: Date.now() }).where(and(eq(setupInstructions.id, id), eq(setupInstructions.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { setupInstructions } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(setupInstructions).where(and(eq(setupInstructions.id, input.id), eq(setupInstructions.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Table Setups ────────────────────────────────────────────────────────────
+  tableSetups: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { tableSetups } = await import('../drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(tableSetups).where(eq(tableSetups.ownerId, ctx.user.id)).orderBy(desc(tableSetups.createdAt));
+    }),
+    save: protectedProcedure
+      .input(z.object({ id: z.number().optional(), name: z.string().default('Table Setup'), description: z.string().optional(), canvasData: z.any().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { tableSetups } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        if (input.id) {
+          await db.update(tableSetups).set({ name: input.name, description: input.description ?? null, canvasData: input.canvasData, updatedAt: now }).where(and(eq(tableSetups.id, input.id), eq(tableSetups.ownerId, ctx.user.id)));
+          return { id: input.id };
+        } else {
+          const [result] = await db.insert(tableSetups).values({ ownerId: ctx.user.id, name: input.name, description: input.description ?? null, canvasData: input.canvasData, createdAt: now, updatedAt: now }).returning({ id: tableSetups.id });
+          return { id: result.id };
+        }
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { tableSetups } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(tableSetups).where(and(eq(tableSetups.id, input.id), eq(tableSetups.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
   }),
 
   // ─── Checklists ─────────────────────────────────────────────────────────────
