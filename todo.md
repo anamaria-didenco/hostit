@@ -619,3 +619,18 @@
 - [ ] Seating Chart module in EventDetail (drag-and-drop)
 - [ ] Dashboard KPI widgets (revenue, upcoming events, overdue tasks, conversion rate)
 - [ ] Improve Dashboard navigation with Contacts tab
+
+## New Features (March 2026 - Batch 3)
+- [ ] Auto-populate runsheets from event data (venue, client, spaces, F&B, contacts)
+- [ ] Bulk CSV import for menu catalogue items with column mapping UI
+- [ ] Staff portal magic link generation
+- [ ] Staff portal public page with live runsheet view
+
+- [ ] Auto-populate runsheet from booking/lead data (client, date, guests, space, event type)
+- [ ] Smart timeline seeding based on event type (wedding/corporate/cocktail/birthday/generic)
+- [ ] AUTO-POPULATE button in RunsheetBuilder header
+- [ ] Auto-trigger populate when opening new runsheet from booking context
+
+- [ ] Public staff portal page at /staff/:token (live runsheet view, no login)
+- [ ] Magic link generator panel in RunsheetBuilder (create, copy, revoke links)
+- [ ] Staff portal route in App.tsx

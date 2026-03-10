@@ -3155,5 +3155,277 @@ Return ONLY valid JSON like: {"items": [{"time":"09:00","duration":30,"title":".
         return { success: true };
       }),
    }),
+
+  // ─── Runsheet Auto-Populate ───────────────────────────────────────────────
+  runsheetAutoPopulate: router({
+    getEventData: protectedProcedure
+      .input(z.object({
+        bookingId: z.number().optional(),
+        leadId: z.number().optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings, leads, proposals } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+
+        let eventData: Record<string, any> = {};
+
+        if (input.bookingId) {
+          const [booking] = await db.select().from(bookings)
+            .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
+          if (booking) {
+            eventData = {
+              title: `${booking.eventType || 'Event'} – ${booking.firstName} ${booking.lastName || ''}`.trim(),
+              clientName: `${booking.firstName} ${booking.lastName || ''}`.trim(),
+              clientEmail: booking.email,
+              eventType: booking.eventType,
+              eventDate: booking.eventDate,
+              eventEndDate: booking.eventEndDate,
+              guestCount: booking.guestCount,
+              spaceName: booking.spaceName,
+              notes: booking.notes,
+              source: 'booking',
+            };
+          }
+        } else if (input.leadId) {
+          const [lead] = await db.select().from(leads)
+            .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
+          if (lead) {
+            // Also try to get the latest proposal for this lead
+            const [proposal] = await db.select().from(proposals)
+              .where(and(eq(proposals.leadId, input.leadId), eq(proposals.ownerId, ctx.user.id)))
+              .orderBy(proposals.createdAt);
+            eventData = {
+              title: `${lead.eventType || 'Event'} – ${lead.firstName} ${lead.lastName || ''}`.trim(),
+              clientName: `${lead.firstName} ${lead.lastName || ''}`.trim(),
+              clientEmail: lead.email,
+              clientPhone: lead.phone,
+              clientCompany: lead.company,
+              eventType: lead.eventType,
+              eventDate: lead.eventDate || proposal?.eventDate,
+              eventEndDate: lead.eventEndDate || proposal?.eventEndDate,
+              guestCount: lead.guestCount || proposal?.guestCount,
+              spaceName: proposal?.spaceName,
+              budget: lead.budget,
+              notes: lead.message,
+              source: 'lead',
+            };
+          }
+        }
+
+        // Generate suggested timeline items based on event type
+        const eventType = (eventData.eventType || '').toLowerCase();
+        const suggestedItems: Array<{ time: string; title: string; category: string; description: string }> = [];
+
+        if (eventType.includes('wedding')) {
+          suggestedItems.push(
+            { time: '14:00', title: 'Venue setup & decoration', category: 'setup', description: 'Florist, decorator, and venue team arrive' },
+            { time: '16:00', title: 'Bridal party arrival', category: 'arrival', description: 'Bridal party photos and preparation' },
+            { time: '17:00', title: 'Guest arrival & welcome drinks', category: 'drinks', description: `Welcome drinks for ${eventData.guestCount || ''} guests` },
+            { time: '17:30', title: 'Ceremony', category: 'ceremony', description: 'Wedding ceremony begins' },
+            { time: '18:00', title: 'Canapés & cocktail hour', category: 'food', description: 'Canapés served during cocktail hour' },
+            { time: '19:00', title: 'Guests seated', category: 'setup', description: 'Guests move to reception room' },
+            { time: '19:15', title: 'Bridal party entrance', category: 'ceremony', description: 'Bridal party and couple entrance' },
+            { time: '19:30', title: 'Entrée service', category: 'food', description: 'Entrée course served' },
+            { time: '20:00', title: 'Speeches', category: 'ceremony', description: 'Welcome speech, best man, maid of honour' },
+            { time: '20:30', title: 'Main course service', category: 'food', description: 'Main course served' },
+            { time: '21:30', title: 'Cake cutting', category: 'ceremony', description: 'Wedding cake cutting ceremony' },
+            { time: '21:45', title: 'Dessert service', category: 'food', description: 'Dessert and wedding cake served' },
+            { time: '22:00', title: 'First dance', category: 'entertainment', description: 'First dance and dance floor opens' },
+            { time: '23:30', title: 'Last drinks', category: 'drinks', description: 'Bar closes, last drinks served' },
+            { time: '00:00', title: 'Event conclusion', category: 'setup', description: 'Guests depart, venue pack-down begins' },
+          );
+        } else if (eventType.includes('corporate') || eventType.includes('conference') || eventType.includes('meeting')) {
+          suggestedItems.push(
+            { time: '07:30', title: 'Venue setup', category: 'setup', description: 'AV, seating, and signage setup' },
+            { time: '08:00', title: 'Catering team arrival', category: 'setup', description: 'Catering team set up tea/coffee station' },
+            { time: '08:30', title: 'Guest registration opens', category: 'arrival', description: 'Registration desk opens, welcome tea & coffee' },
+            { time: '09:00', title: 'Event commences', category: 'ceremony', description: 'Welcome address and program begins' },
+            { time: '10:30', title: 'Morning tea break', category: 'food', description: 'Morning tea served — 20 min break' },
+            { time: '12:30', title: 'Lunch service', category: 'food', description: `Buffet/plated lunch for ${eventData.guestCount || ''} guests` },
+            { time: '13:30', title: 'Afternoon session begins', category: 'ceremony', description: 'Afternoon program resumes' },
+            { time: '15:00', title: 'Afternoon tea break', category: 'food', description: 'Afternoon tea served — 20 min break' },
+            { time: '17:00', title: 'Event concludes', category: 'ceremony', description: 'Closing remarks and networking drinks' },
+            { time: '18:00', title: 'Pack-down', category: 'setup', description: 'Venue pack-down and equipment return' },
+          );
+        } else if (eventType.includes('birthday') || eventType.includes('party') || eventType.includes('celebration')) {
+          suggestedItems.push(
+            { time: '15:00', title: 'Venue setup', category: 'setup', description: 'Decorations, tables, and AV setup' },
+            { time: '17:00', title: 'Catering team arrival', category: 'setup', description: 'Catering team set up food and bar stations' },
+            { time: '18:00', title: 'Guest arrival & welcome drinks', category: 'drinks', description: 'Guests arrive, welcome drinks served' },
+            { time: '18:30', title: 'Canapés service', category: 'food', description: 'Canapés circulated' },
+            { time: '19:00', title: 'Guests seated', category: 'setup', description: 'Guests move to dining area' },
+            { time: '19:15', title: 'Welcome speech', category: 'ceremony', description: 'Host welcome speech' },
+            { time: '19:30', title: 'Dinner service', category: 'food', description: `Dinner service for ${eventData.guestCount || ''} guests` },
+            { time: '21:00', title: 'Cake & dessert', category: 'food', description: 'Birthday cake presentation and dessert' },
+            { time: '21:30', title: 'Dancing & entertainment', category: 'entertainment', description: 'Dance floor opens' },
+            { time: '23:30', title: 'Last drinks', category: 'drinks', description: 'Bar closes' },
+            { time: '00:00', title: 'Event conclusion', category: 'setup', description: 'Guests depart' },
+          );
+        } else if (eventType.includes('cocktail') || eventType.includes('function') || eventType.includes('gala')) {
+          suggestedItems.push(
+            { time: '15:00', title: 'Venue setup', category: 'setup', description: 'Room setup, linen, and styling' },
+            { time: '17:00', title: 'Bar team arrival', category: 'setup', description: 'Bar setup and stock check' },
+            { time: '18:00', title: 'Doors open', category: 'arrival', description: 'Guests arrive, welcome drinks at door' },
+            { time: '18:15', title: 'Canapés round 1', category: 'food', description: 'First round of canapés circulated' },
+            { time: '18:45', title: 'Canapés round 2', category: 'food', description: 'Second round of canapés circulated' },
+            { time: '19:15', title: 'Canapés round 3', category: 'food', description: 'Third round of canapés circulated' },
+            { time: '19:30', title: 'Speeches / formalities', category: 'ceremony', description: 'Welcome address' },
+            { time: '20:00', title: 'Substantial food service', category: 'food', description: 'Grazing stations / substantial canapés' },
+            { time: '21:30', title: 'Last drinks call', category: 'drinks', description: 'Last drinks announced' },
+            { time: '22:00', title: 'Event conclusion', category: 'setup', description: 'Guests depart, pack-down begins' },
+          );
+        } else {
+          // Generic event template
+          suggestedItems.push(
+            { time: '08:00', title: 'Venue setup', category: 'setup', description: 'Venue team setup and preparation' },
+            { time: '09:00', title: 'Catering team arrival', category: 'setup', description: 'Catering team arrive and set up' },
+            { time: '10:00', title: 'Guest arrival', category: 'arrival', description: 'Guests arrive and are welcomed' },
+            { time: '12:00', title: 'Lunch / refreshments', category: 'food', description: `Refreshments for ${eventData.guestCount || ''} guests` },
+            { time: '17:00', title: 'Event conclusion', category: 'ceremony', description: 'Event wraps up' },
+            { time: '17:30', title: 'Pack-down', category: 'setup', description: 'Venue pack-down' },
+          );
+        }
+
+        return { eventData, suggestedItems };
+      }),
+  }),
+
+  // ─── Menu Catalogue CSV Import ────────────────────────────────────────────
+  menuCatalogImport: router({
+    bulkCreateItems: protectedProcedure
+      .input(z.object({
+        items: z.array(z.object({
+          categoryId: z.number(),
+          name: z.string().min(1).max(255),
+          description: z.string().optional(),
+          pricingType: z.enum(['per_person', 'per_item']).default('per_person'),
+          price: z.number().min(0).default(0),
+          unit: z.string().optional(),
+          allergens: z.string().optional(),
+          available: z.boolean().default(true),
+          sortOrder: z.number().optional(),
+        }))
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategoryItems } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const rows = input.items.map((item, i) => ({
+          categoryId: item.categoryId,
+          ownerId: ctx.user.id,
+          name: item.name,
+          description: item.description ?? null,
+          pricingType: item.pricingType,
+          price: Math.round((item.price ?? 0) * 100),
+          unit: item.unit ?? 'person',
+          available: item.available ?? true,
+          allergens: item.allergens ?? null,
+          sortOrder: item.sortOrder ?? i,
+          createdAt: Date.now(),
+        }));
+        if (rows.length > 0) {
+          await db.insert(menuCategoryItems).values(rows);
+        }
+        return { inserted: rows.length };
+      }),
+  }),
+
+  // ─── Staff Portal ─────────────────────────────────────────────────────────
+  staffPortal: router({
+    // Generate a magic link for a runsheet
+    createLink: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        label: z.string().optional(),
+        expiresInDays: z.number().min(1).max(365).default(30),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { staffPortalLinks, runsheets } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const crypto = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        // Verify runsheet belongs to owner
+        const [sheet] = await db.select().from(runsheets)
+          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id)));
+        if (!sheet) throw new Error('Runsheet not found');
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000;
+        await db.insert(staffPortalLinks).values({
+          ownerId: ctx.user.id,
+          runsheetId: input.runsheetId,
+          token,
+          label: input.label ?? 'Staff Link',
+          expiresAt,
+          createdAt: Date.now(),
+        });
+        return { token, expiresAt };
+      }),
+
+    listLinks: protectedProcedure
+      .input(z.object({ runsheetId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { staffPortalLinks } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(staffPortalLinks)
+          .where(and(eq(staffPortalLinks.runsheetId, input.runsheetId), eq(staffPortalLinks.ownerId, ctx.user.id)))
+          .orderBy(staffPortalLinks.createdAt);
+      }),
+
+    deleteLink: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { staffPortalLinks } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(staffPortalLinks)
+          .where(and(eq(staffPortalLinks.id, input.id), eq(staffPortalLinks.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    // Public endpoint — no auth required, just a valid token
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { staffPortalLinks, runsheets, runsheetItems, fnbItems } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [link] = await db.select().from(staffPortalLinks)
+          .where(eq(staffPortalLinks.token, input.token));
+        if (!link) return null;
+        // Check expiry
+        if (link.expiresAt && link.expiresAt < Date.now()) return { expired: true };
+        // Update last accessed
+        await db.update(staffPortalLinks)
+          .set({ lastAccessedAt: Date.now() })
+          .where(eq(staffPortalLinks.id, link.id));
+        // Fetch runsheet + items
+        const [sheet] = await db.select().from(runsheets)
+          .where(eq(runsheets.id, link.runsheetId));
+        if (!sheet) return null;
+        const items = await db.select().from(runsheetItems)
+          .where(eq(runsheetItems.runsheetId, link.runsheetId))
+          .orderBy(runsheetItems.sortOrder);
+        const fnb = await db.select().from(fnbItems)
+          .where(eq(fnbItems.runsheetId, link.runsheetId));
+        return {
+          expired: false,
+          label: link.label,
+          runsheet: { ...sheet, items, fnbItems: fnb },
+        };
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;

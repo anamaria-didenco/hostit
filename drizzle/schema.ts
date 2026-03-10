@@ -742,3 +742,17 @@ export const clientPortalTokens = mysqlTable("client_portal_tokens", {
 });
 export type ClientPortalToken = typeof clientPortalTokens.$inferSelect;
 export type InsertClientPortalToken = typeof clientPortalTokens.$inferInsert;
+
+// ─── Staff Portal Links ───────────────────────────────────────────────────────
+export const staffPortalLinks = mysqlTable("staff_portal_links", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("owner_id").notNull(),
+  runsheetId: int("runsheet_id").notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  label: varchar("label", { length: 255 }), // e.g. "Front of House Team"
+  expiresAt: bigint("expires_at", { mode: "number" }),
+  lastAccessedAt: bigint("last_accessed_at", { mode: "number" }),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type StaffPortalLink = typeof staffPortalLinks.$inferSelect;
+export type InsertStaffPortalLink = typeof staffPortalLinks.$inferInsert;
