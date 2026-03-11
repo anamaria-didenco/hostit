@@ -20,7 +20,6 @@ import ExpressBook from "./pages/ExpressBook";
 import MenuManagement from "./pages/MenuManagement";
 import EventDetail from "./pages/EventDetail";
 import ClientPortal from "./pages/ClientPortal";
-import StaffPortal from "./pages/StaffPortal";
 
 function Router() {
   return (
@@ -44,7 +43,6 @@ function Router() {
       <Route path="/book" component={ExpressBook} />
       <Route path="/event/:id" component={EventDetail} />
       <Route path="/portal/:token" component={ClientPortal} />
-      <Route path="/staff/:token" component={StaffPortal} />
       <Route path="/menu" component={MenuManagement} />
 
       <Route path="/404" component={NotFound} />

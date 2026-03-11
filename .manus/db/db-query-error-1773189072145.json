@@ -1,8 +1,0 @@
-{
-  "query": "ALTER TABLE runsheets ADD COLUMN IF NOT EXISTS \"floorPlanId\" INTEGER;",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 32v3PKrB59rwYSD.b369fd5893a3 --database Ptxx6THeEZbSP594bz6QrZ --execute ALTER TABLE runsheets ADD COLUMN IF NOT EXISTS \"floorPlanId\" INTEGER;",
-  "returncode": 1,
-  "logs": [
-    "ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 60 near \"\"floorPlanId\" INTEGER\""
-  ]
-}

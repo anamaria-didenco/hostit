@@ -11,7 +11,6 @@ import {
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
-  Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard,
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
@@ -138,7 +137,7 @@ export default function RunsheetBuilder() {
   const [dietarySectionOpen, setDietarySectionOpen] = useState(true);
 
   // F&B
-  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'checklist' | 'tableplan'>('timeline');
+  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'checklist'>('timeline');
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
   const [fnbSaving, setFnbSaving] = useState(false);
   const [newFnbItem, setNewFnbItem] = useState<Partial<FnbItem>>({
@@ -152,21 +151,6 @@ export default function RunsheetBuilder() {
   // Proposal link
   const [linkedProposalId, setLinkedProposalId] = useState<number | undefined>(proposalIdParam);
   const [proposalSectionOpen, setProposalSectionOpen] = useState(false);
-
-  // Floor plan link
-  const [linkedFloorPlanId, setLinkedFloorPlanId] = useState<number | undefined>(undefined);
-  const [floorPlanSectionOpen, setFloorPlanSectionOpen] = useState(false);
-
-  // Staff portal links
-  const [staffLinksSectionOpen, setStaffLinksSectionOpen] = useState(false);
-  const [creatingStaffLink, setCreatingStaffLink] = useState(false);
-  const [newStaffLinkLabel, setNewStaffLinkLabel] = useState('Staff Link');
-
-  // AI F&B paste modal
-  const [showFnbPaste, setShowFnbPaste] = useState(false);
-  const [fnbPasteText, setFnbPasteText] = useState('');
-  const [fnbParsedItems, setFnbParsedItems] = useState<any[]>([]);
-  const [fnbParsedLoading, setFnbParsedLoading] = useState(false);
 
   // Checklist items (pre-event tasks)
   // Templates panel
@@ -514,66 +498,6 @@ export default function RunsheetBuilder() {
     { id: bookingId! },
     { enabled: !!bookingId && !sheetId }
   );
-  // Floor plans
-  const { data: floorPlansList } = trpc.floorPlans.list.useQuery(
-    {},
-    { enabled: floorPlanSectionOpen || activeMainTab === 'tableplan' }
-  );
-  const { data: linkedFloorPlan } = trpc.floorPlans.get.useQuery(
-    { id: linkedFloorPlanId! },
-    { enabled: !!linkedFloorPlanId }
-  );
-  // Staff portal links
-  const { data: staffLinks, refetch: refetchStaffLinks } = trpc.staffPortal.listLinks.useQuery(
-    { runsheetId: sheetId! },
-    { enabled: !!sheetId && staffLinksSectionOpen }
-  );
-  const createStaffLinkMutation = trpc.staffPortal.createLink.useMutation({
-    onSuccess: () => { toast.success('Staff link created'); refetchStaffLinks(); setCreatingStaffLink(false); setNewStaffLinkLabel('Staff Link'); },
-    onError: () => toast.error('Failed to create staff link'),
-  });
-  const deleteStaffLinkMutation = trpc.staffPortal.deleteLink.useMutation({
-    onSuccess: () => { toast.success('Link deleted'); refetchStaffLinks(); },
-    onError: () => toast.error('Failed to delete link'),
-  });
-  // AI F&B parse mutation
-  const parseFnbMutation = trpc.menuCatalog.parseFnbText.useMutation({
-    onSuccess: (data: any) => {
-      setFnbParsedItems((data.fnbItems ?? []).map((it: any, i: number) => ({ ...it, _editId: String(i), _selected: true })));
-      setFnbParsedLoading(false);
-      if (!data.success) toast.error('AI could not parse all items — review carefully');
-    },
-    onError: () => { toast.error('Failed to parse F&B text'); setFnbParsedLoading(false); },
-  });
-  function runFnbParse() {
-    if (!fnbPasteText.trim()) { toast.error('Paste some text first'); return; }
-    setFnbParsedLoading(true);
-    setFnbParsedItems([]);
-    parseFnbMutation.mutate({ text: fnbPasteText, eventType: eventType || undefined, guestCount: guestCount ? Number(guestCount) : undefined });
-  }
-  function applyFnbParsed() {
-    const toAdd: FnbItem[] = fnbParsedItems
-      .filter((it: any) => it._selected)
-      .map((it: any, i: number) => ({
-        section: 'foh' as const,
-        course: it.course ?? 'Other',
-        dishName: it.dishName ?? it.name ?? '',
-        description: it.description ?? '',
-        qty: Number(it.qty) || 1,
-        dietary: it.dietary ?? '',
-        serviceTime: it.serviceTime ?? '',
-        prepNotes: it.prepNotes ?? '',
-        staffAssigned: '',
-        sortOrder: fnbItems.length + i,
-        _tempId: `ai-fnb-${Date.now()}-${i}`,
-      }));
-    if (toAdd.length === 0) { toast.error('No items selected'); return; }
-    setFnbItems(prev => [...prev, ...toAdd]);
-    toast.success(`${toAdd.length} item${toAdd.length !== 1 ? 's' : ''} added to F&B sheet`);
-    setShowFnbPaste(false);
-    setFnbPasteText('');
-    setFnbParsedItems([]);
-  }
   useEffect(() => {
     if (existing) {
       setTitle(existing.title);
@@ -586,7 +510,6 @@ export default function RunsheetBuilder() {
       setDietaries((existing.dietaries as Dietary[]) ?? []);
       setVenueSetup(existing.venueSetup ?? "");
       setLinkedProposalId((existing as any).proposalId ?? undefined);
-      setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
       setItems((existing.items ?? []).map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
     }
   }, [existing]);
@@ -785,7 +708,6 @@ export default function RunsheetBuilder() {
           dietaries: dietaries.length ? dietaries : undefined,
           venueSetup: venueSetup || undefined,
           proposalId: linkedProposalId,
-          floorPlanId: linkedFloorPlanId ?? null,
         });
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
@@ -1352,7 +1274,6 @@ export default function RunsheetBuilder() {
             { id: 'timeline', label: 'TIMELINE', icon: <Clock className="w-4 h-4" />, count: items.length },
             { id: 'fnb', label: 'F&B SHEET', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
             { id: 'checklist', label: 'CHECKLIST', icon: <CheckSquare className="w-4 h-4" />, count: `${checkedCount}/${checklistItems.length}` },
-            { id: 'tableplan', label: 'TABLE PLAN', icon: <LayoutGrid className="w-4 h-4" /> },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1585,22 +1506,14 @@ export default function RunsheetBuilder() {
                 <span className="font-bebas tracking-widest text-sm text-ink">F&B SHEET</span>
                 <span className="text-xs text-ink/40 font-dm">({fnbItems.length} items)</span>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { setShowFnbPaste(true); setFnbPasteText(''); setFnbParsedItems([]); }}
-                  className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
-                >
-                  <Sparkles className="w-3.5 h-3.5" /> AI PASTE
-                </button>
-                <Button
-                  onClick={saveFnb}
-                  disabled={fnbSaving}
-                  className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {fnbSaving ? 'SAVING...' : 'SAVE F&B'}
-                </Button>
-              </div>
+              <Button
+                onClick={saveFnb}
+                disabled={fnbSaving}
+                className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {fnbSaving ? 'SAVING...' : 'SAVE F&B'}
+              </Button>
             </div>
 
             {/* Print F&B header */}
@@ -2017,112 +1930,6 @@ export default function RunsheetBuilder() {
           </div>
         )}
 
-        {/* ── TABLE PLAN TAB ──────────────────────────────────────────────── */}
-        {activeMainTab === 'tableplan' && (
-          <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
-              <div className="flex items-center gap-2">
-                <LayoutGrid className="w-4 h-4 text-gold" />
-                <span className="font-bebas tracking-widest text-sm text-ink">TABLE PLAN</span>
-              </div>
-              {linkedFloorPlanId && (
-                <a
-                  href={`/floor-plan?id=${linkedFloorPlanId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-bebas tracking-widest text-xs text-forest hover:underline flex items-center gap-1"
-                >
-                  <ExternalLink className="w-3 h-3" /> OPEN EDITOR
-                </a>
-              )}
-            </div>
-            {/* Floor plan selector */}
-            <div className="px-5 py-4 border-b border-gold/30">
-              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">LINK A FLOOR PLAN</label>
-              <select
-                value={linkedFloorPlanId ?? ""}
-                onChange={e => setLinkedFloorPlanId(e.target.value ? Number(e.target.value) : undefined)}
-                className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
-              >
-                <option value="">— No floor plan linked —</option>
-                {(floorPlansList ?? []).map((fp: any) => (
-                  <option key={fp.id} value={fp.id}>{fp.name}</option>
-                ))}
-              </select>
-              {!floorPlansList?.length && (
-                <p className="text-xs text-ink/40 font-dm mt-2">
-                  No floor plans yet.{' '}
-                  <a href="/floor-plan" className="text-forest underline">Create one in Floor Plan Builder</a>.
-                </p>
-              )}
-            </div>
-            {/* Embedded floor plan viewer */}
-            {linkedFloorPlan ? (
-              <div className="relative" style={{ height: '520px' }}>
-                <div className="absolute inset-0 flex flex-col">
-                  {/* Mini toolbar */}
-                  <div className="flex items-center justify-between px-4 py-2 bg-linen border-b border-gold/30 shrink-0">
-                    <span className="font-bebas tracking-widest text-xs text-ink/60">{linkedFloorPlan.name}</span>
-                    <div className="flex items-center gap-3">
-                      {linkedFloorPlan.shareToken && (
-                        <button
-                          onClick={() => {
-                            const url = `${window.location.origin}/floor-plan/share/${linkedFloorPlan.shareToken}`;
-                            navigator.clipboard.writeText(url);
-                            toast.success('Share link copied!');
-                          }}
-                          className="font-bebas tracking-widest text-[10px] text-ink/50 hover:text-forest flex items-center gap-1 transition-colors"
-                        >
-                          <Share2 className="w-3 h-3" /> COPY SHARE LINK
-                        </button>
-                      )}
-                      <span className="text-[10px] font-dm text-ink/30">READ ONLY VIEW</span>
-                    </div>
-                  </div>
-                  {/* Canvas area - render elements */}
-                  <div className="flex-1 overflow-auto bg-gray-50 p-4">
-                    {linkedFloorPlan.canvasData ? (
-                      <div className="relative bg-white border border-gold/20 shadow-sm mx-auto" style={{ width: (linkedFloorPlan.canvasData as any).width ?? 900, height: (linkedFloorPlan.canvasData as any).height ?? 600, maxWidth: '100%' }}>
-                        {linkedFloorPlan.bgImageUrl && (
-                          <img src={linkedFloorPlan.bgImageUrl} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ opacity: 0.3 }} />
-                        )}
-                        {((linkedFloorPlan.canvasData as any).elements ?? []).map((el: any) => (
-                          <div
-                            key={el.id}
-                            className="absolute border border-gold/40 flex items-center justify-center text-center"
-                            style={{
-                              left: el.x, top: el.y,
-                              width: el.width, height: el.height,
-                              transform: `rotate(${el.rotation ?? 0}deg)`,
-                              backgroundColor: el.color ? `${el.color}33` : '#f5f0e833',
-                              borderColor: el.color ?? '#c9a84c',
-                              fontSize: 10,
-                              fontFamily: 'DM Sans, sans-serif',
-                            }}
-                          >
-                            <span className="text-ink/70 px-1 leading-tight">{el.label ?? el.type}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-ink/30 font-dm text-sm">
-                        No canvas data — open the editor to design your floor plan.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-ink/30">
-                <LayoutGrid className="w-12 h-12 mb-3 opacity-20" />
-                <p className="font-dm text-sm">Link a floor plan above to view it here.</p>
-                <a href="/floor-plan" className="mt-3 font-bebas tracking-widest text-xs text-forest hover:underline flex items-center gap-1">
-                  <Plus className="w-3 h-3" /> CREATE FLOOR PLAN
-                </a>
-              </div>
-            )}
-          </div>
-        )}
         {/* ── Linked Proposal (collapsible, at bottom) ──────────────────── */}
         {leadProposals && leadProposals.length > 0 && (
           <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
@@ -2215,166 +2022,6 @@ export default function RunsheetBuilder() {
                       <FileText className="w-3 h-3" /> VIEW FULL PROPOSAL
                     </a>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Floor Plan Link section ──────────────────────────────────── */}
-        <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
-          <button
-            onClick={() => setFloorPlanSectionOpen(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <LayoutGrid className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-widest text-sm text-forest">FLOOR PLAN</span>
-              {linkedFloorPlanId && <span className="text-xs text-forest/50 font-dm">(linked)</span>}
-            </div>
-            {floorPlanSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
-          </button>
-          {floorPlanSectionOpen && (
-            <div className="px-5 pb-5 pt-2 space-y-3">
-              <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">SELECT FLOOR PLAN</label>
-                <select
-                  value={linkedFloorPlanId ?? ""}
-                  onChange={e => setLinkedFloorPlanId(e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
-                >
-                  <option value="">— No floor plan —</option>
-                  {(floorPlansList ?? []).map((fp: any) => (
-                    <option key={fp.id} value={fp.id}>{fp.name}</option>
-                  ))}
-                </select>
-              </div>
-              {linkedFloorPlanId && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setActiveMainTab('tableplan')}
-                    className="font-bebas tracking-widest text-[10px] text-forest hover:underline flex items-center gap-1"
-                  >
-                    <LayoutGrid className="w-3 h-3" /> VIEW IN TABLE PLAN TAB
-                  </button>
-                  <span className="text-ink/20">•</span>
-                  <a
-                    href={`/floor-plan?id=${linkedFloorPlanId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-bebas tracking-widest text-[10px] text-forest hover:underline flex items-center gap-1"
-                  >
-                    <ExternalLink className="w-3 h-3" /> OPEN EDITOR
-                  </a>
-                </div>
-              )}
-              {!floorPlansList?.length && (
-                <p className="text-xs text-ink/40 font-dm">
-                  No floor plans yet.{' '}
-                  <a href="/floor-plan" className="text-forest underline">Create one</a>.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ── Staff Portal Links section ───────────────────────────────── */}
-        {sheetId && (
-          <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
-            <button
-              onClick={() => setStaffLinksSectionOpen(v => !v)}
-              className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-forest" />
-                <span className="font-bebas tracking-widest text-sm text-forest">STAFF PORTAL LINKS</span>
-                {staffLinks && staffLinks.length > 0 && (
-                  <span className="text-xs text-forest/50 font-dm">({staffLinks.length} link{staffLinks.length !== 1 ? 's' : ''})</span>
-                )}
-              </div>
-              {staffLinksSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
-            </button>
-            {staffLinksSectionOpen && (
-              <div className="px-5 pb-5 pt-2 space-y-4">
-                <p className="text-xs font-dm text-ink/50">Generate a read-only link for staff to view the runsheet without logging in.</p>
-                {/* Existing links */}
-                {(staffLinks ?? []).length > 0 && (
-                  <div className="space-y-2">
-                    {(staffLinks ?? []).map((link: any) => {
-                      const url = `${window.location.origin}/staff/${link.token}`;
-                      return (
-                        <div key={link.id} className="flex items-center gap-2 bg-linen border border-gold/30 px-3 py-2">
-                          <Key className="w-3.5 h-3.5 text-gold shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-dm text-xs font-semibold text-ink truncate">{link.label}</div>
-                            <div className="font-dm text-[10px] text-ink/40 truncate">{url}</div>
-                            {link.expiresAt && (
-                              <div className="font-dm text-[10px] text-ink/30">
-                                Expires: {new Date(link.expiresAt).toLocaleDateString('en-NZ')}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied!'); }}
-                            className="p-1 hover:text-forest transition-colors text-ink/40"
-                            title="Copy link"
-                          >
-                            <Clipboard className="w-3.5 h-3.5" />
-                          </button>
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1 hover:text-forest transition-colors text-ink/40"
-                            title="Open link"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                          <button
-                            onClick={() => deleteStaffLinkMutation.mutate({ id: link.id })}
-                            className="p-1 hover:text-red-500 transition-colors text-ink/30"
-                            title="Delete link"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {/* Create new link */}
-                {creatingStaffLink ? (
-                  <div className="space-y-2">
-                    <Input
-                      value={newStaffLinkLabel}
-                      onChange={e => setNewStaffLinkLabel(e.target.value)}
-                      placeholder="Link label (e.g. FOH Team)"
-                      className="border-gold/30 rounded-none font-dm text-sm h-9"
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => createStaffLinkMutation.mutate({ runsheetId: sheetId!, label: newStaffLinkLabel })}
-                        disabled={createStaffLinkMutation.isPending}
-                        className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 h-8 flex items-center gap-1.5"
-                      >
-                        <Share2 className="w-3 h-3" /> {createStaffLinkMutation.isPending ? 'CREATING...' : 'CREATE LINK'}
-                      </Button>
-                      <Button
-                        onClick={() => setCreatingStaffLink(false)}
-                        variant="outline"
-                        className="font-bebas tracking-widest text-xs rounded-none px-4 h-8"
-                      >
-                        CANCEL
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setCreatingStaffLink(true)}
-                    className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-3 py-1.5 hover:bg-forest/5 transition-colors"
-                  >
-                    <Plus className="w-3 h-3" /> NEW STAFF LINK
-                  </button>
                 )}
               </div>
             )}
@@ -2877,132 +2524,6 @@ export default function RunsheetBuilder() {
         </div>
       )}
 
-      {/* ── AI F&B PASTE MODAL ──────────────────────────────────────────── */}
-      {showFnbPaste && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest">
-              <div>
-                <div className="font-bebas tracking-widest text-gold text-lg flex items-center gap-2">
-                  <Sparkles className="w-5 h-5" /> AI F&B PASTE
-                </div>
-                <div className="font-dm text-white/60 text-xs mt-0.5">Paste a catering brief, menu notes, or email — AI will extract the F&B items</div>
-              </div>
-              <button onClick={() => setShowFnbPaste(false)} className="text-white/50 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto">
-              {fnbParsedItems.length === 0 ? (
-                <div className="p-6 space-y-4">
-                  <div>
-                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">PASTE CATERING TEXT</label>
-                    <Textarea
-                      value={fnbPasteText}
-                      onChange={e => setFnbPasteText(e.target.value)}
-                      placeholder={`Paste menu details, catering brief, or email here...\n\nExamples:\n• “Canapés on arrival: smoked salmon blini, bruschetta (V), arancini (V, GF) — 80 guests”\n• “Sit-down dinner: entree — prawn cocktail; main — beef tenderloin or mushroom risotto (V); dessert — crème brûlée”\n• Paste a full catering proposal or email`}
-                      className="min-h-[220px] border-gold/30 rounded-none font-dm text-sm resize-none focus:border-forest"
-                    />
-                  </div>
-                  <div className="flex items-center gap-3 text-xs font-dm text-ink/40">
-                    <span>Guest count: <strong className="text-ink/60">{guestCount || 'not set'}</strong></span>
-                    <span>•</span>
-                    <span>Event type: <strong className="text-ink/60">{eventType || 'not set'}</strong></span>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="font-bebas tracking-widest text-sm text-ink">
-                      {fnbParsedItems.filter((it: any) => it._selected).length} of {fnbParsedItems.length} items selected
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setFnbParsedItems(prev => prev.map(it => ({ ...it, _selected: true })))}
-                        className="font-bebas tracking-widest text-[10px] text-forest hover:underline"
-                      >
-                        SELECT ALL
-                      </button>
-                      <span className="text-ink/20">•</span>
-                      <button
-                        onClick={() => setFnbParsedItems(prev => prev.map(it => ({ ...it, _selected: false })))}
-                        className="font-bebas tracking-widest text-[10px] text-ink/40 hover:underline"
-                      >
-                        DESELECT ALL
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    {fnbParsedItems.map((item: any, idx: number) => (
-                      <div
-                        key={item._editId}
-                        onClick={() => setFnbParsedItems(prev => prev.map((it, i) => i === idx ? { ...it, _selected: !it._selected } : it))}
-                        className={`flex items-start gap-3 px-3 py-2.5 cursor-pointer border-l-2 transition-colors ${
-                          item._selected ? 'bg-forest/5 border-forest' : 'bg-white border-transparent hover:bg-linen'
-                        }`}
-                      >
-                        <div className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                          item._selected ? 'bg-forest border-forest' : 'border-ink/30'
-                        }`}>
-                          {item._selected && <span className="text-white text-[10px] leading-none">✓</span>}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-dm text-sm font-semibold text-ink">{item.dishName}</span>
-                            <span className="font-bebas text-[10px] tracking-widest text-gold bg-gold/10 px-1.5 py-0.5">{item.course}</span>
-                            {item.dietary && <span className="font-dm text-[10px] text-green-700 bg-green-50 px-1.5 py-0.5">{item.dietary}</span>}
-                          </div>
-                          <div className="flex items-center gap-3 mt-0.5 text-[11px] font-dm text-ink/50">
-                            {item.qty > 1 && <span>Qty: {item.qty}</span>}
-                            {item.serviceTime && <span>⏰ {item.serviceTime}</span>}
-                            {item.description && <span className="truncate">{item.description}</span>}
-                            {item.prepNotes && <span className="italic">{item.prepNotes}</span>}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => { setFnbParsedItems([]); }}
-                    className="font-bebas tracking-widest text-[10px] text-ink/40 hover:text-ink flex items-center gap-1"
-                  >
-                    ← PASTE DIFFERENT TEXT
-                  </button>
-                </div>
-              )}
-            </div>
-            {/* Footer */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gold/30 bg-linen">
-              <button
-                onClick={() => setShowFnbPaste(false)}
-                className="font-bebas tracking-widest text-sm text-ink/50 hover:text-ink transition-colors"
-              >
-                CANCEL
-              </button>
-              {fnbParsedItems.length === 0 ? (
-                <Button
-                  onClick={runFnbParse}
-                  disabled={fnbParsedLoading || !fnbPasteText.trim()}
-                  className="bg-forest hover:bg-forest/90 disabled:opacity-40 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  {fnbParsedLoading ? 'PARSING...' : 'PARSE WITH AI'}
-                </Button>
-              ) : (
-                <Button
-                  onClick={applyFnbParsed}
-                  disabled={fnbParsedItems.filter((it: any) => it._selected).length === 0}
-                  className="bg-gold hover:bg-gold/90 disabled:opacity-40 text-ink font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" /> ADD {fnbParsedItems.filter((it: any) => it._selected).length} ITEMS TO F&B SHEET
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
       <style>{`
         @media print {
           .no-print { display: none !important; }
