@@ -86,6 +86,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     const title: string = rs.title || "Event Runsheet";
     const notes: string = rs.notes || "";
     const venueSetup: string = rs.venueSetup || "";
+    const footerText: string = rs.footerText || "";
 
     let dietaries: Array<{ name: string; count: number; notes?: string }> = [];
     try {
@@ -216,7 +217,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
       <div class="fnb-dish-name">${f.dishName}</div>
       ${f.description ? `<div class="fnb-dish-desc">${f.description}</div>` : ""}
     </div>
-    <div class="fnb-qty">${f.qty}</div>
+    <div class="fnb-qty">${f.course === "Drinks" ? "" : f.qty}</div>
     <div class="fnb-time">${f.serviceTime ? formatTime12(f.serviceTime) : ""}</div>
     <div class="fnb-dietary">${f.dietary ? `<span class="dietary-tag">${f.dietary}</span>` : ""}</div>
     <div class="fnb-staff">
@@ -543,6 +544,12 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
   ${timelineSection}
   ${fohSection}
   ${kitchenSection}
+
+  ${footerText ? `
+<div class="card" style="border-color:rgba(201,168,76,0.5);background:#fdf9f0;">
+  <div class="card-header" style="background:#8b6914;">PAYMENT &amp; NOTES</div>
+  <div class="notes-text" style="font-size:9.5px;color:#4a3800;">${footerText.replace(/\n/g, "<br>")}</div>
+</div>` : ""}
 
   <div class="doc-footer">
     <div class="footer-left">POWERED BY HOSTIT · STAFF BRIEFING SHEET</div>

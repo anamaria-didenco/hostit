@@ -147,6 +147,7 @@ export default function RunsheetBuilder() {
 
   // Venue setup
   const [venueSetup, setVenueSetup] = useState("");
+  const [footerText, setFooterText] = useState("");
   const [setupSectionOpen, setSetupSectionOpen] = useState(true);
 
   // Proposal link
@@ -594,6 +595,7 @@ export default function RunsheetBuilder() {
       setNotes(existing.notes ?? "");
       setDietaries((existing.dietaries as Dietary[]) ?? []);
       setVenueSetup(existing.venueSetup ?? "");
+      setFooterText(existing.footerText ?? "");
       setLinkedProposalId((existing as any).proposalId ?? undefined);
       setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
       setItems((existing.items ?? []).map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
@@ -776,6 +778,7 @@ export default function RunsheetBuilder() {
           notes: notes || undefined,
           dietaries: dietaries.length ? dietaries : undefined,
           venueSetup: venueSetup || undefined,
+          footerText: footerText || undefined,
           items: items.map((item, i) => ({
             time: item.time,
             duration: item.duration,
@@ -799,6 +802,7 @@ export default function RunsheetBuilder() {
           notes: notes || undefined,
           dietaries: dietaries.length ? dietaries : undefined,
           venueSetup: venueSetup || undefined,
+          footerText: footerText || undefined,
           proposalId: linkedProposalId,
           floorPlanId: linkedFloorPlanId ?? null,
         });
@@ -1643,6 +1647,20 @@ export default function RunsheetBuilder() {
               />
               {notes && <div className="hidden print:block font-dm text-sm text-ink/70 whitespace-pre-wrap">{notes}</div>}
             </div>
+
+            {/* Footer / payment notes */}
+            <div className="px-5 py-4 border-t border-gold/30">
+              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">FOOTER NOTE</label>
+              <p className="font-dm text-[10px] text-ink/35 mb-2">Shown at the bottom of the runsheet — use for payment info, terms, or any closing note.</p>
+              <Textarea
+                value={footerText}
+                onChange={e => setFooterText(e.target.value)}
+                placeholder="e.g. Final payment of $2,400 due on the day. Thank you for choosing us!"
+                rows={3}
+                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm no-print"
+              />
+              {footerText && <div className="hidden print:block font-dm text-sm text-ink/60 whitespace-pre-wrap italic">{footerText}</div>}
+            </div>
           </div>
         )}
 
@@ -1953,6 +1971,7 @@ export default function RunsheetBuilder() {
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                     />
                   </div>
+                  {newFnbItem.course !== 'Drinks' && (
                   <div>
                     <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
                     <Input
@@ -1962,6 +1981,7 @@ export default function RunsheetBuilder() {
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                     />
                   </div>
+                  )}
                   <div className="flex items-end">
                     <p className="font-dm text-xs text-ink/40 pb-2">Use ADD FROM CATALOGUE to add dishes, or CUSTOM ITEM for one-off items.</p>
                   </div>
@@ -2015,12 +2035,14 @@ export default function RunsheetBuilder() {
                             {item.description && <div className="text-xs text-ink/40">{item.description}</div>}
                           </div>
                           <div>
-                            <input
-                              type="number" min={1}
-                              value={item.qty}
-                              onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
-                              className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center"
-                            />
+                            {item.course !== 'Drinks' && (
+                              <input
+                                type="number" min={1}
+                                value={item.qty}
+                                onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
+                                className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center"
+                              />
+                            )}
                           </div>
                           {showTimeCol && (
                             <div className="text-xs text-ink/50 font-dm">
@@ -2530,8 +2552,15 @@ export default function RunsheetBuilder() {
         )}
 
         {/* Print footer */}
-        <div className="hidden print:block mt-8 pt-4 border-t border-ink/20 text-xs text-ink/40 font-dm text-center">
-          Prepared by HOSTit — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
+        <div className="hidden print:block mt-8 border-t-2 border-gold/40 pt-4 space-y-2">
+          {footerText && (
+            <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap bg-linen/60 border border-gold/30 px-4 py-3">
+              {footerText}
+            </div>
+          )}
+          <div className="text-xs text-ink/40 font-dm text-center">
+            Prepared by HOSTit — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
+          </div>
         </div>
       </div>
 

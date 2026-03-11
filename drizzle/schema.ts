@@ -296,6 +296,7 @@ export const runsheets = pgTable("runsheets", {
   notes: text("notes"),
   dietaries: json("dietaries").$type<{ name: string; count: number; notes?: string }[]>(),
   venueSetup: text("venueSetup"),
+  footerText: text("footerText"),
   proposalId: integer("proposalId"),
   floorPlanId: integer("floorPlanId"),
   publicToken: varchar("publicToken", { length: 64 }).unique(),

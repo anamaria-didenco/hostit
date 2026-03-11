@@ -1694,6 +1694,7 @@ export const appRouter = router({
         notes: z.string().optional(),
         dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
         venueSetup: z.string().optional(),
+        footerText: z.string().optional(),
         items: z.array(z.object({
           time: z.string(),
           duration: z.number().optional(),
@@ -1724,6 +1725,7 @@ export const appRouter = router({
           notes: input.notes ?? null,
           dietaries: input.dietaries ?? null,
           venueSetup: input.venueSetup ?? null,
+          footerText: input.footerText ?? null,
           proposalId: input.proposalId ?? null,
           publicToken: token,
         }).returning({ id: runsheets.id });
@@ -1758,6 +1760,7 @@ export const appRouter = router({
         notes: z.string().optional(),
         dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
         venueSetup: z.string().optional(),
+        footerText: z.string().optional(),
         proposalId: z.number().nullable().optional(),
         floorPlanId: z.number().nullable().optional(),
       }))
@@ -1778,6 +1781,7 @@ export const appRouter = router({
         if (fields.eventDate !== undefined) updateData.eventDate = fields.eventDate ? new Date(fields.eventDate) : null;
         if (fields.dietaries !== undefined) updateData.dietaries = fields.dietaries;
         if (fields.venueSetup !== undefined) updateData.venueSetup = fields.venueSetup;
+        if (fields.footerText !== undefined) updateData.footerText = fields.footerText;
         if (fields.proposalId !== undefined) updateData.proposalId = fields.proposalId;
         if (fields.floorPlanId !== undefined) updateData.floorPlanId = fields.floorPlanId;
         await db.update(runsheets).set(updateData)
