@@ -1758,7 +1758,8 @@ export const appRouter = router({
         notes: z.string().optional(),
         dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
         venueSetup: z.string().optional(),
-        proposalId: z.number().optional(),
+        proposalId: z.number().nullable().optional(),
+        floorPlanId: z.number().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1778,6 +1779,7 @@ export const appRouter = router({
         if (fields.dietaries !== undefined) updateData.dietaries = fields.dietaries;
         if (fields.venueSetup !== undefined) updateData.venueSetup = fields.venueSetup;
         if (fields.proposalId !== undefined) updateData.proposalId = fields.proposalId;
+        if (fields.floorPlanId !== undefined) updateData.floorPlanId = fields.floorPlanId;
         await db.update(runsheets).set(updateData)
           .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)));
         return { success: true };
@@ -2784,6 +2786,35 @@ export const appRouter = router({
         if (rows.length > 0) await db.insert(menuCategoryItems).values(rows);
         return { success: true, count: rows.length };
       }),
+    // ── AI F&B Parse ──
+    parseFnbText: protectedProcedure
+      .input(z.object({
+        text: z.string().min(1),
+        eventType: z.string().optional(),
+        guestCount: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm');
+        const guestHint = input.guestCount ? ` The event has ${input.guestCount} guests.` : '';
+        const typeHint = input.eventType ? ` Event type: ${input.eventType}.` : '';
+        const prompt = `You are a professional venue event coordinator. Parse the following catering brief or menu notes and extract ALL food and beverage items into a structured list.${typeHint}${guestHint}\n\nReturn a JSON object with a single key "fnbItems" containing an array of items. Each item must have:\n- "section": either "foh" (front of house/service) or "kitchen" (kitchen prep)\n- "course": one of exactly: Canapes, Entree, Main, Dessert, Cheese, Late Night Snack, Breakfast, Morning Tea, Lunch, Afternoon Tea, Drinks, Other\n- "dishName": the name of the dish or item\n- "description": brief description if available (can be empty string)\n- "qty": quantity/portions as integer (use guest count if mentioned, else 1)\n- "dietary": dietary notes e.g. "V, GF" (can be empty string)\n- "serviceTime": time in HH:MM 24h format if mentioned (can be empty string)\n- "prepNotes": any kitchen prep notes (can be empty string)\n\nRules:\n- Group items by course logically (canapes before entree, etc.)\n- If a dish has multiple dietary variants (e.g. "beef and a vegetarian option"), create separate rows\n- Infer course from context (e.g. "on arrival" = Canapes, "sit down" = Entree/Main)\n- For drinks, use course = "Drinks"\n- If quantities are "per person" and guest count is known, multiply\n\nText to parse:\n${input.text}\n\nReturn ONLY valid JSON.`;
+        const response = await invokeLLM({
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant that outputs valid JSON only.' },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' } as any,
+        });
+        const rawContent = response.choices?.[0]?.message?.content ?? '{}';
+        const raw = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
+        try {
+          const parsed = JSON.parse(raw);
+          const items = Array.isArray(parsed.fnbItems) ? parsed.fnbItems : (Array.isArray(parsed) ? parsed : []);
+          return { fnbItems: items.slice(0, 80), success: true };
+        } catch {
+          return { fnbItems: [], success: false, error: 'Failed to parse AI response' };
+        }
+      }),
     // ── AI Runsheet Parse ──
     parseRunsheetText: protectedProcedure
       .input(z.object({ text: z.string().min(1), eventType: z.string().optional() }))
@@ -3349,5 +3380,85 @@ Return ONLY valid JSON. Example structure:
         return { success: true };
       }),
    }),
+
+  // ─── Staff Portal ─────────────────────────────────────────────────────────
+  staffPortal: router({
+    // Public: fetch runsheet data by token (no auth required)
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { staffPortalLinks, runsheets, runsheetItems, fnbItems } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [link] = await db.select().from(staffPortalLinks).where(eq(staffPortalLinks.token, input.token)).limit(1);
+        if (!link) return null;
+        if (link.expiresAt && link.expiresAt < Date.now()) return null;
+        await db.update(staffPortalLinks).set({ lastAccessedAt: Date.now() }).where(eq(staffPortalLinks.id, link.id));
+        const [runsheet] = await db.select().from(runsheets).where(eq(runsheets.id, link.runsheetId)).limit(1);
+        if (!runsheet) return null;
+        const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, link.runsheetId));
+        const fnb = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
+        return { link, runsheet, items, fnb };
+      }),
+
+    // Protected: create a new staff portal link
+    createLink: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        label: z.string().optional(),
+        expiresInDays: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { staffPortalLinks } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const crypto = await import('crypto');
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = input.expiresInDays ? Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000 : null;
+        const [created] = await db.insert(staffPortalLinks).values({
+          ownerId: ctx.user.id,
+          runsheetId: input.runsheetId,
+          token,
+          label: input.label ?? 'Staff Link',
+          expiresAt: expiresAt ?? undefined,
+          createdAt: Date.now(),
+        }).returning();
+        return created;
+      }),
+
+    // Protected: list all links for a runsheet
+    listLinks: protectedProcedure
+      .input(z.object({ runsheetId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { staffPortalLinks } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        return db.select().from(staffPortalLinks).where(and(
+          eq(staffPortalLinks.ownerId, ctx.user.id),
+          eq(staffPortalLinks.runsheetId, input.runsheetId),
+        ));
+      }),
+
+    // Protected: delete a link
+    deleteLink: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { staffPortalLinks } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(staffPortalLinks).where(and(
+          eq(staffPortalLinks.id, input.id),
+          eq(staffPortalLinks.ownerId, ctx.user.id),
+        ));
+        return { success: true };
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;

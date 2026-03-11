@@ -297,6 +297,7 @@ export const runsheets = pgTable("runsheets", {
   dietaries: json("dietaries").$type<{ name: string; count: number; notes?: string }[]>(),
   venueSetup: text("venueSetup"),
   proposalId: integer("proposalId"),
+  floorPlanId: integer("floorPlanId"),
   publicToken: varchar("publicToken", { length: 64 }).unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
@@ -791,3 +792,17 @@ export const tableSetups = pgTable("table_setups", {
 });
 export type TableSetup = typeof tableSetups.$inferSelect;
 export type InsertTableSetup = typeof tableSetups.$inferInsert;
+
+// ─── Staff Portal Links ───────────────────────────────────────────────────────
+export const staffPortalLinks = pgTable("staff_portal_links", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(),
+  runsheetId: integer("runsheet_id").notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  label: varchar("label", { length: 255 }),
+  expiresAt: bigint("expires_at", { mode: "number" }),
+  lastAccessedAt: bigint("last_accessed_at", { mode: "number" }),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type StaffPortalLink = typeof staffPortalLinks.$inferSelect;
+export type InsertStaffPortalLink = typeof staffPortalLinks.$inferInsert;

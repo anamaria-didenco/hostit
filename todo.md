@@ -619,3 +619,13 @@
 - [ ] Seating Chart module in EventDetail (drag-and-drop)
 - [ ] Dashboard KPI widgets (revenue, upcoming events, overdue tasks, conversion rate)
 - [ ] Improve Dashboard navigation with Contacts tab
+- [ ] Proposal link in RunsheetBuilder sidebar with auto-pull F&B
+- [x] Floor plan link in RunsheetBuilder sidebar
+- [x] Table plan / setup view tab in RunsheetBuilder
+- [x] Staff portal magic link generator in RunsheetBuilder
+- [x] Public StaffPortal page at /staff/:token
+- [x] AI F&B paste-parse modal in F&B tab (paste catering brief → extract dishes/courses/qty/dietary)
+- [x] Floor plan link section in RunsheetBuilder sidebar
+- [ ] Pull F&B from Proposal button in F&B tab
+- [x] TABLE PLAN tab in RunsheetBuilder
+- [x] Staff portal public page at /staff/:token
