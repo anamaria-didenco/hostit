@@ -1068,6 +1068,7 @@ export default function RunsheetBuilder() {
                 <Textarea
                   value={pasteText}
                   onChange={e => setPasteText(e.target.value)}
+                  onPaste={e => { e.stopPropagation(); }}
                   placeholder={"Paste anything here — for example:\n• A client email with event details, guest numbers, dietary requirements\n• A previous runsheet or Word document\n• Catering brief with menu and timeline\n\nAI will extract: event details, dietaries, F&B items, and timeline"}
                   rows={4}
                   className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm resize-none bg-white/80 placeholder:text-ink/30"
@@ -2498,8 +2499,10 @@ export default function RunsheetBuilder() {
                   <div>
                     <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">PASTE YOUR TEXT BELOW</label>
                     <Textarea
+                      autoFocus
                       value={pasteText}
                       onChange={e => setPasteText(e.target.value)}
+                      onPaste={e => { e.stopPropagation(); }}
                       placeholder={`Paste anything — an email, booking notes, a client brief, a Word doc...\n\nExamples of what gets extracted:\n• Event details (date, guests, contact info, space name)\n• Dietary requirements (e.g. "5 vegetarian, 2 gluten free")\n• Menu / F&B items (courses, dishes, quantities)\n• Event timeline (6pm – Guests arrive, 7pm – Dinner service...)`}
                       rows={12}
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm"
