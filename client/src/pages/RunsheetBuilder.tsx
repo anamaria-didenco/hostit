@@ -736,8 +736,10 @@ export default function RunsheetBuilder() {
   const createMutation = trpc.runsheets.create.useMutation({
     onSuccess: (data) => {
       setSheetId(data.id);
+      utils.runsheets.list.invalidate();
       toast.success("Runsheet created!");
-      navigate(`/runsheet?id=${data.id}`, { replace: true });
+      const qs = [`id=${data.id}`, bookingId ? `bookingId=${bookingId}` : ''].filter(Boolean).join('&');
+      navigate(`/runsheet?${qs}`, { replace: true });
     },
     onError: () => toast.error("Failed to save runsheet"),
   });
@@ -945,12 +947,23 @@ export default function RunsheetBuilder() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="no-print bg-forest border-b border-white/10 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/")} className="text-white/50 hover:text-white transition-colors">
+          <button
+            onClick={() => {
+              if (bookingId) navigate(`/event/${bookingId}`);
+              else navigate("/");
+            }}
+            className="text-white/50 hover:text-white transition-colors"
+          >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
             <span className="font-bebas tracking-widest text-gold text-sm">RUNSHEET BUILDER</span>
             {sheetId && <span className="ml-2 text-white/30 text-xs font-dm">#{sheetId}</span>}
+            {bookingId && (
+              <span className="ml-2 text-white/40 text-xs font-dm">
+                · Event #{bookingId}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">
