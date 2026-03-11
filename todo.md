@@ -626,6 +626,6 @@
 - [x] Public StaffPortal page at /staff/:token
 - [x] AI F&B paste-parse modal in F&B tab (paste catering brief → extract dishes/courses/qty/dietary)
 - [x] Floor plan link section in RunsheetBuilder sidebar
-- [ ] Pull F&B from Proposal button in F&B tab
+- [x] Pull F&B from Proposal button in F&B tab
 - [x] TABLE PLAN tab in RunsheetBuilder
 - [x] Staff portal public page at /staff/:token

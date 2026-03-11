@@ -11,7 +11,7 @@ import {
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
-  Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard,
+  Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw,
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
@@ -1612,9 +1612,62 @@ export default function RunsheetBuilder() {
             {/* ── PROPOSAL F&B SUMMARY ─────────────────────────────────── */}
             {linkedProposalId && (proposalDrinks || (proposalQuote?.items && proposalQuote.items.length > 0) || (linkedProposal?.lineItems)) && (
               <div className="mx-5 my-4 border border-gold/40 bg-[#fffbf0] p-4 space-y-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <UtensilsCrossed className="w-3.5 h-3.5 text-gold" />
-                  <span className="font-bebas tracking-widest text-xs text-[#8b6914]">FOOD & BEVERAGE FROM PROPOSAL</span>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2">
+                    <UtensilsCrossed className="w-3.5 h-3.5 text-gold" />
+                    <span className="font-bebas tracking-widest text-xs text-[#8b6914]">FOOD & BEVERAGE FROM PROPOSAL</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const qItems: any[] = (proposalQuote as any)?.items ?? [];
+                      const drinks: any = proposalDrinks;
+                      const foodRows: FnbItem[] = qItems.map((qi: any, i: number) => ({
+                        section: 'foh' as const,
+                        course: 'Menu',
+                        dishName: qi.name ?? qi.description ?? 'Menu Item',
+                        description: qi.description ?? '',
+                        qty: Number(qi.qty) || 1,
+                        dietary: '',
+                        serviceTime: '',
+                        staffAssigned: '',
+                        sortOrder: fnbItems.length + i,
+                        _tempId: `pull-qi-${Date.now()}-${i}`,
+                      }));
+                      const drinkRows: FnbItem[] = [];
+                      if (drinks?.selectedDrinks) {
+                        try {
+                          const arr: string[] = typeof drinks.selectedDrinks === 'string' ? JSON.parse(drinks.selectedDrinks) : drinks.selectedDrinks;
+                          arr.forEach((name: string, i: number) => {
+                            drinkRows.push({ section: 'foh', course: 'Drinks', dishName: name, qty: 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: fnbItems.length + foodRows.length + i, _tempId: `pull-dr-${Date.now()}-${i}` });
+                          });
+                        } catch {}
+                      }
+                      if (drinks?.customDrinks) {
+                        try {
+                          const arr: any[] = typeof drinks.customDrinks === 'string' ? JSON.parse(drinks.customDrinks) : drinks.customDrinks;
+                          arr.forEach((d: any, i: number) => {
+                            drinkRows.push({ section: 'foh', course: 'Drinks', dishName: d.name, description: d.description ?? '', qty: 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: fnbItems.length + foodRows.length + drinkRows.length + i, _tempId: `pull-cd-${Date.now()}-${i}` });
+                          });
+                        } catch {}
+                      }
+                      const liRows: FnbItem[] = [];
+                      if ((linkedProposal as any)?.lineItems) {
+                        try {
+                          const li = JSON.parse((linkedProposal as any).lineItems as string ?? '[]') as any[];
+                          li.filter((item: any) => item.description).forEach((item: any, i: number) => {
+                            liRows.push({ section: 'foh', course: 'Menu', dishName: item.description, qty: Number(item.qty) || 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: fnbItems.length + foodRows.length + drinkRows.length + i, _tempId: `pull-li-${Date.now()}-${i}` });
+                          });
+                        } catch {}
+                      }
+                      const all = [...foodRows, ...drinkRows, ...liRows];
+                      if (all.length === 0) { toast.error('No F&B items found in proposal'); return; }
+                      setFnbItems(prev => [...prev, ...all]);
+                      toast.success(`${all.length} item${all.length !== 1 ? 's' : ''} pulled from proposal`);
+                    }}
+                    className="font-bebas tracking-widest text-[10px] text-[#8b6914] hover:text-forest flex items-center gap-1 border border-gold/40 px-2 py-1 hover:bg-forest/5 hover:border-forest/30 transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" /> PULL INTO F&B SHEET
+                  </button>
                 </div>
 
                 {/* Food items from line items */}
