@@ -586,9 +586,10 @@ export default function Dashboard() {
     onSuccess: () => { setNoteText(""); utils.leads.getActivity.invalidate({ leadId: selectedLead?.id }); toast.success("Note added"); },
   });
   const createRunsheet = trpc.runsheets.create.useMutation({
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       toast.success('Runsheet created!');
-      setLocation(`/runsheet?runsheetId=${data.id}`);
+      const leadParam = variables.leadId ? `&leadId=${variables.leadId}` : '';
+      setLocation(`/runsheet?id=${data.id}${leadParam}`);
     },
     onError: () => toast.error('Failed to create runsheet'),
   });
@@ -1750,6 +1751,8 @@ export default function Dashboard() {
                               eventDate,
                               guestCount,
                               eventType,
+                              notes: selectedLead.message ?? undefined,
+                              venueName: (venueSettings as any)?.name ?? undefined,
                               items: defaultItems,
                             });
                           }}

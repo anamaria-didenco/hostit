@@ -493,7 +493,7 @@ export default function RunsheetBuilder() {
 
   // Queries
   const { data: existing } = trpc.runsheets.get.useQuery({ id: sheetId! }, { enabled: !!sheetId });
-  const { data: lead } = trpc.leads.get.useQuery({ id: leadId! }, { enabled: !!leadId && !sheetId });
+  const { data: lead } = trpc.leads.get.useQuery({ id: leadId! }, { enabled: !!leadId });
   const { data: leadProposals } = trpc.proposals.byLead.useQuery(
     { leadId: leadId! },
     { enabled: !!leadId }
@@ -593,14 +593,17 @@ export default function RunsheetBuilder() {
 
   // Pre-fill from lead
   useEffect(() => {
-    if (lead && !sheetId) {
+    if (!lead) return;
+    // Always restore contact info from lead (contact fields are not persisted in DB)
+    setContactName(`${lead.firstName} ${lead.lastName ?? ""}`.trim());
+    setContactEmail(lead.email ?? "");
+    setContactPhone(lead.phone ?? "");
+    // Only seed main fields if we're creating fresh (no existing runsheet)
+    if (!sheetId) {
       setTitle(`${lead.firstName} ${lead.lastName ?? ""} — ${lead.eventType ?? "Event"}`);
       setEventDate(lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-CA") : "");
       setGuestCount(lead.guestCount ? String(lead.guestCount) : "");
       setEventType(lead.eventType ?? "");
-      setContactName(`${lead.firstName} ${lead.lastName ?? ""}`.trim());
-      setContactEmail(lead.email ?? "");
-      setContactPhone(lead.phone ?? "");
       seedDefaultItems(lead.eventType ?? "");
     }
   }, [lead, sheetId]);
