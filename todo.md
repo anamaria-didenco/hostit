@@ -629,3 +629,4 @@
 - [x] Pull F&B from Proposal button in F&B tab
 - [x] TABLE PLAN tab in RunsheetBuilder
 - [x] Staff portal public page at /staff/:token
+- [x] Auto-categorize pulled F&B items into Food and Beverage sections on Pull from Proposal
