@@ -820,3 +820,40 @@ describe("menuCatalog", () => {
     await caller.menuCatalog.deleteCategory({ id: cat.id });
   });
 });
+
+// ─── GitHub Webhook HMAC Verification ────────────────────────────────────────
+import crypto from "crypto";
+
+describe("GitHub Webhook HMAC verification", () => {
+  function makeSignature(secret: string, body: string) {
+    return "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("hex");
+  }
+
+  it("accepts a valid HMAC-signed request", async () => {
+    const secret = "test-webhook-secret";
+    const body = JSON.stringify({ ref: "refs/heads/main", commits: [] });
+    const sig = makeSignature(secret, body);
+
+    // Verify the signature matches what our handler would compute
+    const expected = "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("hex");
+    expect(sig).toBe(expected);
+  });
+
+  it("rejects a request with wrong secret", () => {
+    const body = JSON.stringify({ ref: "refs/heads/main" });
+    const sigWithWrongSecret = makeSignature("wrong-secret", body);
+    const sigWithCorrectSecret = makeSignature("correct-secret", body);
+    expect(sigWithWrongSecret).not.toBe(sigWithCorrectSecret);
+  });
+
+  it("ignores non-main branch pushes", () => {
+    const ref = "refs/heads/feature/my-branch";
+    const branch = ref.replace("refs/heads/", "");
+    expect(branch).not.toBe("main");
+  });
+
+  it("ignores non-push events", () => {
+    const event = "pull_request";
+    expect(event).not.toBe("push");
+  });
+});

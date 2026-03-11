@@ -18,6 +18,7 @@ import { upsertUser } from "../db";
 import { ENV } from "./env";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { handleGithubWebhook } from "../githubWebhook";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,6 +42,12 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  // GitHub webhook — must capture raw body BEFORE json middleware for HMAC verification
+  app.post("/api/webhook/github", express.raw({ type: "application/json" }), (req, res) => {
+    try { req.body = JSON.parse((req.body as Buffer).toString()); } catch { req.body = {}; }
+    handleGithubWebhook(req, res);
+  });
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
