@@ -71,15 +71,8 @@ async function startServer() {
       }
 
       const openId = "local-admin";
-      await upsertUser({
-        openId,
-        name: "Admin",
-        email: null,
-        loginMethod: "local",
-        role: "admin",
-        lastSignedIn: new Date(),
-      });
-
+      // Skip DB write — create JWT directly so login works even if DB is unavailable
+      // The authenticateRequest method handles local- prefixed accounts without DB lookup
       const token = await sdk.createSessionToken(openId, { name: "Admin" });
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });

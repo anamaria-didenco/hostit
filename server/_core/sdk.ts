@@ -268,10 +268,26 @@ class SDKServer {
 
     const sessionUserId = session.openId;
     const signedInAt = new Date();
+
+    // Local admin accounts bypass the database entirely
+    if (sessionUserId.startsWith("local-")) {
+      return {
+        id: 0,
+        openId: sessionUserId,
+        name: session.name || "Admin",
+        email: null,
+        loginMethod: "local",
+        role: "admin",
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+        lastSignedIn: signedInAt,
+      } as User;
+    }
+
     let user = await db.getUserByOpenId(sessionUserId);
 
-    // If user not in DB, try to sync from OAuth (skip for local accounts)
-    if (!user && !sessionUserId.startsWith("local-")) {
+    // If user not in DB, try to sync from OAuth
+    if (!user) {
       try {
         const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
         await db.upsertUser({
@@ -292,10 +308,8 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
-    });
+    // Best-effort update of lastSignedIn (ignore DB errors)
+    db.upsertUser({ openId: user.openId, lastSignedIn: signedInAt }).catch(() => {});
 
     return user;
   }

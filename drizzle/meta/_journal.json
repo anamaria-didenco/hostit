@@ -35,6 +35,20 @@
       "when": 1773130788097,
       "tag": "0004_public_silver_centurion",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1773191188164,
+      "tag": "0005_perpetual_speed",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1773195133021,
+      "tag": "0006_talented_wind_dancer",
+      "breakpoints": true
     }
   ]
 }
