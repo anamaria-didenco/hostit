@@ -1,3 +1,4 @@
+import OpenAI from "openai";
 import { ENV } from "./env";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
@@ -209,20 +210,16 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () => {
-  const base = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? ENV.forgeApiUrl.replace(/\/$/, "")
-    : "https://forge.manus.im";
-  // If base already ends with /v1, don't add it again
-  return base.endsWith("/v1")
-    ? `${base}/chat/completions`
-    : `${base}/v1/chat/completions`;
-};
-
-const assertApiKey = () => {
+const getOpenAIClient = () => {
   if (!ENV.forgeApiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
+  return new OpenAI({
+    apiKey: ENV.forgeApiKey,
+    baseURL: ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+      ? ENV.forgeApiUrl
+      : undefined,
+  });
 };
 
 const normalizeResponseFormat = ({
@@ -271,7 +268,7 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  assertApiKey();
+  const openai = getOpenAIClient();
 
   const {
     messages,
@@ -284,24 +281,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  const payload: Record<string, unknown> = {
-    model: "gpt-4o",
-    messages: messages.map(normalizeMessage),
-  };
-
-  if (tools && tools.length > 0) {
-    payload.tools = tools;
-  }
-
   const normalizedToolChoice = normalizeToolChoice(
     toolChoice || tool_choice,
     tools
   );
-  if (normalizedToolChoice) {
-    payload.tool_choice = normalizedToolChoice;
-  }
-
-  payload.max_tokens = 4096;
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,
@@ -310,25 +293,24 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
   });
 
+  const requestParams: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+    model: "gpt-4o",
+    messages: messages.map(normalizeMessage) as OpenAI.Chat.ChatCompletionMessageParam[],
+    max_tokens: 4096,
+  };
+
+  if (tools && tools.length > 0) {
+    requestParams.tools = tools as OpenAI.Chat.ChatCompletionTool[];
+  }
+
+  if (normalizedToolChoice) {
+    requestParams.tool_choice = normalizedToolChoice as OpenAI.Chat.ChatCompletionToolChoiceOption;
+  }
+
   if (normalizedResponseFormat) {
-    payload.response_format = normalizedResponseFormat;
+    requestParams.response_format = normalizedResponseFormat as OpenAI.ResponseFormatJSONObject | OpenAI.ResponseFormatJSONSchema | OpenAI.ResponseFormatText;
   }
 
-  const response = await fetch(resolveApiUrl(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
-    );
-  }
-
-  return (await response.json()) as InvokeResult;
+  const result = await openai.chat.completions.create(requestParams);
+  return result as unknown as InvokeResult;
 }
