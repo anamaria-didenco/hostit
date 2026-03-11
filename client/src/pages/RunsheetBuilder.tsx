@@ -4,7 +4,6 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp,
@@ -1236,12 +1235,12 @@ export default function RunsheetBuilder() {
                   </button>
                 ))}
               </div>
-              <Textarea
+              <textarea
                 value={venueSetup}
                 onChange={e => setVenueSetup(e.target.value)}
                 placeholder="Describe the room layout, table arrangement, AV setup, decorations, bar position, dance floor, stage..."
                 rows={3}
-                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm"
+                className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm p-3 resize-none"
               />
             </div>
           )}
@@ -1600,12 +1599,12 @@ export default function RunsheetBuilder() {
             {/* General notes */}
             <div className="px-5 py-4 border-t border-gold/30">
               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">GENERAL NOTES</label>
-              <Textarea
+              <textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Any additional notes for the event..."
                 rows={3}
-                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm no-print"
+                className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm p-3 resize-none no-print"
               />
               {notes && <div className="hidden print:block font-dm text-sm text-ink/70 whitespace-pre-wrap">{notes}</div>}
             </div>
@@ -2774,12 +2773,12 @@ export default function RunsheetBuilder() {
                   placeholder="Template name (e.g. Cocktail)"
                   className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
-                <Textarea
+                <textarea
                   value={newSetupValue}
                   onChange={e => setNewSetupValue(e.target.value)}
                   placeholder="Setup description..."
                   rows={2}
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                  className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest text-sm p-2 resize-none font-dm"
                 />
                 <Button
                   onClick={() => {
@@ -2990,11 +2989,13 @@ export default function RunsheetBuilder() {
                 <div className="p-6 space-y-4">
                   <div>
                     <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">PASTE CATERING TEXT</label>
-                    <Textarea
+                    <textarea
+                      autoFocus
                       value={fnbPasteText}
                       onChange={e => setFnbPasteText(e.target.value)}
-                      placeholder={`Paste menu details, catering brief, or email here...\n\nExamples:\n• “Canapés on arrival: smoked salmon blini, bruschetta (V), arancini (V, GF) — 80 guests”\n• “Sit-down dinner: entree — prawn cocktail; main — beef tenderloin or mushroom risotto (V); dessert — crème brûlée”\n• Paste a full catering proposal or email`}
-                      className="min-h-[220px] border-gold/30 rounded-none font-dm text-sm resize-none focus:border-forest"
+                      placeholder="Paste menu details, catering brief, or email here..."
+                      rows={10}
+                      className="w-full border border-gold/30 rounded-none font-dm text-sm resize-none focus:outline-none focus:border-forest p-3"
                     />
                   </div>
                   <div className="flex items-center gap-3 text-xs font-dm text-ink/40">
