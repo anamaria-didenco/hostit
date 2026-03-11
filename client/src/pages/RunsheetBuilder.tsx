@@ -1052,6 +1052,40 @@ export default function RunsheetBuilder() {
         </div>
       )}
 
+      {/* ── Smart Paste Import Banner ───────────────────────────────────────── */}
+      <div className="no-print bg-gradient-to-r from-forest/8 via-gold/8 to-forest/8 border-b border-gold/25 px-6 py-4">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 pt-1">
+              <Sparkles className="w-5 h-5 text-gold" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="font-bebas tracking-widest text-sm text-forest">SMART PASTE IMPORT</span>
+                <span className="font-dm text-xs text-ink/50">Paste a client email, booking brief, Word doc or notes — AI fills in everything automatically</span>
+              </div>
+              <div className="flex gap-2 items-end">
+                <Textarea
+                  value={pasteText}
+                  onChange={e => setPasteText(e.target.value)}
+                  placeholder={"Paste anything here — for example:\n• A client email with event details, guest numbers, dietary requirements\n• A previous runsheet or Word document\n• Catering brief with menu and timeline\n\nAI will extract: event details, dietaries, F&B items, and timeline"}
+                  rows={4}
+                  className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm resize-none bg-white/80 placeholder:text-ink/30"
+                />
+                <button
+                  onClick={() => { if (pasteText.trim()) { setShowPasteImport(true); setParsedData(null); setEditedParsedTimeline([]); } }}
+                  disabled={!pasteText.trim()}
+                  className="font-bebas tracking-widest text-sm bg-forest text-cream px-5 flex flex-col items-center justify-center gap-1.5 hover:bg-forest/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 self-stretch"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  IMPORT
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="max-w-5xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0">
 
         {/* ── Print Header ────────────────────────────────────────────────── */}
