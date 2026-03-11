@@ -524,6 +524,17 @@ export default function RunsheetBuilder() {
     { id: bookingId! },
     { enabled: !!bookingId && !sheetId }
   );
+  // If this booking already has a runsheet, redirect to edit it instead of creating a new one
+  const { data: bookingRunsheets } = trpc.runsheets.list.useQuery(
+    { bookingId: bookingId! },
+    { enabled: !!bookingId && !sheetId }
+  );
+  useEffect(() => {
+    if (!sheetId && bookingRunsheets && bookingRunsheets.length > 0) {
+      const existingId = bookingRunsheets[0].id;
+      navigate(`/runsheet?id=${existingId}&bookingId=${bookingId}`);
+    }
+  }, [bookingRunsheets, sheetId]);
   // Floor plans
   const { data: floorPlansList } = trpc.floorPlans.list.useQuery(
     {},
