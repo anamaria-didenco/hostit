@@ -10,18 +10,18 @@ export type StatusDef = {
 };
 
 export const COLOR_PRESETS = [
-  { id: "amber",   label: "Gold",    classes: "border-amber-400 bg-amber-50 text-amber-800",     swatch: "#f59e0b" },
-  { id: "sky",     label: "Sky",     classes: "border-sky-400 bg-sky-50 text-sky-700",           swatch: "#38bdf8" },
-  { id: "forest",  label: "Forest",  classes: "border-emerald-700 bg-emerald-50 text-emerald-800", swatch: "#047857" },
-  { id: "orange",  label: "Orange",  classes: "border-orange-400 bg-orange-50 text-orange-700",  swatch: "#fb923c" },
-  { id: "emerald", label: "Emerald", classes: "border-emerald-500 bg-emerald-50 text-emerald-700", swatch: "#10b981" },
-  { id: "stone",   label: "Stone",   classes: "border-stone-400 bg-stone-100 text-stone-500",    swatch: "#a8a29e" },
-  { id: "purple",  label: "Purple",  classes: "border-purple-400 bg-purple-50 text-purple-700",  swatch: "#c084fc" },
-  { id: "pink",    label: "Pink",    classes: "border-pink-400 bg-pink-50 text-pink-700",        swatch: "#f472b6" },
-  { id: "indigo",  label: "Indigo",  classes: "border-indigo-400 bg-indigo-50 text-indigo-700",  swatch: "#818cf8" },
-  { id: "teal",    label: "Teal",    classes: "border-teal-400 bg-teal-50 text-teal-700",        swatch: "#2dd4bf" },
-  { id: "red",     label: "Red",     classes: "border-red-400 bg-red-50 text-red-700",           swatch: "#f87171" },
-  { id: "gray",    label: "Gray",    classes: "border-gray-400 bg-gray-50 text-gray-600",        swatch: "#9ca3af" },
+  { id: "amber",   label: "Gold",    classes: "border-amber-400 bg-amber-100 text-amber-900",     swatch: "#f59e0b" },
+  { id: "sky",     label: "Sky",     classes: "border-sky-400 bg-sky-100 text-sky-800",           swatch: "#38bdf8" },
+  { id: "forest",  label: "Forest",  classes: "border-emerald-600 bg-emerald-100 text-emerald-900", swatch: "#047857" },
+  { id: "orange",  label: "Orange",  classes: "border-orange-400 bg-orange-100 text-orange-800",  swatch: "#fb923c" },
+  { id: "emerald", label: "Emerald", classes: "border-emerald-500 bg-emerald-100 text-emerald-800", swatch: "#10b981" },
+  { id: "stone",   label: "Stone",   classes: "border-stone-400 bg-stone-200 text-stone-700",    swatch: "#a8a29e" },
+  { id: "purple",  label: "Purple",  classes: "border-purple-400 bg-purple-100 text-purple-800",  swatch: "#c084fc" },
+  { id: "pink",    label: "Pink",    classes: "border-pink-400 bg-pink-100 text-pink-800",        swatch: "#f472b6" },
+  { id: "indigo",  label: "Indigo",  classes: "border-indigo-400 bg-indigo-100 text-indigo-800",  swatch: "#818cf8" },
+  { id: "teal",    label: "Teal",    classes: "border-teal-400 bg-teal-100 text-teal-800",        swatch: "#2dd4bf" },
+  { id: "red",     label: "Red",     classes: "border-red-400 bg-red-100 text-red-800",           swatch: "#f87171" },
+  { id: "gray",    label: "Gray",    classes: "border-gray-400 bg-gray-100 text-gray-700",        swatch: "#9ca3af" },
 ];
 
 export const DEFAULT_STATUSES: StatusDef[] = [

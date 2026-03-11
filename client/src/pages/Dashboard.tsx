@@ -124,12 +124,12 @@ function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date |
 }
 
 const PIPELINE_STAGES = [
-  { key: "new", label: "NEW", color: "border-gold bg-gold/15 text-amber-800" },
-  { key: "contacted", label: "CONTACTED", color: "border-sky-400 bg-sky-50 text-sky-700" },
-  { key: "proposal_sent", label: "PROPOSAL SENT", color: "border-forest bg-forest/10 text-forest" },
-  { key: "negotiating", label: "NEGOTIATING", color: "border-orange-400 bg-orange-50 text-orange-700" },
-  { key: "booked", label: "CONFIRMED", color: "border-emerald-500 bg-emerald-50 text-emerald-700" },
-  { key: "lost", label: "LOST", color: "border-stone-400 bg-stone-50 text-stone-500" },
+  { key: "new", label: "NEW", color: "border-amber-400 bg-amber-100 text-amber-900" },
+  { key: "contacted", label: "CONTACTED", color: "border-sky-400 bg-sky-100 text-sky-800" },
+  { key: "proposal_sent", label: "PROPOSAL SENT", color: "border-emerald-600 bg-emerald-100 text-emerald-900" },
+  { key: "negotiating", label: "NEGOTIATING", color: "border-orange-400 bg-orange-100 text-orange-800" },
+  { key: "booked", label: "CONFIRMED", color: "border-emerald-500 bg-emerald-100 text-emerald-800" },
+  { key: "lost", label: "LOST", color: "border-stone-400 bg-stone-200 text-stone-700" },
 ];
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -1529,14 +1529,7 @@ export default function Dashboard() {
                                 <td className="px-3 py-2.5 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" }) : "—"}</td>
                                 <td className="px-3 py-2.5 font-dm text-xs text-ink/60 text-right">{lead.guestCount ?? "—"}</td>
                                 <td className="px-3 py-2.5">
-                                  <span
-                                    className="font-bebas text-xs tracking-widest px-1.5 py-0.5 border"
-                                    style={{
-                                      backgroundColor: statusStage?.swatch ? `${statusStage.swatch}18` : undefined,
-                                      borderColor: statusStage?.swatch ?? '#d4c5a9',
-                                      color: statusStage?.swatch ?? '#5a4a3a',
-                                    }}
-                                  >
+                                  <span className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}>
                                     {statusStage?.label ?? lead.status.replace(/_/g, " ")}
                                   </span>
                                 </td>
