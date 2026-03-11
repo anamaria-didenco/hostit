@@ -86,7 +86,7 @@ type FnbItem = {
   sortOrder: number;
   _tempId?: string;
 };
-const COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Other'];
+const COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'];
 
 type ParsedRunsheetData = {
   eventDetails?: {
