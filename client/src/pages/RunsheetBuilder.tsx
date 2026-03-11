@@ -1068,6 +1068,16 @@ export default function RunsheetBuilder() {
                 <textarea
                   value={pasteText}
                   onChange={e => setPasteText(e.target.value)}
+                  onPaste={e => {
+                    const text = e.clipboardData.getData('text');
+                    if (text) {
+                      e.preventDefault();
+                      const t = e.target as HTMLTextAreaElement;
+                      const start = t.selectionStart ?? pasteText.length;
+                      const end = t.selectionEnd ?? pasteText.length;
+                      setPasteText(pasteText.slice(0, start) + text + pasteText.slice(end));
+                    }
+                  }}
                   placeholder={"Paste anything here — for example:\n• A client email with event details, guest numbers, dietary requirements\n• A previous runsheet or Word document\n• Catering brief with menu and timeline\n\nAI will extract: event details, dietaries, F&B items, and timeline"}
                   rows={4}
                   className="flex-1 rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm resize-none bg-white/80 placeholder:text-ink/30 p-3"
@@ -2501,6 +2511,16 @@ export default function RunsheetBuilder() {
                       autoFocus
                       value={pasteText}
                       onChange={e => setPasteText(e.target.value)}
+                      onPaste={e => {
+                        const text = e.clipboardData.getData('text');
+                        if (text) {
+                          e.preventDefault();
+                          const t = e.target as HTMLTextAreaElement;
+                          const start = t.selectionStart ?? pasteText.length;
+                          const end = t.selectionEnd ?? pasteText.length;
+                          setPasteText(pasteText.slice(0, start) + text + pasteText.slice(end));
+                        }
+                      }}
                       placeholder={`Paste anything — an email, booking notes, a client brief, a Word doc...\n\nExamples of what gets extracted:\n• Event details (date, guests, contact info, space name)\n• Dietary requirements (e.g. "5 vegetarian, 2 gluten free")\n• Menu / F&B items (courses, dishes, quantities)\n• Event timeline (6pm – Guests arrive, 7pm – Dinner service...)`}
                       rows={12}
                       className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm p-3 resize-none"
@@ -2994,6 +3014,16 @@ export default function RunsheetBuilder() {
                       autoFocus
                       value={fnbPasteText}
                       onChange={e => setFnbPasteText(e.target.value)}
+                      onPaste={e => {
+                        const text = e.clipboardData.getData("text");
+                        if (text) {
+                          e.preventDefault();
+                          const t = e.target as HTMLTextAreaElement;
+                          const start = t.selectionStart ?? fnbPasteText.length;
+                          const end = t.selectionEnd ?? fnbPasteText.length;
+                          setFnbPasteText(fnbPasteText.slice(0, start) + text + fnbPasteText.slice(end));
+                        }
+                      }}
                       placeholder="Paste menu details, catering brief, or email here..."
                       rows={10}
                       className="w-full min-h-[220px] border border-gold/30 rounded-none font-dm text-sm resize-none focus:outline-none focus:border-forest p-3"
