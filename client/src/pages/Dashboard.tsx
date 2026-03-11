@@ -970,12 +970,7 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center max-w-sm w-full mx-4">
         <div className="mb-8">
           <div className="flex items-center justify-center mb-4">
-            <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-              alt="VenueFlowHQ"
-              className="h-12 w-auto object-contain"
-              style={{ filter: 'brightness(0)' }}
-            />
+            <span className="font-bold text-gray-900 text-2xl tracking-tight">VenueFlowHQ</span>
           </div>
           <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Event CRM for NZ Venues</p>
         </div>
@@ -1004,12 +999,7 @@ export default function Dashboard() {
       <nav className="bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
         <div className="flex items-center pr-5 border-r border-border mr-4 flex-shrink-0">
-          <img
-            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-            alt="VenueFlowHQ"
-            className="h-7 w-auto object-contain"
-            style={{ filter: 'brightness(0)' }}
-          />
+          <span className="font-bold text-gray-900 text-base tracking-tight">VenueFlowHQ</span>
         </div>
         {/* Primary nav tabs — hidden on mobile (shown in bottom bar instead) */}
         <div className="hidden md:flex items-center">

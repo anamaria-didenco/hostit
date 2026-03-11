@@ -354,12 +354,7 @@ export default function ProposalBuilder() {
           </Button>
         </Link>
         <div className="flex items-center mr-3">
-          <img
-            src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-            alt="VenueFlowHQ"
-            className="h-7 w-auto object-contain"
-            style={{ filter: 'brightness(0)' }}
-          />
+          <span className="font-bold text-gray-900 text-base tracking-tight">VenueFlowHQ</span>
         </div>
         <div className="font-inter text-sm font-medium text-gray-700">Proposal Builder</div>
         <div className="ml-auto flex items-center gap-2">
