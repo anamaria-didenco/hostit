@@ -1,25 +1,24 @@
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
-  Clock, Users, MapPin, Calendar, ChefHat, UtensilsCrossed,
-  AlertCircle, CheckCircle2, Loader2, Wine
+  Clock, Calendar, ChefHat, UtensilsCrossed,
+  AlertCircle, CheckCircle2, Loader2, User, Phone, Mail,
+  Building2,
 } from "lucide-react";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const CATEGORIES: Record<string, { label: string; color: string; bg: string }> = {
-  arrival:     { label: "Arrival",       color: "text-blue-700",   bg: "bg-blue-50 border-blue-200" },
-  ceremony:    { label: "Ceremony",      color: "text-purple-700", bg: "bg-purple-50 border-purple-200" },
-  catering:    { label: "Catering",      color: "text-orange-700", bg: "bg-orange-50 border-orange-200" },
-  drinks:      { label: "Drinks",        color: "text-teal-700",   bg: "bg-teal-50 border-teal-200" },
-  speeches:    { label: "Speeches",      color: "text-pink-700",   bg: "bg-pink-50 border-pink-200" },
-  entertainment: { label: "Entertainment", color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" },
-  setup:       { label: "Setup",         color: "text-gray-700",   bg: "bg-gray-50 border-gray-200" },
-  breakdown:   { label: "Breakdown",     color: "text-red-700",    bg: "bg-red-50 border-red-200" },
-  other:       { label: "Other",         color: "text-slate-700",  bg: "bg-slate-50 border-slate-200" },
+// ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
+const CATEGORIES: Record<string, { label: string; color: string; dot: string }> = {
+  setup:         { label: "Setup",         color: "bg-blue-100 text-blue-700",   dot: "bg-blue-400" },
+  guest:         { label: "Guest",         color: "bg-purple-100 text-purple-700", dot: "bg-purple-400" },
+  food:          { label: "Food",          color: "bg-amber-100 text-amber-700", dot: "bg-amber-400" },
+  beverage:      { label: "Beverage",      color: "bg-green-100 text-green-700", dot: "bg-green-400" },
+  speech:        { label: "Speech",        color: "bg-pink-100 text-pink-700",   dot: "bg-pink-400" },
+  entertainment: { label: "Entertainment", color: "bg-indigo-100 text-indigo-700", dot: "bg-indigo-400" },
+  packdown:      { label: "Packdown",      color: "bg-gray-100 text-gray-700",   dot: "bg-gray-400" },
+  other:         { label: "Other",         color: "bg-stone-100 text-stone-600", dot: "bg-stone-400" },
 };
+
+const COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'];
 
 function getCat(cat: string) {
   return CATEGORIES[cat] ?? CATEGORIES.other;
@@ -57,26 +56,24 @@ export default function StaffPortal() {
     { enabled: !!token, retry: false }
   );
 
-  // ── Loading ──
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-linen flex items-center justify-center">
         <div className="text-center space-y-3">
-          <Loader2 className="w-10 h-10 animate-spin text-slate-400 mx-auto" />
-          <p className="text-slate-500 text-sm">Loading runsheet…</p>
+          <Loader2 className="w-10 h-10 animate-spin text-forest/40 mx-auto" />
+          <p className="font-dm text-ink/50 text-sm">Loading runsheet…</p>
         </div>
       </div>
     );
   }
 
-  // ── Error / not found ──
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-linen flex items-center justify-center p-6">
         <div className="text-center space-y-4 max-w-sm">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto" />
-          <h1 className="text-xl font-semibold text-slate-800">Link not found or expired</h1>
-          <p className="text-slate-500 text-sm">
+          <h1 className="font-bebas tracking-widest text-xl text-ink">LINK NOT FOUND</h1>
+          <p className="font-dm text-ink/50 text-sm">
             This staff portal link may have expired or been revoked. Please ask your venue manager for a new link.
           </p>
         </div>
@@ -84,9 +81,8 @@ export default function StaffPortal() {
     );
   }
 
-  const { runsheet, items, fnb } = data;
+  const { runsheet, items, fnb, contactName, contactEmail, contactPhone } = data;
 
-  // Sort timeline items by time
   const sortedItems = [...items].sort((a, b) => {
     if (a.time < b.time) return -1;
     if (a.time > b.time) return 1;
@@ -96,284 +92,287 @@ export default function StaffPortal() {
   const fohItems = fnb.filter(f => f.section === "foh");
   const kitchenItems = fnb.filter(f => f.section === "kitchen");
 
-  // Group FOH by course
   const fohByCourse: Record<string, typeof fohItems> = {};
   for (const item of fohItems) {
-    const course = item.course ?? "General";
+    const course = item.course ?? "Other";
     if (!fohByCourse[course]) fohByCourse[course] = [];
     fohByCourse[course].push(item);
   }
 
-  // Group Kitchen by course
   const kitchenByCourse: Record<string, typeof kitchenItems> = {};
   for (const item of kitchenItems) {
-    const course = item.course ?? "General";
+    const course = item.course ?? "Other";
     if (!kitchenByCourse[course]) kitchenByCourse[course] = [];
     kitchenByCourse[course].push(item);
   }
 
+  const orderedFohCourses = COURSES.filter(c => fohByCourse[c]);
+  const orderedKitchenCourses = COURSES.filter(c => kitchenByCourse[c]);
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-linen">
       {/* ── Header ── */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+      <header className="bg-forest sticky top-0 z-10 shadow-md">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">{runsheet.title}</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Staff Runsheet — Read Only</p>
+            <p className="font-bebas tracking-widest text-white/60 text-xs">FUNCTION RUNSHEET — STAFF COPY</p>
+            <h1 className="font-bebas tracking-widest text-white text-lg leading-tight">{runsheet.title}</h1>
           </div>
-          <Badge variant="outline" className="text-xs bg-green-50 border-green-200 text-green-700">
-            <CheckCircle2 className="w-3 h-3 mr-1" />
-            Live
-          </Badge>
+          <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-sm">
+            <CheckCircle2 className="w-3.5 h-3.5 text-white/80" />
+            <span className="font-bebas tracking-widest text-white/90 text-xs">LIVE</span>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        {/* ── Event Summary ── */}
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-slate-800">Event Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="flex items-start gap-2">
-                <Calendar className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs text-slate-500">Date</p>
-                  <p className="text-sm font-medium text-slate-800">{formatDate(runsheet.eventDate)}</p>
-                </div>
+      <main className="max-w-4xl mx-auto px-4 py-5 space-y-4">
+
+        {/* ── Event Details ── */}
+        <div className="bg-white border border-gold/30 shadow-sm">
+          <div className="px-5 py-3 border-b border-gold/30 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-forest" />
+            <span className="font-bebas tracking-widest text-sm text-forest">EVENT DETAILS</span>
+          </div>
+          <div className="px-5 py-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">DATE</p>
+                <p className="font-dm text-sm font-semibold text-ink">{formatDate(runsheet.eventDate)}</p>
               </div>
-              <div className="flex items-start gap-2">
-                <Users className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs text-slate-500">Guests</p>
-                  <p className="text-sm font-medium text-slate-800">{runsheet.guestCount ?? "TBC"}</p>
-                </div>
+              <div>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">EVENT TYPE</p>
+                <p className="font-dm text-sm font-semibold text-ink">{runsheet.eventType || "—"}</p>
               </div>
-              {runsheet.spaceName && (
-                <div className="flex items-start gap-2">
-                  <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-slate-500">Space</p>
-                    <p className="text-sm font-medium text-slate-800">{runsheet.spaceName}</p>
-                  </div>
-                </div>
-              )}
-              {runsheet.eventType && (
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-slate-500">Event Type</p>
-                    <p className="text-sm font-medium text-slate-800 capitalize">{runsheet.eventType}</p>
-                  </div>
-                </div>
-              )}
+              <div>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">VENUE / SPACE</p>
+                <p className="font-dm text-sm font-semibold text-ink">{runsheet.spaceName || "—"}</p>
+              </div>
+              <div>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">GUESTS</p>
+                <p className="font-dm text-sm font-semibold text-ink">{runsheet.guestCount ?? "TBC"}</p>
+              </div>
             </div>
 
-            {runsheet.venueSetup && (
-              <>
-                <Separator className="my-3" />
-                <div>
-                  <p className="text-xs text-slate-500 mb-1">Venue Setup</p>
-                  <p className="text-sm text-slate-700">{runsheet.venueSetup}</p>
-                </div>
-              </>
-            )}
-
-            {runsheet.notes && (
-              <>
-                <Separator className="my-3" />
-                <div>
-                  <p className="text-xs text-slate-500 mb-1">Notes</p>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{runsheet.notes}</p>
-                </div>
-              </>
-            )}
-
-            {/* Dietaries */}
-            {runsheet.dietaries && runsheet.dietaries.length > 0 && (
-              <>
-                <Separator className="my-3" />
-                <div>
-                  <p className="text-xs text-slate-500 mb-2">Dietary Requirements</p>
-                  <div className="flex flex-wrap gap-2">
-                    {runsheet.dietaries.map((d, i) => (
-                      <Badge key={i} variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                        {d.name} × {d.count}
-                        {d.notes && <span className="ml-1 text-amber-600">({d.notes})</span>}
-                      </Badge>
-                    ))}
+            {/* Contact info */}
+            {(contactName || contactEmail || contactPhone) && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gold/30">
+                {contactName && (
+                  <div>
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5 flex items-center gap-1">
+                      <User className="w-3 h-3" /> CLIENT NAME
+                    </p>
+                    <p className="font-dm text-sm text-ink">{contactName}</p>
                   </div>
-                </div>
-              </>
+                )}
+                {contactPhone && (
+                  <div>
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5 flex items-center gap-1">
+                      <Phone className="w-3 h-3" /> PHONE
+                    </p>
+                    <p className="font-dm text-sm text-ink">{contactPhone}</p>
+                  </div>
+                )}
+                {contactEmail && (
+                  <div>
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5 flex items-center gap-1">
+                      <Mail className="w-3 h-3" /> EMAIL
+                    </p>
+                    <p className="font-dm text-sm text-ink">{contactEmail}</p>
+                  </div>
+                )}
+              </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        {/* ── Venue Setup ── */}
+        {runsheet.venueSetup && (
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="px-5 py-3 border-b border-gold/30 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-forest" />
+              <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
+            </div>
+            <div className="px-5 py-4">
+              <p className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{runsheet.venueSetup}</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Dietary Requirements ── */}
+        {runsheet.dietaries && runsheet.dietaries.length > 0 && (
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="px-5 py-3 border-b border-gold/30 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500" />
+              <span className="font-bebas tracking-widest text-sm text-amber-600">DIETARY REQUIREMENTS</span>
+            </div>
+            <div className="px-5 py-4 flex flex-wrap gap-2">
+              {runsheet.dietaries.map((d, i) => (
+                <span
+                  key={i}
+                  className="font-dm text-xs bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1.5"
+                >
+                  <span className="font-semibold">{d.name}</span>
+                  <span className="mx-1 text-amber-500">×</span>
+                  <span>{d.count}</span>
+                  {d.notes && <span className="ml-1 text-amber-600">({d.notes})</span>}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Notes ── */}
+        {runsheet.notes && (
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="px-5 py-3 border-b border-gold/30">
+              <span className="font-bebas tracking-widest text-sm text-ink/60">GENERAL NOTES</span>
+            </div>
+            <div className="px-5 py-4">
+              <p className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{runsheet.notes}</p>
+            </div>
+          </div>
+        )}
 
         {/* ── Timeline ── */}
         {sortedItems.length > 0 && (
-          <Card className="border-slate-200 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base text-slate-800 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-slate-500" />
-                Timeline
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y divide-slate-100">
-                {sortedItems.map((item, idx) => {
-                  const cat = getCat(item.category);
-                  const endTime = item.duration ? addMinutes(item.time, item.duration) : null;
-                  return (
-                    <div key={item.id ?? idx} className="flex gap-0 group">
-                      {/* Time column */}
-                      <div className="w-20 shrink-0 px-4 py-3 text-right">
-                        <p className="text-sm font-mono font-semibold text-slate-700">{formatTime12(item.time)}</p>
-                        {endTime && (
-                          <p className="text-xs text-slate-400 font-mono">{formatTime12(endTime)}</p>
-                        )}
-                      </div>
-                      {/* Colour strip */}
-                      <div className={`w-1 shrink-0 ${cat.bg.split(" ")[0].replace("bg-", "bg-")} rounded-sm my-1`} />
-                      {/* Content */}
-                      <div className="flex-1 px-4 py-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-slate-800">{item.title}</span>
-                          <Badge variant="outline" className={`text-xs px-1.5 py-0 ${cat.bg} ${cat.color} border`}>
-                            {cat.label}
-                          </Badge>
-                          {item.duration && (
-                            <span className="text-xs text-slate-400">{item.duration} min</span>
-                          )}
-                        </div>
-                        {item.description && (
-                          <p className="text-sm text-slate-600 mt-1">{item.description}</p>
-                        )}
-                        {item.assignedTo && (
-                          <p className="text-xs text-slate-400 mt-1">Assigned: {item.assignedTo}</p>
-                        )}
-                      </div>
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
+              <Clock className="w-4 h-4 text-white" />
+              <span className="font-bebas tracking-widest text-sm text-white">EVENT TIMELINE</span>
+              {sortedItems.length > 0 && (
+                <span className="font-dm text-white/60 text-xs ml-1">
+                  {formatTime12(sortedItems[0].time)} – {formatTime12(addMinutes(sortedItems[sortedItems.length - 1].time, sortedItems[sortedItems.length - 1].duration ?? 0))}
+                </span>
+              )}
+            </div>
+            <div className="divide-y divide-gold/20">
+              {sortedItems.map((item, idx) => {
+                const cat = getCat(item.category);
+                const endTime = item.duration ? addMinutes(item.time, item.duration) : null;
+                return (
+                  <div key={item.id ?? idx} className="flex items-stretch">
+                    {/* Time column */}
+                    <div className="w-[90px] flex-shrink-0 px-4 py-3 border-r border-gold/30 text-right">
+                      <p className="font-dm text-sm font-bold text-ink">{formatTime12(item.time)}</p>
+                      {endTime && (
+                        <p className="font-dm text-[10px] text-ink/40">–{formatTime12(endTime)}</p>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+                    {/* Category badge column */}
+                    <div className="w-[90px] flex-shrink-0 px-3 py-3 flex items-start">
+                      <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${cat.color}`}>
+                        {cat.label}
+                      </span>
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 px-3 py-3 min-w-0">
+                      <p className="font-dm text-sm font-semibold text-ink">{item.title}</p>
+                      {item.duration && (
+                        <p className="font-dm text-[10px] text-ink/40 mt-0.5">{item.duration} min</p>
+                      )}
+                      {item.description && (
+                        <p className="font-dm text-sm text-ink/60 mt-1">{item.description}</p>
+                      )}
+                      {item.assignedTo && (
+                        <p className="font-dm text-xs text-forest/70 mt-1">→ {item.assignedTo}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {/* ── F&B: FOH ── */}
         {fohItems.length > 0 && (
-          <Card className="border-slate-200 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base text-slate-800 flex items-center gap-2">
-                <UtensilsCrossed className="w-4 h-4 text-slate-500" />
-                Front of House — Food &amp; Beverage
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {Object.entries(fohByCourse).map(([course, courseItems]) => (
-                <div key={course}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">{course}</p>
-                  <div className="space-y-2">
-                    {courseItems.map((item, idx) => (
-                      <div key={item.id ?? idx} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-orange-50 border border-orange-100">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800">{item.dishName}</p>
-                          {item.description && <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>}
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {item.dietary && (
-                              <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-700 px-1.5 py-0">
-                                {item.dietary}
-                              </Badge>
-                            )}
-                            {item.serviceTime && (
-                              <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-700 px-1.5 py-0">
-                                <Clock className="w-2.5 h-2.5 mr-0.5" />
-                                {item.serviceTime}
-                              </Badge>
-                            )}
-                            {item.staffAssigned && (
-                              <span className="text-xs text-slate-400">→ {item.staffAssigned}</span>
-                            )}
-                          </div>
-                          {item.platingNotes && (
-                            <p className="text-xs text-slate-500 mt-1 italic">Plating: {item.platingNotes}</p>
-                          )}
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <span className="text-sm font-semibold text-slate-700">×{item.qty}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
+              <UtensilsCrossed className="w-4 h-4 text-white" />
+              <span className="font-bebas tracking-widest text-sm text-white">FRONT OF HOUSE — F&amp;B SHEET</span>
+            </div>
+            {/* Column headers */}
+            <div className="grid grid-cols-[1fr_60px_80px_90px_1fr_1fr] gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5">
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">DISH</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">QTY</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">DIETARY</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">SERVICE TIME</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">STAFF</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">NOTES</span>
+            </div>
+            {orderedFohCourses.map(course => (
+              <div key={course}>
+                <div className="px-5 py-1.5 font-bebas tracking-widest text-xs border-b border-gold/30 bg-gold/10 text-[#a07820]">
+                  {course}
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+                {fohByCourse[course].map((item, idx) => (
+                  <div
+                    key={item.id ?? idx}
+                    className="grid grid-cols-[1fr_60px_80px_90px_1fr_1fr] gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm hover:bg-linen/50"
+                  >
+                    <span className="font-medium text-ink">{item.dishName}</span>
+                    <span className="text-ink/70">{item.qty}</span>
+                    <span className="text-ink/60 text-xs">{item.dietary || "—"}</span>
+                    <span className="text-ink/60 text-xs">{item.serviceTime ? formatTime12(item.serviceTime) : "—"}</span>
+                    <span className="text-ink/60 text-xs">{item.staffAssigned || "—"}</span>
+                    <span className="text-ink/50 text-xs">{(item as any).platingNotes || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         )}
 
         {/* ── F&B: Kitchen ── */}
         {kitchenItems.length > 0 && (
-          <Card className="border-slate-200 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base text-slate-800 flex items-center gap-2">
-                <ChefHat className="w-4 h-4 text-slate-500" />
-                Kitchen Sheet
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {Object.entries(kitchenByCourse).map(([course, courseItems]) => (
-                <div key={course}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">{course}</p>
-                  <div className="space-y-2">
-                    {courseItems.map((item, idx) => (
-                      <div key={item.id ?? idx} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800">{item.dishName}</p>
-                          {item.description && <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>}
-                          {item.prepNotes && (
-                            <p className="text-xs text-slate-500 mt-1 italic">Prep: {item.prepNotes}</p>
-                          )}
-                          {item.platingNotes && (
-                            <p className="text-xs text-slate-500 mt-0.5 italic">Plating: {item.platingNotes}</p>
-                          )}
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {item.dietary && (
-                              <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-700 px-1.5 py-0">
-                                {item.dietary}
-                              </Badge>
-                            )}
-                            {item.serviceTime && (
-                              <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-700 px-1.5 py-0">
-                                <Clock className="w-2.5 h-2.5 mr-0.5" />
-                                {item.serviceTime}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <span className="text-sm font-semibold text-slate-700">×{item.qty}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
+              <ChefHat className="w-4 h-4 text-white" />
+              <span className="font-bebas tracking-widest text-sm text-white">KITCHEN SHEET</span>
+            </div>
+            {/* Column headers */}
+            <div className="grid grid-cols-[1fr_60px_80px_90px_1fr_1fr] gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5">
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">DISH</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">QTY</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">DIETARY</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">SERVICE TIME</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">PREP NOTES</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/40">PLATING</span>
+            </div>
+            {orderedKitchenCourses.map(course => (
+              <div key={course}>
+                <div className="px-5 py-1.5 font-bebas tracking-widest text-xs border-b border-gold/30 bg-gold/10 text-[#a07820]">
+                  {course}
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+                {kitchenByCourse[course].map((item, idx) => (
+                  <div
+                    key={item.id ?? idx}
+                    className="grid grid-cols-[1fr_60px_80px_90px_1fr_1fr] gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm hover:bg-linen/50"
+                  >
+                    <span className="font-medium text-ink">{item.dishName}</span>
+                    <span className="text-ink/70">{item.qty}</span>
+                    <span className="text-ink/60 text-xs">{item.dietary || "—"}</span>
+                    <span className="text-ink/60 text-xs">{item.serviceTime ? formatTime12(item.serviceTime) : "—"}</span>
+                    <span className="text-ink/50 text-xs">{(item as any).prepNotes || "—"}</span>
+                    <span className="text-ink/50 text-xs">{(item as any).platingNotes || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         )}
 
         {/* ── Empty state ── */}
         {sortedItems.length === 0 && fohItems.length === 0 && kitchenItems.length === 0 && (
-          <div className="text-center py-12 text-slate-400">
-            <Wine className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">No items have been added to this runsheet yet.</p>
+          <div className="text-center py-16 text-ink/30 font-dm text-sm">
+            <Clock className="w-10 h-10 mx-auto mb-3 opacity-20" />
+            No items have been added to this runsheet yet.
           </div>
         )}
 
         {/* ── Footer ── */}
-        <div className="text-center text-xs text-slate-400 pb-8">
-          Powered by HOSTit · This page updates automatically
+        <div className="text-center font-bebas tracking-widest text-xs text-ink/30 pb-8">
+          POWERED BY HOSTIT · THIS PAGE UPDATES AUTOMATICALLY
         </div>
       </main>
     </div>

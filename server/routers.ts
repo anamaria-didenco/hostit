@@ -3400,7 +3400,20 @@ Return ONLY valid JSON. Example structure:
         if (!runsheet) return null;
         const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, link.runsheetId));
         const fnb = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
-        return { link, runsheet, items, fnb };
+        // Fetch contact info from lead if linked
+        let contactName: string | null = null;
+        let contactEmail: string | null = null;
+        let contactPhone: string | null = null;
+        if (runsheet.leadId) {
+          const { leads } = await import('../drizzle/schema');
+          const [lead] = await db.select().from(leads).where(eq(leads.id, runsheet.leadId)).limit(1);
+          if (lead) {
+            contactName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
+            contactEmail = lead.email;
+            contactPhone = lead.phone ?? null;
+          }
+        }
+        return { link, runsheet, items, fnb, contactName, contactEmail, contactPhone };
       }),
 
     // Protected: create a new staff portal link
