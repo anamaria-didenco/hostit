@@ -11,7 +11,7 @@ import {
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
-  Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw,
+  Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard,
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
@@ -1612,89 +1612,9 @@ export default function RunsheetBuilder() {
             {/* ── PROPOSAL F&B SUMMARY ─────────────────────────────────── */}
             {linkedProposalId && (proposalDrinks || (proposalQuote?.items && proposalQuote.items.length > 0) || (linkedProposal?.lineItems)) && (
               <div className="mx-5 my-4 border border-gold/40 bg-[#fffbf0] p-4 space-y-3">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className="flex items-center gap-2">
-                    <UtensilsCrossed className="w-3.5 h-3.5 text-gold" />
-                    <span className="font-bebas tracking-widest text-xs text-[#8b6914]">FOOD & BEVERAGE FROM PROPOSAL</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      // ── Smart categorizer ──────────────────────────────────
-                      const BEVERAGE_KEYWORDS = /\b(wine|beer|lager|ale|cider|cocktail|spirit|whisky|whiskey|gin|vodka|rum|tequila|champagne|prosecco|sparkling|sauvignon|pinot|merlot|cab(ernet)?|chardonnay|riesling|rosé|rose|shiraz|syrah|port|sherry|aperol|campari|negroni|martini|mojito|margarita|espresso martini|bar|beverage|drink|juice|water|soda|lemonade|kombucha|mocktail|non.?alco|soft drink|tea|coffee|hot choc|cider|keg|tap|pint|glass|bottle|carafe|jug|pitcher)\b/i;
-                      const COURSE_MAP: Record<string, string> = {
-                        canape: 'Canapes', canapé: 'Canapes', 'finger food': 'Canapes', nibble: 'Canapes', amuse: 'Canapes',
-                        entree: 'Entree', entrée: 'Entree', starter: 'Entree', appetiser: 'Entree', appetizer: 'Entree', 'first course': 'Entree',
-                        main: 'Main', mains: 'Main', 'main course': 'Main', plated: 'Main', dinner: 'Main',
-                        dessert: 'Dessert', sweet: 'Dessert', pudding: 'Dessert', cake: 'Dessert', tart: 'Dessert', mousse: 'Dessert', panna: 'Dessert', gelato: 'Dessert', sorbet: 'Dessert',
-                        cheese: 'Cheese', cheeseboard: 'Cheese',
-                        'late night': 'Late Night Snack', midnight: 'Late Night Snack', supper: 'Late Night Snack',
-                        breakfast: 'Breakfast', brunch: 'Breakfast', eggs: 'Breakfast', toast: 'Breakfast', bacon: 'Breakfast',
-                        'morning tea': 'Morning Tea', 'morning break': 'Morning Tea', scone: 'Morning Tea', muffin: 'Morning Tea',
-                        lunch: 'Lunch', sandwich: 'Lunch', wrap: 'Lunch', salad: 'Lunch', bowl: 'Lunch',
-                        'afternoon tea': 'Afternoon Tea', 'arvo tea': 'Afternoon Tea', 'high tea': 'Afternoon Tea',
-                      };
-                      function categorizeName(name: string): { isBeverage: boolean; course: string } {
-                        const lower = name.toLowerCase();
-                        if (BEVERAGE_KEYWORDS.test(lower)) return { isBeverage: true, course: 'Drinks' };
-                        for (const [kw, course] of Object.entries(COURSE_MAP)) {
-                          if (lower.includes(kw)) return { isBeverage: false, course };
-                        }
-                        return { isBeverage: false, course: 'Menu' };
-                      }
-                      // ── Pull from quote items ──────────────────────────────
-                      const qItems: any[] = (proposalQuote as any)?.items ?? [];
-                      const drinks: any = proposalDrinks;
-                      const foodRows: FnbItem[] = [];
-                      const bevRows: FnbItem[] = [];
-                      qItems.forEach((qi: any, i: number) => {
-                        const label = qi.name ?? qi.description ?? 'Menu Item';
-                        const { isBeverage, course } = categorizeName(label);
-                        const row: FnbItem = { section: 'foh', course, dishName: label, description: qi.description ?? '', qty: Number(qi.qty) || 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: 0, _tempId: `pull-qi-${Date.now()}-${i}` };
-                        isBeverage ? bevRows.push(row) : foodRows.push(row);
-                      });
-                      // ── Pull from line items ───────────────────────────────
-                      if ((linkedProposal as any)?.lineItems) {
-                        try {
-                          const li = JSON.parse((linkedProposal as any).lineItems as string ?? '[]') as any[];
-                          li.filter((item: any) => item.description).forEach((item: any, i: number) => {
-                            const label = item.description;
-                            const { isBeverage, course } = categorizeName(label);
-                            const row: FnbItem = { section: 'foh', course, dishName: label, qty: Number(item.qty) || 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: 0, _tempId: `pull-li-${Date.now()}-${i}` };
-                            isBeverage ? bevRows.push(row) : foodRows.push(row);
-                          });
-                        } catch {}
-                      }
-                      // ── Pull selected drinks ───────────────────────────────
-                      if (drinks?.selectedDrinks) {
-                        try {
-                          const arr: string[] = typeof drinks.selectedDrinks === 'string' ? JSON.parse(drinks.selectedDrinks) : drinks.selectedDrinks;
-                          arr.forEach((name: string, i: number) => {
-                            bevRows.push({ section: 'foh', course: 'Drinks', dishName: name, qty: 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: 0, _tempId: `pull-dr-${Date.now()}-${i}` });
-                          });
-                        } catch {}
-                      }
-                      if (drinks?.customDrinks) {
-                        try {
-                          const arr: any[] = typeof drinks.customDrinks === 'string' ? JSON.parse(drinks.customDrinks) : drinks.customDrinks;
-                          arr.forEach((d: any, i: number) => {
-                            bevRows.push({ section: 'foh', course: 'Drinks', dishName: d.name, description: d.description ?? '', qty: 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: 0, _tempId: `pull-cd-${Date.now()}-${i}` });
-                          });
-                        } catch {}
-                      }
-                      // ── Assign sort orders: food first, then beverages ─────
-                      const base = fnbItems.length;
-                      const all: FnbItem[] = [
-                        ...foodRows.map((r, i) => ({ ...r, sortOrder: base + i })),
-                        ...bevRows.map((r, i) => ({ ...r, sortOrder: base + foodRows.length + i })),
-                      ];
-                      if (all.length === 0) { toast.error('No F&B items found in proposal'); return; }
-                      setFnbItems(prev => [...prev, ...all]);
-                      toast.success(`${all.length} item${all.length !== 1 ? 's' : ''} pulled — ${foodRows.length} food, ${bevRows.length} beverage`);
-                    }}
-                    className="font-bebas tracking-widest text-[10px] text-[#8b6914] hover:text-forest flex items-center gap-1 border border-gold/40 px-2 py-1 hover:bg-forest/5 hover:border-forest/30 transition-colors"
-                  >
-                    <RefreshCw className="w-3 h-3" /> PULL INTO F&B SHEET
-                  </button>
+                <div className="flex items-center gap-2 mb-1">
+                  <UtensilsCrossed className="w-3.5 h-3.5 text-gold" />
+                  <span className="font-bebas tracking-widest text-xs text-[#8b6914]">FOOD & BEVERAGE FROM PROPOSAL</span>
                 </div>
 
                 {/* Food items from line items */}
