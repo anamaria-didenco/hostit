@@ -41,6 +41,11 @@ export default function EventDetail() {
     { bookingId },
     { enabled: !!user?.id && bookingId > 0 }
   );
+  const { data: existingRunsheets } = trpc.runsheets.list.useQuery(
+    { bookingId },
+    { enabled: !!user?.id && bookingId > 0 }
+  );
+  const existingRunsheet = existingRunsheets?.[0] ?? null;
 
   const updateBooking = trpc.bookings.update.useMutation({
     onSuccess: () => {
@@ -364,10 +369,10 @@ export default function EventDetail() {
           <div className="dante-card p-5">
             <div className="gold-rule max-w-full mb-4"><span>QUICK ACTIONS</span></div>
             <div className="space-y-2">
-              <Link href={`/runsheet?bookingId=${bookingId}`}>
+              <Link href={existingRunsheet ? `/runsheet?id=${existingRunsheet.id}&bookingId=${bookingId}` : `/runsheet?bookingId=${bookingId}`}>
                 <button className="w-full flex items-center gap-3 px-4 py-3 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                   <Clock className="w-4 h-4 text-gold" />
-                  RUNSHEET
+                  {existingRunsheet ? 'EDIT RUNSHEET' : 'CREATE RUNSHEET'}
                 </button>
               </Link>
               {booking.proposalId && (

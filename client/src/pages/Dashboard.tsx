@@ -1628,20 +1628,14 @@ export default function Dashboard() {
                         const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
                         return (
                           <div key={stage.key} className="w-64 flex-shrink-0 flex flex-col">
-                            <div
-                              className="font-bebas text-xs tracking-widest px-3 py-2 border mb-2 flex-shrink-0"
-                              style={{
-                                backgroundColor: stage.swatch ? `${stage.swatch}18` : undefined,
-                                borderColor: stage.swatch ?? '#d4c5a9',
-                                color: stage.swatch ?? '#5a4a3a',
-                              }}
-                            >
+                            <div className={`font-bebas text-xs tracking-widest px-3 py-2 border mb-2 flex-shrink-0 ${stage.color}`}>
                               {stage.label} <span className="opacity-60">({stageLeads.length})</span>
                             </div>
                             <div className="space-y-2 overflow-y-auto flex-1">
                               {stageLeads.map((lead: any) => (
                                 <div key={lead.id} onClick={() => selectLead(lead)}
-                                  className="dante-card p-3 cursor-pointer hover:border-gold/40 transition-colors bg-white">
+                                  className="dante-card p-3 cursor-pointer hover:border-gold/40 transition-colors bg-white border-l-4"
+                                  style={{ borderLeftColor: stage.swatch ?? '#d4c5a9' }}>
                                   <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
                                   <div className="font-dm text-xs text-sage mt-0.5">{lead.eventType || "Event"}</div>
                                   {lead.eventDate && <div className="font-dm text-xs text-ink/50 mt-0.5">{new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}</div>}
