@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp,
@@ -1069,7 +1070,7 @@ export default function RunsheetBuilder() {
                   onChange={e => setPasteText(e.target.value)}
                   placeholder={"Paste anything here — for example:\n• A client email with event details, guest numbers, dietary requirements\n• A previous runsheet or Word document\n• Catering brief with menu and timeline\n\nAI will extract: event details, dietaries, F&B items, and timeline"}
                   rows={4}
-                  className="flex-1 rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm resize-none bg-white/80 placeholder:text-ink/30 p-3 w-full"
+                  className="flex-1 rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm resize-none bg-white/80 placeholder:text-ink/30 p-3"
                 />
                 <button
                   onClick={() => { if (pasteText.trim()) { setShowPasteImport(true); setParsedData(null); setEditedParsedTimeline([]); } }}
@@ -1235,12 +1236,12 @@ export default function RunsheetBuilder() {
                   </button>
                 ))}
               </div>
-              <textarea
+              <Textarea
                 value={venueSetup}
                 onChange={e => setVenueSetup(e.target.value)}
                 placeholder="Describe the room layout, table arrangement, AV setup, decorations, bar position, dance floor, stage..."
                 rows={3}
-                className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm p-3 resize-none"
+                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm"
               />
             </div>
           )}
@@ -1599,12 +1600,12 @@ export default function RunsheetBuilder() {
             {/* General notes */}
             <div className="px-5 py-4 border-t border-gold/30">
               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">GENERAL NOTES</label>
-              <textarea
+              <Textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Any additional notes for the event..."
                 rows={3}
-                className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm p-3 resize-none no-print"
+                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm no-print"
               />
               {notes && <div className="hidden print:block font-dm text-sm text-ink/70 whitespace-pre-wrap">{notes}</div>}
             </div>
@@ -2773,12 +2774,12 @@ export default function RunsheetBuilder() {
                   placeholder="Template name (e.g. Cocktail)"
                   className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
-                <textarea
+                <Textarea
                   value={newSetupValue}
                   onChange={e => setNewSetupValue(e.target.value)}
                   placeholder="Setup description..."
                   rows={2}
-                  className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest text-sm p-2 resize-none font-dm"
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
                 <Button
                   onClick={() => {
@@ -2995,7 +2996,7 @@ export default function RunsheetBuilder() {
                       onChange={e => setFnbPasteText(e.target.value)}
                       placeholder="Paste menu details, catering brief, or email here..."
                       rows={10}
-                      className="w-full border border-gold/30 rounded-none font-dm text-sm resize-none focus:outline-none focus:border-forest p-3"
+                      className="w-full min-h-[220px] border border-gold/30 rounded-none font-dm text-sm resize-none focus:outline-none focus:border-forest p-3"
                     />
                   </div>
                   <div className="flex items-center gap-3 text-xs font-dm text-ink/40">
