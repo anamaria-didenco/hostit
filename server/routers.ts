@@ -568,6 +568,52 @@ export const appRouter = router({
           .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
         return { deleted: input.ids.length };
       }),
+
+    parseEnquiryText: protectedProcedure
+      .input(z.object({ text: z.string().min(1) }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm');
+        const prompt = `You are a venue event coordinator assistant. Parse the following text (an email, message, or event brief) and extract all relevant enquiry details.
+
+Return a JSON object with any of the following fields that are present in the text:
+- "firstName": string — client's first name
+- "lastName": string — client's last name
+- "email": string — client's email address
+- "phone": string — client's phone number
+- "company": string — company or organisation name if mentioned
+- "eventType": string — type of event (e.g. "Wedding", "Corporate Dinner", "Birthday", "Conference")
+- "eventDate": string — ISO date format YYYY-MM-DD
+- "guestCount": integer — number of guests
+- "budget": number — budget in NZD if mentioned
+- "spaceName": string — venue space or room name if mentioned
+- "message": string — a concise 1-3 sentence summary of the enquiry capturing key details not covered by other fields
+
+Rules:
+- Only include fields that are clearly stated or strongly implied in the text
+- For eventDate, convert any written date to YYYY-MM-DD format
+- For guestCount, use the number mentioned (e.g. "80 guests" → 80)
+- Do not invent or guess information not present in the text
+
+Text to parse:
+${input.text}
+
+Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":"jane@example.com","eventType":"Wedding","eventDate":"2026-09-14","guestCount":80,"message":"Jane is enquiring about a Saturday wedding reception for 80 guests in September."}`;
+
+        const response = await invokeLLM({
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant that outputs valid JSON only.' },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' } as any,
+        });
+        const rawContent = response.choices?.[0]?.message?.content ?? '{}';
+        try {
+          const parsed = JSON.parse(typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent));
+          return { success: true, data: parsed };
+        } catch {
+          return { success: false, data: {} };
+        }
+      }),
   }),
   // ─── Proposals ─────────────────────────────────────────────────────────────
   proposals: router({

@@ -471,6 +471,9 @@ export default function Dashboard() {
   const [collapsedInboxSections, setCollapsedInboxSections] = useState<Set<string>>(new Set());
   const [showAddLead, setShowAddLead] = useState(false);
   const [showCsvImport, setShowCsvImport] = useState(false);
+  const [enquiryPasteText, setEnquiryPasteText] = useState('');
+  const [enquiryParsing, setEnquiryParsing] = useState(false);
+  const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
   const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', guestCount: '', budget: '', message: '', status: 'new' as const });
 
   const utils = trpc.useUtils();
@@ -627,11 +630,40 @@ export default function Dashboard() {
     }
   }
 
+  const parseEnquiryMutation = trpc.leads.parseEnquiryText.useMutation({
+    onSuccess: (result) => {
+      if (result.success && result.data) {
+        const d = result.data as any;
+        setAddEnquiryForm(f => ({
+          ...f,
+          firstName: d.firstName ?? f.firstName,
+          lastName: d.lastName ?? f.lastName,
+          email: d.email ?? f.email,
+          phone: d.phone ?? f.phone,
+          company: d.company ?? f.company,
+          eventType: d.eventType ?? f.eventType,
+          eventDate: d.eventDate ?? f.eventDate,
+          guestCount: d.guestCount ? String(d.guestCount) : f.guestCount,
+          budget: d.budget ? String(d.budget) : f.budget,
+          message: d.message ?? f.message,
+        }));
+        setEnquiryPasteMode(false);
+        toast.success('Details extracted — review and confirm below');
+      } else {
+        toast.error('Could not extract details — try adding manually');
+      }
+      setEnquiryParsing(false);
+    },
+    onError: () => { toast.error('Failed to parse text'); setEnquiryParsing(false); },
+  });
+
   const createEnquiry = trpc.leads.create.useMutation({
     onSuccess: () => {
       refetchLeads();
       setShowAddLead(false);
       setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', guestCount: '', budget: '', message: '', status: 'new' });
+      setEnquiryPasteText('');
+      setEnquiryPasteMode(true);
       toast.success('Enquiry added!');
     },
     onError: () => toast.error('Failed to add enquiry'),
@@ -4997,101 +5029,166 @@ export default function Dashboard() {
       )}
 
       {/* Add Enquiry Modal */}
-      <Dialog open={showAddLead} onOpenChange={setShowAddLead}>
-        <DialogContent className="max-w-lg rounded-none border border-gold/30">
+      <Dialog open={showAddLead} onOpenChange={open => { setShowAddLead(open); if (!open) { setEnquiryPasteText(''); setEnquiryPasteMode(true); } }}>
+        <DialogContent className="max-w-lg rounded-none border border-gold/30 max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">
               <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add New Enquiry</DialogTitle>
+              <p className="font-dm text-white/50 text-xs mt-1">Paste an email or brief to auto-fill, or enter details manually.</p>
             </div>
           </DialogHeader>
-          <form onSubmit={e => {
-            e.preventDefault();
-            createEnquiry.mutate({
-              firstName: addEnquiryForm.firstName,
-              lastName: addEnquiryForm.lastName || undefined,
-              email: addEnquiryForm.email || undefined,
-              phone: addEnquiryForm.phone || undefined,
-              company: addEnquiryForm.company || undefined,
-              eventType: addEnquiryForm.eventType || undefined,
-              eventDate: addEnquiryForm.eventDate || undefined,
-              guestCount: addEnquiryForm.guestCount ? parseInt(addEnquiryForm.guestCount) : undefined,
-              budget: addEnquiryForm.budget ? parseFloat(addEnquiryForm.budget) : undefined,
-              message: addEnquiryForm.message || undefined,
-              status: addEnquiryForm.status,
-              source: 'manual',
-            });
-          }} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FIRST NAME *</label>
-                <Input required value={addEnquiryForm.firstName} onChange={e => setAddEnquiryForm(f => ({ ...f, firstName: e.target.value }))}
-                  placeholder="Jane" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-              </div>
-              <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">LAST NAME</label>
-                <Input value={addEnquiryForm.lastName} onChange={e => setAddEnquiryForm(f => ({ ...f, lastName: e.target.value }))}
-                  placeholder="Smith" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EMAIL</label>
-                <Input type="email" value={addEnquiryForm.email} onChange={e => setAddEnquiryForm(f => ({ ...f, email: e.target.value }))}
-                  placeholder="jane@example.com" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-              </div>
-              <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PHONE</label>
-                <Input value={addEnquiryForm.phone} onChange={e => setAddEnquiryForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder="021 000 0000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TYPE</label>
-                <Input value={addEnquiryForm.eventType} onChange={e => setAddEnquiryForm(f => ({ ...f, eventType: e.target.value }))}
-                  placeholder="Wedding, Birthday, Corporate..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-              </div>
-              <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT DATE</label>
-                <Input type="date" value={addEnquiryForm.eventDate} onChange={e => setAddEnquiryForm(f => ({ ...f, eventDate: e.target.value }))}
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+
+          {/* ── Smart Paste panel ── */}
+          {enquiryPasteMode ? (
+            <div className="space-y-3">
+              <div className="bg-forest/5 border border-forest/20 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-bebas tracking-widest text-xs text-forest">SMART PASTE</span>
+                  <span className="font-dm text-[10px] text-ink/40 ml-1">— paste a client email, booking request, or any text</span>
+                </div>
+                <textarea
+                  autoFocus
+                  rows={7}
+                  value={enquiryPasteText}
+                  onPaste={e => {
+                    const text = e.clipboardData.getData('text');
+                    e.preventDefault();
+                    setEnquiryPasteText(text);
+                  }}
+                  onChange={e => setEnquiryPasteText(e.target.value)}
+                  placeholder={"Paste a client email, message or booking request here...\n\nExamples:\n• \"Hi, I'm looking to book a wedding for 80 guests on 14 September...\"\n• A forwarded email from a client\n• A booking brief or inquiry form response"}
+                  className="w-full font-dm text-sm text-ink bg-white border border-gold/30 focus:outline-none focus:border-forest resize-none p-3 placeholder:text-ink/30"
+                  style={{ minHeight: 140 }}
+                />
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    disabled={!enquiryPasteText.trim() || enquiryParsing}
+                    onClick={() => {
+                      setEnquiryParsing(true);
+                      parseEnquiryMutation.mutate({ text: enquiryPasteText });
+                    }}
+                    className="flex-1 bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm py-2.5 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {enquiryParsing ? (
+                      <><span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" /> EXTRACTING...</>
+                    ) : (
+                      'EXTRACT DETAILS WITH AI'
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEnquiryPasteMode(false)}
+                    className="px-4 py-2.5 border border-gold/30 font-bebas tracking-widest text-xs text-ink/50 hover:text-ink hover:border-gold transition-colors"
+                  >
+                    MANUAL
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">GUEST COUNT</label>
-                <Input type="number" value={addEnquiryForm.guestCount} onChange={e => setAddEnquiryForm(f => ({ ...f, guestCount: e.target.value }))}
-                  placeholder="50" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+          ) : (
+            <form onSubmit={e => {
+              e.preventDefault();
+              createEnquiry.mutate({
+                firstName: addEnquiryForm.firstName,
+                lastName: addEnquiryForm.lastName || undefined,
+                email: addEnquiryForm.email || undefined,
+                phone: addEnquiryForm.phone || undefined,
+                company: addEnquiryForm.company || undefined,
+                eventType: addEnquiryForm.eventType || undefined,
+                eventDate: addEnquiryForm.eventDate || undefined,
+                guestCount: addEnquiryForm.guestCount ? parseInt(addEnquiryForm.guestCount) : undefined,
+                budget: addEnquiryForm.budget ? parseFloat(addEnquiryForm.budget) : undefined,
+                message: addEnquiryForm.message || undefined,
+                status: addEnquiryForm.status,
+                source: 'manual',
+              });
+            }} className="space-y-3">
+              {enquiryPasteText && (
+                <button type="button" onClick={() => setEnquiryPasteMode(true)}
+                  className="w-full text-left px-3 py-2 bg-forest/5 border border-forest/20 font-dm text-xs text-forest hover:bg-forest/10 transition-colors">
+                  ← Back to Smart Paste
+                </button>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FIRST NAME *</label>
+                  <Input required value={addEnquiryForm.firstName} onChange={e => setAddEnquiryForm(f => ({ ...f, firstName: e.target.value }))}
+                    placeholder="Jane" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">LAST NAME</label>
+                  <Input value={addEnquiryForm.lastName} onChange={e => setAddEnquiryForm(f => ({ ...f, lastName: e.target.value }))}
+                    placeholder="Smith" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EMAIL</label>
+                  <Input type="email" value={addEnquiryForm.email} onChange={e => setAddEnquiryForm(f => ({ ...f, email: e.target.value }))}
+                    placeholder="jane@example.com" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PHONE</label>
+                  <Input value={addEnquiryForm.phone} onChange={e => setAddEnquiryForm(f => ({ ...f, phone: e.target.value }))}
+                    placeholder="021 000 0000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">COMPANY</label>
+                  <Input value={addEnquiryForm.company} onChange={e => setAddEnquiryForm(f => ({ ...f, company: e.target.value }))}
+                    placeholder="Acme Ltd" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TYPE</label>
+                  <Input value={addEnquiryForm.eventType} onChange={e => setAddEnquiryForm(f => ({ ...f, eventType: e.target.value }))}
+                    placeholder="Wedding, Birthday, Corporate..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT DATE</label>
+                  <Input type="date" value={addEnquiryForm.eventDate} onChange={e => setAddEnquiryForm(f => ({ ...f, eventDate: e.target.value }))}
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">GUEST COUNT</label>
+                  <Input type="number" value={addEnquiryForm.guestCount} onChange={e => setAddEnquiryForm(f => ({ ...f, guestCount: e.target.value }))}
+                    placeholder="50" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">BUDGET (NZD)</label>
+                  <Input type="number" value={addEnquiryForm.budget} onChange={e => setAddEnquiryForm(f => ({ ...f, budget: e.target.value }))}
+                    placeholder="5000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STATUS</label>
+                  <Select value={addEnquiryForm.status} onValueChange={v => setAddEnquiryForm(f => ({ ...f, status: v as any }))}>
+                    <SelectTrigger className="rounded-none border border-gold/30 text-xs font-bebas tracking-widest focus:ring-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pipelineStages.map(s => (
+                        <SelectItem key={s.key} value={s.key} className="font-bebas text-xs tracking-widest">{s.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">BUDGET (NZD)</label>
-                <Input type="number" value={addEnquiryForm.budget} onChange={e => setAddEnquiryForm(f => ({ ...f, budget: e.target.value }))}
-                  placeholder="5000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTES</label>
+                <Textarea value={addEnquiryForm.message} onChange={e => setAddEnquiryForm(f => ({ ...f, message: e.target.value }))}
+                  rows={2} placeholder="Any additional details..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
               </div>
-            </div>
-            <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STATUS</label>
-              <Select value={addEnquiryForm.status} onValueChange={v => setAddEnquiryForm(f => ({ ...f, status: v as any }))}>
-                <SelectTrigger className="rounded-none border border-gold/30 text-xs font-bebas tracking-widest focus:ring-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {pipelineStages.map(s => (
-                    <SelectItem key={s.key} value={s.key} className="font-bebas text-xs tracking-widest">{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTES</label>
-              <Textarea value={addEnquiryForm.message} onChange={e => setAddEnquiryForm(f => ({ ...f, message: e.target.value }))}
-                rows={2} placeholder="Any additional details..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
-            </div>
-            <button type="submit" disabled={createEnquiry.isPending}
-              className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
-              {createEnquiry.isPending ? 'ADDING...' : 'ADD ENQUIRY'}
-            </button>
-          </form>
+              <button type="submit" disabled={createEnquiry.isPending}
+                className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
+                {createEnquiry.isPending ? 'ADDING...' : 'ADD ENQUIRY'}
+              </button>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 
