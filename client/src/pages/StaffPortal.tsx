@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import {
   Clock, Calendar, ChefHat, UtensilsCrossed,
   AlertCircle, CheckCircle2, Loader2, User, Phone, Mail,
-  Building2,
+  Building2, DollarSign,
 } from "lucide-react";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
@@ -82,6 +82,7 @@ export default function StaffPortal() {
   }
 
   const { runsheet, items, fnb, contactName, contactEmail, contactPhone } = data;
+  const payments: any[] = (data as any).payments ?? [];
 
   const sortedItems = [...items].sort((a, b) => {
     if (a.time < b.time) return -1;
@@ -367,6 +368,49 @@ export default function StaffPortal() {
           <div className="text-center py-16 text-ink/30 font-dm text-sm">
             <Clock className="w-10 h-10 mx-auto mb-3 opacity-20" />
             No items have been added to this runsheet yet.
+          </div>
+        )}
+
+        {/* ── Payments ── */}
+        {payments && payments.length > 0 && (
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
+              <DollarSign className="w-4 h-4 text-white" />
+              <span className="font-bebas tracking-widest text-sm text-white">PAYMENT SUMMARY</span>
+            </div>
+            <div className="divide-y divide-gold/20">
+              {/* Column headers */}
+              <div className="grid grid-cols-[120px_1fr_120px_100px] gap-2 px-5 py-2 bg-gold/5">
+                <span className="font-bebas tracking-widest text-[10px] text-ink/40">DATE</span>
+                <span className="font-bebas tracking-widest text-[10px] text-ink/40">TYPE / METHOD</span>
+                <span className="font-bebas tracking-widest text-[10px] text-ink/40">AMOUNT</span>
+                <span className="font-bebas tracking-widest text-[10px] text-ink/40">NOTES</span>
+              </div>
+              {payments.map((p: any) => (
+                <div key={p.id} className="grid grid-cols-[120px_1fr_120px_100px] gap-2 px-5 py-3 items-center text-sm font-dm">
+                  <span className="text-ink/70 text-xs">
+                    {p.paidAt ? new Date(p.paidAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                  </span>
+                  <div>
+                    <span className="font-bebas tracking-widest text-xs bg-gold/20 text-[#7a5c10] px-2 py-0.5 mr-1">{p.type?.toUpperCase()}</span>
+                    <span className="text-ink/50 text-xs">{p.method?.replace(/_/g, ' ')}</span>
+                  </div>
+                  <span className="font-semibold text-forest">
+                    ${Number(p.amount).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-ink/40 text-xs truncate">{p.notes || "—"}</span>
+                </div>
+              ))}
+              {/* Total */}
+              <div className="grid grid-cols-[120px_1fr_120px_100px] gap-2 px-5 py-3 items-center bg-linen/60">
+                <span></span>
+                <span className="font-bebas tracking-widest text-xs text-ink/50">TOTAL RECEIVED</span>
+                <span className="font-bebas tracking-widest text-sm text-forest">
+                  ${payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span></span>
+              </div>
+            </div>
           </div>
         )}
 

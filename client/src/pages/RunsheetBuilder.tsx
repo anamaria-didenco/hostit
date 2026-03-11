@@ -417,6 +417,14 @@ export default function RunsheetBuilder() {
     setShowSetupManager(false);
   }
 
+  // F&B column visibility toggles
+  const [showTimeCol, setShowTimeCol] = useState(true);
+  const [showStaffCol, setShowStaffCol] = useState(true);
+  const [showPrepPlatingCol, setShowPrepPlatingCol] = useState(true);
+
+  // Derived: dynamic grid template for F&B table (header + rows)
+  const fnbGridCols = ['90px', '1fr', '60px', showTimeCol ? '80px' : null, '90px', showStaffCol ? '1fr' : null, showPrepPlatingCol ? '1fr' : null, '32px'].filter(Boolean).join(' ');
+
   // Custom item mode for F&B add form
   const [fnbCustomMode, setFnbCustomMode] = useState(false);
   const [fnbCustomName, setFnbCustomName] = useState('');
@@ -437,12 +445,13 @@ export default function RunsheetBuilder() {
     }
   }, [existingFnb]);
 
-  async function saveFnb() {
-    if (!sheetId) { toast.error('Save the runsheet first'); return; }
+  async function saveFnb(overrideId?: number) {
+    const id = overrideId ?? sheetId;
+    if (!id) return;
     setFnbSaving(true);
     try {
       await saveFnbMutation.mutateAsync({
-        runsheetId: sheetId,
+        runsheetId: id,
         items: fnbItems.map((item, i) => ({
           section: item.section,
           course: item.course,
@@ -752,7 +761,7 @@ export default function RunsheetBuilder() {
     setSaving(true);
     try {
       if (!sheetId) {
-        await createMutation.mutateAsync({
+        const created = await createMutation.mutateAsync({
           title,
           leadId,
           bookingId,
@@ -775,6 +784,7 @@ export default function RunsheetBuilder() {
             sortOrder: i,
           })),
         });
+        if (fnbItems.length > 0 && created?.id) await saveFnb(created.id);
       } else {
         await updateMutation.mutateAsync({
           id: sheetId,
@@ -816,6 +826,7 @@ export default function RunsheetBuilder() {
             });
           }
         }
+        if (fnbItems.length > 0) await saveFnb();
       }
     } finally {
       setSaving(false);
@@ -1623,7 +1634,7 @@ export default function RunsheetBuilder() {
         )}
 
         {/* ── F&B SHEET TAB ────────────────────────────────────────────────── */}
-        {activeMainTab === 'fnb' && (
+        <div className={activeMainTab !== 'fnb' ? 'hidden print:block' : ''}>
           <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
             {/* F&B unified header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30 no-print">
@@ -1633,6 +1644,23 @@ export default function RunsheetBuilder() {
                 <span className="text-xs text-ink/40 font-dm">({fnbItems.length} items)</span>
               </div>
               <div className="flex items-center gap-2">
+                {/* Column visibility toggles */}
+                <button
+                  onClick={() => setShowTimeCol(v => !v)}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showTimeCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  title="Toggle Time column"
+                >TIME</button>
+                <button
+                  onClick={() => setShowStaffCol(v => !v)}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showStaffCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  title="Toggle Staff column"
+                >STAFF</button>
+                <button
+                  onClick={() => setShowPrepPlatingCol(v => !v)}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPrepPlatingCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  title="Toggle Prep/Plating column"
+                >PREP/PLATING</button>
+                <div className="w-px h-4 bg-ink/10 mx-1" />
                 <button
                   onClick={() => { setShowFnbPaste(true); setFnbPasteText(''); setFnbParsedItems([]); }}
                   className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
@@ -1640,7 +1668,7 @@ export default function RunsheetBuilder() {
                   <Sparkles className="w-3.5 h-3.5" /> AI PASTE
                 </button>
                 <Button
-                  onClick={saveFnb}
+                  onClick={() => saveFnb()}
                   disabled={fnbSaving}
                   className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
                 >
@@ -1937,14 +1965,14 @@ export default function RunsheetBuilder() {
             ) : (
               <div>
                 {/* Table header */}
-                <div className="grid gap-2 px-5 py-2.5 text-xs font-bebas tracking-widest text-white bg-gold grid-cols-[90px_1fr_60px_80px_90px_1fr_1fr_32px]">
+                <div className="grid gap-2 px-5 py-2.5 text-xs font-bebas tracking-widest text-white bg-gold" style={{ gridTemplateColumns: fnbGridCols }}>
                   <div>COURSE</div>
                   <div>DISH</div>
                   <div>QTY</div>
-                  <div>TIME</div>
+                  {showTimeCol && <div>TIME</div>}
                   <div>DIETARY</div>
-                  <div>STAFF</div>
-                  <div>PREP / PLATING</div>
+                  {showStaffCol && <div>STAFF</div>}
+                  {showPrepPlatingCol && <div>PREP / PLATING</div>}
                   <div className="no-print"></div>
                 </div>
                 {/* Group by course */}
@@ -1961,7 +1989,8 @@ export default function RunsheetBuilder() {
                       .map(({ item, originalIdx }) => (
                         <div
                           key={item._tempId ?? originalIdx}
-                          className="grid gap-2 px-5 py-2.5 items-center border-b border-gold/30 text-sm font-dm hover:bg-linen/50 group grid-cols-[90px_1fr_60px_80px_90px_1fr_1fr_32px]"
+                          className="grid gap-2 px-5 py-2.5 items-center border-b border-gold/30 text-sm font-dm hover:bg-linen/50 group"
+                          style={{ gridTemplateColumns: fnbGridCols }}
                         >
                           <div className="text-xs text-ink/40 font-bebas tracking-widest">{item.course}</div>
                           <div>
@@ -1980,36 +2009,42 @@ export default function RunsheetBuilder() {
                               className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center"
                             />
                           </div>
-                          <div className="text-xs text-ink/50 font-dm">
-                            {item.serviceTime ? formatTime12(item.serviceTime) : '—'}
-                          </div>
+                          {showTimeCol && (
+                            <div className="text-xs text-ink/50 font-dm">
+                              {item.serviceTime ? formatTime12(item.serviceTime) : '—'}
+                            </div>
+                          )}
                           <div>
                             {item.dietary && (
                               <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>
                             )}
                           </div>
-                          <div>
-                            <input
-                              value={item.staffAssigned ?? ''}
-                              onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)}
-                              placeholder="Staff..."
-                              className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
-                            />
-                          </div>
-                          <div className="space-y-0.5">
-                            <input
-                              value={item.prepNotes ?? ''}
-                              onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)}
-                              placeholder="Prep..."
-                              className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
-                            />
-                            <input
-                              value={item.platingNotes ?? ''}
-                              onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)}
-                              placeholder="Plating..."
-                              className="w-full font-dm text-xs text-ink/50 bg-transparent border-0 focus:outline-none"
-                            />
-                          </div>
+                          {showStaffCol && (
+                            <div>
+                              <input
+                                value={item.staffAssigned ?? ''}
+                                onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)}
+                                placeholder="Staff..."
+                                className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
+                              />
+                            </div>
+                          )}
+                          {showPrepPlatingCol && (
+                            <div className="space-y-0.5">
+                              <input
+                                value={item.prepNotes ?? ''}
+                                onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)}
+                                placeholder="Prep..."
+                                className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
+                              />
+                              <input
+                                value={item.platingNotes ?? ''}
+                                onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)}
+                                placeholder="Plating..."
+                                className="w-full font-dm text-xs text-ink/50 bg-transparent border-0 focus:outline-none"
+                              />
+                            </div>
+                          )}
                           <div className="no-print opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => removeFnbItem(originalIdx)}
@@ -2040,7 +2075,7 @@ export default function RunsheetBuilder() {
               </div>
             )}
           </div>
-        )}
+        </div>
 
         {/* ── CHECKLIST TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'checklist' && (

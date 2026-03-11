@@ -3413,7 +3413,20 @@ Return ONLY valid JSON. Example structure:
             contactPhone = lead.phone ?? null;
           }
         }
-        return { link, runsheet, items, fnb, contactName, contactEmail, contactPhone };
+        // Fetch payment records if runsheet is linked to a booking
+        let paymentsData: { id: number; amount: string; type: string; method: string; paidAt: Date; notes: string | null }[] = [];
+        if (runsheet.bookingId) {
+          const { payments } = await import('../drizzle/schema');
+          paymentsData = await db.select({
+            id: payments.id,
+            amount: payments.amount,
+            type: payments.type,
+            method: payments.method,
+            paidAt: payments.paidAt,
+            notes: payments.notes,
+          }).from(payments).where(eq(payments.bookingId, runsheet.bookingId)).orderBy(payments.paidAt);
+        }
+        return { link, runsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData };
       }),
 
     // Protected: create a new staff portal link
