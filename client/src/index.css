@@ -43,7 +43,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   HOSTit — Sage & White Design System
+   VenueFlowHQ — Sage & White Design System
    ─────────────────────────────────────────────────────────────────────────────
    Primary pairing:
      Sage Green   #8D957E  oklch(0.590 0.040 140)  → primary accent, CTAs, active
@@ -454,7 +454,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   HOSTit — Multi-Theme Colour Schemes
+   VenueFlowHQ — Multi-Theme Colour Schemes
    Applied via data-theme="..." on <html> element
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -496,7 +496,7 @@
   --brand-gold:      #8D957E;
 }
 
-/* ── Theme: Forest (deep green + gold + cream — original HOSTit brand) ── */
+/* ── Theme: Forest (deep green + gold + cream — original VenueFlowHQ brand) ── */
 [data-theme="forest"] {
   --background:             oklch(0.972 0.010 90);   /* warm cream */
   --foreground:             oklch(0.180 0.030 145);  /* deep forest ink */

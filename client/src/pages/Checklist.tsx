@@ -195,7 +195,7 @@ export default function Checklist() {
             {/* Print footer */}
             <div className="hidden print:block mt-8 pt-4 border-t border-stone-300">
               <div className="flex justify-between font-dm text-xs text-stone-500">
-                <span>HOSTit — Event Management</span>
+                <span>VenueFlowHQ — Event Management</span>
                 <span>Printed: {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</span>
               </div>
             </div>

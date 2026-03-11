@@ -552,7 +552,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
 </div>` : ""}
 
   <div class="doc-footer">
-    <div class="footer-left">POWERED BY HOSTIT · STAFF BRIEFING SHEET</div>
+    <div class="footer-left">POWERED BY VENUEFLOWHQ · STAFF BRIEFING SHEET</div>
     <div class="footer-right">Generated ${new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</div>
   </div>
 

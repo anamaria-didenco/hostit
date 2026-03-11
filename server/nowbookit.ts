@@ -27,7 +27,7 @@ export interface NbiBookingPayload {
   covers: number;
   duration?: number;    // minutes, default 120
   notes?: string;
-  reference?: string;   // external reference (HOSTit booking ID)
+  reference?: string;   // external reference (VenueFlowHQ booking ID)
 }
 
 export interface NbiBlockoutPayload {
@@ -76,7 +76,7 @@ export async function verifyNbiCredentials(creds: NbiCredentials): Promise<{ val
 }
 
 /**
- * Create a booking in Nowbook It when a HOSTit proposal is accepted.
+ * Create a booking in Nowbook It when a VenueFlowHQ proposal is accepted.
  */
 export async function createNbiBooking(
   creds: NbiCredentials,
@@ -132,7 +132,7 @@ export async function createNbiBlockout(
       date: payload.date,
       start_time: payload.startTime,
       end_time: payload.endTime,
-      reason: payload.reason ?? "HOSTit confirmed booking",
+      reason: payload.reason ?? "VenueFlowHQ confirmed booking",
     };
 
     const res = await fetch(`${NBI_BASE}/blockouts`, {

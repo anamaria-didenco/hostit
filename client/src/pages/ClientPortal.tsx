@@ -47,7 +47,7 @@ export default function ClientPortal() {
   const eventName = booking ? `${booking.firstName}${booking.lastName ? ' ' + booking.lastName : ''}'s ${booking.eventType ?? 'Event'}` : lead ? `${lead.firstName}${lead.lastName ? ' ' + lead.lastName : ''}'s ${lead.eventType ?? 'Event'}` : "Your Event";
   const eventDate = booking?.eventDate ?? lead?.eventDate;
   const guestCount = booking?.guestCount ?? lead?.guestCount;
-  const venueName = "HOSTit Venue";
+  const venueName = "VenueFlowHQ Venue";
 
   const lineItems = proposal?.lineItems ? (() => { try { return JSON.parse(proposal.lineItems); } catch { return []; } })() : [];
 
@@ -221,7 +221,7 @@ export default function ClientPortal() {
 
         {/* Footer */}
         <div className="text-center text-xs text-gray-400 py-4">
-          Powered by <span className="font-semibold text-[#2d5a27]">HOSTit</span> · New Zealand Venue Management
+          Powered by <span className="font-semibold text-[#2d5a27]">VenueFlowHQ</span> · New Zealand Venue Management
         </div>
       </div>
     </div>

@@ -1185,7 +1185,7 @@ export const appRouter = router({
           auth: { user: settings.smtpUser, pass: settings.smtpPass },
         });
 
-        const fromName = settings.smtpFromName ?? settings.name ?? 'HOSTit';
+        const fromName = settings.smtpFromName ?? settings.name ?? 'VenueFlowHQ';
         const fromEmail = settings.smtpFromEmail ?? settings.smtpUser;
 
         await transporter.sendMail({

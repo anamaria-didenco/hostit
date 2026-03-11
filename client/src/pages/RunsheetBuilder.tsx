@@ -1146,7 +1146,7 @@ export default function RunsheetBuilder() {
             </div>
             <div className="text-right">
               <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">PREPARED BY</div>
-              <div className="font-dm text-sm font-semibold">{venueName || "HOSTit"}</div>
+              <div className="font-dm text-sm font-semibold">{venueName || "VenueFlowHQ"}</div>
               <div className="font-dm text-xs text-ink/50">{new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</div>
             </div>
           </div>
@@ -2570,7 +2570,7 @@ export default function RunsheetBuilder() {
             </div>
           )}
           <div className="text-xs text-ink/40 font-dm text-center">
-            Prepared by HOSTit — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
+            Prepared by VenueFlowHQ — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
           </div>
         </div>
       </div>

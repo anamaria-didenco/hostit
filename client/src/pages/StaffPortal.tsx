@@ -416,7 +416,7 @@ export default function StaffPortal() {
 
         {/* ── Footer ── */}
         <div className="text-center font-bebas tracking-widest text-xs text-ink/30 pb-8">
-          POWERED BY HOSTIT · THIS PAGE UPDATES AUTOMATICALLY
+          POWERED BY VENUEFLOWHQ · THIS PAGE UPDATES AUTOMATICALLY
         </div>
       </main>
     </div>

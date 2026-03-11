@@ -356,7 +356,7 @@ export default function ProposalBuilder() {
         <div className="flex items-center mr-3">
           <img
             src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-            alt="HOSTit"
+            alt="VenueFlowHQ"
             className="h-7 w-auto object-contain"
             style={{ filter: 'brightness(0)' }}
           />

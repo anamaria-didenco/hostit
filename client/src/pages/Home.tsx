@@ -55,7 +55,7 @@ export default function Home() {
 
   const testimonials = [
     {
-      quote: "HOSTit has completely transformed how we manage events. The runsheet builder alone saves us hours every week.",
+      quote: "VenueFlowHQ has completely transformed how we manage events. The runsheet builder alone saves us hours every week.",
       name: "Sarah M.",
       role: "Events Manager, Auckland",
       rating: 5,
@@ -85,7 +85,7 @@ export default function Home() {
             <div className="w-8 h-8 rounded-lg bg-sage-green flex items-center justify-center">
               <span className="text-white font-bold text-sm tracking-tight">H</span>
             </div>
-            <span className="font-bold text-gray-900 tracking-tight text-lg">HOSTit</span>
+            <span className="font-bold text-gray-900 tracking-tight text-lg">VenueFlowHQ</span>
           </div>
 
           {/* Nav links */}
@@ -145,7 +145,7 @@ export default function Home() {
 
           {/* Sub */}
           <p className="text-xl text-gray-500 mb-10 max-w-xl mx-auto leading-relaxed font-normal">
-            HOSTit brings enquiries, proposals, calendars, runsheets, and menus together — so your team can focus on the experience.
+            VenueFlowHQ brings enquiries, proposals, calendars, runsheets, and menus together — so your team can focus on the experience.
           </p>
 
           {/* CTAs */}
@@ -262,7 +262,7 @@ export default function Home() {
             Ready to simplify your venue?
           </h2>
           <p className="text-white/80 text-lg mb-10 leading-relaxed">
-            Join venues across New Zealand using HOSTit to manage events with confidence.
+            Join venues across New Zealand using VenueFlowHQ to manage events with confidence.
           </p>
           <a href={getLoginUrl()}
             className="inline-flex items-center gap-2 bg-white text-sage-dark font-semibold px-8 py-4 rounded-xl hover:bg-gray-50 transition-colors text-base shadow-sm">
@@ -279,9 +279,9 @@ export default function Home() {
             <div className="w-7 h-7 rounded-lg bg-sage-green flex items-center justify-center">
               <span className="text-white font-bold text-xs">H</span>
             </div>
-            <span className="font-bold text-gray-900 tracking-tight">HOSTit</span>
+            <span className="font-bold text-gray-900 tracking-tight">VenueFlowHQ</span>
           </div>
-          <p className="text-sm text-gray-400">© {new Date().getFullYear()} HOSTit. New Zealand's Venue Management Platform.</p>
+          <p className="text-sm text-gray-400">© {new Date().getFullYear()} VenueFlowHQ. New Zealand's Venue Management Platform.</p>
           <div className="flex gap-6">
             {["Privacy", "Terms", "Contact"].map(item => (
               <a key={item} href="#" className="text-sm text-gray-400 hover:text-gray-700 transition-colors">{item}</a>

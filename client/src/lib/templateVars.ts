@@ -1,5 +1,5 @@
 /**
- * Template variable substitution for HOSTit email templates.
+ * Template variable substitution for VenueFlowHQ email templates.
  *
  * Supported variables:
  *   {{contactName}}   – Full name (firstName + lastName)

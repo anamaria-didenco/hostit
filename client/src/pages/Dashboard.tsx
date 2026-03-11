@@ -972,7 +972,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-center mb-4">
             <img
               src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-              alt="HOSTit"
+              alt="VenueFlowHQ"
               className="h-12 w-auto object-contain"
               style={{ filter: 'brightness(0)' }}
             />
@@ -1006,7 +1006,7 @@ export default function Dashboard() {
         <div className="flex items-center pr-5 border-r border-border mr-4 flex-shrink-0">
           <img
             src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-            alt="HOSTit"
+            alt="VenueFlowHQ"
             className="h-7 w-auto object-contain"
             style={{ filter: 'brightness(0)' }}
           />
@@ -2862,7 +2862,7 @@ export default function Dashboard() {
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
                         <Input type="email" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
                           placeholder="events@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-                        <p className="font-dm text-xs text-sage/60 mt-1">Add the email address you want to receive all HOSTit notifications.</p>
+                        <p className="font-dm text-xs text-sage/60 mt-1">Add the email address you want to receive all VenueFlowHQ notifications.</p>
                       </div>
                     </div>
                   </div>
@@ -2951,7 +2951,7 @@ export default function Dashboard() {
                   {/* ── Theme Colour Scheme ── */}
                   <div className="dante-card p-6">
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">COLOUR SCHEME</h2>
-                    <p className="font-dm text-sm text-ink/60 mb-4">Choose a colour palette for your HOSTit workspace. This applies across the dashboard, runsheets, and public forms.</p>
+                    <p className="font-dm text-sm text-ink/60 mb-4">Choose a colour palette for your VenueFlowHQ workspace. This applies across the dashboard, runsheets, and public forms.</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {[
                         { key: 'sage', label: 'Sage Green', swatches: ['#2D4A3E','#C9A84C','#F5F0E8','#1a2e27'] },
@@ -3508,7 +3508,7 @@ export default function Dashboard() {
               <div className="max-w-3xl mx-auto">
               <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Integrations</h1>
               <div className="space-y-4">
-                {[{name:'Google Calendar',desc:'Sync bookings to your Google Calendar automatically.',icon:'📅'},{name:'Xero',desc:'Export invoices and payments to Xero accounting.',icon:'💼'},{name:'Mailchimp',desc:'Add new contacts to your Mailchimp mailing list.',icon:'📧'},{name:'Zapier',desc:'Connect HOSTit to 5,000+ apps via Zapier webhooks.',icon:'⚡'}].map(i => (
+                {[{name:'Google Calendar',desc:'Sync bookings to your Google Calendar automatically.',icon:'📅'},{name:'Xero',desc:'Export invoices and payments to Xero accounting.',icon:'💼'},{name:'Mailchimp',desc:'Add new contacts to your Mailchimp mailing list.',icon:'📧'},{name:'Zapier',desc:'Connect VenueFlowHQ to 5,000+ apps via Zapier webhooks.',icon:'⚡'}].map(i => (
                   <div key={i.name} className="dante-card p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{i.icon}</span>
@@ -3556,7 +3556,7 @@ export default function Dashboard() {
               <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Team</h1>
               <div className="dante-card p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <p className="font-dm text-sm text-ink/70">Manage team members who can access your HOSTit account.</p>
+                  <p className="font-dm text-sm text-ink/70">Manage team members who can access your VenueFlowHQ account.</p>
                   <button onClick={() => toast.info('Team invites coming soon')} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1"><Plus className="w-3 h-3" /> INVITE</button>
                 </div>
                 <div className="border border-dashed border-gold/20 p-6 text-center">

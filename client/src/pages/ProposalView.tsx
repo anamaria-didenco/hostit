@@ -227,7 +227,7 @@ export default function ProposalView() {
             ) : (
               <img
                 src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-                alt="HOSTit"
+                alt="VenueFlowHQ"
                 className="h-10 w-auto object-contain"
                 style={{ filter: 'brightness(0) invert(1)' }}
               />
@@ -473,12 +473,12 @@ export default function ProposalView() {
             ) : (
               <img
                 src="https://d2xsxph8kpxj0f.cloudfront.net/310519663244480581/Ptxx6THeEZbSP594bz6QrZ/hostit-logo-minimal-light-auSwScdt4inoXk2LSecYHY.png"
-                alt="HOSTit"
+                alt="VenueFlowHQ"
                 className="h-8 w-auto object-contain"
               />
             )}
           </div>
-          <div className="font-bebas text-xs tracking-widest" style={{ color: T.stone }}>POWERED BY HOSTit · EVENT CRM FOR NEW ZEALAND VENUES</div>
+          <div className="font-bebas text-xs tracking-widest" style={{ color: T.stone }}>POWERED BY VenueFlowHQ · EVENT CRM FOR NEW ZEALAND VENUES</div>
           {venue?.phone && <div className="font-inter text-xs mt-1" style={{ color: T.stone }}>{venue.phone}</div>}
           {venue?.email && <div className="font-inter text-xs" style={{ color: T.stone }}>{venue.email}</div>}
         </div>

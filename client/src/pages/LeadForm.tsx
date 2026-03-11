@@ -108,7 +108,7 @@ export default function LeadForm() {
     </div>
   );
 
-  const venueName    = venue?.name ?? "HOSTit Venue";
+  const venueName    = venue?.name ?? "VenueFlowHQ Venue";
   const formTitle    = venue?.leadFormTitle ?? "Book Your Event";
   const formSubtitle = venue?.leadFormSubtitle ?? "Tell us about your event and we'll get back to you within 24 hours.";
   const primaryColor = venue?.primaryColor ?? "#2D4A3E";
@@ -251,7 +251,7 @@ export default function LeadForm() {
             </p>
             <p className="text-sm text-gray-400">A confirmation has been noted. Please check your email for updates.</p>
             <div className="mt-8 pt-6 border-t border-dashed border-gray-200">
-              <div className="font-bold text-xs tracking-widest text-gray-400">POWERED BY HOSTit</div>
+              <div className="font-bold text-xs tracking-widest text-gray-400">POWERED BY VenueFlowHQ</div>
             </div>
           </div>
         ) : (
@@ -340,7 +340,7 @@ export default function LeadForm() {
 
       {/* Footer */}
       <div className="py-8 text-center mt-4 bg-gray-800 border-t border-gray-700">
-        <div className="font-bold text-xs tracking-widest text-gray-500">POWERED BY HOSTit · EVENT CRM FOR NEW ZEALAND VENUES</div>
+        <div className="font-bold text-xs tracking-widest text-gray-500">POWERED BY VenueFlowHQ · EVENT CRM FOR NEW ZEALAND VENUES</div>
         <div className="mt-3">
           <Link href="/dashboard">
             <span className="text-xs cursor-pointer transition-colors text-gray-600 hover:text-gray-400">Venue owner? Sign in →</span>

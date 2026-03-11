@@ -257,7 +257,7 @@ export default function CsvImportModal({ onClose, onImported }: Props) {
             <div className="space-y-4">
               <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 flex gap-2 text-sm text-amber-800">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Map each column from your file to the correct HOSTit field. Unmapped columns will be skipped.</span>
+                <span>Map each column from your file to the correct VenueFlowHQ field. Unmapped columns will be skipped.</span>
               </div>
               <div className="space-y-2">
                 {headers.map(header => (

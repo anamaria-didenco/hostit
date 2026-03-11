@@ -33,7 +33,7 @@ export default function FloorPlanShare() {
           <span className="font-bold text-gray-800 text-base">{plan.name}</span>
           <span className="ml-3 text-xs text-gray-400 font-medium bg-gray-100 px-2 py-0.5 rounded">READ ONLY</span>
         </div>
-        <div className="text-xs text-gray-400">Shared via HOSTit</div>
+        <div className="text-xs text-gray-400">Shared via VenueFlowHQ</div>
       </div>
 
       {/* Editor in read-only mode */}

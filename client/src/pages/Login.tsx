@@ -39,7 +39,7 @@ export default function Login() {
             <div className="w-9 h-9 rounded-xl bg-[#8D957E] flex items-center justify-center">
               <span className="text-white font-bold text-sm">H</span>
             </div>
-            <span className="font-bold text-gray-900 text-xl tracking-tight">HOSTit</span>
+            <span className="font-bold text-gray-900 text-xl tracking-tight">VenueFlowHQ</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Sign in</h1>
           <p className="text-gray-500 text-sm mt-1">Enter your admin password to continue</p>
