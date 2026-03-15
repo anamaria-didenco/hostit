@@ -1754,15 +1754,6 @@ export default function Dashboard() {
                             const eventDate = selectedLead.eventDate ? new Date(selectedLead.eventDate).toISOString().slice(0,10) : undefined;
                             const guestCount = selectedLead.guestCount ? Number(selectedLead.guestCount) : undefined;
                             const eventType = selectedLead.eventType || 'Event';
-                            const defaultItems = [
-                              { time: '09:00', duration: 30, title: 'Venue Setup', description: 'Tables, chairs, decorations', assignedTo: 'FOH Team', category: 'Setup', sortOrder: 0 },
-                              { time: '10:00', duration: 60, title: 'Kitchen Prep', description: 'Food preparation and mise en place', assignedTo: 'Kitchen', category: 'Kitchen', sortOrder: 1 },
-                              { time: '17:00', duration: 30, title: 'Guest Arrival', description: 'Welcome drinks and seating', assignedTo: 'FOH', category: 'Service', sortOrder: 2 },
-                              { time: '17:30', duration: 90, title: 'Entrée Service', description: 'First course service', assignedTo: 'FOH', category: 'Service', sortOrder: 3 },
-                              { time: '19:00', duration: 90, title: 'Main Course', description: 'Main course service', assignedTo: 'FOH', category: 'Service', sortOrder: 4 },
-                              { time: '20:30', duration: 60, title: 'Dessert & Coffee', description: 'Dessert service and tea/coffee', assignedTo: 'FOH', category: 'Service', sortOrder: 5 },
-                              { time: '21:30', duration: 60, title: 'Pack Down', description: 'Clear tables, clean venue', assignedTo: 'All Staff', category: 'Cleanup', sortOrder: 6 },
-                            ];
                             createRunsheet.mutate({
                               title: `${eventType} — ${selectedLead.firstName} ${selectedLead.lastName ?? ''}`,
                               leadId: selectedLead.id,
@@ -1771,7 +1762,6 @@ export default function Dashboard() {
                               eventType,
                               notes: selectedLead.message ?? undefined,
                               venueName: (venueSettings as any)?.name ?? undefined,
-                              items: defaultItems,
                             });
                           }}
                           disabled={createRunsheet.isPending}

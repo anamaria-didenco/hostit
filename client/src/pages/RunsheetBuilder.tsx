@@ -163,6 +163,9 @@ export default function RunsheetBuilder() {
   const [creatingStaffLink, setCreatingStaffLink] = useState(false);
   const [newStaffLinkLabel, setNewStaffLinkLabel] = useState('Staff Link');
 
+  // Print layout
+  const [printColumns, setPrintColumns] = useState<1 | 2>(1);
+
   // AI F&B paste modal
   const [showFnbPaste, setShowFnbPaste] = useState(false);
   const [fnbPasteText, setFnbPasteText] = useState('');
@@ -638,7 +641,6 @@ export default function RunsheetBuilder() {
       setEventDate(lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-CA") : "");
       setGuestCount(lead.guestCount ? String(lead.guestCount) : "");
       setEventType(lead.eventType ?? "");
-      seedDefaultItems(lead.eventType ?? "");
     }
   }, [lead, sheetId]);
 
@@ -661,7 +663,6 @@ export default function RunsheetBuilder() {
       setContactName(`${booking.firstName} ${booking.lastName ?? ""}`.trim());
       setContactEmail(booking.email ?? "");
       if (booking.spaceName) setSpaceName(booking.spaceName);
-      seedDefaultItems(booking.eventType ?? "");
     }
   }, [booking, sheetId]);
 
@@ -1001,6 +1002,13 @@ export default function RunsheetBuilder() {
             }`}
           >
             <FileText className="w-3.5 h-3.5" /> TEMPLATES
+          </button>
+          <button
+            onClick={() => setPrintColumns(c => c === 1 ? 2 : 1)}
+            className="font-bebas tracking-widest text-xs text-white/60 hover:text-gold flex items-center gap-1.5 transition-colors no-print"
+            title={printColumns === 1 ? 'Switch to 2-column print' : 'Switch to 1-column print'}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" /> {printColumns === 1 ? '1 COL' : '2 COL'}
           </button>
           <button
             onClick={() => window.print()}
@@ -1512,14 +1520,14 @@ export default function RunsheetBuilder() {
                 No items yet. Click "Add Item" to build your runsheet.
               </div>
             ) : (
-              <div className="divide-y divide-gold/20">
+              <div className={`divide-y divide-gold/20 ${printColumns === 2 ? 'print-cols-2 print:divide-y-0' : ''}`}>
                 {items.map((item, idx) => {
                   const key = getItemKey(item);
                   const isExpanded = expandedItem === key;
                   const endTime = addMinutes(item.time, item.duration);
                   const catInfo = CATEGORIES.find(c => c.value === item.category);
                   return (
-                    <div key={key} className="group hover:bg-linen/50 transition-colors print:hover:bg-transparent">
+                    <div key={key} className={`group hover:bg-linen/50 transition-colors print:hover:bg-transparent ${printColumns === 2 ? 'print:break-inside-avoid print:border-b print:border-gold/20 print:mb-0' : ''}`}>
                       {/* Main row */}
                       <div className="flex items-center gap-0 print:gap-3">
                         {/* Time column */}
@@ -3231,6 +3239,8 @@ export default function RunsheetBuilder() {
           .no-print { display: none !important; }
           body { background: white; }
           @page { margin: 1.5cm; }
+          .print-cols-2 { columns: 2; column-gap: 1.5rem; }
+          .print-cols-2 > * { break-inside: avoid; border-bottom: 1px solid #d4b896; margin-bottom: 0; }
         }
       `}</style>
     </div>
