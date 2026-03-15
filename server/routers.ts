@@ -337,6 +337,29 @@ export const appRouter = router({
             }
           }
         }
+        // When function/event pack is sent, auto-schedule a 5-day follow-up task
+        if (input.status === "function_pack_sent") {
+          const { getDb } = await import('./db');
+          const { tasks } = await import('../drizzle/schema');
+          const db = await getDb();
+          if (db) {
+            const lead = await getLeadById(input.id);
+            const leadName = lead ? `${lead.firstName}${lead.lastName ? ' ' + lead.lastName : ''}` : 'client';
+            const fiveDaysFromNow = Date.now() + 5 * 24 * 60 * 60 * 1000;
+            const now = Date.now();
+            await db.insert(tasks).values({
+              ownerId: ctx.user.id,
+              title: `Follow up with ${leadName}`,
+              description: `Function pack was sent — check in with ${leadName} to confirm they've received it and answer any questions.`,
+              dueDate: fiveDaysFromNow,
+              linkedLeadId: input.id,
+              priority: 'high',
+              completed: false,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
         return { success: true };
       }),
 

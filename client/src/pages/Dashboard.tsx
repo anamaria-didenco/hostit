@@ -566,7 +566,15 @@ export default function Dashboard() {
     onError: () => toast.error("Failed to update source"),
   });
   const updateStatus = trpc.leads.updateStatus.useMutation({
-    onSuccess: () => { refetchLeads(); if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id }); toast.success("Status updated"); },
+    onSuccess: (_data, variables) => {
+      refetchLeads();
+      if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
+      if (variables.status === 'function_pack_sent') {
+        toast.success("Status updated — a follow-up reminder has been added to your Tasks for 5 days from now.");
+      } else {
+        toast.success("Status updated");
+      }
+    },
   });
   const bulkUpdateStatus = trpc.leads.bulkUpdateStatus.useMutation({
     onSuccess: (data) => {
