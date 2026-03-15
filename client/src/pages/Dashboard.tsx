@@ -1840,18 +1840,31 @@ export default function Dashboard() {
                         </div>
                       )}
                       <div className="space-y-1.5">
-                        {pipelineStages.map(stage => (
-                          <button key={stage.key}
-                            onClick={() => updateStatus.mutate({ id: selectedLead.id, status: stage.key as any })}
-                            className={`w-full text-left px-3 py-2 rounded-lg border font-inter text-xs font-medium transition-all ${
-                              selectedLead.status === stage.key
-                                ? 'bg-sage-green/10 border-sage-green text-sage-dark'
-                                : 'border-gray-100 text-gray-500 hover:border-sage-green/40 hover:bg-sage-green/5'
-                            }`}>
-                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${selectedLead.status === stage.key ? 'bg-sage-green' : 'bg-gray-300'}`} />
-                            {stage.label}
-                          </button>
-                        ))}
+                        {pipelineStages.map(stage => {
+                          const isActive = selectedLead.status === stage.key;
+                          return (
+                            <button key={stage.key}
+                              onClick={() => updateStatus.mutate({ id: selectedLead.id, status: stage.key as any })}
+                              className="w-full text-left px-3 py-2 border font-inter text-xs font-medium transition-all"
+                              style={isActive ? {
+                                backgroundColor: stage.swatch + '22',
+                                borderColor: stage.swatch,
+                                color: '#1a1a1a',
+                                borderLeftWidth: '3px',
+                              } : {
+                                backgroundColor: 'transparent',
+                                borderColor: '#f0ede8',
+                                color: '#888',
+                              }}
+                            >
+                              <span
+                                className="inline-block w-2 h-2 rounded-full mr-2 flex-shrink-0"
+                                style={{ backgroundColor: isActive ? stage.swatch : stage.swatch + '66' }}
+                              />
+                              {stage.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
