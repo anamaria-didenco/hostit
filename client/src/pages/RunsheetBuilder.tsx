@@ -535,6 +535,18 @@ export default function RunsheetBuilder() {
       navigate(`/runsheet?id=${existingId}&bookingId=${bookingId}`);
     }
   }, [bookingRunsheets, sheetId]);
+  // If this lead already has a runsheet, redirect to edit it instead of creating a new one
+  const { data: leadRunsheets } = trpc.runsheets.list.useQuery(
+    { leadId: leadId! },
+    { enabled: !!leadId && !sheetId }
+  );
+  useEffect(() => {
+    if (!sheetId && leadRunsheets && leadRunsheets.length > 0) {
+      const existingId = leadRunsheets[0].id;
+      const qs = [`id=${existingId}`, `leadId=${leadId}`].join('&');
+      navigate(`/runsheet?${qs}`);
+    }
+  }, [leadRunsheets, sheetId]);
   // Floor plans
   const { data: floorPlansList } = trpc.floorPlans.list.useQuery(
     {},

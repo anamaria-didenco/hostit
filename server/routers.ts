@@ -1830,6 +1830,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.footerText !== undefined) updateData.footerText = fields.footerText;
         if (fields.proposalId !== undefined) updateData.proposalId = fields.proposalId;
         if (fields.floorPlanId !== undefined) updateData.floorPlanId = fields.floorPlanId;
+        updateData.updatedAt = new Date();
         await db.update(runsheets).set(updateData)
           .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)));
         return { success: true };
