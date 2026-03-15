@@ -389,6 +389,24 @@ export const floorPlans = pgTable("floor_plans", {
 });
 export type FloorPlan = typeof floorPlans.$inferSelect;
 
+// ─── Furniture Inventory ───────────────────────────────────────────────────────
+export const furnitureInventory = pgTable("furniture_inventory", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull().default("rect_table"),
+  color: varchar("color", { length: 20 }).notNull().default("#d4a574"),
+  width: integer("width").notNull().default(80),
+  height: integer("height").notNull().default(80),
+  seats: integer("seats"),
+  quantity: integer("quantity"),
+  notes: text("notes"),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type FurnitureItem = typeof furnitureInventory.$inferSelect;
+export type InsertFurnitureItem = typeof furnitureInventory.$inferInsert;
+
 // ─── Checklist Templates ──────────────────────────────────────────────────────
 export const checklistTemplates = pgTable("checklist_templates", {
   id: serial("id").primaryKey(),

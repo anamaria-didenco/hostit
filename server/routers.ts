@@ -3560,5 +3560,87 @@ Return ONLY valid JSON. Example structure:
         return { success: true };
       }),
   }),
+
+  // ─── Furniture Inventory ──────────────────────────────────────────────────
+  furnitureInventory: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { furnitureInventory } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(furnitureInventory)
+        .where(eq(furnitureInventory.ownerId, ctx.user.id))
+        .orderBy(asc(furnitureInventory.createdAt));
+    }),
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        type: z.string().default('rect_table'),
+        color: z.string().default('#d4a574'),
+        width: z.number().int().positive().default(80),
+        height: z.number().int().positive().default(80),
+        seats: z.number().int().positive().optional(),
+        quantity: z.number().int().positive().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { furnitureInventory } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const now = Date.now();
+        const [result] = await db.insert(furnitureInventory).values({
+          ownerId: ctx.user.id,
+          name: input.name,
+          type: input.type,
+          color: input.color,
+          width: input.width,
+          height: input.height,
+          seats: input.seats ?? null,
+          quantity: input.quantity ?? null,
+          notes: input.notes ?? null,
+          createdAt: now,
+          updatedAt: now,
+        }).returning({ id: furnitureInventory.id });
+        return { success: true, id: result.id };
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).optional(),
+        type: z.string().optional(),
+        color: z.string().optional(),
+        width: z.number().int().positive().optional(),
+        height: z.number().int().positive().optional(),
+        seats: z.number().int().positive().nullable().optional(),
+        quantity: z.number().int().positive().nullable().optional(),
+        notes: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { furnitureInventory } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        await db.update(furnitureInventory)
+          .set({ ...rest, updatedAt: Date.now() })
+          .where(and(eq(furnitureInventory.id, id), eq(furnitureInventory.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { furnitureInventory } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(furnitureInventory)
+          .where(and(eq(furnitureInventory.id, input.id), eq(furnitureInventory.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;
