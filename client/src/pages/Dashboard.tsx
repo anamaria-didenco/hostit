@@ -488,6 +488,10 @@ export default function Dashboard() {
     { leadId: selectedLead?.id ?? 0 },
     { enabled: !!selectedLead?.id }
   );
+  const { data: selectedLeadRunsheets } = trpc.runsheets.list.useQuery(
+    { leadId: selectedLead?.id ?? 0 },
+    { enabled: !!selectedLead?.id }
+  );
   const { data: venueSettings, refetch: refetchSettings } = trpc.venue.get.useQuery(
     { ownerId: user?.id },
     { enabled: !!user?.id }
@@ -1739,7 +1743,12 @@ export default function Dashboard() {
                         className="bg-sage-green text-white font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-dark transition-all">
                         <FileText className="w-3.5 h-3.5" /> Create Proposal
                       </button>
-                      {['booked','confirmed'].includes(selectedLead.status) ? (
+                      {selectedLeadRunsheets && selectedLeadRunsheets.length > 0 ? (
+                        <button onClick={() => setLocation(`/runsheet?id=${selectedLeadRunsheets[selectedLeadRunsheets.length - 1].id}&leadId=${selectedLead.id}`)}
+                          className="border border-sage-green text-sage-dark font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-green/10 transition-all">
+                          <Clock className="w-3.5 h-3.5" /> Edit Runsheet
+                        </button>
+                      ) : ['booked','confirmed'].includes(selectedLead.status) ? (
                         <button
                           onClick={() => {
                             const eventDate = selectedLead.eventDate ? new Date(selectedLead.eventDate).toISOString().slice(0,10) : undefined;
