@@ -854,6 +854,31 @@ export default function Dashboard() {
     onError: () => toast.error('Failed to delete floor plan'),
   });
 
+  // Furniture inventory
+  const { data: furnitureInventory, refetch: refetchFurnitureInventory } = trpc.furnitureInventory.list.useQuery(
+    undefined, { enabled: !!user?.id && settingsSubTab === 'floor-plans' }
+  );
+  const [showInvForm, setShowInvForm] = useState(false);
+  const [editingInvId, setEditingInvId] = useState<number | null>(null);
+  const [invForm, setInvForm] = useState({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '' });
+  const createFurniture = trpc.furnitureInventory.create.useMutation({
+    onSuccess: () => { refetchFurnitureInventory(); setShowInvForm(false); setEditingInvId(null); setInvForm({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '' }); toast.success('Item added'); },
+    onError: () => toast.error('Failed to add item'),
+  });
+  const updateFurniture = trpc.furnitureInventory.update.useMutation({
+    onSuccess: () => { refetchFurnitureInventory(); setEditingInvId(null); setShowInvForm(false); setInvForm({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '' }); toast.success('Item updated'); },
+    onError: () => toast.error('Failed to update item'),
+  });
+  const deleteFurniture = trpc.furnitureInventory.delete.useMutation({
+    onSuccess: () => { refetchFurnitureInventory(); toast.success('Item removed'); },
+    onError: () => toast.error('Failed to remove item'),
+  });
+  const handleSaveFurniture = () => {
+    if (!invForm.name.trim()) { toast.error('Name is required'); return; }
+    const payload = { name: invForm.name.trim(), type: invForm.type, color: invForm.color, width: invForm.width, height: invForm.height, seats: invForm.seats ? parseInt(invForm.seats) : undefined, quantity: invForm.quantity ? parseInt(invForm.quantity) : undefined, notes: invForm.notes || undefined };
+    if (editingInvId) { updateFurniture.mutate({ id: editingInvId, ...payload }); } else { createFurniture.mutate(payload); }
+  };
+
   const [settingsForm, setSettingsForm] = useState<any>(null);
   const [formFields, setFormFields] = useState<FormFieldDef[] | null>(null);
   const [newCustomFieldLabel, setNewCustomFieldLabel] = useState('');
@@ -4349,6 +4374,143 @@ export default function Dashboard() {
                         <p className="font-dm text-sm text-ink font-medium">Interactive Floor Plan Builder</p>
                         <p className="font-dm text-xs text-ink/60 mt-1">Drag and drop tables, chairs, stages, bars, and more onto the canvas. Assign seat counts, rotate elements, and save templates to reuse across events.</p>
                       </div>
+                    </div>
+
+                    {/* ── Furniture Inventory ── */}
+                    <div className="bg-white border border-gray-200 rounded mb-8">
+                      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                        <div>
+                          <h2 className="font-semibold text-gray-800 text-sm">Furniture Inventory</h2>
+                          <p className="font-dm text-xs text-gray-400 mt-0.5">Define your actual tables and chairs — colours, sizes, quantities. These appear in the floor plan builder so you place real items.</p>
+                        </div>
+                        {!showInvForm && !editingInvId && (
+                          <button
+                            onClick={() => { setShowInvForm(true); setEditingInvId(null); setInvForm({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '' }); }}
+                            className="flex items-center gap-1.5 bg-ink text-cream font-bebas tracking-widest text-xs px-4 py-2 hover:bg-ink/80 transition-colors"
+                          >
+                            <Plus className="w-3 h-3" /> ADD ITEM
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Add / Edit form */}
+                      {(showInvForm || editingInvId) && (
+                        <div className="p-5 border-b border-gray-100 bg-gray-50">
+                          <h3 className="font-bebas tracking-widest text-xs text-gray-500 mb-3">{editingInvId ? 'EDIT ITEM' : 'NEW INVENTORY ITEM'}</h3>
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div className="col-span-2">
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">NAME *</label>
+                              <input value={invForm.name} onChange={e => setInvForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Round Table — White Linen"
+                                className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
+                            </div>
+                            <div>
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">SHAPE</label>
+                              <select value={invForm.type} onChange={e => { const t = e.target.value; const defs: Record<string,{w:number,h:number}> = {round_table:{w:80,h:80},rect_table:{w:120,h:60},chair:{w:30,h:30},bar:{w:160,h:50},stage:{w:200,h:80},dance_floor:{w:200,h:200},dj_booth:{w:80,h:60},buffet:{w:160,h:50},gift_table:{w:100,h:50},entrance:{w:60,h:20}}; const d = defs[t] ?? {w:80,h:60}; setInvForm(f => ({ ...f, type: t, width: d.w, height: d.h })); }}
+                                className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy bg-white">
+                                <option value="round_table">Round Table</option>
+                                <option value="rect_table">Rect Table</option>
+                                <option value="chair">Chair</option>
+                                <option value="bar">Bar</option>
+                                <option value="stage">Stage</option>
+                                <option value="dance_floor">Dance Floor</option>
+                                <option value="dj_booth">DJ Booth</option>
+                                <option value="buffet">Buffet Table</option>
+                                <option value="gift_table">Gift Table</option>
+                                <option value="entrance">Entrance</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">COLOUR</label>
+                              <div className="flex items-center gap-2">
+                                <input type="color" value={invForm.color} onChange={e => setInvForm(f => ({ ...f, color: e.target.value }))}
+                                  className="w-10 h-8 border border-gray-200 rounded cursor-pointer flex-shrink-0" />
+                                <div style={{ width: 32, height: 32, backgroundColor: invForm.color, borderRadius: invForm.type === 'round_table' ? '50%' : 2, border: '1.5px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />
+                                <span className="font-dm text-xs text-gray-400">{invForm.color}</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">WIDTH (px)</label>
+                              <input type="number" min="20" value={invForm.width} onChange={e => setInvForm(f => ({ ...f, width: parseInt(e.target.value) || 20 }))}
+                                className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
+                            </div>
+                            <div>
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">HEIGHT (px)</label>
+                              <input type="number" min="20" value={invForm.height} onChange={e => setInvForm(f => ({ ...f, height: parseInt(e.target.value) || 20 }))}
+                                className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
+                            </div>
+                            <div>
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">SEATS</label>
+                              <input type="number" min="1" value={invForm.seats} placeholder="–" onChange={e => setInvForm(f => ({ ...f, seats: e.target.value }))}
+                                className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
+                            </div>
+                            <div>
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">QTY OWNED</label>
+                              <input type="number" min="1" value={invForm.quantity} placeholder="–" onChange={e => setInvForm(f => ({ ...f, quantity: e.target.value }))}
+                                className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">NOTES</label>
+                              <input value={invForm.notes} placeholder="e.g. Stored in back room" onChange={e => setInvForm(f => ({ ...f, notes: e.target.value }))}
+                                className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setShowInvForm(false); setEditingInvId(null); }} className="border border-gray-200 font-bebas tracking-widest text-xs px-4 py-2 text-gray-500 hover:text-gray-700 transition-colors">CANCEL</button>
+                            <button onClick={handleSaveFurniture} disabled={createFurniture.isPending || updateFurniture.isPending}
+                              className="bg-burgundy text-cream font-bebas tracking-widest text-xs px-6 py-2 hover:bg-burgundy/90 transition-colors disabled:opacity-50">
+                              {createFurniture.isPending || updateFurniture.isPending ? 'SAVING...' : 'SAVE ITEM'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Inventory list */}
+                      {!furnitureInventory || furnitureInventory.length === 0 ? (
+                        <div className="p-8 text-center text-gray-400">
+                          <p className="font-dm text-sm">No furniture items yet.</p>
+                          <p className="font-dm text-xs mt-1">Add your tables and chairs to use them when building floor plans.</p>
+                        </div>
+                      ) : (
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-gray-50">
+                              <th className="text-left p-3 pl-5 text-xs font-medium text-gray-400 font-bebas tracking-widest">ITEM</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">SHAPE</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">SIZE</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">SEATS</th>
+                              <th className="text-left p-3 text-xs font-medium text-gray-400 font-bebas tracking-widest">QTY</th>
+                              <th className="p-3"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(furnitureInventory as any[]).map((item) => (
+                              <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                                <td className="p-3 pl-5">
+                                  <div className="flex items-center gap-3">
+                                    <div style={{ width: 28, height: 28, backgroundColor: item.color, borderRadius: item.type === 'round_table' ? '50%' : 2, border: '1.5px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />
+                                    <div>
+                                      <p className="font-dm text-sm text-gray-800 font-medium">{item.name}</p>
+                                      {item.notes && <p className="font-dm text-xs text-gray-400 italic">{item.notes}</p>}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="p-3 font-dm text-sm text-gray-500">{item.type.replace('_', ' ')}</td>
+                                <td className="p-3 font-dm text-sm text-gray-500">{item.width}×{item.height}</td>
+                                <td className="p-3 font-dm text-sm text-gray-500">{item.seats ?? '—'}</td>
+                                <td className="p-3 font-dm text-sm text-gray-500">{item.quantity ?? '—'}</td>
+                                <td className="p-3 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button onClick={() => { setEditingInvId(item.id); setShowInvForm(false); setInvForm({ name: item.name, type: item.type, color: item.color, width: item.width, height: item.height, seats: item.seats?.toString() ?? '', quantity: item.quantity?.toString() ?? '', notes: item.notes ?? '' }); }}
+                                      className="text-gray-400 hover:text-gray-700 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => { if (confirm(`Remove "${item.name}"?`)) deleteFurniture.mutate({ id: item.id }); }}
+                                      className="text-red-300 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
 
                     {/* Floor plans grid */}

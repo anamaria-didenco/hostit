@@ -178,6 +178,12 @@ export default function FloorPlanEditor({
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customForm, setCustomForm] = useState({ label: "", w: 80, h: 80, color: "#5b7c6c", seats: 0, round: false });
 
+  // Sidebar tab
+  const [sidebarTab, setSidebarTab] = useState<"elements" | "inventory">("elements");
+
+  // Venue furniture inventory
+  const { data: inventory } = trpc.furnitureInventory.list.useQuery(undefined, { enabled: !readOnly });
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -389,118 +395,208 @@ export default function FloorPlanEditor({
       {/* ── Left palette ────────────────────────────────────────────────── */}
       {!readOnly && (
         <div className="w-48 bg-ivory border-r border-border flex flex-col flex-shrink-0">
-          <div className="px-3 py-2 border-b border-border">
-            <p className="font-bebas tracking-widest text-xs text-sage">ELEMENTS</p>
-            <p className="text-[10px] text-ink/40 mt-0.5">Drag onto canvas</p>
+          {/* Tab switcher */}
+          <div className="flex border-b border-border flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setSidebarTab("elements")}
+              className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "elements" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/40 hover:text-ink/70"}`}
+            >
+              ELEMENTS
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarTab("inventory")}
+              className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "inventory" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/40 hover:text-ink/70"}`}
+            >
+              INVENTORY
+            </button>
           </div>
-          <div className="flex-1 overflow-y-auto py-1">
-            {PALETTE.map(item => (
-              <div
-                key={item.type}
-                draggable
-                onDragStart={e => e.dataTransfer.setData("fp-type", item.type)}
-                className="flex items-center gap-2 px-3 py-1.5 cursor-grab hover:bg-burgundy/5 transition-colors group"
-              >
-                <span style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.icon}</span>
-                <span className="font-dm text-xs text-ink/70 group-hover:text-ink truncate">{item.label}</span>
-              </div>
-            ))}
 
-            {/* Custom items */}
-            {customPalette.length > 0 && (
-              <>
-                <div className="px-3 pt-3 pb-1">
-                  <p className="font-bebas tracking-widest text-[10px] text-sage/60">CUSTOM</p>
-                </div>
-                {customPalette.map(item => (
+          {/* ── ELEMENTS tab ── */}
+          {sidebarTab === "elements" && (
+            <>
+              <div className="px-3 py-1.5 border-b border-border flex-shrink-0">
+                <p className="text-[10px] text-ink/40">Drag onto canvas</p>
+              </div>
+              <div className="flex-1 overflow-y-auto py-1">
+                {PALETTE.map(item => (
                   <div
                     key={item.type}
                     draggable
                     onDragStart={e => e.dataTransfer.setData("fp-type", item.type)}
                     className="flex items-center gap-2 px-3 py-1.5 cursor-grab hover:bg-burgundy/5 transition-colors group"
                   >
-                    <span style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.round ? "●" : "▬"}</span>
-                    <span className="font-dm text-xs text-ink/70 group-hover:text-ink truncate flex-1">{item.label}</span>
-                    <button
-                      type="button"
-                      onClick={() => setCustomPalette(prev => prev.filter(p => p.type !== item.type))}
-                      className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-400 transition-all flex-shrink-0"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </button>
+                    <span style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.icon}</span>
+                    <span className="font-dm text-xs text-ink/70 group-hover:text-ink truncate">{item.label}</span>
                   </div>
                 ))}
-              </>
-            )}
-          </div>
 
-          {/* Custom item creator */}
-          <div className="border-t border-border">
-            {!showCustomForm ? (
-              <button
-                type="button"
-                onClick={() => setShowCustomForm(true)}
-                className="w-full flex items-center gap-1.5 px-3 py-2.5 text-xs font-bebas tracking-widest text-ink/50 hover:text-ink hover:bg-gold/5 transition-colors"
-              >
-                <Plus className="w-3 h-3" /> ADD CUSTOM ITEM
-              </button>
-            ) : (
-              <div className="p-3 space-y-2 bg-linen/60">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="font-bebas text-[10px] tracking-widest text-sage">NEW ITEM</p>
-                  <button type="button" onClick={() => setShowCustomForm(false)} className="text-ink/30 hover:text-ink">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={customForm.label}
-                  onChange={e => setCustomForm(f => ({ ...f, label: e.target.value }))}
-                  placeholder="Label (e.g. VIP Table)"
-                  className="w-full border border-border rounded px-2 py-1 text-xs font-dm focus:outline-none focus:border-gold"
-                />
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div>
-                    <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">W</label>
-                    <input type="number" value={customForm.w} onChange={e => setCustomForm(f => ({ ...f, w: parseInt(e.target.value) || 80 }))}
-                      className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
-                  </div>
-                  <div>
-                    <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">H</label>
-                    <input type="number" value={customForm.h} onChange={e => setCustomForm(f => ({ ...f, h: parseInt(e.target.value) || 80 }))}
-                      className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 items-end">
-                  <div>
-                    <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">COLOUR</label>
-                    <input type="color" value={customForm.color} onChange={e => setCustomForm(f => ({ ...f, color: e.target.value }))}
-                      className="w-full h-7 border border-border rounded cursor-pointer" />
-                  </div>
-                  <div>
-                    <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">SEATS</label>
-                    <input type="number" value={customForm.seats} min={0}
-                      onChange={e => setCustomForm(f => ({ ...f, seats: parseInt(e.target.value) || 0 }))}
-                      className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={customForm.round} onChange={e => setCustomForm(f => ({ ...f, round: e.target.checked }))}
-                      className="accent-forest w-3 h-3" />
-                    <span className="font-dm text-xs text-ink/60">Round shape</span>
-                  </label>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddCustomItem}
-                  className="w-full bg-forest text-white font-bebas tracking-widest text-xs py-1.5 rounded-sm hover:bg-forest/90 transition-colors"
-                >
-                  ADD TO CANVAS
-                </button>
+                {/* Custom items */}
+                {customPalette.length > 0 && (
+                  <>
+                    <div className="px-3 pt-3 pb-1">
+                      <p className="font-bebas tracking-widest text-[10px] text-sage/60">CUSTOM</p>
+                    </div>
+                    {customPalette.map(item => (
+                      <div
+                        key={item.type}
+                        draggable
+                        onDragStart={e => e.dataTransfer.setData("fp-type", item.type)}
+                        className="flex items-center gap-2 px-3 py-1.5 cursor-grab hover:bg-burgundy/5 transition-colors group"
+                      >
+                        <span style={{ color: item.color, fontSize: "13px", flexShrink: 0 }}>{item.round ? "●" : "▬"}</span>
+                        <span className="font-dm text-xs text-ink/70 group-hover:text-ink truncate flex-1">{item.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => setCustomPalette(prev => prev.filter(p => p.type !== item.type))}
+                          className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-400 transition-all flex-shrink-0"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
-            )}
-          </div>
+
+              {/* Custom item creator */}
+              <div className="border-t border-border flex-shrink-0">
+                {!showCustomForm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomForm(true)}
+                    className="w-full flex items-center gap-1.5 px-3 py-2.5 text-xs font-bebas tracking-widest text-ink/50 hover:text-ink hover:bg-gold/5 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" /> ADD CUSTOM ITEM
+                  </button>
+                ) : (
+                  <div className="p-3 space-y-2 bg-linen/60">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-bebas text-[10px] tracking-widest text-sage">NEW ITEM</p>
+                      <button type="button" onClick={() => setShowCustomForm(false)} className="text-ink/30 hover:text-ink">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={customForm.label}
+                      onChange={e => setCustomForm(f => ({ ...f, label: e.target.value }))}
+                      placeholder="Label (e.g. VIP Table)"
+                      className="w-full border border-border rounded px-2 py-1 text-xs font-dm focus:outline-none focus:border-gold"
+                    />
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div>
+                        <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">W</label>
+                        <input type="number" value={customForm.w} onChange={e => setCustomForm(f => ({ ...f, w: parseInt(e.target.value) || 80 }))}
+                          className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
+                      </div>
+                      <div>
+                        <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">H</label>
+                        <input type="number" value={customForm.h} onChange={e => setCustomForm(f => ({ ...f, h: parseInt(e.target.value) || 80 }))}
+                          className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5 items-end">
+                      <div>
+                        <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">COLOUR</label>
+                        <input type="color" value={customForm.color} onChange={e => setCustomForm(f => ({ ...f, color: e.target.value }))}
+                          className="w-full h-7 border border-border rounded cursor-pointer" />
+                      </div>
+                      <div>
+                        <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">SEATS</label>
+                        <input type="number" value={customForm.seats} min={0}
+                          onChange={e => setCustomForm(f => ({ ...f, seats: parseInt(e.target.value) || 0 }))}
+                          className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" checked={customForm.round} onChange={e => setCustomForm(f => ({ ...f, round: e.target.checked }))}
+                          className="accent-forest w-3 h-3" />
+                        <span className="font-dm text-xs text-ink/60">Round shape</span>
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddCustomItem}
+                      className="w-full bg-forest text-white font-bebas tracking-widest text-xs py-1.5 rounded-sm hover:bg-forest/90 transition-colors"
+                    >
+                      ADD TO CANVAS
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── INVENTORY tab ── */}
+          {sidebarTab === "inventory" && (
+            <>
+              <div className="px-3 py-1.5 border-b border-border flex-shrink-0">
+                <p className="text-[10px] text-ink/40">Click to place on canvas</p>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {!inventory || inventory.length === 0 ? (
+                  <div className="p-4 text-center">
+                    <p className="font-dm text-xs text-ink/40 mt-4">No furniture added yet.</p>
+                    <p className="font-dm text-[10px] text-ink/30 mt-1">Go to Settings → Floor Plans to manage your inventory.</p>
+                  </div>
+                ) : (
+                  <div className="py-1">
+                    {(inventory as any[]).map((item) => {
+                      const round = item.type === "round_table";
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            const newEl: FPElement = {
+                              id: `inv-${item.id}-${Date.now()}`,
+                              type: item.type,
+                              x: Math.max(0, Math.round(canvasData.width / 2 - item.width / 2)),
+                              y: Math.max(0, Math.round(canvasData.height / 2 - item.height / 2)),
+                              width: item.width,
+                              height: item.height,
+                              rotation: 0,
+                              label: item.name,
+                              color: item.color,
+                              seats: item.seats ?? 0,
+                            };
+                            setCanvasData(prev => ({ ...prev, elements: [...prev.elements, newEl] }));
+                            setSelected(newEl.id);
+                            toast.success(`Added "${item.name}"`);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-burgundy/5 transition-colors group text-left"
+                        >
+                          {/* Shape preview */}
+                          <div
+                            style={{
+                              width: 28, height: 28, flexShrink: 0,
+                              backgroundColor: item.color,
+                              borderRadius: round ? "50%" : 2,
+                              border: "1.5px solid rgba(0,0,0,0.2)",
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-dm text-xs text-ink/80 group-hover:text-ink truncate">{item.name}</p>
+                            <p className="font-dm text-[10px] text-ink/40">
+                              {item.seats ? `${item.seats} seats` : ""}
+                              {item.seats && item.quantity ? " · " : ""}
+                              {item.quantity ? `×${item.quantity} owned` : ""}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-border flex-shrink-0 px-3 py-2">
+                <p className="font-dm text-[10px] text-ink/30">Manage in Settings → Floor Plans</p>
+              </div>
+            </>
+          )}
         </div>
       )}
 
