@@ -1539,15 +1539,6 @@ export default function RunsheetBuilder() {
                             className="font-dm text-sm font-bold text-ink bg-transparent border-0 focus:outline-none w-full no-print"
                           />
                           <div className="hidden print:block font-dm text-sm font-bold">{formatTime12(item.time)}</div>
-                          <div className="font-dm text-[10px] text-ink/40 no-print">–{endTime}</div>
-                          <div className="hidden print:block font-dm text-[10px] text-ink/40">–{formatTime12(endTime)}</div>
-                        </div>
-
-                        {/* Category badge */}
-                        <div className="w-[90px] flex-shrink-0 px-3 py-3 no-print">
-                          <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${catStyle(item.category)}`}>
-                            {catInfo?.label ?? item.category}
-                          </span>
                         </div>
 
                         {/* Title & description */}
@@ -1571,10 +1562,6 @@ export default function RunsheetBuilder() {
                           </div>
                         )}
 
-                        {/* Duration */}
-                        <div className="w-[50px] flex-shrink-0 px-2 py-3 text-right no-print">
-                          <span className="font-dm text-xs text-ink/30">{item.duration}m</span>
-                        </div>
 
                         {/* Actions */}
                         <div className="flex items-center gap-0.5 px-2 py-3 no-print opacity-0 group-hover:opacity-100 transition-opacity">

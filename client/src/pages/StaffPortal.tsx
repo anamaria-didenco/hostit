@@ -255,22 +255,10 @@ export default function StaffPortal() {
                     {/* Time column */}
                     <div className="w-[90px] flex-shrink-0 px-4 py-3 border-r border-gold/30 text-right">
                       <p className="font-dm text-sm font-bold text-ink">{formatTime12(item.time)}</p>
-                      {endTime && (
-                        <p className="font-dm text-[10px] text-ink/40">–{formatTime12(endTime)}</p>
-                      )}
-                    </div>
-                    {/* Category badge column */}
-                    <div className="w-[90px] flex-shrink-0 px-3 py-3 flex items-start">
-                      <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${cat.color}`}>
-                        {cat.label}
-                      </span>
                     </div>
                     {/* Content */}
                     <div className="flex-1 px-3 py-3 min-w-0">
                       <p className="font-dm text-sm font-semibold text-ink">{item.title}</p>
-                      {item.duration && (
-                        <p className="font-dm text-[10px] text-ink/40 mt-0.5">{item.duration} min</p>
-                      )}
                       {item.description && (
                         <p className="font-dm text-sm text-ink/60 mt-1">{item.description}</p>
                       )}

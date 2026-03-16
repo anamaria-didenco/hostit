@@ -159,26 +159,17 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
 <div class="card">
   <div class="card-header timeline-header">
     EVENT TIMELINE
-    ${sortedItems.length > 0 ? `<span class="header-sub">${formatTime12((sortedItems[0] as any).time)} – ${formatTime12(addMinutes((sortedItems[sortedItems.length - 1] as any).time, (sortedItems[sortedItems.length - 1] as any).duration ?? 0))}</span>` : ""}
   </div>
   <div class="timeline-head">
     <div class="tl-time">TIME</div>
-    <div class="tl-cat">CATEGORY</div>
     <div class="tl-title">ITEM</div>
     <div class="tl-staff">ASSIGNED TO</div>
   </div>
   ${sortedItems.map((item: any) => {
-    const cat = CATEGORY_STYLES[item.category] || CATEGORY_STYLES.other;
-    const endTime = item.duration ? formatTime12(addMinutes(item.time, item.duration)) : "";
     return `
   <div class="tl-row">
     <div class="tl-time">
       <div class="tl-time-start">${formatTime12(item.time)}</div>
-      ${endTime ? `<div class="tl-time-end">${endTime}</div>` : ""}
-    </div>
-    <div class="tl-cat">
-      <span class="cat-badge" style="background:${cat.bg};color:${cat.text}">${cat.label}</span>
-      ${item.duration ? `<div class="tl-dur">${item.duration}m</div>` : ""}
     </div>
     <div class="tl-title">
       <div class="tl-item-title">${item.title || "—"}</div>
@@ -408,7 +399,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
   /* ── Timeline ── */
   .timeline-head {
     display: grid;
-    grid-template-columns: 60px 80px 1fr 90px;
+    grid-template-columns: 60px 1fr 90px;
     gap: 6px;
     padding: 4px 10px;
     background: rgba(201,168,76,0.12);
@@ -420,7 +411,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
   }
   .tl-row {
     display: grid;
-    grid-template-columns: 60px 80px 1fr 90px;
+    grid-template-columns: 60px 1fr 90px;
     gap: 6px;
     padding: 5px 10px;
     border-bottom: 1px solid rgba(201,168,76,0.15);
@@ -429,20 +420,6 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
   .tl-row:last-child { border-bottom: none; }
   .tl-time { }
   .tl-time-start { font-weight: 700; font-size: 9.5px; }
-  .tl-time-end { font-size: 8px; color: rgba(26,18,9,0.4); }
-  .tl-cat {}
-  .cat-badge {
-    display: inline-block;
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 7.5px;
-    letter-spacing: 0.08em;
-    padding: 1.5px 5px;
-  }
-  .tl-dur {
-    font-size: 7.5px;
-    color: rgba(26,18,9,0.4);
-    margin-top: 2px;
-  }
   .tl-item-title { font-weight: 600; font-size: 9.5px; }
   .tl-item-desc { font-size: 8.5px; color: rgba(26,18,9,0.55); margin-top: 1px; }
   .tl-staff { font-size: 8.5px; color: #2d5a27; }
