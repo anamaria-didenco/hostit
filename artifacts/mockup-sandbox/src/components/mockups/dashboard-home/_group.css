@@ -1,0 +1,19 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+:root {
+  --sage-green: oklch(0.590 0.040 140);
+  --sage-dark:  oklch(0.490 0.042 140);
+  --sage-tint:  oklch(0.940 0.018 140);
+  --border:     oklch(0.920 0.010 80);
+}
+
+* { font-family: 'Inter', -apple-system, system-ui, sans-serif; box-sizing: border-box; }
+
+.bg-sage-green  { background-color: oklch(0.590 0.040 140); }
+.bg-sage-dark   { background-color: oklch(0.490 0.042 140); }
+.bg-sage-tint   { background-color: oklch(0.940 0.018 140); }
+.text-sage-green { color: oklch(0.590 0.040 140); }
+.text-sage-dark  { color: oklch(0.490 0.042 140); }
+.border-sage-green { border-color: oklch(0.590 0.040 140); }
+.fill-sage-green { fill: oklch(0.590 0.040 140); }
+.ring-sage-green { --tw-ring-color: oklch(0.590 0.040 140); }
