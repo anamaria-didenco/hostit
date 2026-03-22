@@ -489,6 +489,10 @@ export default function Dashboard() {
   const [widgetEditMode, setWidgetEditMode] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
+  const [showStatsCustomize, setShowStatsCustomize] = useState(false);
+  const [hiddenStats, setHiddenStats] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('vfhq_hidden_stats') ?? '[]')); } catch { return new Set(); }
+  });
   const [widgetSizes, setWidgetSizes] = useState<Record<string, 'half' | 'full'>>({});
   const [collapsedInboxSections, setCollapsedInboxSections] = useState<Set<string>>(new Set());
   const [showAddLead, setShowAddLead] = useState(false);
@@ -1176,27 +1180,62 @@ export default function Dashboard() {
           {tab === "overview" && (
             <div className="flex flex-col min-h-full md:h-full md:overflow-hidden">
               {/* Stats bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-0 border-b border-border flex-shrink-0">
-                {[
-                  { label: "New Enquiries", value: stats?.newLeads ?? 0, sub: "awaiting reply", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-3.5 h-3.5" /> },
-                  { label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", iconBg: "bg-blue-50", iconColor: "text-blue-600", icon: <Calendar className="w-3.5 h-3.5" /> },
-                  { label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-sage-tint", iconColor: "text-sage-green", icon: <FileText className="w-3.5 h-3.5" /> },
-                  { label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: <TrendingUp className="w-3.5 h-3.5" /> },
-                  { label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: <DollarSign className="w-3.5 h-3.5" /> },
-                  { label: "Pending Payments", value: stats?.pendingPayments ?? 0, sub: (stats?.pendingPayments ?? 0) > 0 ? "bookings outstanding" : "all clear", iconBg: (stats?.pendingPayments ?? 0) > 0 ? "bg-orange-50" : "bg-gray-50", iconColor: (stats?.pendingPayments ?? 0) > 0 ? "text-orange-500" : "text-gray-400", icon: <CreditCard className="w-3.5 h-3.5" /> },
-                  { label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueTasks ?? 0) > 0 ? "bg-red-50" : "bg-gray-50", iconColor: (stats?.overdueTasks ?? 0) > 0 ? "text-red-500" : "text-gray-400", icon: <AlertCircle className="w-3.5 h-3.5" /> },
-                  { label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-50", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-3.5 h-3.5" /> },
-                ].map((s, i) => (
-                  <div key={s.label} className={`px-3 py-3 border-r border-b border-border last:border-r-0 ${i % 4 === 3 ? 'sm:border-r-0 lg:border-r' : ''} ${i >= 4 ? 'lg:border-b-0' : ''}`}>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <div className={`w-6 h-6 rounded ${s.iconBg} ${s.iconColor} flex items-center justify-center flex-shrink-0`}>{s.icon}</div>
-                      <div className="font-inter text-xs text-gray-400 leading-tight truncate">{s.label}</div>
+              {(() => {
+                const allStats = [
+                  { id: "active_enquiries", label: "Active Enquiries", value: stats?.newLeads ?? 0, sub: "in pipeline", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-3.5 h-3.5" /> },
+                  { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", iconBg: "bg-blue-50", iconColor: "text-blue-600", icon: <Calendar className="w-3.5 h-3.5" /> },
+                  { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-sage-tint", iconColor: "text-sage-green", icon: <FileText className="w-3.5 h-3.5" /> },
+                  { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: <TrendingUp className="w-3.5 h-3.5" /> },
+                  { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: <DollarSign className="w-3.5 h-3.5" /> },
+                  { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueTasks ?? 0) > 0 ? "bg-red-50" : "bg-gray-50", iconColor: (stats?.overdueTasks ?? 0) > 0 ? "text-red-500" : "text-gray-400", icon: <AlertCircle className="w-3.5 h-3.5" /> },
+                  { id: "overdue_followups", label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-50", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-3.5 h-3.5" /> },
+                ];
+                const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
+                const cols = visibleStats.length;
+                return (
+                  <div className="relative border-b border-border flex-shrink-0">
+                    <div className={`grid gap-0`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+                      {visibleStats.map((s, i) => (
+                        <div key={s.id} className={`px-3 py-3 border-r border-border last:border-r-0`}>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <div className={`w-6 h-6 rounded ${s.iconBg} ${s.iconColor} flex items-center justify-center flex-shrink-0`}>{s.icon}</div>
+                            <div className="font-inter text-xs text-gray-400 leading-tight truncate">{s.label}</div>
+                          </div>
+                          <div className="font-inter text-xl text-gray-900 font-bold leading-none mb-0.5">{s.value}</div>
+                          <div className="font-inter text-xs text-gray-400">{s.sub}</div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="font-inter text-xl text-gray-900 font-bold leading-none mb-0.5">{s.value}</div>
-                    <div className="font-inter text-xs text-gray-400">{s.sub}</div>
+                    {/* Customize button */}
+                    <div className="absolute top-1.5 right-1.5">
+                      <button
+                        onClick={() => setShowStatsCustomize(v => !v)}
+                        className="p-1 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors"
+                        title="Customise stats">
+                        <Settings className="w-3 h-3" />
+                      </button>
+                      {showStatsCustomize && (
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg rounded-lg p-3 z-30 w-52">
+                          <div className="font-inter text-xs font-semibold text-gray-700 mb-2">Show / hide stats</div>
+                          {allStats.map(s => (
+                            <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 px-1 rounded">
+                              <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
+                                setHiddenStats(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                                  localStorage.setItem('vfhq_hidden_stats', JSON.stringify([...next]));
+                                  return next;
+                                });
+                              }} className="w-3.5 h-3.5 accent-sage-green" />
+                              <span className="font-inter text-xs text-gray-600">{s.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })()}
 
               {/* Main area: full calendar + sidebar */}
               <div className="flex flex-col md:flex-row flex-1 overflow-auto md:overflow-hidden">
@@ -1285,17 +1324,19 @@ export default function Dashboard() {
                                 {dayBookings.slice(0, 3).map((b: any) => (
                                   <button key={b.id}
                                     onClick={() => { setSelectedBooking(b); setTab('calendar'); }}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-tight font-inter font-medium truncate ${statusColor(b.status)} hover:opacity-80 transition-opacity`}
+                                    className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-inter ${statusColor(b.status)} hover:opacity-80 transition-opacity`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.status}`}>
-                                    {b.eventType || b.firstName || 'Event'}
+                                    <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
+                                    {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
                                   </button>
                                 ))}
                                 {dayLeads.slice(0, 2).map((l: any) => (
                                   <button key={l.id}
                                     onClick={() => { selectLead(l); setTab('enquiries'); }}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-tight font-inter font-medium truncate ${statusColor(l.status)} hover:opacity-80 transition-opacity`}
+                                    className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-inter ${statusColor(l.status)} hover:opacity-80 transition-opacity`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.status}`}>
-                                    {l.eventType || l.firstName || 'Enquiry'}
+                                    <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                                    {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
                                   </button>
                                 ))}
                                 {(dayBookings.length + dayLeads.length) > 4 && (
@@ -2301,16 +2342,16 @@ export default function Dashboard() {
                               <div key={b.id} className="relative group/card w-full">
                                 <button
                                   onClick={() => setLocation(`/event/${b.id}`)}
-                                  className={`w-full text-left rounded px-1 py-0.5 text-[10px] leading-tight font-dm truncate ${statusCard(b.status)} hover:opacity-80 transition-opacity`}
-                                  title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.status} — ${b.guestCount ?? '?'} guests`}>
-                                  <div className="font-semibold truncate">{b.eventType || 'Event'}</div>
-                                  {b.startTime && <div className="opacity-80">{b.startTime} – {b.endTime}</div>}
-                                  <div className="opacity-80 capitalize">{b.status === 'booked' ? 'Confirmed' : b.status}</div>
-                                  {b.guestCount && <div className="opacity-80">Guests {b.guestCount}</div>}
+                                  className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity`}
+                                  title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests`}>
+                                  <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
+                                  {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
+                                  {b.startTime && <div className="opacity-70">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
+                                  {b.guestCount && <div className="opacity-70">{b.guestCount} guests</div>}
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); if (confirm(`Delete ${b.eventType || 'event'} for ${b.firstName}?`)) deleteBooking.mutate({ id: b.id }); }}
-                                  className="absolute top-0 right-0 opacity-0 group-hover/card:opacity-100 transition-opacity bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center"
+                                  className="absolute top-0.5 right-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center"
                                   title="Delete event">
                                   <X className="w-2 h-2" />
                                 </button>
@@ -2320,11 +2361,11 @@ export default function Dashboard() {
                             {dayLeads.map((l: any) => (
                               <button key={l.id}
                                 onClick={() => { selectLead(l); setTab('enquiries'); }}
-                                className={`w-full text-left rounded px-1 py-0.5 text-[10px] leading-tight font-dm truncate ${statusCard(l.status)} hover:opacity-80 transition-opacity`}
-                                title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.status} — ${l.guestCount ?? '?'} guests`}>
-                                <div className="font-semibold truncate">{l.eventType || 'Enquiry'}</div>
-                                <div className="opacity-80 capitalize">{l.status?.replace('_',' ')}</div>
-                                {l.guestCount && <div className="opacity-80">Guests {l.guestCount}</div>}
+                                className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}
+                                title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
+                                <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                                {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
+                                {l.guestCount && <div className="opacity-70">{l.guestCount} guests</div>}
                               </button>
                             ))}
                             {/* Edit icon for adding event on this day */}
