@@ -104,7 +104,7 @@ export default function Home() {
             <a href="#features"
               className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white text-gray-700 font-semibold text-base px-6 py-4 rounded-xl border-2 border-gray-200 hover:border-sage-green hover:text-sage-green transition-all">
               <Play className="w-4 h-4" />
-              See all features
+              Watch a 2-min demo
             </a>
           </div>
 

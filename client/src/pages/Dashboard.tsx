@@ -469,6 +469,7 @@ export default function Dashboard() {
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
   const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("list");
+  const [kanbanDetailOpen, setKanbanDetailOpen] = useState(false);
   const [eventSortBy, setEventSortBy] = useState<"event_date"|"date_booked"|"status">("event_date");
   const [eventSortDir, setEventSortDir] = useState<"asc"|"desc">("asc");
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -1765,9 +1766,10 @@ export default function Dashboard() {
               </div>
               {/* ── KANBAN VIEW ──────────────────────────────────────────── */}
               {leadViewMode === "kanban" && (
-                <div className="flex-1 flex flex-col overflow-hidden">
-                  <div className="px-6 py-3 border-b border-gold/15 bg-cream flex-shrink-0 flex items-center gap-3">
-                    <div className="flex border border-gold/30 rounded-lg overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden bg-background">
+                  {/* Kanban toolbar */}
+                  <div className="px-5 py-3 border-b border-border bg-white flex-shrink-0 flex items-center gap-3">
+                    <div className="flex border border-border rounded-lg overflow-hidden">
                       {([
                         { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
                         { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
@@ -1775,39 +1777,79 @@ export default function Dashboard() {
                       ]).map(({ mode, icon, title }) => (
                         <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
                           title={title}
-                          className={`px-2 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/50 hover:bg-linen hover:text-ink"}`}>
+                          className={`px-2.5 py-1.5 transition-colors ${leadViewMode === mode ? "bg-sage-green text-white" : "text-gray-400 hover:bg-sage-tint hover:text-gray-700"}`}>
                           {icon}
                         </button>
                       ))}
                     </div>
-                    <h2 className="font-cormorant text-xl font-semibold text-ink">Pipeline</h2>
-                    <span className="font-dm text-xs text-ink/40">{filteredLeads.length} records</span>
+                    <h2 className="font-inter font-semibold text-base text-gray-900">Pipeline</h2>
+                    <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{filteredLeads.length} records</span>
+                    <div className="ml-auto flex items-center gap-2">
+                      <button
+                        onClick={() => setShowAddLead(true)}
+                        className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
+                        <Plus className="w-3.5 h-3.5" /> Add New
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex-1 overflow-x-auto p-6">
-                    <div className="flex gap-4 min-w-max h-full">
+                  {/* Kanban columns */}
+                  <div className="flex-1 overflow-x-auto p-5">
+                    <div className="flex gap-3 min-w-max h-full">
                       {pipelineStages.map(stage => {
                         const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
                         return (
-                          <div key={stage.key} className="w-64 flex-shrink-0 flex flex-col">
-                            <div className={`font-bebas text-xs tracking-widest px-3 py-2 border mb-2 flex-shrink-0 ${stage.color}`}>
-                              {stage.label} <span className="opacity-60">({stageLeads.length})</span>
+                          <div key={stage.key} className="w-72 flex-shrink-0 flex flex-col gap-2">
+                            {/* Column header */}
+                            <div className="flex items-center justify-between px-3 py-2.5 bg-white rounded-xl border border-border flex-shrink-0"
+                              style={{ borderTop: `3px solid ${stage.swatch ?? '#d4c5a9'}` }}>
+                              <span className="font-inter text-xs font-bold text-gray-700 uppercase tracking-wider">{stage.label}</span>
+                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 min-w-[20px] text-center">{stageLeads.length}</span>
                             </div>
-                            <div className="space-y-2 overflow-y-auto flex-1">
+                            {/* Cards */}
+                            <div className="flex flex-col gap-2 overflow-y-auto flex-1 pb-2">
                               {stageLeads.map((lead: any) => (
-                                <div key={lead.id} onClick={() => selectLead(lead)}
-                                  className="dante-card p-3 cursor-pointer hover:border-gold/40 transition-colors bg-white border-l-4"
-                                  style={{ borderLeftColor: stage.swatch ?? '#d4c5a9' }}>
-                                  <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
-                                  <div className="font-dm text-xs text-sage mt-0.5">{lead.eventType || "Event"}</div>
-                                  {lead.eventDate && <div className="font-dm text-xs text-ink/50 mt-0.5">{new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}</div>}
-                                  {lead.guestCount && <div className="font-dm text-xs text-ink/50">{lead.guestCount} guests</div>}
-                                </div>
+                                <button key={lead.id}
+                                  onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
+                                  className="w-full bg-white rounded-xl border border-border hover:border-sage-green hover:shadow-md transition-all text-left p-3.5 group"
+                                  style={{ borderLeft: `3px solid ${stage.swatch ?? '#d4c5a9'}` }}>
+                                  <div className="font-inter font-semibold text-sm text-gray-900 truncate group-hover:text-sage-dark">
+                                    {lead.firstName} {lead.lastName}
+                                  </div>
+                                  {lead.eventType && (
+                                    <div className="font-inter text-xs text-gray-500 mt-0.5 truncate">{lead.eventType}</div>
+                                  )}
+                                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                                    {lead.eventDate && (
+                                      <span>{new Date(lead.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}</span>
+                                    )}
+                                    {lead.guestCount && <span>{lead.guestCount} guests</span>}
+                                  </div>
+                                  {lead.followUpDate && (() => {
+                                    const d = new Date(lead.followUpDate);
+                                    const overdue = d <= new Date() && !['booked', 'lost', 'cancelled'].includes(lead.status);
+                                    if (overdue) return (
+                                      <div className="mt-2 text-[10px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-md inline-block">
+                                        Overdue follow-up
+                                      </div>
+                                    );
+                                    return (
+                                      <div className="mt-2 text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md inline-block">
+                                        Follow up {d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}
+                                      </div>
+                                    );
+                                  })()}
+                                </button>
                               ))}
                               {stageLeads.length === 0 && (
-                                <div className="border border-dashed border-gold/20 p-4 text-center">
-                                  <p className="font-dm text-xs text-sage/40">No records</p>
+                                <div className="rounded-xl border-2 border-dashed border-border p-5 text-center">
+                                  <p className="text-xs text-gray-300 font-medium">No leads</p>
                                 </div>
                               )}
+                              <button
+                                onClick={() => setShowAddLead(true)}
+                                className="w-full py-2 rounded-xl border border-dashed border-gray-200 text-xs text-gray-300 hover:border-sage-green hover:text-sage-green transition-colors flex items-center justify-center gap-1">
+                                <Plus className="w-3 h-3" /> Add
+                              </button>
                             </div>
                           </div>
                         );
@@ -1853,8 +1895,8 @@ export default function Dashboard() {
                   </button>
                 </div>
               )}
-              {/* Lead Detail */}
-              {selectedLead ? (
+              {/* Lead Detail — hidden in kanban mode (shown as modal instead) */}
+              {leadViewMode !== "kanban" && (selectedLead ? (
                 <div className="flex-1 overflow-auto p-4 md:p-6">
                   <div className="flex items-center gap-3 mb-4 md:mb-6">
                     <button onClick={() => setSelectedLead(null)} className="md:hidden font-inter font-medium text-sm text-sage-dark flex items-center gap-1 py-1 pr-2">
@@ -2130,6 +2172,98 @@ export default function Dashboard() {
                     <p className="font-dm text-ink/60/50 text-sm mt-2">Click a lead from the list to view details</p>
                   </div>
                 </div>
+              ))}
+              {/* Kanban Lead Quick-View Modal */}
+              {leadViewMode === "kanban" && kanbanDetailOpen && selectedLead && (
+                <Dialog open={kanbanDetailOpen} onOpenChange={(v) => { setKanbanDetailOpen(v); if (!v) setSelectedLead(null); }}>
+                  <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle className="font-inter text-xl font-bold text-gray-900 leading-tight">
+                        {selectedLead.firstName} {selectedLead.lastName}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      {/* Status badge */}
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const stage = pipelineStages.find((s: any) => s.key === selectedLead.status);
+                          return stage ? (
+                            <span className={`font-inter text-xs font-bold px-2.5 py-1 rounded-lg border ${stage.color}`}>{stage.label}</span>
+                          ) : null;
+                        })()}
+                      </div>
+                      {/* Contact */}
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        {selectedLead.email && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Email</p>
+                            <p className="text-gray-900 truncate">{selectedLead.email}</p>
+                          </div>
+                        )}
+                        {selectedLead.phone && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Phone</p>
+                            <p className="text-gray-900">{selectedLead.phone}</p>
+                          </div>
+                        )}
+                        {selectedLead.eventType && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Event Type</p>
+                            <p className="text-gray-900">{selectedLead.eventType}</p>
+                          </div>
+                        )}
+                        {selectedLead.eventDate && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Event Date</p>
+                            <p className="text-gray-900">{new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+                          </div>
+                        )}
+                        {selectedLead.guestCount && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Guests</p>
+                            <p className="text-gray-900">{selectedLead.guestCount}</p>
+                          </div>
+                        )}
+                        {selectedLead.budget && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Budget</p>
+                            <p className="text-gray-900">${Number(selectedLead.budget).toLocaleString()}</p>
+                          </div>
+                        )}
+                      </div>
+                      {selectedLead.message && (
+                        <div>
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Message</p>
+                          <p className="text-sm text-gray-700 leading-relaxed line-clamp-3">{selectedLead.message}</p>
+                        </div>
+                      )}
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-border flex-wrap">
+                        {selectedLead.email && (
+                          <button
+                            onClick={() => {
+                              setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
+                              setShowEmailModal(true);
+                              setKanbanDetailOpen(false);
+                            }}
+                            className="flex items-center gap-1.5 font-inter text-xs font-medium border border-sage-green text-sage-dark px-3 py-2 rounded-lg hover:bg-sage-green/10 transition-colors">
+                            <Mail className="w-3.5 h-3.5" /> Email
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setKanbanDetailOpen(false); setLocation(`/proposals/new?leadId=${selectedLead.id}`); }}
+                          className="flex items-center gap-1.5 font-inter text-xs font-semibold bg-sage-green text-white px-3 py-2 rounded-lg hover:bg-sage-dark transition-colors">
+                          <FileText className="w-3.5 h-3.5" /> Create Proposal
+                        </button>
+                        <button
+                          onClick={() => { setLeadViewMode("list"); setKanbanDetailOpen(false); }}
+                          className="ml-auto font-inter text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 px-2 py-2">
+                          Full details <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               )}
             </div>
           )}
