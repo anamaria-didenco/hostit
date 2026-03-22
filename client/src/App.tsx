@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -17,7 +17,6 @@ import RunsheetBuilder from "./pages/RunsheetBuilder";
 import PaymentTracker from "./pages/PaymentTracker";
 import Analytics from "./pages/Analytics";
 import ExpressBook from "./pages/ExpressBook";
-import MenuManagement from "./pages/MenuManagement";
 import EventDetail from "./pages/EventDetail";
 import ClientPortal from "./pages/ClientPortal";
 import StaffPortal from "./pages/StaffPortal";
@@ -45,7 +44,7 @@ function Router() {
       <Route path="/event/:id" component={EventDetail} />
       <Route path="/portal/:token" component={ClientPortal} />
       <Route path="/staff/:token" component={StaffPortal} />
-      <Route path="/menu" component={MenuManagement} />
+      <Route path="/menu"><Redirect to="/dashboard?tab=settings&sub=menu" /></Route>
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

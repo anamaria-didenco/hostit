@@ -359,6 +359,18 @@ function PipelineSnapshotWidget({ allLeads, onViewLeads, stages }: { allLeads: a
   );
 }
 
+// ── Helper: redirects the "menu" top-level tab to Settings > Menu & Catalogue ──
+function MenuTabRedirect({ setTab, setSettingsSubTab }: {
+  setTab: (t: "settings") => void;
+  setSettingsSubTab: (t: "menu") => void;
+}) {
+  useEffect(() => {
+    setTab("settings");
+    setSettingsSubTab("menu");
+  }, []);
+  return null;
+}
+
 // ── Settings Sidebar (Perfect Venue style) ─────────────────────────────────
 function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl }: {
   settingsSubTab: string;
@@ -367,13 +379,10 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
   venueLogoUrl?: string;
 }) {
   const items = [
-    { id: "venue-details", label: "Venue Details" },
-    { id: "venue-profile", label: "Venue Profile" },
-    { id: "spaces", label: "Spaces" },
+    { id: "venue", label: "Venue" },
     { id: "lead-form", label: "Contact Form" },
     { id: "integrations", label: "Integrations" },
-    { id: "menu", label: "Menu" },
-    { id: "menu-catalogue", label: "Menu Catalogue" },
+    { id: "menu", label: "Menu & Catalogue" },
     { id: "templates", label: "Proposal" },
     { id: "email", label: "Email" },
     { id: "automated-tasks", label: "Automated Tasks" },
@@ -436,8 +445,21 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
 export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<"overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook">("overview");
-  const [settingsSubTab, setSettingsSubTab] = useState<"venue-details"|"venue-profile"|"spaces"|"lead-form"|"integrations"|"expressbook"|"menu"|"menu-catalogue"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses">("venue-details");
+  type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook";
+  type SettingsSubTab = "venue"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses";
+  const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","expressbook"];
+  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","lead-form","integrations","menu","templates","email","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses"];
+  const isDashTab = (v: string | null): v is DashTab => v !== null && (DASH_TABS as readonly string[]).includes(v);
+  const isSettingsSubTab = (v: string | null): v is SettingsSubTab => v !== null && (SETTINGS_SUB_TABS as readonly string[]).includes(v);
+  const _qp = new URLSearchParams(window.location.search);
+  const _rawTab = _qp.get('tab');
+  const _rawSub = _qp.get('sub');
+  const _initTab: DashTab = isDashTab(_rawTab) ? _rawTab : "overview";
+  const _initSubTab: SettingsSubTab = isSettingsSubTab(_rawSub) ? _rawSub : "venue";
+  const [tab, setTab] = useState<DashTab>(_initTab);
+  const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>(_initSubTab);
+  const [venueSettingsSection, setVenueSettingsSection] = useState<"details"|"profile"|"spaces">("details");
+  const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("packages");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
@@ -780,8 +802,8 @@ export default function Dashboard() {
   const [checklistForm, setChecklistForm] = useState({ name: "", description: "", items: "" });
 
   // Menu Sections & Sales Categories (for Settings > Menu)
-  const { data: menuSectionsList, refetch: refetchMenuSections } = trpc.menuSections.list.useQuery(undefined, { enabled: !!user?.id && settingsSubTab === 'menu' });
-  const { data: salesCategoriesList, refetch: refetchSalesCategories } = trpc.salesCategories.list.useQuery(undefined, { enabled: !!user?.id && settingsSubTab === 'menu' });
+  const { data: menuSectionsList, refetch: refetchMenuSections } = trpc.menuSections.list.useQuery(undefined, { enabled: !!user?.id && settingsSubTab === 'menu' && menuSettingsSection === 'packages' });
+  const { data: salesCategoriesList, refetch: refetchSalesCategories } = trpc.salesCategories.list.useQuery(undefined, { enabled: !!user?.id && settingsSubTab === 'menu' && menuSettingsSection === 'packages' });
   const [menuSettingsTab, setMenuSettingsTab] = useState<'sections'|'categories'|'items'>('sections');
   const [showSectionForm, setShowSectionForm] = useState(false);
   const [sectionForm, setSectionForm] = useState({ name: '', salesCategory: '', hasSalesTax: true, hasAdminFee: true, hasGratuity: true, applyToMin: true });
@@ -793,12 +815,12 @@ export default function Dashboard() {
   const deleteSalesCategory = trpc.salesCategories.delete.useMutation({ onSuccess: () => { refetchSalesCategories(); toast.success('Category deleted'); } });
 
   // Menu Catalogue state
-  const { data: catalogCategories, refetch: refetchCatalogCategories } = trpc.menuCatalog.listCategories.useQuery({ type: 'all' }, { enabled: !!user?.id && settingsSubTab === 'menu-catalogue' });
+  const { data: catalogCategories, refetch: refetchCatalogCategories } = trpc.menuCatalog.listCategories.useQuery({ type: 'all' }, { enabled: !!user?.id && settingsSubTab === 'menu' && menuSettingsSection === 'catalogue' });
   const [catalogActiveType, setCatalogActiveType] = useState<'food'|'drink'>('food');
   const [catalogActiveCategoryId, setCatalogActiveCategoryId] = useState<number|null>(null);
   const { data: catalogItems, refetch: refetchCatalogItems } = trpc.menuCatalog.listItems.useQuery(
     { categoryId: catalogActiveCategoryId ?? undefined },
-    { enabled: !!user?.id && settingsSubTab === 'menu-catalogue' && catalogActiveCategoryId !== null }
+    { enabled: !!user?.id && settingsSubTab === 'menu' && menuSettingsSection === 'catalogue' && catalogActiveCategoryId !== null }
   );
   const [showCatalogCategoryForm, setShowCatalogCategoryForm] = useState(false);
   const [catalogCategoryForm, setCatalogCategoryForm] = useState({ name: '', type: 'food' as 'food'|'drink', description: '' });
@@ -836,7 +858,7 @@ export default function Dashboard() {
   const [showBarItemForm, setShowBarItemForm] = useState(false);
   const [barItemForm, setBarItemForm] = useState({ category: "Wine", name: "", description: "", pricePerUnit: "", unit: "per glass" });
   const [editingBarItemId, setEditingBarItemId] = useState<number|null>(null);
-  const [settingsFoodTab, setSettingsFoodTab] = useState<"food"|"bar"|"floorplans">("food");
+
   const addBarItem = trpc.barMenu.add.useMutation({
     onSuccess: () => { refetchBarMenu(); setShowBarItemForm(false); setBarItemForm({ category: "Wine", name: "", description: "", pricePerUnit: "", unit: "per glass" }); setEditingBarItemId(null); toast.success("Drink added!"); },
     onError: () => toast.error("Failed to add drink"),
@@ -2807,132 +2829,8 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── MENU ─────────────────────────────────────────────────────── */}
-          {tab === "menu" && (
-            <div className="p-6 max-w-3xl">
-              <div className="gold-rule max-w-xs mb-3"><span>CATERING OPTIONS</span></div>
-              <div className="flex items-center justify-between mb-6">
-                <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Menu Packages</h1>
-                <Button onClick={() => { setEditingPackageId(null); setMenuForm({ name: "", type: "food", description: "", pricePerHead: "" }); setShowMenuForm(true); }}
-                  className="btn-forest font-bebas tracking-widest text-xs px-5 py-2.5 text-cream gap-1.5">
-                  <Plus className="w-3.5 h-3.5" /> ADD PACKAGE
-                </Button>
-              </div>
-
-              {showMenuForm && (
-                <div className="dante-card p-5 mb-6 border-2 border-gold/30">
-                  <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">{editingPackageId ? 'EDIT PACKAGE' : 'NEW PACKAGE'}</h2>
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PACKAGE NAME</label>
-                        <Input value={menuForm.name} onChange={e => setMenuForm(f => ({ ...f, name: e.target.value }))}
-                          placeholder="e.g. 3-Course Dinner" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-forest" />
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TYPE</label>
-                        <Select value={menuForm.type} onValueChange={(v: any) => setMenuForm(f => ({ ...f, type: v }))}>
-                          <SelectTrigger className="rounded-none border-2 focus:ring-0 focus:border-forest">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="food">Food</SelectItem>
-                            <SelectItem value="beverages">Beverages</SelectItem>
-                            <SelectItem value="food_and_beverages">Food & Beverages</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
-                      <Textarea value={menuForm.description} onChange={e => setMenuForm(f => ({ ...f, description: e.target.value }))}
-                        placeholder="Describe what's included..." rows={2}
-                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-forest resize-none text-sm" />
-                    </div>
-                    <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE PER HEAD (NZD)</label>
-                      <Input type="number" value={menuForm.pricePerHead} onChange={e => setMenuForm(f => ({ ...f, pricePerHead: e.target.value }))}
-                        placeholder="65.00" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-forest" />
-                    </div>
-                    <div className="flex gap-2 pt-1">
-                      <Button type="button" onClick={() => {
-                        if (editingPackageId) {
-                          updateMenuPackage.mutate({ id: editingPackageId, name: menuForm.name, type: menuForm.type, description: menuForm.description || undefined, pricePerHead: menuForm.pricePerHead ? parseFloat(menuForm.pricePerHead) : undefined });
-                        } else {
-                          createMenuPackage.mutate({ name: menuForm.name, type: menuForm.type, description: menuForm.description || undefined, pricePerHead: menuForm.pricePerHead ? parseFloat(menuForm.pricePerHead) : undefined });
-                        }
-                      }} disabled={!menuForm.name || createMenuPackage.isPending || updateMenuPackage.isPending}
-                        className="btn-forest font-bebas tracking-widest text-xs px-6 py-2.5 text-cream">
-                        {editingPackageId ? 'UPDATE PACKAGE' : 'SAVE PACKAGE'}
-                      </Button>
-                      <Button type="button" variant="outline" onClick={() => setShowMenuForm(false)}
-                        className="border-2 border-border font-bebas tracking-widest text-xs rounded-none">
-                        CANCEL
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Food Packages */}
-              {['food', 'beverages', 'food_and_beverages'].map(type => {
-                const pkgs = (menuPackages ?? []).filter(p => p.type === type);
-                if (pkgs.length === 0 && !showMenuForm) return null;
-                const typeLabel = type === 'food' ? 'FOOD' : type === 'beverages' ? 'BEVERAGES' : 'FOOD & BEVERAGES';
-                const TypeIcon = type === 'food' ? UtensilsCrossed : type === 'beverages' ? Wine : ChefHat;
-                const iconColor = type === 'food' ? 'text-tomato' : type === 'beverages' ? 'text-gold' : 'text-forest';
-                return (
-                  <div key={type} className="mb-6">
-                    <div className={`flex items-center gap-2 mb-3`}>
-                      <TypeIcon className={`w-4 h-4 ${iconColor}`} />
-                      <span className={`font-bebas text-xs tracking-widest ${iconColor}`}>{typeLabel} PACKAGES</span>
-                    </div>
-                    {pkgs.length === 0 ? (
-                      <div className="text-center py-4 border border-dashed border-border">
-                        <p className="font-dm text-sm text-muted-foreground">No {typeLabel.toLowerCase()} packages yet.</p>
-                      </div>
-                    ) : (
-                      <div className="grid gap-3">
-                        {pkgs.map(pkg => (
-                          <div key={pkg.id} className="dante-card p-4 flex items-start justify-between gap-4">
-                            <div className="flex-1">
-                              <div className="font-bebas text-sm tracking-wide text-ink">{pkg.name}</div>
-                              {pkg.description && <div className="font-dm text-xs text-muted-foreground mt-0.5">{pkg.description}</div>}
-
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              {pkg.pricePerHead && (
-                                <div className="font-alfa text-lg text-forest">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
-                              )}
-                              <button onClick={() => { setEditingPackageId(pkg.id); setMenuForm({ name: pkg.name, type: pkg.type as any, description: pkg.description ?? "", pricePerHead: pkg.pricePerHead ? String(pkg.pricePerHead) : "" }); setShowMenuForm(true); }}
-                                className="text-sage/50 hover:text-forest transition-colors">
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => { if (confirm('Delete this package?')) deleteMenuPackage.mutate({ id: pkg.id }); }}
-                                className="text-sage/50 hover:text-tomato transition-colors">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {(!menuPackages || menuPackages.length === 0) && !showMenuForm && (
-                <div className="text-center py-12 border-2 border-dashed border-border">
-                  <ChefHat className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
-                  <p className="font-cormorant text-xl text-muted-foreground">No menu packages yet</p>
-                  <p className="font-dm text-sm text-muted-foreground/60 mt-1 mb-4">Add Food, Beverages, or Food & Beverages packages to include in your proposals.</p>
-                  <Button onClick={() => setShowMenuForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-6 py-2.5 text-cream gap-1.5">
-                    <Plus className="w-3.5 h-3.5" /> ADD YOUR FIRST PACKAGE
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+          {/* ── MENU tab: redirect to Settings > Menu & Catalogue ─────────── */}
+          {tab === "menu" && <MenuTabRedirect setTab={setTab} setSettingsSubTab={setSettingsSubTab} />}
 
           {/* ── TASKS ─────────────────────────────────────────────────────── */}
           {tab === "tasks" && (
@@ -2986,11 +2884,29 @@ export default function Dashboard() {
               <SettingsSidebar settingsSubTab={settingsSubTab} setSettingsSubTab={setSettingsSubTab} venueName={venueSettings?.name ?? user?.name ?? 'Your Venue'} />
               <div className="flex-1 overflow-auto p-4 md:p-8">
 
-              {/* ── VENUE DETAILS ────────────────────────────────── */}
-              {settingsSubTab === "venue-details" && (
+              {/* ── VENUE (unified: Details + Profile + Spaces) ─────── */}
+              {settingsSubTab === "venue" && (
               <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Details</h1>
-              {settingsForm && (
+              <h1 className="font-cormorant text-ink mb-4" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Settings</h1>
+
+              {/* Section tabs */}
+              <div className="flex gap-0 mb-6 border-b border-gold/20">
+                {([
+                  { id: 'details', label: 'Basic Details' },
+                  { id: 'profile', label: 'Profile & Branding' },
+                  { id: 'spaces', label: 'Spaces' },
+                ] as const).map(s => (
+                  <button key={s.id} onClick={() => setVenueSettingsSection(s.id)}
+                    className={`font-bebas tracking-widest text-sm px-5 py-2.5 border-b-2 transition-colors ${
+                      venueSettingsSection === s.id ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink/70'
+                    }`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── BASIC DETAILS SECTION ── */}
+              {venueSettingsSection === "details" && settingsForm && (
                 <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
 
                   {/* ── Venue Details ── */}
@@ -3144,6 +3060,249 @@ export default function Dashboard() {
                   </button>
                 </form>
               )}
+
+              {/* ── PROFILE & BRANDING SECTION ── */}
+              {venueSettingsSection === "profile" && settingsForm && (
+                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
+
+                  {/* ── Banner Image ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE PROFILE BANNER</h2>
+                    <div className="border border-dashed border-gold/30 rounded p-4 text-center bg-linen/30">
+                      {settingsForm.bannerImageUrl ? (
+                        <div className="relative">
+                          <img src={settingsForm.bannerImageUrl} alt="Banner" className="w-full h-48 object-cover rounded"
+                            onError={e => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              toast.error("Banner image could not be loaded. Please upload a new image.");
+                            }} />
+                          <button type="button" onClick={() => {
+                            setSettingsForm((f: any) => ({ ...f, bannerImageUrl: "" }));
+                            updateSettings.mutate({ bannerImageUrl: "" });
+                          }}
+                            className="absolute top-2 right-2 bg-white/80 rounded-full p-1 text-ink/60 hover:text-tomato">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer block">
+                          <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            const fd = new FormData(); fd.append('file', file);
+                            try {
+                              const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                              const data = await res.json();
+                              if (data.url) {
+                                const newUrl = data.url;
+                                setSettingsForm((f: any) => ({ ...f, bannerImageUrl: newUrl }));
+                                updateSettings.mutate({ bannerImageUrl: newUrl });
+                              } else {
+                                toast.error("Banner upload failed. Please try again.");
+                              }
+                            } catch {
+                              toast.error("Banner upload failed. Please check your connection and try again.");
+                            }
+                          }} />
+                          <div className="py-8">
+                            <ImageIcon className="w-8 h-8 text-gold/40 mx-auto mb-2" />
+                            <p className="font-dm text-sm text-sage">Click to upload banner image</p>
+                            <p className="font-dm text-xs text-sage/60">Recommended: 1920 × 1080px or wider</p>
+                          </div>
+                        </label>
+                      )}
+                    </div>
+                    {settingsForm.bannerImageUrl && (
+                      <p className="font-dm text-xs text-sage/60 mt-2">Banner image saved. Use the × button to remove it.</p>
+                    )}
+                  </div>
+
+                  {/* ── Venue Description ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE DESCRIPTION</h2>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE TYPE</label>
+                        <select value={settingsForm.venueType} onChange={e => setSettingsForm((f: any) => ({ ...f, venueType: e.target.value }))}
+                          className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                          <option value="">None</option>
+                          {["Restaurant","Bar","Function Venue","Hotel","Rooftop","Garden","Winery","Brewery","Private Dining Room","Conference Centre","Other"].map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">PRICE CATEGORY</label>
+                        <div className="flex gap-4">
+                          {["$$","$$$","$$$$"].map(p => (
+                            <label key={p} className="flex items-center gap-2 cursor-pointer">
+                              <input type="radio" name="priceCategory" value={p} checked={settingsForm.priceCategory === p}
+                                onChange={() => setSettingsForm((f: any) => ({ ...f, priceCategory: p }))}
+                                className="accent-forest" />
+                              <span className="font-dm text-sm text-ink">{p}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ABOUT YOUR VENUE</label>
+                        <Textarea value={settingsForm.aboutVenue} onChange={e => setSettingsForm((f: any) => ({ ...f, aboutVenue: e.target.value }))}
+                          placeholder="Describe your venue..." rows={4}
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Availability Settings ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">AVAILABILITY SETTINGS</h2>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">EVENT DURATION</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="font-dm text-xs text-sage/70 block mb-1">Minimum Duration</label>
+                            <select value={settingsForm.minEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, minEventDuration: e.target.value }))}
+                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                              {["30 minutes","1 hour","2 hours","3 hours","4 hours"].map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-dm text-xs text-sage/70 block mb-1">Maximum Duration</label>
+                            <select value={settingsForm.maxEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, maxEventDuration: e.target.value }))}
+                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                              {["2 hours","3 hours","4 hours","6 hours","8 hours","10 hours","12 hours","No limit"].map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">LEAD TIME</label>
+                        <p className="font-dm text-xs text-sage/60 mb-2">To maximise your inquiries, we recommend your lead time be as short as possible.</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="font-dm text-xs text-sage/70 block mb-1">Minimum Lead Time</label>
+                            <select value={settingsForm.minLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, minLeadTime: e.target.value }))}
+                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                              {["Same day","1 day","2 days","3 days","1 week","2 weeks","1 month"].map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-dm text-xs text-sage/70 block mb-1">Maximum Lead Time</label>
+                            <select value={settingsForm.maxLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, maxLeadTime: e.target.value }))}
+                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                              {["1 month","2 months","3 months","6 months","1 year","2 years"].map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUFFER TIME</label>
+                        <select value={settingsForm.bufferTime} onChange={e => setSettingsForm((f: any) => ({ ...f, bufferTime: e.target.value }))}
+                          className="w-48 border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
+                          {["None","15 minutes","30 minutes","45 minutes","1 hour","2 hours"].map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Operating Hours ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">OPERATING HOURS</h2>
+                    <div className="space-y-3">
+                      {(() => {
+                        let hours: any[] = [];
+                        try { hours = JSON.parse(settingsForm.operatingHours); } catch { hours = []; }
+                        return hours.map((h: any, i: number) => (
+                          <div key={h.day} className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 w-32">
+                              <input type="checkbox" checked={h.enabled} id={`oh2-${i}`}
+                                onChange={e => {
+                                  const updated = [...hours]; updated[i] = { ...h, enabled: e.target.checked };
+                                  setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
+                                }} className="w-4 h-4 accent-forest" />
+                              <label htmlFor={`oh2-${i}`} className="font-dm text-sm text-ink">{h.day}</label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <label className="font-dm text-xs text-sage/60 block">Start Time</label>
+                                <Input type="time" value={h.start} disabled={!h.enabled}
+                                  onChange={e => {
+                                    const updated = [...hours]; updated[i] = { ...h, start: e.target.value };
+                                    setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
+                                  }}
+                                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold w-32 disabled:opacity-40" />
+                              </div>
+                              <div>
+                                <label className="font-dm text-xs text-sage/60 block">End Time</label>
+                                <Input type="time" value={h.end} disabled={!h.enabled}
+                                  onChange={e => {
+                                    const updated = [...hours]; updated[i] = { ...h, end: e.target.value };
+                                    setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
+                                  }}
+                                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold w-32 disabled:opacity-40" />
+                              </div>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+
+                  <button type="submit" disabled={updateSettings.isPending}
+                    className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
+                    {updateSettings.isPending ? "SAVING..." : "SAVE VENUE PROFILE"}
+                  </button>
+                </form>
+              )}
+
+              {/* ── SPACES SECTION ── */}
+              {venueSettingsSection === "spaces" && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-cormorant text-xl font-semibold text-ink">Event Spaces</h2>
+                  <button onClick={() => setShowAddSpace(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
+                    <Plus className="w-3 h-3" /> ADD SPACE
+                  </button>
+                </div>
+                {(spaces ?? []).length === 0 ? (
+                  <div className="border border-dashed border-gold/20 p-6 text-center">
+                    <p className="font-dm text-sage text-sm">No spaces added yet. Add your event rooms or areas.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(spaces ?? []).map((s: any) => (
+                      <div key={s.id} className="dante-card p-4 flex items-center justify-between">
+                        <div>
+                          <div className="font-cormorant font-semibold text-base text-ink">{s.name}</div>
+                          <div className="font-dm text-xs text-ink/60">
+                            {s.minCapacity && s.maxCapacity ? `${s.minCapacity}–${s.maxCapacity} guests` : s.maxCapacity ? `Up to ${s.maxCapacity} guests` : ""}
+                            {s.minSpend ? ` · Min spend $${Number(s.minSpend).toLocaleString()}` : ""}
+                          </div>
+                          {s.description && <div className="font-dm text-xs text-ink/40 mt-0.5">{s.description}</div>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setEditingSpace(s); setEditSpaceForm({ name: s.name, description: s.description ?? '', minCapacity: s.minCapacity ? String(s.minCapacity) : '', maxCapacity: s.maxCapacity ? String(s.maxCapacity) : '', minSpend: s.minSpend ? String(s.minSpend) : '' }); setShowEditSpace(true); }}
+                            className="text-sage hover:text-forest-dark p-1"
+                            title="Edit space"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteSpace.mutate({ id: s.id }); }}
+                            className="text-red-400 hover:text-red-600 p-1"
+                            title="Delete space"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              )}
+
               </div>
               )}
 
@@ -3720,396 +3879,6 @@ export default function Dashboard() {
               </div>
               )}
 
-              {/* ── VENUE PROFILE (Menus & Floor Plans) ─────────── */}
-              {(settingsSubTab === "venue-profile") && (
-              <div>
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Profile</h1>
-              {settingsForm && (
-                <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
-
-                  {/* ── Venue Description ── */}
-                  <div className="dante-card p-6">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE DESCRIPTION</h2>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE PROFILE BANNER</label>
-                        <div className="border border-dashed border-gold/30 rounded p-4 text-center bg-linen/30">
-                          {settingsForm.bannerImageUrl ? (
-                            <div className="relative">
-                              <img src={settingsForm.bannerImageUrl} alt="Banner" className="w-full h-40 object-cover rounded" />
-                              <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, bannerImageUrl: "" }))}
-                                className="absolute top-2 right-2 bg-white/80 rounded-full p-1 text-ink/60 hover:text-tomato">
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <label className="cursor-pointer block">
-                              <input type="file" accept="image/*" className="hidden" onChange={async e => {
-                                const file = e.target.files?.[0]; if (!file) return;
-                                const fd = new FormData(); fd.append('file', file);
-                                const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                                const data = await res.json();
-                                if (data.url) setSettingsForm((f: any) => ({ ...f, bannerImageUrl: data.url }));
-                              }} />
-                              <div className="py-6">
-                                <ImageIcon className="w-8 h-8 text-gold/40 mx-auto mb-2" />
-                                <p className="font-dm text-sm text-sage">Click to upload banner image</p>
-                                <p className="font-dm text-xs text-sage/60">Upload an image at least 1920 x 1080</p>
-                              </div>
-                            </label>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE TYPE</label>
-                        <select value={settingsForm.venueType} onChange={e => setSettingsForm((f: any) => ({ ...f, venueType: e.target.value }))}
-                          className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
-                          <option value="">None</option>
-                          {["Restaurant","Bar","Function Venue","Hotel","Rooftop","Garden","Winery","Brewery","Private Dining Room","Conference Centre","Other"].map(t => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">PRICE CATEGORY</label>
-                        <div className="flex gap-4">
-                          {["$$","$$$","$$$$"].map(p => (
-                            <label key={p} className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" name="priceCategory" value={p} checked={settingsForm.priceCategory === p}
-                                onChange={() => setSettingsForm((f: any) => ({ ...f, priceCategory: p }))}
-                                className="accent-forest" />
-                              <span className="font-dm text-sm text-ink">{p}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ABOUT YOUR VENUE</label>
-                        <Textarea value={settingsForm.aboutVenue} onChange={e => setSettingsForm((f: any) => ({ ...f, aboutVenue: e.target.value }))}
-                          placeholder="Describe your venue..." rows={4}
-                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── Availability Settings ── */}
-                  <div className="dante-card p-6">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">AVAILABILITY SETTINGS</h2>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">EVENT DURATION</label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="font-dm text-xs text-sage/70 block mb-1">Minimum Duration</label>
-                            <select value={settingsForm.minEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, minEventDuration: e.target.value }))}
-                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
-                              {["30 minutes","1 hour","2 hours","3 hours","4 hours"].map(d => <option key={d} value={d}>{d}</option>)}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="font-dm text-xs text-sage/70 block mb-1">Maximum Duration</label>
-                            <select value={settingsForm.maxEventDuration} onChange={e => setSettingsForm((f: any) => ({ ...f, maxEventDuration: e.target.value }))}
-                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
-                              {["2 hours","3 hours","4 hours","6 hours","8 hours","10 hours","12 hours","No limit"].map(d => <option key={d} value={d}>{d}</option>)}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">LEAD TIME</label>
-                        <p className="font-dm text-xs text-sage/60 mb-2">To maximise your inquiries, we recommend your lead time be as short as possible.</p>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="font-dm text-xs text-sage/70 block mb-1">Minimum Lead Time</label>
-                            <select value={settingsForm.minLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, minLeadTime: e.target.value }))}
-                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
-                              {["Same day","1 day","2 days","3 days","1 week","2 weeks","1 month"].map(d => <option key={d} value={d}>{d}</option>)}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="font-dm text-xs text-sage/70 block mb-1">Maximum Lead Time</label>
-                            <select value={settingsForm.maxLeadTime} onChange={e => setSettingsForm((f: any) => ({ ...f, maxLeadTime: e.target.value }))}
-                              className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
-                              {["1 month","2 months","3 months","6 months","1 year","2 years"].map(d => <option key={d} value={d}>{d}</option>)}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUFFER TIME</label>
-                        <select value={settingsForm.bufferTime} onChange={e => setSettingsForm((f: any) => ({ ...f, bufferTime: e.target.value }))}
-                          className="w-48 border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
-                          {["None","15 minutes","30 minutes","45 minutes","1 hour","2 hours"].map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── Operating Hours ── */}
-                  <div className="dante-card p-6">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">HOURS</h2>
-                    <div className="space-y-3">
-                      {(() => {
-                        let hours: any[] = [];
-                        try { hours = JSON.parse(settingsForm.operatingHours); } catch { hours = []; }
-                        return hours.map((h: any, i: number) => (
-                          <div key={h.day} className="flex items-center gap-4">
-                            <div className="flex items-center gap-2 w-32">
-                              <input type="checkbox" checked={h.enabled} id={`oh-${i}`}
-                                onChange={e => {
-                                  const updated = [...hours]; updated[i] = { ...h, enabled: e.target.checked };
-                                  setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
-                                }} className="w-4 h-4 accent-forest" />
-                              <label htmlFor={`oh-${i}`} className="font-dm text-sm text-ink">{h.day}</label>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div>
-                                <label className="font-dm text-xs text-sage/60 block">Start Time</label>
-                                <Input type="time" value={h.start} disabled={!h.enabled}
-                                  onChange={e => {
-                                    const updated = [...hours]; updated[i] = { ...h, start: e.target.value };
-                                    setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
-                                  }}
-                                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold w-32 disabled:opacity-40" />
-                              </div>
-                              <div>
-                                <label className="font-dm text-xs text-sage/60 block">End Time</label>
-                                <Input type="time" value={h.end} disabled={!h.enabled}
-                                  onChange={e => {
-                                    const updated = [...hours]; updated[i] = { ...h, end: e.target.value };
-                                    setSettingsForm((f: any) => ({ ...f, operatingHours: JSON.stringify(updated) }));
-                                  }}
-                                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold w-32 disabled:opacity-40" />
-                              </div>
-                            </div>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                  </div>
-
-                  <button type="submit" disabled={updateSettings.isPending}
-                    className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
-                    {updateSettings.isPending ? "SAVING..." : "SAVE VENUE PROFILE"}
-                  </button>
-                </form>
-              )}
-
-              {/* ─── Menus & Floor Plans ─────────────────────────────── */}
-              <div className="mt-10" style={{ display: 'none' }}>
-                <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Menus &amp; Floor Plans</h2>
-                {/* Sub-tabs */}
-                <div className="flex gap-0 mb-6 border-b border-gold/20">
-                  {(["food","bar","floorplans"] as const).map(t => (
-                    <button key={t} onClick={() => setSettingsFoodTab(t)}
-                      className={`font-bebas tracking-widest text-xs px-5 py-2 border-b-2 transition-colors ${
-                        settingsFoodTab === t ? "border-forest text-forest" : "border-transparent text-ink/50 hover:text-ink"
-                      }`}>
-                      {t === "food" ? "FOOD MENU" : t === "bar" ? "DRINKS MENU" : "FLOOR PLANS"}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Food Menu */}
-                {settingsFoodTab === "food" && (
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="font-dm text-sm text-ink/60">Manage your food packages and items. Full editor available in <button onClick={() => setLocation('/menu')} className="text-forest underline">Menu Management</button>.</p>
-                    </div>
-                    {(menuPackages ?? []).length === 0 ? (
-                      <div className="border border-dashed border-gold/20 p-6 text-center">
-                        <p className="font-dm text-sage text-sm">No food packages yet.</p>
-                        <button onClick={() => setLocation('/menu')} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream mt-3 inline-block">CREATE FOOD PACKAGE</button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {(menuPackages ?? []).map((pkg: any) => (
-                          <div key={pkg.id} className="dante-card p-4 flex items-center justify-between">
-                            <div>
-                              <div className="font-cormorant font-semibold text-base text-ink">{pkg.name}</div>
-                              <div className="font-dm text-xs text-ink/60">
-                                {pkg.type} {pkg.pricePerHead ? `· $${Number(pkg.pricePerHead).toFixed(0)}/head` : ""}
-                                {pkg.items?.length ? ` · ${pkg.items.length} items` : ""}
-                              </div>
-                            </div>
-                            <button onClick={() => setLocation('/menu')} className="font-bebas tracking-widest text-xs text-forest hover:underline">EDIT</button>
-                          </div>
-                        ))}
-                        <button onClick={() => setLocation('/menu')} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream mt-2 flex items-center gap-1">
-                          <Plus className="w-3 h-3" /> ADD PACKAGE
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Bar / Drinks Menu */}
-                {settingsFoodTab === "bar" && (
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <p className="font-dm text-sm text-ink/60">{(barMenuItemsList ?? []).length} drink{(barMenuItemsList ?? []).length !== 1 ? "s" : ""} on your menu</p>
-                      <button onClick={() => { setEditingBarItemId(null); setBarItemForm({ category: "Wine", name: "", description: "", pricePerUnit: "", unit: "per glass" }); setShowBarItemForm(true); }}
-                        className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
-                        <Plus className="w-3 h-3" /> ADD DRINK
-                      </button>
-                    </div>
-
-                    {showBarItemForm && (
-                      <div className="dante-card p-5 mb-4">
-                        <h3 className="font-bebas tracking-widest text-sm text-ink mb-3">{editingBarItemId ? "EDIT DRINK" : "ADD DRINK"}</h3>
-                        <div className="grid grid-cols-2 gap-3 mb-3">
-                          <div>
-                            <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CATEGORY</label>
-                            <select value={barItemForm.category} onChange={e => setBarItemForm(f => ({ ...f, category: e.target.value }))}
-                              className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white">
-                              {["Wine","Beer","Spirits","Cocktails","Non-Alcoholic","Champagne","Other"].map(c => (
-                                <option key={c} value={c}>{c}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NAME *</label>
-                            <Input value={barItemForm.name} onChange={e => setBarItemForm(f => ({ ...f, name: e.target.value }))}
-                              placeholder="Sauvignon Blanc" className="rounded-none border border-gold/30" />
-                          </div>
-                        </div>
-                        <div className="mb-3">
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
-                          <Input value={barItemForm.description} onChange={e => setBarItemForm(f => ({ ...f, description: e.target.value }))}
-                            placeholder="Marlborough, NZ" className="rounded-none border border-gold/30" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 mb-4">
-                          <div>
-                            <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE</label>
-                            <Input type="number" value={barItemForm.pricePerUnit} onChange={e => setBarItemForm(f => ({ ...f, pricePerUnit: e.target.value }))}
-                              placeholder="12.00" className="rounded-none border border-gold/30" />
-                          </div>
-                          <div>
-                            <label className="font-bebas text-xs tracking-widest text-sage block mb-1">UNIT</label>
-                            <select value={barItemForm.unit} onChange={e => setBarItemForm(f => ({ ...f, unit: e.target.value }))}
-                              className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white">
-                              {["per glass","per bottle","per jug","per person","per hour"].map(u => (
-                                <option key={u} value={u}>{u}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => {
-                            if (!barItemForm.name.trim()) return toast.error("Name required");
-                            if (editingBarItemId) {
-                              updateBarItem.mutate({ id: editingBarItemId, category: barItemForm.category, name: barItemForm.name, description: barItemForm.description || undefined, pricePerUnit: barItemForm.pricePerUnit ? parseFloat(barItemForm.pricePerUnit) : undefined, unit: barItemForm.unit });
-                            } else {
-                              addBarItem.mutate({ category: barItemForm.category, name: barItemForm.name, description: barItemForm.description || undefined, pricePerUnit: barItemForm.pricePerUnit ? parseFloat(barItemForm.pricePerUnit) : undefined, unit: barItemForm.unit });
-                            }
-                          }} className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream">
-                            {editingBarItemId ? "UPDATE" : "ADD"}
-                          </button>
-                          <button onClick={() => { setShowBarItemForm(false); setEditingBarItemId(null); }} className="font-bebas tracking-widest text-xs px-4 py-2 border border-border text-ink/60 hover:text-ink">CANCEL</button>
-                        </div>
-                      </div>
-                    )}
-
-                    {(barMenuItemsList ?? []).length === 0 && !showBarItemForm ? (
-                      <div className="border border-dashed border-gold/20 p-6 text-center">
-                        <Wine className="w-8 h-8 text-gold/40 mx-auto mb-2" />
-                        <p className="font-dm text-sage text-sm">No drinks on your menu yet.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {Object.entries(
-                          (barMenuItemsList ?? []).reduce((acc: Record<string, any[]>, item: any) => {
-                            (acc[item.category] = acc[item.category] || []).push(item);
-                            return acc;
-                          }, {})
-                        ).map(([cat, items]) => (
-                          <div key={cat}>
-                            <div className="font-bebas tracking-widest text-xs text-sage mb-1 mt-3">{cat}</div>
-                            {(items as any[]).map((item: any) => (
-                              <div key={item.id} className="dante-card p-3 flex items-center justify-between mb-1">
-                                <div>
-                                  <div className="font-cormorant font-semibold text-sm text-ink">{item.name}</div>
-                                  {item.description && <div className="font-dm text-xs text-ink/50">{item.description}</div>}
-                                  {item.pricePerUnit && <div className="font-dm text-xs text-forest">${Number(item.pricePerUnit).toFixed(2)} {item.unit}</div>}
-                                </div>
-                                <div className="flex gap-2">
-                                  <button onClick={() => { setEditingBarItemId(item.id); setBarItemForm({ category: item.category, name: item.name, description: item.description ?? "", pricePerUnit: item.pricePerUnit ? String(item.pricePerUnit) : "", unit: item.unit ?? "per glass" }); setShowBarItemForm(true); }}
-                                    className="text-ink/40 hover:text-forest"><Pencil className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => deleteBarItem.mutate({ id: item.id })} className="text-ink/40 hover:text-tomato"><Trash2 className="w-3.5 h-3.5" /></button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Floor Plans */}
-                {settingsFoodTab === "floorplans" && (
-                  <div>
-                    <p className="font-dm text-sm text-ink/60 mb-4">Create and manage reusable floor plan layouts for your spaces. Open the full floor plan builder to design a new layout.</p>
-                    <button onClick={() => setLocation('/floor-plan')} className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream flex items-center gap-2">
-                      <LayoutGrid className="w-4 h-4" /> OPEN FLOOR PLAN BUILDER
-                    </button>
-                    <p className="font-dm text-xs text-ink/40 mt-3">Floor plans are saved per event in the Floor Plan Builder. You can access them from any booking's Event Detail page.</p>
-                  </div>
-                )}
-               </div>
-              </div>
-              )}
-
-              {/* ── EVENT SPACES SUB-TAB ───────────────────────── */}
-              {settingsSubTab === "spaces" && (
-              <div>
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Event Spaces</h1>
-              <div className="mt-0">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-cormorant text-xl font-semibold text-ink">Event Spaces</h2>
-                  <button onClick={() => setShowAddSpace(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
-                    <Plus className="w-3 h-3" /> ADD SPACE
-                  </button>
-                </div>
-                {(spaces ?? []).length === 0 ? (
-                  <div className="border border-dashed border-gold/20 p-6 text-center">
-                    <p className="font-dm text-sage text-sm">No spaces added yet. Add your event rooms or areas.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {(spaces ?? []).map((s: any) => (
-                      <div key={s.id} className="dante-card p-4 flex items-center justify-between">
-                        <div>
-                          <div className="font-cormorant font-semibold text-base text-ink">{s.name}</div>
-                          <div className="font-dm text-xs text-ink/60">
-                            {s.minCapacity && s.maxCapacity ? `${s.minCapacity}–${s.maxCapacity} guests` : s.maxCapacity ? `Up to ${s.maxCapacity} guests` : ""}
-                            {s.minSpend ? ` · Min spend $${Number(s.minSpend).toLocaleString()}` : ""}
-                          </div>
-                          {s.description && <div className="font-dm text-xs text-ink/40 mt-0.5">{s.description}</div>}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => { setEditingSpace(s); setEditSpaceForm({ name: s.name, description: s.description ?? '', minCapacity: s.minCapacity ? String(s.minCapacity) : '', maxCapacity: s.maxCapacity ? String(s.maxCapacity) : '', minSpend: s.minSpend ? String(s.minSpend) : '' }); setShowEditSpace(true); }}
-                            className="text-sage hover:text-forest-dark p-1"
-                            title="Edit space"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteSpace.mutate({ id: s.id }); }}
-                            className="text-red-400 hover:text-red-600 p-1"
-                            title="Delete space"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              </div>
-              )}
 
 
               {/* ── AUTOMATED TASKS ─────────────────────────────── */}
@@ -4703,10 +4472,29 @@ export default function Dashboard() {
               </div>
               )}
 
-              {/* ── MENU ────────────────────────────────────────── */}
+              {/* ── MENU & CATALOGUE ─────────────────────────────── */}
               {settingsSubTab === "menu" && (
-              <div className="max-w-3xl mx-auto">
-                <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Menu</h1>
+              <div className="max-w-5xl mx-auto">
+                <h1 className="font-cormorant text-ink mb-4" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Menu & Catalogue</h1>
+
+                {/* Sub-section tabs */}
+                <div className="flex gap-0 mb-6 border-b border-gold/20">
+                  {([
+                    { id: 'packages', label: 'F&B Packages' },
+                    { id: 'catalogue', label: 'Menu Catalogue' },
+                  ] as const).map(s => (
+                    <button key={s.id} onClick={() => setMenuSettingsSection(s.id)}
+                      className={`font-bebas tracking-widest text-sm px-5 py-2.5 border-b-2 transition-colors ${
+                        menuSettingsSection === s.id ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink/70'
+                      }`}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── PACKAGES TAB ── */}
+                {menuSettingsSection === 'packages' && (<div className="max-w-3xl mx-auto space-y-6">
+                <p className="font-dm text-sm text-ink/60 mb-2">Create F&amp;B packages with pricing. These packages can be selected in proposals and runsheets.</p>
 
                 {/* Menu Sections */}
                 <div className="bg-white border border-gray-200 rounded mb-6">
@@ -4859,17 +4647,11 @@ export default function Dashboard() {
                     ))}
                   </div>
                 </div>
-              </div>
-              )}
+                </div>)}
 
-              {/* ── BILLING ─────────────────────────────────────── */}
-              {/* ── MENU CATALOGUE ──────────────────────────────────── */}
-              {settingsSubTab === "menu-catalogue" && (
-              <div className="max-w-5xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
-                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Menu Catalogue</h1>
-                  <p className="font-dm text-sm text-ink/50">Build your food and drink catalogue. Items can be selected when building proposals and runsheets.</p>
-                </div>
+                {/* ── CATALOGUE TAB ── */}
+                {menuSettingsSection === 'catalogue' && (<div>
+                <p className="font-dm text-sm text-ink/50 mb-6">Build your food and drink catalogue. Items can be selected when building proposals and runsheets.</p>
 
                 {/* Type tabs */}
                 <div className="flex gap-0 mb-6 border-b border-gold/20">
@@ -5069,6 +4851,8 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+                </div>)}
+
               </div>
               )}
 
