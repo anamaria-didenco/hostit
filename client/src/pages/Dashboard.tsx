@@ -551,6 +551,7 @@ export default function Dashboard() {
   });
   // Load saved layout when prefs arrive
   const prefsLoaded = useRef(false);
+  const suppressStatusToast = useRef(false);
   useEffect(() => {
     if (userPrefs && !prefsLoaded.current) {
       prefsLoaded.current = true;
@@ -607,11 +608,18 @@ export default function Dashboard() {
     onSuccess: (_data, variables) => {
       refetchLeads();
       if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
+      if (suppressStatusToast.current) {
+        suppressStatusToast.current = false;
+        return;
+      }
       if (variables.status === 'function_pack_sent') {
         toast.success("Status updated — a follow-up reminder has been added to your Tasks for 5 days from now.");
       } else {
         toast.success("Status updated");
       }
+    },
+    onError: () => {
+      suppressStatusToast.current = false;
     },
   });
   const bulkUpdateStatus = trpc.leads.bulkUpdateStatus.useMutation({
@@ -636,7 +644,18 @@ export default function Dashboard() {
     onError: (err) => toast.error(err.message || 'Delete failed'),
   });
   const addNote = trpc.leads.addNote.useMutation({
-    onSuccess: () => { setNoteText(""); utils.leads.getActivity.invalidate({ leadId: selectedLead?.id }); toast.success("Note added"); },
+    onSuccess: () => {
+      setNoteText("");
+      utils.leads.getActivity.invalidate({ leadId: selectedLead?.id });
+      if (selectedLead?.status === 'new') {
+        suppressStatusToast.current = true;
+        updateStatus.mutate({ id: selectedLead.id, status: 'contacted' });
+        setSelectedLead((prev: any) => prev ? { ...prev, status: 'contacted' } : prev);
+        toast.success("Note added! Enquiry moved to Events.");
+      } else {
+        toast.success("Note added");
+      }
+    },
   });
   const createRunsheet = trpc.runsheets.create.useMutation({
     onSuccess: (data, variables) => {
@@ -660,9 +679,9 @@ export default function Dashboard() {
       refetchLeads();
       refetchOverdue();
       setSelectedLead(null);
-      toast.success("Enquiry deleted");
+      toast.success("Record deleted");
     },
-    onError: () => toast.error("Failed to delete enquiry"),
+    onError: () => toast.error("Failed to delete record"),
   });
   const markRead = trpc.leads.markRead.useMutation({
     onSuccess: (_data, vars) => {
@@ -715,9 +734,9 @@ export default function Dashboard() {
       setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', guestCount: '', budget: '', message: '', status: 'new' });
       setEnquiryPasteText('');
       setEnquiryPasteMode(true);
-      toast.success('Enquiry added!');
+      toast.success('Added successfully!');
     },
-    onError: () => toast.error('Failed to add enquiry'),
+    onError: () => toast.error('Failed to add record'),
   });
   const createEnquiryFromCalendar = trpc.leads.create.useMutation({
     onSuccess: () => {
@@ -1120,7 +1139,7 @@ export default function Dashboard() {
         <div className="hidden md:flex items-center">
           {[
             { id: "overview", label: "Home" },
-            { id: "enquiries", label: "Enquiries" },
+            { id: "enquiries", label: "Events" },
             { id: "calendar", label: "Calendar" },
             { id: "tasks", label: "Tasks" },
             { id: "reports", label: "Reports" },
@@ -1157,7 +1176,7 @@ export default function Dashboard() {
         {/* Mobile: current tab label */}
         <div className="md:hidden flex-1 text-center">
           <span className="font-inter text-sm font-semibold text-sage-dark">
-            {tab === "overview" ? "Home" : tab === "enquiries" ? "Enquiries" : tab === "calendar" ? "Calendar" : tab === "tasks" ? "Tasks" : tab === "reports" ? "Reports" : "Settings"}
+            {tab === "overview" ? "Home" : tab === "enquiries" ? "Events" : tab === "calendar" ? "Calendar" : tab === "tasks" ? "Tasks" : tab === "reports" ? "Reports" : "Settings"}
           </span>
         </div>
         {/* Spacer (desktop only) */}
@@ -1453,7 +1472,7 @@ export default function Dashboard() {
               <div className={`
                 ${leadViewMode === "kanban" ? "hidden" : ""}
                 ${leadViewMode === "table" ? `flex flex-col ${selectedLead ? "w-[55%] border-r border-gold/15" : "flex-1"} bg-warm-white overflow-hidden` : ""}
-                ${leadViewMode === "list" ? `${selectedLead ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 lg:w-96 border-r border-gold/15 bg-warm-white flex-shrink-0` : ""}
+                ${leadViewMode === "list" ? `${selectedLead ? "hidden md:flex md:w-80 lg:w-96 flex-shrink-0" : "flex w-full"} flex-col border-r border-gold/15 bg-warm-white` : ""}
               `}>
                 <div className="p-4 border-b border-gold/15">
                   {/* Sub-tab toggle */}
@@ -1463,7 +1482,7 @@ export default function Dashboard() {
                       className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
                         leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
                       }`}>
-                      New
+                      New Enquiries
                       {newEnquiries.length > 0 && (
                         <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
                           leadsSubTab === "new" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"
@@ -1475,7 +1494,7 @@ export default function Dashboard() {
                       className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
                         leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
                       }`}>
-                      All
+                      Events
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
                         leadsSubTab === "all" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"
                       }`}>{repliedLeads.length}</span>
@@ -1484,7 +1503,7 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <h2 className="font-cormorant text-2xl font-semibold text-ink">
-                        {leadViewMode === "kanban" ? "Pipeline" : leadsSubTab === "new" ? "New Enquiries" : "All Records"}
+                        {leadViewMode === "kanban" ? "Pipeline" : leadsSubTab === "new" ? "New Enquiries" : "Events"}
                       </h2>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -1517,7 +1536,7 @@ export default function Dashboard() {
                       onClick={() => setShowAddLead(true)}
                       className="flex-1 bg-sage-green text-white font-inter font-medium text-sm py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-sage-dark transition-colors"
                     >
-                      <Plus className="w-3.5 h-3.5" /> Add Enquiry
+                      <Plus className="w-3.5 h-3.5" /> Add New
                     </button>
                     <button
                       onClick={() => setShowCsvImport(true)}
@@ -5204,8 +5223,8 @@ export default function Dashboard() {
       {showBulkDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedLeadIds.size} enquir{selectedLeadIds.size === 1 ? 'y' : 'ies'}?</h3>
-            <p className="text-sm text-gray-500 mb-6">This will permanently remove the selected enquiries and all their activity history. This cannot be undone.</p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedLeadIds.size} record{selectedLeadIds.size === 1 ? '' : 's'}?</h3>
+            <p className="text-sm text-gray-500 mb-6">This will permanently remove the selected records and all their activity history. This cannot be undone.</p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowBulkDeleteConfirm(false)}
@@ -5238,7 +5257,7 @@ export default function Dashboard() {
         <DialogContent className="max-w-lg rounded-none border border-gold/30 max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">
-              <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add New Enquiry</DialogTitle>
+              <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add New</DialogTitle>
               <p className="font-dm text-white/50 text-xs mt-1">Paste an email or brief to auto-fill, or enter details manually.</p>
             </div>
           </DialogHeader>
@@ -5390,7 +5409,7 @@ export default function Dashboard() {
               </div>
               <button type="submit" disabled={createEnquiry.isPending}
                 className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
-                {createEnquiry.isPending ? 'ADDING...' : 'ADD ENQUIRY'}
+                {createEnquiry.isPending ? 'ADDING...' : 'ADD NEW'}
               </button>
             </form>
           )}
@@ -5401,7 +5420,7 @@ export default function Dashboard() {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
         {[
           { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
-          { id: "enquiries", label: "Enquiries", icon: <MessageSquare className="w-5 h-5" /> },
+          { id: "enquiries", label: "Events", icon: <MessageSquare className="w-5 h-5" /> },
           { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
           { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
           { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
