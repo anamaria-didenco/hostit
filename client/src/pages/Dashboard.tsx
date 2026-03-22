@@ -1320,273 +1320,392 @@ export default function Dashboard() {
         {/* Main Content */}
         <main className={`flex-1 ${tab === "enquiries" ? "overflow-hidden" : "overflow-auto pb-16 md:pb-0"}`}>
 
-          {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
-          {tab === "overview" && (
-            <div className="flex flex-col min-h-full md:h-full md:overflow-hidden">
-              {/* Stats bar */}
-              {(() => {
-                const allStats = [
-                  { id: "active_enquiries", label: "Active Enquiries", value: stats?.newLeads ?? 0, sub: "in pipeline", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-3.5 h-3.5" /> },
-                  { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", iconBg: "bg-blue-50", iconColor: "text-blue-600", icon: <Calendar className="w-3.5 h-3.5" /> },
-                  { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-sage-tint", iconColor: "text-sage-green", icon: <FileText className="w-3.5 h-3.5" /> },
-                  { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: <TrendingUp className="w-3.5 h-3.5" /> },
-                  { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: <DollarSign className="w-3.5 h-3.5" /> },
-                  { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueTasks ?? 0) > 0 ? "bg-red-50" : "bg-gray-50", iconColor: (stats?.overdueTasks ?? 0) > 0 ? "text-red-500" : "text-gray-400", icon: <AlertCircle className="w-3.5 h-3.5" /> },
-                  { id: "overdue_followups", label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-50", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-3.5 h-3.5" /> },
-                ];
-                const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
-                const cols = visibleStats.length;
-                return (
-                  <div className="relative border-b border-border flex-shrink-0">
-                    <div className={`grid gap-0`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-                      {visibleStats.map((s, i) => (
-                        <div key={s.id} className={`px-3 py-3 border-r border-border last:border-r-0`}>
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <div className={`w-6 h-6 rounded ${s.iconBg} ${s.iconColor} flex items-center justify-center flex-shrink-0`}>{s.icon}</div>
-                            <div className="font-inter text-xs text-gray-400 leading-tight truncate">{s.label}</div>
+          {/* ── OVERVIEW — Today's Briefing ──────────────────────────────────── */}
+          {tab === "overview" && (() => {
+            const todayDate = new Date();
+            const tomorrowDate = new Date(todayDate);
+            tomorrowDate.setDate(todayDate.getDate() + 1);
+            const isToday = (d: Date) => d.toDateString() === todayDate.toDateString();
+            const isTomorrow = (d: Date) => d.toDateString() === tomorrowDate.toDateString();
+
+            const todayAndTomorrowEvents = [
+              ...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })),
+              ...(monthLeadEvents ?? [])
+                .filter((l: any) => ['confirmed', 'booked', 'tentative'].includes(l.status))
+                .map((l: any) => ({ ...l, _type: 'lead' })),
+            ]
+              .filter((e: any) => {
+                const d = new Date(e.eventDate);
+                return isToday(d) || isTomorrow(d);
+              })
+              .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
+
+            const actionItems: { id: string; color: string; icon: React.ReactNode; title: string; subtitle: string; actionLabel: string; onAction: () => void }[] = [
+              ...(overdueLeads ?? []).slice(0, 5).map((l: any) => ({
+                id: `follow-${l.id}`,
+                color: 'rose',
+                icon: <MessageSquare className="w-5 h-5" />,
+                title: `Reply to ${l.firstName} ${l.lastName ?? ''}`.trim(),
+                subtitle: l.followUpDate
+                  ? `Follow-up was due ${new Date(l.followUpDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`
+                  : 'Overdue follow-up',
+                actionLabel: 'Reply Now',
+                onAction: () => { selectLead(l); setLeadsSubTab('all'); setTab('enquiries'); },
+              })),
+            ];
+
+            const briefingDateStr = todayDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' });
+            const activeEnqCount = newEnquiries.length;
+            const upcomingEvtCount = stats?.upcomingEvents ?? 0;
+            const overdueTaskCount = stats?.overdueTasks ?? 0;
+            const followUpDueCount = stats?.overdueFollowUps ?? 0;
+
+            const recentActivity = [...(allLeads ?? [])]
+              .filter((l: any) => l.updatedAt || l.createdAt)
+              .sort((a: any, b: any) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime())
+              .slice(0, 4);
+
+            const avatarColor = (name: string) => {
+              const colors = ['bg-[#2D4A3E]', 'bg-rose-700', 'bg-blue-700', 'bg-amber-700', 'bg-violet-700'];
+              const idx = (name.charCodeAt(0) ?? 0) % colors.length;
+              return colors[idx];
+            };
+
+            return (
+              <div className="min-h-full bg-[#FAFAF7] text-slate-800 p-6 md:p-8 overflow-auto">
+                {/* Header */}
+                <div className="mb-8 flex items-end justify-between">
+                  <div>
+                    <h1 className="text-3xl font-bold text-[#2D4A3E] tracking-tight">Today's Briefing</h1>
+                    <p className="text-slate-500 mt-1">{briefingDateStr} — Action priority view</p>
+                  </div>
+                  <button
+                    onClick={() => { setShowAddLead(true); }}
+                    className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 bg-[#2D4A3E] text-white rounded-lg hover:bg-[#1e332a] transition-colors">
+                    <Plus className="w-4 h-4" /> Add Enquiry
+                  </button>
+                </div>
+
+                {/* KPI Bar */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                  {/* Active Enquiries */}
+                  <div className="bg-white rounded-xl p-5 border border-green-100 shadow-sm relative overflow-hidden group cursor-pointer" onClick={() => setTab('enquiries')}>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-green-50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110" />
+                    <div className="relative z-10 flex flex-col h-full justify-between">
+                      <h3 className="text-sm font-medium text-slate-500 mb-1">Active Enquiries</h3>
+                      <div className="flex items-end justify-between">
+                        <span className="text-4xl font-bold text-[#2D4A3E]">{activeEnqCount}</span>
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center text-xs font-medium text-green-600 mb-2">
+                            <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" />
+                            <span>in pipeline</span>
                           </div>
-                          <div className="font-inter text-xl text-gray-900 font-bold leading-none mb-0.5">{s.value}</div>
-                          <div className="font-inter text-xs text-gray-400">{s.sub}</div>
+                          <div className="flex items-end gap-1 h-6 w-16">
+                            <div className="w-full bg-green-100 rounded-t-sm h-[40%]" />
+                            <div className="w-full bg-green-100 rounded-t-sm h-[60%]" />
+                            <div className="w-full bg-green-200 rounded-t-sm h-[50%]" />
+                            <div className="w-full bg-green-300 rounded-t-sm h-[80%]" />
+                            <div className="w-full bg-green-500 rounded-t-sm" style={{ height: `${Math.max(20, Math.min(100, activeEnqCount * 4))}%` }} />
+                          </div>
                         </div>
-                      ))}
+                      </div>
                     </div>
-                    {/* Customize button */}
-                    <div className="absolute top-1.5 right-1.5">
-                      <button
-                        onClick={() => setShowStatsCustomize(v => !v)}
-                        className="p-1 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors"
-                        title="Customise stats">
-                        <Settings className="w-3 h-3" />
-                      </button>
-                      {showStatsCustomize && (
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg rounded-lg p-3 z-30 w-52">
-                          <div className="font-inter text-xs font-semibold text-gray-700 mb-2">Show / hide stats</div>
-                          {allStats.map(s => (
-                            <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 px-1 rounded">
-                              <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
-                                setHiddenStats(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
-                                  localStorage.setItem('vfhq_hidden_stats', JSON.stringify([...next]));
-                                  return next;
-                                });
-                              }} className="w-3.5 h-3.5 accent-sage-green" />
-                              <span className="font-inter text-xs text-gray-600">{s.label}</span>
-                            </label>
-                          ))}
+                  </div>
+
+                  {/* Upcoming Events */}
+                  <div className="bg-white rounded-xl p-5 border border-blue-100 shadow-sm relative overflow-hidden group cursor-pointer" onClick={() => setTab('calendar')}>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110" />
+                    <div className="relative z-10 flex flex-col h-full justify-between">
+                      <h3 className="text-sm font-medium text-slate-500 mb-1">Upcoming Events</h3>
+                      <div className="flex items-end justify-between">
+                        <span className="text-4xl font-bold text-[#2D4A3E]">{upcomingEvtCount}</span>
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center text-xs font-medium text-blue-600 mb-2">
+                            <Calendar className="w-3.5 h-3.5 mr-1" />
+                            <span>next 30 days</span>
+                          </div>
+                          <div className="flex items-end gap-1 h-6 w-16">
+                            <div className="w-full bg-blue-100 rounded-t-sm h-[20%]" />
+                            <div className="w-full bg-blue-500 rounded-t-sm h-[100%]" />
+                            <div className="w-full bg-blue-100 rounded-t-sm h-[30%]" />
+                            <div className="w-full bg-blue-200 rounded-t-sm h-[50%]" />
+                            <div className="w-full bg-blue-300 rounded-t-sm" style={{ height: `${Math.max(20, Math.min(100, upcomingEvtCount * 8))}%` }} />
+                          </div>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Overdue Tasks */}
+                  <div className="bg-white rounded-xl p-5 border border-amber-100 shadow-sm relative overflow-hidden group cursor-pointer" onClick={() => setTab('tasks')}>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110" />
+                    <div className="relative z-10 flex flex-col h-full justify-between">
+                      <h3 className="text-sm font-medium text-slate-500 mb-1">Overdue Tasks</h3>
+                      <div className="flex items-end justify-between">
+                        <span className={`text-4xl font-bold ${overdueTaskCount > 0 ? 'text-amber-700' : 'text-[#2D4A3E]'}`}>{overdueTaskCount}</span>
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center text-xs font-medium text-amber-600 mb-2">
+                            <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" />
+                            <span>{overdueTaskCount > 0 ? 'action required' : 'all clear'}</span>
+                          </div>
+                          <div className="flex items-end gap-1 h-6 w-16">
+                            <div className="w-full bg-amber-200 rounded-t-sm h-[60%]" />
+                            <div className="w-full bg-amber-300 rounded-t-sm h-[80%]" />
+                            <div className="w-full bg-amber-200 rounded-t-sm h-[50%]" />
+                            <div className="w-full bg-amber-400 rounded-t-sm h-[90%]" />
+                            <div className="w-full bg-amber-500 rounded-t-sm" style={{ height: `${Math.max(10, Math.min(100, overdueTaskCount * 15))}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Follow-ups Due */}
+                  <div className="bg-white rounded-xl p-5 border border-rose-100 shadow-sm relative overflow-hidden group cursor-pointer" onClick={() => setTab('enquiries')}>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110" />
+                    <div className="relative z-10 flex flex-col h-full justify-between">
+                      <h3 className="text-sm font-medium text-slate-500 mb-1">Follow-ups Due</h3>
+                      <div className="flex items-end justify-between">
+                        <span className={`text-4xl font-bold ${followUpDueCount > 0 ? 'text-rose-700' : 'text-[#2D4A3E]'}`}>{followUpDueCount}</span>
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center text-xs font-medium text-rose-600 mb-2">
+                            <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" />
+                            <span>{followUpDueCount > 0 ? 'overdue' : 'all clear'}</span>
+                          </div>
+                          <div className="flex items-end gap-1 h-6 w-16">
+                            <div className="w-full bg-rose-100 rounded-t-sm h-[30%]" />
+                            <div className="w-full bg-rose-200 rounded-t-sm h-[50%]" />
+                            <div className="w-full bg-rose-300 rounded-t-sm h-[60%]" />
+                            <div className="w-full bg-rose-400 rounded-t-sm h-[80%]" />
+                            <div className="w-full bg-rose-500 rounded-t-sm" style={{ height: `${Math.max(15, Math.min(100, followUpDueCount * 15))}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Three-column grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+
+                  {/* Left col — Today & Tomorrow */}
+                  <div className="lg:col-span-4 flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-semibold text-[#2D4A3E]">Today &amp; Tomorrow</h2>
+                      <button onClick={() => setTab('calendar')} className="text-xs text-slate-500 hover:text-[#2D4A3E] transition-colors">View calendar →</button>
+                    </div>
+                    <div className="flex flex-col gap-4 flex-1">
+                      {todayAndTomorrowEvents.length === 0 ? (
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center text-center flex-1">
+                          <Calendar className="w-8 h-8 text-slate-200 mb-2" />
+                          <p className="text-sm text-slate-400">No events today or tomorrow</p>
+                          <button onClick={() => setShowAddLead(true)} className="mt-3 text-xs text-[#2D4A3E] font-medium hover:underline">Add an event</button>
+                        </div>
+                      ) : (
+                        todayAndTomorrowEvents.slice(0, 3).map((e: any) => {
+                          const eDate = new Date(e.eventDate);
+                          const dayLabel = isToday(eDate) ? 'Today' : 'Tomorrow';
+                          const timeStr = eDate.toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit', hour12: true });
+                          const isConfirmed = e.status === 'confirmed' || e.status === 'booked';
+                          const isTentative = e.status === 'tentative';
+                          const statusColor = isConfirmed ? 'bg-green-500' : isTentative ? 'bg-amber-400' : 'bg-rose-400';
+                          const badgeBg = isConfirmed ? 'bg-green-50 text-green-700 border-green-200' : isTentative ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200';
+                          const statusLabel = isConfirmed ? 'Confirmed' : isTentative ? 'Tentative' : (e.status ?? 'Enquiry').replace('_', ' ');
+                          return (
+                            <div key={e.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                              <div className={`w-full h-1.5 ${statusColor}`} />
+                              <div className="p-5">
+                                <div className="flex justify-between items-start mb-3">
+                                  <h3 className="font-bold text-base text-slate-800 leading-tight truncate pr-2">
+                                    {e.firstName} {e.lastName}
+                                    {e.eventType ? ` — ${e.eventType}` : ''}
+                                  </h3>
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border uppercase shrink-0 ${badgeBg}`}>
+                                    {statusLabel}
+                                  </span>
+                                </div>
+                                <div className="space-y-2 mb-4">
+                                  <div className="flex items-center text-sm text-slate-600">
+                                    <Clock className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
+                                    <span className="font-medium">{dayLabel}, {timeStr}</span>
+                                  </div>
+                                  {e.spaceName && (
+                                    <div className="flex items-center text-sm text-slate-600">
+                                      <MapPin className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
+                                      <span>{e.spaceName}</span>
+                                    </div>
+                                  )}
+                                  {e.guestCount && (
+                                    <div className="flex items-center text-sm text-slate-600">
+                                      <Users className="w-4 h-4 mr-2 text-slate-400 shrink-0" />
+                                      <span>{e.guestCount} Guests</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex gap-2">
+                                  {isConfirmed && (
+                                    <button
+                                      onClick={() => setLocation(`/runsheet?leadId=${e.id}`)}
+                                      className="flex-1 bg-[#2D4A3E] hover:bg-[#1e332a] text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors">
+                                      View Runsheet
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => { selectLead(e); setTab('enquiries'); }}
+                                    className="flex-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium py-2 px-3 rounded-lg transition-colors">
+                                    Open Enquiry
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                      {todayAndTomorrowEvents.length > 3 && (
+                        <button onClick={() => setTab('calendar')} className="w-full text-sm text-slate-500 hover:text-[#2D4A3E] font-medium transition-colors flex items-center justify-center p-2">
+                          View all {todayAndTomorrowEvents.length} events <ArrowRight className="w-4 h-4 ml-1" />
+                        </button>
                       )}
                     </div>
                   </div>
-                );
-              })()}
 
-              {/* Main area: full calendar + sidebar */}
-              <div className="flex flex-col md:flex-row flex-1 overflow-auto md:overflow-hidden">
-
-                {/* Full Calendar */}
-                <div className="flex-1 flex flex-col overflow-hidden md:border-r border-border">
-                  {/* Calendar toolbar */}
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-white flex-shrink-0">
-                    <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-sage-tint rounded-lg transition-colors text-gray-500"><ChevronLeft className="w-4 h-4" /></button>
-                    <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-sage-tint rounded-lg transition-colors text-gray-500"><ChevronRight className="w-4 h-4" /></button>
-                    <h2 className="font-inter font-semibold text-gray-900 text-base flex-1" style={{ letterSpacing: '-0.02em' }}>{MONTHS[month]} {year}</h2>
-                    <button onClick={() => setCalDate(new Date())} className="font-inter text-xs font-medium px-3 py-1.5 border border-border rounded-lg text-gray-500 hover:bg-sage-tint hover:text-sage-dark transition-colors">Today</button>
-                    <button
-                      onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
-                      className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
-                      <Plus className="w-3.5 h-3.5" /> Add Event
-                    </button>
-                  </div>
-                  {/* Legend */}
-                  <div className="flex items-center gap-4 px-4 py-1.5 border-b border-border bg-gray-50 flex-shrink-0">
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-sage-green inline-block" />Confirmed</span>
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Tentative</span>
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-violet-400 inline-block" />Proposal</span>
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />Enquiry</span>
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 inline-block" />Cancelled</span>
-                  </div>
-                  {/* Day headers */}
-                  <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
-                    {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
-                      <div key={d} className={`text-center font-inter text-xs font-semibold py-2 border-r border-border last:border-r-0 ${
-                        d === 'SAT' || d === 'SUN' ? 'text-sage-green bg-sage-tint/30' : 'text-gray-400'
-                      }`}>{d}</div>
-                    ))}
-                  </div>
-                  {/* Calendar grid */}
-                  <div className="flex-1 overflow-auto">
-                    {(() => {
-                      const firstDayOfMonth = new Date(year, month, 1).getDay();
-                      const mondayOffset = (firstDayOfMonth + 6) % 7;
-                      const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
-                      const cells = Array.from({ length: totalCells }, (_, i) => {
-                        const dayNum = i - mondayOffset + 1;
-                        return dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null;
-                      });
-                      const weeks = [];
-                      for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-                      const numWeeks = weeks.length;
-                      return weeks.map((week, wi) => (
-                        <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(100 / numWeeks)}%` }}>
-                          {week.map((day, di) => {
-                            if (!day) return <div key={di} className="border-r border-border last:border-r-0 bg-gray-50/50" />;
-                            const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
-                            const isWeekend = di >= 5;
-                            const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
-                            const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                            const statusColor = (status: string) => {
-                              switch(status) {
-                                case 'confirmed': case 'booked': return 'bg-sage-green text-white';
-                                case 'tentative': return 'bg-amber-400 text-white';
-                                case 'proposal_sent': return 'bg-violet-400 text-white';
-                                case 'negotiating': return 'bg-orange-400 text-white';
-                                case 'new': return 'bg-rose-400 text-white';
-                                case 'contacted': return 'bg-rose-300 text-white';
-                                case 'cancelled': case 'lost': return 'bg-gray-300 text-gray-600';
-                                default: return 'bg-gray-200 text-gray-600';
-                              }
-                            };
+                  {/* Center col — Action Required */}
+                  <div className="lg:col-span-5 flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        {actionItems.length > 0 && <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+                        <h2 className="text-lg font-bold text-[#2D4A3E] uppercase tracking-wide">Action Required</h2>
+                      </div>
+                      {actionItems.length > 0 && (
+                        <span className="text-xs font-bold tracking-wide bg-rose-100 text-rose-700 px-2 py-1 rounded-md">
+                          {actionItems.length} ITEM{actionItems.length !== 1 ? 'S' : ''}
+                        </span>
+                      )}
+                    </div>
+                    {actionItems.length === 0 ? (
+                      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center text-center flex-1">
+                        <CheckCircle2 className="w-8 h-8 text-green-300 mb-2" />
+                        <p className="text-sm font-medium text-slate-600">All caught up!</p>
+                        <p className="text-xs text-slate-400 mt-1">No overdue follow-ups right now.</p>
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="divide-y divide-slate-100">
+                          {actionItems.map((item) => {
+                            const borderColor = item.color === 'rose' ? 'border-l-rose-500' : item.color === 'amber' ? 'border-l-amber-400' : 'border-l-blue-400';
+                            const iconBg = item.color === 'rose' ? 'bg-rose-50 text-rose-600' : item.color === 'amber' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600';
                             return (
-                              <div key={di}
-                                className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[90px] ${
-                                  isWeekend ? 'bg-sage-tint/10' : 'bg-white'
-                                } ${isToday ? 'ring-2 ring-inset ring-sage-green' : ''} hover:bg-sage-tint/20 transition-colors`}
-                              >
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <span className={`font-inter text-xs font-semibold leading-none ${
-                                    isToday ? 'w-5 h-5 bg-sage-green text-white rounded-full flex items-center justify-center text-[10px]' : isWeekend ? 'text-sage-dark' : 'text-gray-600'
-                                  }`}>{day}</span>
+                              <div key={item.id} className={`p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors border-l-4 ${borderColor}`}>
+                                <div className={`mt-0.5 p-2 rounded-lg shrink-0 ${iconBg}`}>{item.icon}</div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-slate-800 text-sm mb-1 truncate">{item.title}</p>
+                                  <p className="text-xs text-slate-500 mb-3">{item.subtitle}</p>
                                   <button
-                                    onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' }); }}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-sage-tint rounded"
-                                    title="Add event">
-                                    <Plus className="w-3 h-3 text-sage-green" />
+                                    onClick={item.onAction}
+                                    className="text-xs font-medium bg-white border border-slate-300 shadow-sm hover:bg-slate-50 text-slate-700 py-1.5 px-4 rounded-md transition-colors">
+                                    {item.actionLabel}
                                   </button>
                                 </div>
-                                {dayBookings.slice(0, 3).map((b: any) => (
-                                  <button key={b.id}
-                                    onClick={() => { setSelectedBooking(b); setTab('calendar'); }}
-                                    className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-inter ${statusColor(b.status)} hover:opacity-80 transition-opacity`}
-                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.status}`}>
-                                    <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                                    {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
-                                  </button>
-                                ))}
-                                {dayLeads.slice(0, 2).map((l: any) => (
-                                  <button key={l.id}
-                                    onClick={() => { selectLead(l); setTab('enquiries'); }}
-                                    className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-inter ${statusColor(l.status)} hover:opacity-80 transition-opacity`}
-                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.status}`}>
-                                    <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                    {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
-                                  </button>
-                                ))}
-                                {(dayBookings.length + dayLeads.length) > 4 && (
-                                  <span className="font-inter text-[9px] text-gray-400 px-1">+{dayBookings.length + dayLeads.length - 4} more</span>
-                                )}
                               </div>
                             );
                           })}
                         </div>
-                      ));
-                    })()}
+                      </div>
+                    )}
                   </div>
-                </div>
 
-                {/* Right sidebar: upcoming events + new enquiries */}
-                <div className="w-full md:w-72 flex-shrink-0 flex flex-col md:overflow-hidden bg-white border-t md:border-t-0 border-border">
-                  {/* Upcoming confirmed events */}
-                  <div className="flex-1 overflow-auto border-b border-border">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                      <h3 className="font-inter text-sm font-semibold text-gray-900">Upcoming Events</h3>
-                      <button onClick={() => setTab('calendar')} className="font-inter text-xs text-sage-green hover:text-sage-dark transition-colors">View all</button>
+                  {/* Right col — New Enquiries */}
+                  <div className="lg:col-span-3 flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-semibold text-[#2D4A3E]">New Enquiries</h2>
+                      {newEnquiries.length > 0 && (
+                        <span className="text-[10px] font-bold bg-[#2D4A3E] text-white px-2 py-0.5 rounded-full">{newEnquiries.length}</span>
+                      )}
                     </div>
-                    {(() => {
-                      const upcoming = [...(monthBookings ?? []), ...(monthLeadEvents ?? []).filter((l: any) => l.status === 'booked' || l.status === 'confirmed')]
-                        .filter((e: any) => new Date(e.eventDate) >= new Date())
-                        .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
-                        .slice(0, 8);
-                      if (upcoming.length === 0) return (
-                        <div className="flex flex-col items-center justify-center p-6 text-center">
-                          <Calendar className="w-8 h-8 text-gray-200 mb-2" />
-                          <p className="font-inter text-xs text-gray-400">No upcoming events this month</p>
-                        </div>
-                      );
-                      return (
-                        <div className="divide-y divide-border">
-                          {upcoming.map((e: any) => {
-                            const isConfirmed = e.status === 'confirmed' || e.status === 'booked';
+                    {newEnquiries.length === 0 ? (
+                      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center text-center flex-1">
+                        <CheckCircle2 className="w-8 h-8 text-green-300 mb-2" />
+                        <p className="text-sm text-slate-400">No new enquiries</p>
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                        <div className="divide-y divide-slate-100">
+                          {newEnquiries.slice(0, 4).map((lead: any) => {
+                            const initials = `${lead.firstName?.[0] ?? ''}${lead.lastName?.[0] ?? ''}`.toUpperCase() || '?';
+                            const isUnread = !lead.readAt;
                             return (
-                              <button key={e.id}
-                                onClick={() => e._type === 'booking' ? setLocation(`/event/${e.id}`) : (setSelectedLead(e), setTab('enquiries'))}
-                                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-sage-tint/30 transition-colors text-left">
-                                <div className={`w-1.5 h-full min-h-[36px] rounded-full flex-shrink-0 mt-0.5 ${
-                                  isConfirmed ? 'bg-sage-green' : e.status === 'tentative' ? 'bg-amber-400' : e.status === 'proposal_sent' ? 'bg-violet-400' : 'bg-rose-400'
-                                }`} />
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-inter text-xs font-semibold text-gray-900 truncate">{e.firstName} {e.lastName}</div>
-                                  <div className="font-inter text-xs text-gray-500 truncate">{e.eventType || (isConfirmed ? 'Event' : 'Enquiry')}</div>
-                                  <div className="font-inter text-xs text-gray-400">{new Date(e.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}{e.guestCount ? ` · ${e.guestCount} guests` : ''}</div>
+                              <div key={lead.id} className="p-4 hover:bg-slate-50 transition-colors">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-7 h-7 rounded-full ${avatarColor(lead.firstName ?? '')} text-white flex items-center justify-center text-xs font-bold shrink-0`}>{initials}</div>
+                                    <span className="font-bold text-sm text-slate-800">{lead.firstName} {lead.lastName}</span>
+                                  </div>
+                                  {isUnread && (
+                                    <span className="text-[9px] font-bold tracking-wider text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded uppercase">Unread</span>
+                                  )}
                                 </div>
-                                <span className={`font-inter text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${
-                                  isConfirmed ? 'bg-sage-tint text-sage-dark' : e.status === 'tentative' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
-                                }`}>{isConfirmed ? 'CONFIRMED' : e.status?.replace('_',' ').toUpperCase()}</span>
-                              </button>
+                                <div className="pl-9">
+                                  {lead.eventType && <p className="text-xs font-medium text-slate-700 mb-1">{lead.eventType}</p>}
+                                  <div className="flex items-center text-[11px] text-slate-500 gap-3 mb-3">
+                                    {lead.eventDate && <span className="flex items-center"><Calendar className="w-3 h-3 mr-1" />{new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>}
+                                    {lead.guestCount && <span className="flex items-center"><Users className="w-3 h-3 mr-1" />{lead.guestCount}</span>}
+                                  </div>
+                                  <button
+                                    onClick={() => { selectLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
+                                    className="text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors">
+                                    Quick Respond
+                                  </button>
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* New enquiries */}
-                  <div className="flex-1 overflow-auto">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-inter text-sm font-semibold text-gray-900">New Enquiries</h3>
-                        {newEnquiries.length > 0 && (
-                          <span className="bg-sage-green text-white font-inter text-[10px] font-bold px-1.5 py-0.5 rounded-full">{newEnquiries.length}</span>
-                        )}
-                      </div>
-                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} className="font-inter text-xs text-sage-green hover:text-sage-dark transition-colors">View all</button>
-                    </div>
-                    {newEnquiries.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center p-6 text-center">
-                        <CheckCircle className="w-8 h-8 text-sage-green/30 mb-2" />
-                        <p className="font-inter text-xs text-gray-400">All caught up!</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-border">
-                        {newEnquiries.slice(0, 6).map((lead: any) => (
-                          <button key={lead.id} onClick={() => { selectLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
-                            className="w-full flex items-start gap-3 px-4 py-3 hover:bg-sage-tint/30 transition-colors text-left">
-                            <div className="w-2 h-2 rounded-full bg-rose-400 mt-1.5 flex-shrink-0 animate-pulse" />
-                            <div className="flex-1 min-w-0">
-                              <div className="font-inter text-xs font-semibold text-gray-900">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-inter text-xs text-gray-500 truncate">{lead.eventType || 'Event'}{lead.guestCount ? ` · ${lead.guestCount} guests` : ''}</div>
-                              {lead.eventDate && <div className="font-inter text-xs text-gray-400">{new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</div>}
-                            </div>
-                            <div className="font-inter text-[10px] text-gray-400 flex-shrink-0">
-                              {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''}
-                            </div>
-                          </button>
-                        ))}
                       </div>
                     )}
-                    {(overdueLeads ?? []).length > 0 && (
-                      <div className="border-t border-red-200 bg-red-50/50 px-4 py-2 flex items-center gap-2">
-                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                        <span className="font-inter text-xs font-semibold text-red-700">{(overdueLeads ?? []).length} overdue follow-up{(overdueLeads ?? []).length > 1 ? 's' : ''}</span>
-                        <button onClick={() => setTab('enquiries')} className="ml-auto font-inter text-xs text-red-600 hover:text-red-800 transition-colors">View →</button>
-                      </div>
+                    {newEnquiries.length > 4 && (
+                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} className="w-full text-sm text-slate-500 hover:text-[#2D4A3E] font-medium transition-colors flex items-center justify-center p-2 mt-1">
+                        View all {newEnquiries.length} enquiries <ArrowRight className="w-4 h-4 ml-1" />
+                      </button>
                     )}
                   </div>
                 </div>
+
+                {/* Activity Feed */}
+                {recentActivity.length > 0 && (
+                  <div>
+                    <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Recent Activity</h2>
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3.5 flex items-center overflow-x-auto">
+                      {recentActivity.map((l: any, i: number) => (
+                        <React.Fragment key={l.id}>
+                          <button
+                            onClick={() => { selectLead(l); setTab('enquiries'); }}
+                            className="flex items-center shrink-0 mr-6 hover:opacity-70 transition-opacity">
+                            <Activity className="w-4 h-4 text-slate-400 mr-2" />
+                            <span className="text-sm font-medium text-slate-700">
+                              {l.firstName} {l.lastName} — {(l.status ?? 'enquiry').replace('_', ' ')}
+                            </span>
+                            <span className="text-xs text-slate-400 ml-2">
+                              {l.updatedAt
+                                ? new Date(l.updatedAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })
+                                : l.createdAt
+                                ? new Date(l.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })
+                                : ''}
+                            </span>
+                          </button>
+                          {i < recentActivity.length - 1 && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-200 mr-6 shrink-0" />
+                          )}
+                        </React.Fragment>
+                      ))}
+                      <button onClick={() => setTab('enquiries')} className="shrink-0 text-sm font-medium text-[#2D4A3E] hover:underline flex items-center ml-2">
+                        View all <ChevronRight className="w-4 h-4 ml-0.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── ENQUIRIES INBOX ──────────────────────────────────────────────────── */}
           {tab === "enquiries" && (
