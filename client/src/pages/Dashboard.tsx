@@ -794,6 +794,11 @@ export default function Dashboard() {
   const [catalogItemForm, setCatalogItemForm] = useState({ name: '', description: '', pricingType: 'per_person' as 'per_person'|'per_item', price: '', unit: 'person', allergens: '' });
   const [catalogCsvText, setCatalogCsvText] = useState('');
   const [showCatalogCsvImport, setShowCatalogCsvImport] = useState(false);
+
+  // Automated task rules
+  const [showAddTaskRule, setShowAddTaskRule] = useState(false);
+  const [taskRuleForm, setTaskRuleForm] = useState({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium' });
+
   const createCatalogCategory = trpc.menuCatalog.createCategory.useMutation({
     onSuccess: () => { refetchCatalogCategories(); setShowCatalogCategoryForm(false); setCatalogCategoryForm({ name: '', type: 'food', description: '' }); toast.success('Category created!'); }
   });
@@ -4026,39 +4031,65 @@ export default function Dashboard() {
 
 
               {/* ── AUTOMATED TASKS ─────────────────────────────── */}
-              {settingsSubTab === "automated-tasks" && (
-              <div className="max-w-3xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
-                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Automated Tasks</h1>
-                </div>
-                <div className="bg-white border border-gray-200 rounded">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                    <h2 className="font-semibold text-gray-800">Automated Tasks</h2>
-                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+              {settingsSubTab === "automated-tasks" && (() => {
+                const taskRules: { name: string; trigger: string; daysOffset: string; priority: string }[] = (() => {
+                  try { return JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); } catch { return []; }
+                })();
+                const TRIGGER_LABELS: Record<string, string> = {
+                  days_before_event: 'Days before event',
+                  on_booking_confirmed: 'On booking confirmed',
+                  on_function_pack_sent: 'On function pack sent',
+                  on_enquiry_received: 'On new enquiry',
+                };
+                const saveRules = (rules: typeof taskRules) => {
+                  updateSettings.mutate({ automatedTaskRules: JSON.stringify(rules) });
+                };
+                return (
+                <div className="max-w-3xl mx-auto">
+                  <div className="flex items-center justify-between mb-6">
+                    <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Automated Tasks</h1>
                   </div>
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
-                        <th className="text-left p-3 text-xs font-medium text-gray-500">Create When</th>
-                        <th className="text-left p-3 text-xs font-medium text-gray-500">Event Type</th>
-                        <th className="p-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[{name:'Final Head Count Due',when:'Off',type:'All Events'},{name:'Menu Selections Due',when:'Off',type:'All Events'},{name:'Order Rentals',when:'Off',type:'All Events'}].map((row,i) => (
-                        <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="p-3 text-sm text-gray-700">{row.name}</td>
-                          <td className="p-3 text-sm text-gray-500">{row.when}</td>
-                          <td className="p-3 text-sm text-gray-500">{row.type}</td>
-                          <td className="p-3 text-right"><button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
+                  <p className="font-dm text-sm text-ink/60 mb-4">When a trigger fires, a task is automatically created and linked to the event.</p>
+                  <div className="bg-white border border-gray-200 rounded">
+                    <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                      <h2 className="font-semibold text-gray-800">Task Rules</h2>
+                      <button onClick={() => { setTaskRuleForm({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium' }); setShowAddTaskRule(true); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add Rule</button>
+                    </div>
+                    {taskRules.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <p className="font-dm text-sm text-ink/40">No automated task rules yet. Add one to get started.</p>
+                      </div>
+                    ) : (
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          <th className="text-left p-3 text-xs font-medium text-gray-500">Task Name</th>
+                          <th className="text-left p-3 text-xs font-medium text-gray-500">Trigger</th>
+                          <th className="text-left p-3 text-xs font-medium text-gray-500">Priority</th>
+                          <th className="p-3"></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {taskRules.map((row, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                            <td className="p-3 text-sm text-gray-700">{row.name}</td>
+                            <td className="p-3 text-sm text-gray-500">
+                              {TRIGGER_LABELS[row.trigger] || row.trigger}
+                              {row.trigger === 'days_before_event' && row.daysOffset ? ` (${row.daysOffset}d)` : ''}
+                            </td>
+                            <td className="p-3 text-sm text-gray-500 capitalize">{row.priority}</td>
+                            <td className="p-3 text-right">
+                              <button onClick={() => { const next = taskRules.filter((_, j) => j !== i); saveRules(next); }} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    )}
+                  </div>
                 </div>
-              </div>
-              )}
+                );
+              })()}
 
               {/* ── GROUP SETTINGS ──────────────────────────────── */}
               {settingsSubTab === "group-settings" && (
@@ -4979,14 +5010,10 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h2 className="font-semibold text-gray-800">Current Plan</h2>
-                      <p className="text-sm text-gray-500 mt-1">Free Starter Plan</p>
+                      <p className="text-sm text-forest font-semibold mt-1">VenueFlowHQ — Full Access</p>
+                      <p className="text-xs text-gray-400 mt-0.5">All features unlocked</p>
                     </div>
-                    <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-6 py-2">UPGRADE</button>
-                  </div>
-                  <div className="border-t border-gray-100 pt-4">
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Payment Method</h3>
-                    <p className="text-sm text-gray-400">No payment method on file.</p>
-                    <button className="mt-3 border border-gray-300 text-gray-700 text-sm px-4 py-1.5 rounded hover:bg-gray-50">Add Payment Method</button>
+                    <span className="bg-forest/10 text-forest text-xs font-bebas tracking-widest px-4 py-2 rounded">ACTIVE</span>
                   </div>
                 </div>
               </div>
@@ -4997,6 +5024,55 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {/* Add Task Rule Modal */}
+      <Dialog open={showAddTaskRule} onOpenChange={setShowAddTaskRule}>
+        <DialogContent className="max-w-md rounded-none border border-gold/30">
+          <DialogHeader>
+            <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">
+              <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add Task Rule</DialogTitle>
+            </div>
+          </DialogHeader>
+          <form onSubmit={e => {
+            e.preventDefault();
+            if (!taskRuleForm.name.trim()) return;
+            const existing: any[] = (() => { try { return JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); } catch { return []; } })();
+            const next = [...existing, { name: taskRuleForm.name.trim(), trigger: taskRuleForm.trigger, daysOffset: taskRuleForm.daysOffset, priority: taskRuleForm.priority }];
+            updateSettings.mutate({ automatedTaskRules: JSON.stringify(next) }, { onSuccess: () => { refetchSettings(); setShowAddTaskRule(false); toast.success('Task rule added!'); } });
+          }} className="space-y-3">
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TASK NAME *</label>
+              <Input required value={taskRuleForm.name} onChange={e => setTaskRuleForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Confirm final guest numbers" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+            </div>
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TRIGGER</label>
+              <select value={taskRuleForm.trigger} onChange={e => setTaskRuleForm(f => ({ ...f, trigger: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
+                <option value="days_before_event">Days before event</option>
+                <option value="on_booking_confirmed">On booking confirmed</option>
+                <option value="on_function_pack_sent">On function pack sent</option>
+                <option value="on_enquiry_received">On new enquiry received</option>
+              </select>
+            </div>
+            {taskRuleForm.trigger === 'days_before_event' && (
+              <div>
+                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DAYS BEFORE EVENT</label>
+                <Input type="number" min="1" value={taskRuleForm.daysOffset} onChange={e => setTaskRuleForm(f => ({ ...f, daysOffset: e.target.value }))} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+              </div>
+            )}
+            <div>
+              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRIORITY</label>
+              <select value={taskRuleForm.priority} onChange={e => setTaskRuleForm(f => ({ ...f, priority: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <button type="submit" disabled={updateSettings.isPending} className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
+              {updateSettings.isPending ? 'SAVING...' : 'ADD RULE'}
+            </button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Space Modal */}
       <Dialog open={showAddSpace} onOpenChange={setShowAddSpace}>

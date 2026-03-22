@@ -56,6 +56,13 @@
       "when": 1773612617947,
       "tag": "0007_plain_shinobi_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1774151213000,
+      "tag": "0008_wealthy_fantastic_four",
+      "breakpoints": true
     }
   ]
 }

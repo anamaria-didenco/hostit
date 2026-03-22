@@ -91,6 +91,7 @@ export const appRouter = router({
         customStatuses: z.string().optional(),
         customDietaryOptions: z.string().optional(),
         customSetupTemplates: z.string().optional(),
+        automatedTaskRules: z.string().optional(),
         formFont: z.string().optional(),
         formGalleryImages: z.string().optional(),
         customFormFields: z.string().optional(),

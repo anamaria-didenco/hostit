@@ -12,7 +12,8 @@ import { handleFloorPlanPdf } from "../floorPlanPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { storagePut } from "../storage";
+import path from "path";
+import fs from "fs";
 import { sdk } from "./sdk";
 import { upsertUser } from "../db";
 import { ENV } from "./env";
@@ -112,15 +113,22 @@ async function startServer() {
     }).catch(next);
   });
 
-  // Image upload endpoint (for floor plan backgrounds, venue banners, etc.)
+  // Serve uploaded files statically
+  const uploadsDir = path.join(process.cwd(), "public", "uploads");
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  app.use("/uploads", express.static(uploadsDir));
+
+  // Image upload endpoint — saves to local filesystem
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
   app.post("/api/upload-image", upload.single("file"), async (req, res) => {
     try {
       const multerReq = req as express.Request & { file?: Express.Multer.File };
       if (!multerReq.file) { res.status(400).json({ error: "No file" }); return; }
-      const ext = multerReq.file.originalname.split(".").pop() ?? "jpg";
-      const key = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { url } = await storagePut(key, multerReq.file.buffer, multerReq.file.mimetype);
+      const ext = (multerReq.file.originalname.split(".").pop() ?? "jpg").toLowerCase();
+      const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const filePath = path.join(uploadsDir, filename);
+      fs.writeFileSync(filePath, multerReq.file.buffer);
+      const url = `/uploads/${filename}`;
       res.json({ url });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
