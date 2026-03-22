@@ -1170,7 +1170,7 @@ export default function Dashboard() {
         {/* No sidebar — full-width main content */}
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto pb-16 md:pb-0">
+        <main className={`flex-1 ${tab === "enquiries" ? "overflow-hidden" : "overflow-auto pb-16 md:pb-0"}`}>
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
           {tab === "overview" && (
