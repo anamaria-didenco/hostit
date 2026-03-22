@@ -119,9 +119,11 @@ export default function LeadForm() {
   const formSubtitle = venue?.leadFormSubtitle ?? "Tell us about your event and we'll get back to you within 24 hours.";
   const primaryColor = venue?.primaryColor ?? "#2D4A3E";
   const logoUrl      = (venue as any)?.logoUrl;
+  const logoScale    = (venue as any)?.logoScale ?? 100;
   const formFont     = (venue as any)?.formFont ?? 'inter';
   const fontFamily   = FONT_MAP[formFont] ?? FONT_MAP.inter;
   const textOnPrimary = isLight(primaryColor) ? "#1a1a1a" : "#ffffff";
+  const galleryPhotoHeight = (venue as any)?.galleryPhotoHeight ?? 128;
 
   // Parse gallery images
   let galleryImages: string[] = [];
@@ -205,8 +207,8 @@ export default function LeadForm() {
           {/* Logo */}
           <div className="flex items-center justify-center mb-5">
             {logoUrl ? (
-              <img src={logoUrl} alt={venueName} className="h-16 w-auto object-contain"
-                style={isLight(primaryColor) ? {} : { filter: 'brightness(0) invert(1)' }} />
+              <img src={logoUrl} alt={venueName}
+                style={{ height: `${Math.round(logoScale * 0.64)}px`, width: 'auto', objectFit: 'contain', maxWidth: '80%', ...(isLight(primaryColor) ? {} : { filter: 'brightness(0) invert(1)' }) }} />
             ) : (
               <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold"
                 style={{ backgroundColor: `${textOnPrimary}22`, color: textOnPrimary }}>
@@ -242,7 +244,8 @@ export default function LeadForm() {
         <div className="w-full overflow-x-auto flex gap-2 px-4 py-3 bg-white border-b border-gray-100">
           {galleryImages.map((img, i) => (
             <img key={i} src={img} alt={`Venue ${i + 1}`}
-              className="h-32 w-auto object-cover flex-shrink-0 rounded-sm" />
+              style={{ height: `${galleryPhotoHeight}px`, width: 'auto', objectFit: 'cover', flexShrink: 0 }}
+              className="rounded-sm" />
           ))}
         </div>
       )}

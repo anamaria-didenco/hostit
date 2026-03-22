@@ -986,6 +986,8 @@ export default function Dashboard() {
         coverImageUrl: vs?.coverImageUrl ?? "",
         formFont: vs?.formFont ?? "inter",
         formGalleryImages: vs?.formGalleryImages ?? "[]",
+        logoScale: vs?.logoScale ?? 100,
+        galleryPhotoHeight: vs?.galleryPhotoHeight ?? 128,
         operatingHours: vs?.operatingHours ?? JSON.stringify([
           { day: "Sunday", enabled: true, start: "08:00", end: "22:00" },
           { day: "Monday", enabled: true, start: "08:00", end: "22:00" },
@@ -3617,32 +3619,49 @@ export default function Dashboard() {
                   <h2 className="font-bebas text-xs tracking-widest text-sage">BRANDING</h2>
 
                   {/* Logo */}
-                  <div className="flex items-start gap-4">
-                    <div className="w-20 h-20 rounded border-2 border-dashed border-gold/40 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
-                      {settingsForm.logoUrl ? (
-                        <img src={settingsForm.logoUrl} alt="logo" className="w-full h-full object-contain" />
-                      ) : (
-                        <span className="text-[10px] text-gray-400 text-center px-1">No logo</span>
-                      )}
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-4">
+                      <div className="w-24 h-24 rounded border-2 border-dashed border-gold/40 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0" style={{ padding: '4px' }}>
+                        {settingsForm.logoUrl ? (
+                          <img src={settingsForm.logoUrl} alt="logo" style={{ width: `${settingsForm.logoScale ?? 100}%`, height: `${settingsForm.logoScale ?? 100}%`, objectFit: 'contain' }} />
+                        ) : (
+                          <span className="text-[10px] text-gray-400 text-center px-1">No logo</span>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">LOGO</label>
+                        <input type="file" accept="image/*"
+                          onChange={async e => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            const fd = new FormData(); fd.append('file', file);
+                            const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                            const { url } = await res.json();
+                            setSettingsForm((f: any) => ({ ...f, logoUrl: url }));
+                            toast.success('Logo uploaded!');
+                          }}
+                          className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
+                        <p className="font-dm text-xs text-ink/40 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
+                        {settingsForm.logoUrl && (
+                          <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, logoUrl: '' }))}
+                            className="mt-1 font-dm text-xs text-red-400 hover:text-red-600">Remove logo</button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-1">LOGO</label>
-                      <input type="file" accept="image/*"
-                        onChange={async e => {
-                          const file = e.target.files?.[0]; if (!file) return;
-                          const fd = new FormData(); fd.append('file', file);
-                          const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                          const { url } = await res.json();
-                          setSettingsForm((f: any) => ({ ...f, logoUrl: url }));
-                          toast.success('Logo uploaded!');
-                        }}
-                        className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
-                      <p className="font-dm text-xs text-ink/40 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
-                      {settingsForm.logoUrl && (
-                        <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, logoUrl: '' }))}
-                          className="mt-1 font-dm text-xs text-red-400 hover:text-red-600">Remove logo</button>
-                      )}
-                    </div>
+                    {settingsForm.logoUrl && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-bebas text-xs tracking-widest text-sage">LOGO SIZE</label>
+                          <span className="font-dm text-xs text-ink/50">{settingsForm.logoScale ?? 100}%</span>
+                        </div>
+                        <input type="range" min={30} max={200} step={5}
+                          value={settingsForm.logoScale ?? 100}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, logoScale: Number(e.target.value) }))}
+                          className="w-full accent-sage-green" />
+                        <div className="flex justify-between font-dm text-[10px] text-ink/30 mt-0.5">
+                          <span>Smaller</span><span>Larger</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Colour + Font row */}
@@ -3676,7 +3695,11 @@ export default function Dashboard() {
                   {/* Live preview */}
                   <div className="border border-gold/20 overflow-hidden rounded">
                     <div className="px-6 py-5 text-center" style={{ backgroundColor: settingsForm.primaryColor ?? '#2D4A3E' }}>
-                      {settingsForm.logoUrl && <img src={settingsForm.logoUrl} alt="logo" className="h-10 w-auto object-contain mx-auto mb-2" />}
+                      {settingsForm.logoUrl && (
+                        <div className="flex justify-center mb-2">
+                          <img src={settingsForm.logoUrl} alt="logo" style={{ height: `${Math.round((settingsForm.logoScale ?? 100) * 0.4)}px`, width: 'auto', objectFit: 'contain', maxWidth: '100%' }} />
+                        </div>
+                      )}
                       <div className="text-base font-bold text-white">{venueSettings?.name ?? 'Your Venue'}</div>
                       <div className="text-sm text-white/80 mt-0.5">{settingsForm.leadFormTitle || 'Book Your Event'}</div>
                     </div>
@@ -3693,13 +3716,30 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <p className="font-dm text-xs text-ink/50">Photos display as a gallery strip on your public contact form.</p>
+
+                  {/* Photo height slider */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bebas text-xs tracking-widest text-sage">PHOTO HEIGHT</label>
+                      <span className="font-dm text-xs text-ink/50">{settingsForm.galleryPhotoHeight ?? 128}px</span>
+                    </div>
+                    <input type="range" min={60} max={320} step={8}
+                      value={settingsForm.galleryPhotoHeight ?? 128}
+                      onChange={e => setSettingsForm((f: any) => ({ ...f, galleryPhotoHeight: Number(e.target.value) }))}
+                      className="w-full accent-sage-green" />
+                    <div className="flex justify-between font-dm text-[10px] text-ink/30 mt-0.5">
+                      <span>Shorter</span><span>Taller</span>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-3 gap-3">
                     {(() => {
                       let imgs: string[] = [];
                       try { imgs = JSON.parse(settingsForm.formGalleryImages || '[]'); } catch {}
+                      const ph = settingsForm.galleryPhotoHeight ?? 128;
                       return [
                         ...imgs.map((url, i) => (
-                          <div key={i} className="relative group aspect-video bg-gray-100 overflow-hidden border border-gold/20">
+                          <div key={i} className="relative group bg-gray-100 overflow-hidden border border-gold/20" style={{ height: `${ph}px` }}>
                             <img src={url} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover" />
                             <button type="button"
                               onClick={() => {
@@ -3712,7 +3752,7 @@ export default function Dashboard() {
                           </div>
                         )),
                         imgs.length < 6 ? (
-                          <label key="add" className="aspect-video bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors">
+                          <label key="add" className="bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors" style={{ height: `${ph}px` }}>
                             <Upload className="w-5 h-5 text-ink/30 mb-1" />
                             <span className="font-dm text-xs text-ink/40">Upload photo</span>
                             <input type="file" accept="image/*" className="hidden"

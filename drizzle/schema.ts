@@ -96,6 +96,8 @@ export const venueSettings = pgTable("venue_settings", {
   formFont: varchar("formFont", { length: 50 }).default("inter"),
   formGalleryImages: text("formGalleryImages"),
   customFormFields: text("customFormFields"),
+  logoScale: integer("logoScale").default(100),
+  galleryPhotoHeight: integer("galleryPhotoHeight").default(128),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

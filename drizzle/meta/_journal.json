@@ -63,6 +63,13 @@
       "when": 1774151213000,
       "tag": "0008_wealthy_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1774164341080,
+      "tag": "0009_exotic_menace",
+      "breakpoints": true
     }
   ]
 }
