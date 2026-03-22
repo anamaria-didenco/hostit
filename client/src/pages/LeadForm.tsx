@@ -64,6 +64,7 @@ function isLight(hex: string) {
 export default function LeadForm() {
   const { slug } = useParams<{ slug?: string }>();
   const [submitted, setSubmitted] = useState(false);
+  const isEmbed = new URLSearchParams(window.location.search).get("embed") === "1";
 
   const { data: venueBySlug, isLoading: loadingBySlug } = trpc.venue.getBySlug.useQuery(
     { slug: slug ?? "" },
@@ -199,48 +200,52 @@ export default function LeadForm() {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#f8f5f0", fontFamily }}>
+    <div className={isEmbed ? "" : "min-h-screen"} style={{ backgroundColor: "#f8f5f0", fontFamily }}>
 
-      {/* ── Venue Header ─────────────────────────────────────────── */}
-      <div style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
-        <div className="max-w-2xl mx-auto px-6 py-12 text-center">
-          {/* Logo */}
-          <div className="flex items-center justify-center mb-5">
-            {logoUrl ? (
-              <img src={logoUrl} alt={venueName}
-                style={{ height: `${Math.round(logoScale * 0.64)}px`, width: 'auto', objectFit: 'contain', maxWidth: '80%', ...(isLight(primaryColor) ? {} : { filter: 'brightness(0) invert(1)' }) }} />
-            ) : (
-              <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold"
-                style={{ backgroundColor: `${textOnPrimary}22`, color: textOnPrimary }}>
-                {venueName.charAt(0).toUpperCase()}
+      {/* ── Venue Header (hidden in embed mode) ──────────────────── */}
+      {!isEmbed && (
+        <>
+          <div style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
+            <div className="max-w-2xl mx-auto px-6 py-12 text-center">
+              {/* Logo */}
+              <div className="flex items-center justify-center mb-5">
+                {logoUrl ? (
+                  <img src={logoUrl} alt={venueName}
+                    style={{ height: `${Math.round(logoScale * 0.64)}px`, width: 'auto', objectFit: 'contain', maxWidth: '80%', ...(isLight(primaryColor) ? {} : { filter: 'brightness(0) invert(1)' }) }} />
+                ) : (
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold"
+                    style={{ backgroundColor: `${textOnPrimary}22`, color: textOnPrimary }}>
+                    {venueName.charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          {/* Decorative rule */}
-          <div className="flex items-center gap-3 justify-center mb-6">
-            <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
-            <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: `${textOnPrimary}88` }} />
-            <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
-          </div>
-          <div className="text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: textOnPrimary }}>{venueName}</div>
-          <h1 className="text-xl italic mb-3" style={{ color: `${textOnPrimary}cc` }}>{formTitle}</h1>
-          <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}99` }}>{formSubtitle}</p>
-          {/* Venue contact info */}
-          {(venue?.city || venue?.phone || venue?.email) && (
-            <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
-              {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
-              {venue.phone && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Phone className="w-3 h-3" /> {venue.phone}</div>}
-              {venue.email && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Mail className="w-3 h-3" /> {venue.email}</div>}
+              {/* Decorative rule */}
+              <div className="flex items-center gap-3 justify-center mb-6">
+                <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
+                <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: `${textOnPrimary}88` }} />
+                <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
+              </div>
+              <div className="text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: textOnPrimary }}>{venueName}</div>
+              <h1 className="text-xl italic mb-3" style={{ color: `${textOnPrimary}cc` }}>{formTitle}</h1>
+              <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}99` }}>{formSubtitle}</p>
+              {/* Venue contact info */}
+              {(venue?.city || venue?.phone || venue?.email) && (
+                <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
+                  {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
+                  {venue.phone && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Phone className="w-3 h-3" /> {venue.phone}</div>}
+                  {venue.email && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Mail className="w-3 h-3" /> {venue.email}</div>}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      {/* Accent band */}
-      <div className="h-1" style={{ backgroundColor: `${primaryColor}66` }} />
+          {/* Accent band */}
+          <div className="h-1" style={{ backgroundColor: `${primaryColor}66` }} />
+        </>
+      )}
 
       {/* ── Gallery strip ─────────────────────────────────────── */}
-      {galleryImages.length > 0 && (
+      {!isEmbed && galleryImages.length > 0 && (
         <div className="w-full overflow-x-auto flex gap-2 px-4 py-3 bg-white border-b border-gray-100">
           {galleryImages.map((img, i) => (
             <img key={i} src={img} alt={`Venue ${i + 1}`}

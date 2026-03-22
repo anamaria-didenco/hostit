@@ -46,12 +46,12 @@
    VenueFlowHQ — Sage & White Design System
    ─────────────────────────────────────────────────────────────────────────────
    Primary pairing:
-     Sage Green   #8D957E  oklch(0.590 0.040 140)  → primary accent, CTAs, active
+     Sage Green   #8D957E  oklch(0.520 0.110 148)  → primary accent, CTAs, active
      White        #FFFFFF  oklch(1.000 0.000 0)     → all surfaces, cards, nav
 
    Supporting palette:
-     Sage Light   #B8C0AD  oklch(0.760 0.030 140)   → tints, hover fills
-     Sage Dark    #6e7862  oklch(0.490 0.042 140)   → hover/pressed states
+     Sage Light   #B8C0AD  oklch(0.730 0.070 148)   → tints, hover fills
+     Sage Dark    #6e7862  oklch(0.430 0.100 148)   → hover/pressed states
      Sage Tint    #F0F2EE  oklch(0.960 0.012 140)   → subtle fills, page bg
      Charcoal     #2D3028  oklch(0.210 0.020 140)   → primary text (warm dark)
      Mid Grey     #6B7280  oklch(0.520 0.010 220)   → secondary text, borders
@@ -75,7 +75,7 @@
   --popover-foreground:     oklch(0.210 0.020 140);
 
   /* ── Primary = Sage Green ── */
-  --primary:                oklch(0.590 0.040 140);   /* #8D957E */
+  --primary:                oklch(0.520 0.110 148);   /* #8D957E */
   --primary-foreground:     oklch(1.000 0.000 0);
 
   /* Secondary = pale sage fill */
@@ -88,7 +88,7 @@
 
   /* Accent = sage tint */
   --accent:                 oklch(0.940 0.018 140);
-  --accent-foreground:      oklch(0.490 0.042 140);   /* Sage Dark */
+  --accent-foreground:      oklch(0.430 0.100 148);   /* Sage Dark */
 
   /* ── Utility ── */
   --destructive:            oklch(0.580 0.200 25);
@@ -97,10 +97,10 @@
   /* Borders = light sage-grey */
   --border:                 oklch(0.900 0.012 140);
   --input:                  oklch(0.950 0.008 140);
-  --ring:                   oklch(0.590 0.040 140);   /* Sage Green focus ring */
+  --ring:                   oklch(0.520 0.110 148);   /* Sage Green focus ring */
 
   /* ── Charts ── */
-  --chart-1: oklch(0.590 0.040 140);   /* Sage Green */
+  --chart-1: oklch(0.520 0.110 148);   /* Sage Green */
   --chart-2: oklch(0.460 0.120 40);    /* Burnt Sienna (supporting) */
   --chart-3: oklch(0.560 0.022 220);   /* Stormy Sky (supporting) */
   --chart-4: oklch(0.720 0.140 65);    /* Warm amber */
@@ -109,12 +109,12 @@
   /* ── Sidebar = white with sage border ── */
   --sidebar:                    oklch(1.000 0.000 0);
   --sidebar-foreground:         oklch(0.210 0.020 140);
-  --sidebar-primary:            oklch(0.590 0.040 140);
+  --sidebar-primary:            oklch(0.520 0.110 148);
   --sidebar-primary-foreground: oklch(1.000 0.000 0);
   --sidebar-accent:             oklch(0.940 0.018 140);
-  --sidebar-accent-foreground:  oklch(0.490 0.042 140);
+  --sidebar-accent-foreground:  oklch(0.430 0.100 148);
   --sidebar-border:             oklch(0.900 0.012 140);
-  --sidebar-ring:               oklch(0.590 0.040 140);
+  --sidebar-ring:               oklch(0.520 0.110 148);
 }
 
 /* ── Base Layer ──────────────────────────────────────────────────────────── */
@@ -170,7 +170,7 @@
     letter-spacing: 0.06em;
     font-size: 0.7rem;
     text-transform: uppercase;
-    color: oklch(0.590 0.040 140);  /* Sage Green for section labels */
+    color: oklch(0.520 0.110 148);  /* Sage Green for section labels */
   }
 
   label {
@@ -215,18 +215,18 @@
   .font-pacifico  { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-style: italic; font-weight: 600; }
 
   /* ── Sage Green palette (text) ── */
-  .text-sage-green  { color: oklch(0.590 0.040 140); }
-  .text-sage-dark   { color: oklch(0.490 0.042 140); }
-  .text-sage-light  { color: oklch(0.760 0.030 140); }
+  .text-sage-green  { color: oklch(0.520 0.110 148); }
+  .text-sage-dark   { color: oklch(0.430 0.100 148); }
+  .text-sage-light  { color: oklch(0.730 0.070 148); }
 
   /* Legacy aliases → all map to sage/charcoal roles */
-  .text-forest    { color: oklch(0.590 0.040 140); }
-  .text-teal      { color: oklch(0.590 0.040 140); }
-  .text-burgundy  { color: oklch(0.590 0.040 140); }
-  .text-terra     { color: oklch(0.590 0.040 140); }
-  .text-blue      { color: oklch(0.590 0.040 140); }
-  .text-gold      { color: oklch(0.590 0.040 140); }
-  .text-sienna    { color: oklch(0.590 0.040 140); }
+  .text-forest    { color: oklch(0.520 0.110 148); }
+  .text-teal      { color: oklch(0.520 0.110 148); }
+  .text-burgundy  { color: oklch(0.520 0.110 148); }
+  .text-terra     { color: oklch(0.520 0.110 148); }
+  .text-blue      { color: oklch(0.520 0.110 148); }
+  .text-gold      { color: oklch(0.520 0.110 148); }
+  .text-sienna    { color: oklch(0.520 0.110 148); }
   .text-sage      { color: oklch(0.520 0.010 220); }
   .text-stone     { color: oklch(0.520 0.010 220); }
   .text-taupe     { color: oklch(0.520 0.010 220); }
@@ -241,22 +241,22 @@
   .text-amber     { color: oklch(0.720 0.140 65); }
 
   /* ── Sage Green palette (bg) ── */
-  .bg-sage-green  { background-color: oklch(0.590 0.040 140); }
-  .bg-sage-dark   { background-color: oklch(0.490 0.042 140); }
+  .bg-sage-green  { background-color: oklch(0.520 0.110 148); }
+  .bg-sage-dark   { background-color: oklch(0.430 0.100 148); }
   .bg-sage-tint   { background-color: oklch(0.940 0.018 140); }
-  .bg-sage-light  { background-color: oklch(0.760 0.030 140); }
+  .bg-sage-light  { background-color: oklch(0.730 0.070 148); }
 
   /* Legacy aliases */
-  .bg-forest      { background-color: oklch(0.590 0.040 140); }
-  .bg-forest-dark { background-color: oklch(0.490 0.042 140); }
-  .bg-teal        { background-color: oklch(0.590 0.040 140); }
-  .bg-teal-dark   { background-color: oklch(0.490 0.042 140); }
-  .bg-terra       { background-color: oklch(0.590 0.040 140); }
-  .bg-burgundy    { background-color: oklch(0.590 0.040 140); }
-  .bg-burg-dark   { background-color: oklch(0.490 0.042 140); }
-  .bg-blue        { background-color: oklch(0.590 0.040 140); }
-  .bg-gold        { background-color: oklch(0.590 0.040 140); }
-  .bg-sienna      { background-color: oklch(0.590 0.040 140); }
+  .bg-forest      { background-color: oklch(0.520 0.110 148); }
+  .bg-forest-dark { background-color: oklch(0.430 0.100 148); }
+  .bg-teal        { background-color: oklch(0.520 0.110 148); }
+  .bg-teal-dark   { background-color: oklch(0.430 0.100 148); }
+  .bg-terra       { background-color: oklch(0.520 0.110 148); }
+  .bg-burgundy    { background-color: oklch(0.520 0.110 148); }
+  .bg-burg-dark   { background-color: oklch(0.430 0.100 148); }
+  .bg-blue        { background-color: oklch(0.520 0.110 148); }
+  .bg-gold        { background-color: oklch(0.520 0.110 148); }
+  .bg-sienna      { background-color: oklch(0.520 0.110 148); }
   .bg-sienna-tint { background-color: oklch(0.940 0.018 140); }
   .bg-cream       { background-color: oklch(1.000 0.000 0); }
   .bg-ivory       { background-color: oklch(1.000 0.000 0); }
@@ -271,16 +271,16 @@
   .bg-amber       { background-color: oklch(0.720 0.140 65); }
 
   /* ── Sage Green palette (border) ── */
-  .border-sage-green { border-color: oklch(0.590 0.040 140); }
-  .border-sage-dark  { border-color: oklch(0.490 0.042 140); }
+  .border-sage-green { border-color: oklch(0.520 0.110 148); }
+  .border-sage-dark  { border-color: oklch(0.430 0.100 148); }
 
   /* Legacy aliases */
-  .border-forest   { border-color: oklch(0.590 0.040 140); }
-  .border-teal     { border-color: oklch(0.590 0.040 140); }
-  .border-terra    { border-color: oklch(0.590 0.040 140); }
-  .border-burgundy { border-color: oklch(0.590 0.040 140); }
+  .border-forest   { border-color: oklch(0.520 0.110 148); }
+  .border-teal     { border-color: oklch(0.520 0.110 148); }
+  .border-terra    { border-color: oklch(0.520 0.110 148); }
+  .border-burgundy { border-color: oklch(0.520 0.110 148); }
   .border-gold     { border-color: oklch(0.590 0.040 140 / 0.25); }
-  .border-sienna   { border-color: oklch(0.590 0.040 140); }
+  .border-sienna   { border-color: oklch(0.520 0.110 148); }
   .border-stormy   { border-color: oklch(0.560 0.022 220); }
   .border-ink      { border-color: oklch(0.210 0.020 140); }
   .border-amber    { border-color: oklch(0.720 0.140 65); }
@@ -356,13 +356,13 @@
     background-color: oklch(0.940 0.018 140);  /* sage tint */
   }
   .nav-item.active {
-    color: oklch(0.490 0.042 140);   /* Sage Dark */
+    color: oklch(0.430 0.100 148);   /* Sage Dark */
     background-color: oklch(0.940 0.018 140);
     font-weight: 600;
   }
 
   /* ── Status pill badges ── */
-  .status-new       { background: oklch(0.940 0.018 140); color: oklch(0.490 0.042 140); }
+  .status-new       { background: oklch(0.940 0.018 140); color: oklch(0.430 0.100 148); }
   .status-quoted    { background: oklch(0.940 0.040 65 / 0.50); color: oklch(0.500 0.120 65); }
   .status-confirmed { background: oklch(0.940 0.018 140); color: oklch(0.380 0.050 140); }
   .status-cancelled { background: oklch(0.940 0.008 220); color: oklch(0.520 0.010 220); }
@@ -378,7 +378,7 @@
 
   /* ── Primary button = Sage Green ── */
   .btn-teal, .btn-forest {
-    background-color: oklch(0.590 0.040 140);
+    background-color: oklch(0.520 0.110 148);
     color: oklch(1.000 0.000 0);
     border-radius: 0.625rem;
     font-family: 'Inter', system-ui, sans-serif;
@@ -387,13 +387,13 @@
     letter-spacing: -0.01em;
     transition: background-color 0.15s ease, transform 0.1s ease;
   }
-  .btn-teal:hover, .btn-forest:hover { background-color: oklch(0.490 0.042 140); }
+  .btn-teal:hover, .btn-forest:hover { background-color: oklch(0.430 0.100 148); }
   .btn-teal:active, .btn-forest:active { transform: scale(0.98); }
 
   /* ── Outline button = Sage Green outline ── */
   .btn-terra-outline, .btn-gold-outline {
     background-color: oklch(1.000 0.000 0);
-    color: oklch(0.490 0.042 140);
+    color: oklch(0.430 0.100 148);
     border: 1.5px solid oklch(0.590 0.040 140 / 0.50);
     border-radius: 0.625rem;
     font-family: 'Inter', system-ui, sans-serif;
@@ -417,7 +417,7 @@
   }
   .input-paradiso:focus, .input-dante:focus {
     outline: none;
-    border-color: oklch(0.590 0.040 140);
+    border-color: oklch(0.520 0.110 148);
     box-shadow: 0 0 0 3px oklch(0.590 0.040 140 / 0.15);
   }
 
@@ -466,25 +466,25 @@
   --card-foreground:        oklch(0.210 0.020 140);
   --popover:                oklch(1.000 0.000 0);
   --popover-foreground:     oklch(0.210 0.020 140);
-  --primary:                oklch(0.590 0.040 140);
+  --primary:                oklch(0.520 0.110 148);
   --primary-foreground:     oklch(1.000 0.000 0);
   --secondary:              oklch(0.950 0.012 140);
   --secondary-foreground:   oklch(0.210 0.020 140);
   --muted:                  oklch(0.940 0.008 140);
   --muted-foreground:       oklch(0.520 0.010 220);
   --accent:                 oklch(0.940 0.018 140);
-  --accent-foreground:      oklch(0.490 0.042 140);
+  --accent-foreground:      oklch(0.430 0.100 148);
   --border:                 oklch(0.900 0.012 140);
   --input:                  oklch(0.950 0.008 140);
-  --ring:                   oklch(0.590 0.040 140);
+  --ring:                   oklch(0.520 0.110 148);
   --sidebar:                oklch(1.000 0.000 0);
   --sidebar-foreground:     oklch(0.210 0.020 140);
-  --sidebar-primary:        oklch(0.590 0.040 140);
+  --sidebar-primary:        oklch(0.520 0.110 148);
   --sidebar-primary-foreground: oklch(1.000 0.000 0);
   --sidebar-accent:         oklch(0.940 0.018 140);
-  --sidebar-accent-foreground: oklch(0.490 0.042 140);
+  --sidebar-accent-foreground: oklch(0.430 0.100 148);
   --sidebar-border:         oklch(0.900 0.012 140);
-  --sidebar-ring:           oklch(0.590 0.040 140);
+  --sidebar-ring:           oklch(0.520 0.110 148);
   /* Brand tokens */
   --brand-primary:   #8D957E;
   --brand-accent:    #6e7862;

@@ -179,7 +179,7 @@ export default function FloorPlanEditor({
   const [customForm, setCustomForm] = useState({ label: "", w: 80, h: 80, color: "#5b7c6c", seats: 0, round: false });
 
   // Sidebar tab
-  const [sidebarTab, setSidebarTab] = useState<"elements" | "inventory">("elements");
+  const [sidebarTab, setSidebarTab] = useState<"elements" | "inventory">("inventory");
 
   // Venue furniture inventory
   const { data: inventory } = trpc.furnitureInventory.list.useQuery(undefined, { enabled: !readOnly });
@@ -399,17 +399,17 @@ export default function FloorPlanEditor({
           <div className="flex border-b border-border flex-shrink-0">
             <button
               type="button"
-              onClick={() => setSidebarTab("elements")}
-              className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "elements" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/40 hover:text-ink/70"}`}
-            >
-              ELEMENTS
-            </button>
-            <button
-              type="button"
               onClick={() => setSidebarTab("inventory")}
               className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "inventory" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/40 hover:text-ink/70"}`}
             >
               INVENTORY
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarTab("elements")}
+              className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "elements" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/40 hover:text-ink/70"}`}
+            >
+              ELEMENTS
             </button>
           </div>
 

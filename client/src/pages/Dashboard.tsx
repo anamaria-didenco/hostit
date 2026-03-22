@@ -471,18 +471,17 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
   const items = [
     { id: "venue", label: "Venue" },
     { id: "lead-form", label: "Contact Form" },
+    { id: "floor-plans", label: "Floor Plans" },
     { id: "integrations", label: "Integrations" },
     { id: "menu", label: "Menu & Catalogue" },
-    { id: "templates", label: "Proposal" },
+    { id: "templates", label: "Templates" },
     { id: "email", label: "Email" },
     { id: "automated-tasks", label: "Automated Tasks" },
     { id: "taxes", label: "Taxes & Fees" },
     { id: "team", label: "Team" },
     { id: "billing", label: "Billing" },
-    { id: "floor-plans", label: "Floor Plans" },
     { id: "group-settings", label: "Group Settings" },
     { id: "statuses", label: "Enquiry Statuses" },
-    { id: "profile", label: "Profile" },
   ];
   const currentLabel = items.find(i => i.id === settingsSubTab)?.label ?? 'Settings';
   return (
@@ -3884,7 +3883,7 @@ export default function Dashboard() {
               {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
               {settingsSubTab === "lead-form" && (
               <div className="max-w-3xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-4">
                   <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Contact Form</h1>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Form link copied!'); }}
@@ -3897,6 +3896,27 @@ export default function Dashboard() {
                     </a>
                   </div>
                 </div>
+                {/* Iframe embed code */}
+                {venueSettings?.slug && (() => {
+                  const embedUrl = `${window.location.origin}/enquire/${venueSettings.slug}?embed=1`;
+                  const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="100%"\n  height="700"\n  frameborder="0"\n  style="border:none; border-radius:12px;"\n  title="Event Enquiry Form"\n></iframe>`;
+                  return (
+                    <div className="mb-6 bg-sage-tint border border-sage-green/20 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <p className="font-inter font-semibold text-sm text-gray-900">Embed on your website</p>
+                          <p className="font-inter text-xs text-gray-500 mt-0.5">Copy this code and paste it into your website HTML where you want the form to appear.</p>
+                        </div>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(iframeCode); toast.success('Embed code copied!'); }}
+                          className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-2 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors flex-shrink-0 ml-4">
+                          <Copy className="w-3.5 h-3.5" /> Copy Code
+                        </button>
+                      </div>
+                      <pre className="bg-white border border-border rounded-lg p-3 text-xs font-mono text-gray-700 overflow-x-auto whitespace-pre-wrap break-all select-all">{iframeCode}</pre>
+                    </div>
+                  );
+                })()}
 
               {settingsForm && (
               <form onSubmit={e => {

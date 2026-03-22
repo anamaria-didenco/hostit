@@ -159,7 +159,6 @@ export default function RunsheetBuilder() {
   const [floorPlanSectionOpen, setFloorPlanSectionOpen] = useState(false);
 
   // Staff portal links
-  const [staffLinksSectionOpen, setStaffLinksSectionOpen] = useState(false);
   const [creatingStaffLink, setCreatingStaffLink] = useState(false);
   const [newStaffLinkLabel, setNewStaffLinkLabel] = useState('Staff Link');
 
@@ -562,7 +561,7 @@ export default function RunsheetBuilder() {
   // Staff portal links
   const { data: staffLinks, refetch: refetchStaffLinks } = trpc.staffPortal.listLinks.useQuery(
     { runsheetId: sheetId! },
-    { enabled: !!sheetId && staffLinksSectionOpen }
+    { enabled: !!sheetId }
   );
   const createStaffLinkMutation = trpc.staffPortal.createLink.useMutation({
     onSuccess: () => { toast.success('Staff link created'); refetchStaffLinks(); setCreatingStaffLink(false); setNewStaffLinkLabel('Staff Link'); },
@@ -2469,10 +2468,7 @@ export default function RunsheetBuilder() {
         {/* ── Staff Portal Links section ───────────────────────────────── */}
         {sheetId && (
           <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
-            <button
-              onClick={() => setStaffLinksSectionOpen(v => !v)}
-              className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors"
-            >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-forest" />
                 <span className="font-bebas tracking-widest text-sm text-forest">STAFF PORTAL LINKS</span>
@@ -2480,9 +2476,8 @@ export default function RunsheetBuilder() {
                   <span className="text-xs text-forest/50 font-dm">({staffLinks.length} link{staffLinks.length !== 1 ? 's' : ''})</span>
                 )}
               </div>
-              {staffLinksSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
-            </button>
-            {staffLinksSectionOpen && (
+            </div>
+            {true && (
               <div className="px-5 pb-5 pt-2 space-y-4">
                 <p className="text-xs font-dm text-ink/50">Generate a read-only link for staff to view the runsheet without logging in.</p>
                 {/* Existing links */}

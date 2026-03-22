@@ -3,6 +3,7 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, Plus, Trash2, Send, FileText, Copy, CheckCircle, UtensilsCrossed, Wine, ChefHat, ChevronDown, ChevronUp, Download, Palette, Image } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -99,6 +100,22 @@ export default function ProposalBuilder() {
   const { data: menuPackages } = trpc.menu.listPackages.useQuery(undefined, { enabled: !!user });
   const [selectedMenuPackageIds, setSelectedMenuPackageIds] = useState<number[]>([]);
   const [menuSectionOpen, setMenuSectionOpen] = useState(true);
+
+  // ── Food items state ───────────────────────────────────────────────────────
+  const [foodSectionOpen, setFoodSectionOpen] = useState(false);
+  const [customFoodItems, setCustomFoodItems] = useState<{ name: string; description?: string; pricePerHead?: number }[]>([]);
+  const [newFoodItem, setNewFoodItem] = useState({ name: "", description: "", pricePerHead: "" });
+
+  const addFoodItem = () => {
+    if (!newFoodItem.name.trim()) return;
+    setCustomFoodItems(prev => [...prev, {
+      name: newFoodItem.name.trim(),
+      description: newFoodItem.description.trim() || undefined,
+      pricePerHead: newFoodItem.pricePerHead ? parseFloat(newFoodItem.pricePerHead) : undefined,
+    }]);
+    setNewFoodItem({ name: "", description: "", pricePerHead: "" });
+  };
+  const removeFoodItem = (i: number) => setCustomFoodItems(prev => prev.filter((_, idx) => idx !== i));
 
   // ── Drinks selection state ─────────────────────────────────────────────────
   const [drinksSectionOpen, setDrinksSectionOpen] = useState(false);
@@ -331,7 +348,7 @@ export default function ProposalBuilder() {
 
   if (loading) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="font-alfa text-3xl text-tomato/20 animate-pulse">LOADING...</div>
+      <div className="font-alfa text-3xl text-primary/20 animate-pulse">LOADING...</div>
     </div>
   );
 
@@ -339,7 +356,7 @@ export default function ProposalBuilder() {
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center">
         <p className="font-dm text-muted-foreground mb-4">Please sign in to create proposals.</p>
-        <a href={getLoginUrl()}><Button className="bg-tomato text-white font-bebas tracking-widest rounded-none">SIGN IN</Button></a>
+        <a href={getLoginUrl()}><Button className="bg-primary text-white font-bebas tracking-widest rounded-none">SIGN IN</Button></a>
       </div>
     </div>
   );
@@ -393,8 +410,8 @@ export default function ProposalBuilder() {
         <div className="lg:col-span-2 space-y-5">
           {/* Lead Info Banner */}
           {lead && (
-            <div className="bg-amber/10 border-2 border-amber/40 p-4">
-              <div className="font-bebas text-xs tracking-widest text-amber mb-1">CREATING PROPOSAL FOR</div>
+            <div className="bg-sage-tint border-2 border-sage-green/40 p-4">
+              <div className="font-bebas text-xs tracking-widest text-sage-green mb-1">CREATING PROPOSAL FOR</div>
               <div className="font-alfa text-lg text-ink">{lead.firstName} {lead.lastName}</div>
               <div className="font-dm text-sm text-muted-foreground">{lead.email} · {lead.eventType || "Event"}</div>
             </div>
@@ -407,13 +424,13 @@ export default function ProposalBuilder() {
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
                 <Input value={title} onChange={e => setTitle(e.target.value)}
-                  className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato font-dm" />
+                  className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm" />
               </div>
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
                 <Textarea value={introMessage} onChange={e => setIntroMessage(e.target.value)}
                   placeholder="Thank you for your enquiry! We'd love to host your event at our venue. Please find our proposal below..."
-                  rows={3} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato resize-none text-sm" />
+                  rows={3} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm" />
               </div>
             </div>
           </div>
@@ -425,18 +442,31 @@ export default function ProposalBuilder() {
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT DATE</label>
                 <Input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}
-                  className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                  className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
               </div>
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">GUEST COUNT</label>
                 <Input type="number" value={guestCount} onChange={e => setGuestCount(e.target.value)}
-                  placeholder="50" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                  placeholder="50" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
               </div>
               <div className="col-span-2">
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT SPACE</label>
-                <Input value={spaceName} onChange={e => setSpaceName(e.target.value)}
-                  placeholder="The Main Dining Room"
-                  className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato" />
+                {spaces && spaces.length > 0 ? (
+                  <Select value={spaceName} onValueChange={setSpaceName}>
+                    <SelectTrigger className="rounded-none border-2 focus:ring-0 focus:border-primary h-10">
+                      <SelectValue placeholder="Select a space…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {spaces.map(s => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={spaceName} onChange={e => setSpaceName(e.target.value)}
+                    placeholder="The Main Dining Room"
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
+                )}
               </div>
             </div>
           </div>
@@ -445,13 +475,13 @@ export default function ProposalBuilder() {
           <div className="bg-cream-card border border-border shadow-sm">
             <button
               onClick={() => setMenuSectionOpen(o => !o)}
-              className="w-full flex items-center justify-between p-5 hover:bg-amber/5 transition-colors"
+              className="w-full flex items-center justify-between p-5 hover:bg-sage-tint/50 transition-colors"
             >
               <div className="flex items-center gap-2">
-                <ChefHat className="w-4 h-4 text-amber" />
+                <ChefHat className="w-4 h-4 text-sage-green" />
                 <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">MENU OPTIONS</h2>
                 {selectedMenuPackageIds.length > 0 && (
-                  <span className="bg-tomato text-white font-bebas text-xs px-2 py-0.5 rounded-full">{selectedMenuPackageIds.length} SELECTED</span>
+                  <span className="bg-primary text-white font-bebas text-xs px-2 py-0.5 rounded-full">{selectedMenuPackageIds.length} SELECTED</span>
                 )}
               </div>
               {menuSectionOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
@@ -471,8 +501,8 @@ export default function ProposalBuilder() {
                     {menuPackages.filter(p => p.type === 'food').length > 0 && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
-                          <UtensilsCrossed className="w-3.5 h-3.5 text-tomato" />
-                          <span className="font-bebas text-xs tracking-widest text-tomato">FOOD PACKAGES</span>
+                          <UtensilsCrossed className="w-3.5 h-3.5 text-primary" />
+                          <span className="font-bebas text-xs tracking-widest text-primary">FOOD PACKAGES</span>
                         </div>
                         <div className="grid gap-2">
                           {menuPackages.filter(p => p.type === 'food').map(pkg => (
@@ -481,8 +511,8 @@ export default function ProposalBuilder() {
                               onClick={() => toggleMenuPackage(pkg.id)}
                               className={`w-full text-left p-3 border-2 transition-all ${
                                 selectedMenuPackageIds.includes(pkg.id)
-                                  ? 'border-tomato bg-tomato/5'
-                                  : 'border-border hover:border-tomato/40'
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-border hover:border-primary/40'
                               }`}
                             >
                               <div className="flex items-start justify-between gap-2">
@@ -492,10 +522,10 @@ export default function ProposalBuilder() {
                                 </div>
                                 <div className="text-right shrink-0">
                                   {pkg.pricePerHead && (
-                                    <div className="font-alfa text-sm text-tomato">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
+                                    <div className="font-alfa text-sm text-primary">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
                                   )}
                                   {selectedMenuPackageIds.includes(pkg.id) && (
-                                    <div className="font-bebas text-xs text-tomato tracking-widest mt-0.5">✓ SELECTED</div>
+                                    <div className="font-bebas text-xs text-primary tracking-widest mt-0.5">✓ SELECTED</div>
                                   )}
                                 </div>
                               </div>
@@ -509,8 +539,8 @@ export default function ProposalBuilder() {
                     {menuPackages.filter(p => p.type === 'beverages').length > 0 && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
-                          <Wine className="w-3.5 h-3.5 text-amber" />
-                          <span className="font-bebas text-xs tracking-widest text-amber">BEVERAGES PACKAGES</span>
+                          <Wine className="w-3.5 h-3.5 text-sage-green" />
+                          <span className="font-bebas text-xs tracking-widest text-sage-green">BEVERAGES PACKAGES</span>
                         </div>
                         <div className="grid gap-2">
                           {menuPackages.filter(p => p.type === 'beverages').map(pkg => (
@@ -519,8 +549,8 @@ export default function ProposalBuilder() {
                               onClick={() => toggleMenuPackage(pkg.id)}
                               className={`w-full text-left p-3 border-2 transition-all ${
                                 selectedMenuPackageIds.includes(pkg.id)
-                                  ? 'border-amber bg-amber/5'
-                                  : 'border-border hover:border-amber/40'
+                                  ? 'border-sage-green bg-sage-tint/50'
+                                  : 'border-border hover:border-sage-green/40'
                               }`}
                             >
                               <div className="flex items-start justify-between gap-2">
@@ -530,10 +560,10 @@ export default function ProposalBuilder() {
                                 </div>
                                 <div className="text-right shrink-0">
                                   {pkg.pricePerHead && (
-                                    <div className="font-alfa text-sm text-amber">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
+                                    <div className="font-alfa text-sm text-sage-green">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
                                   )}
                                   {selectedMenuPackageIds.includes(pkg.id) && (
-                                    <div className="font-bebas text-xs text-amber tracking-widest mt-0.5">✓ SELECTED</div>
+                                    <div className="font-bebas text-xs text-sage-green tracking-widest mt-0.5">✓ SELECTED</div>
                                   )}
                                 </div>
                               </div>
@@ -591,7 +621,7 @@ export default function ProposalBuilder() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">PRICING</h2>
               <Button size="sm" variant="ghost" onClick={() => setLineItems(prev => [...prev, { description: "", qty: 1, unitPrice: 0, total: 0 }])}
-                className="font-bebas tracking-widest text-xs text-tomato gap-1">
+                className="font-bebas tracking-widest text-xs text-primary gap-1">
                 <Plus className="w-3 h-3" /> ADD ITEM
               </Button>
             </div>
@@ -610,15 +640,15 @@ export default function ProposalBuilder() {
                 <div key={i} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-5">
                     <Input value={item.description} onChange={e => updateLineItem(i, "description", e.target.value)}
-                      placeholder="Item description" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm h-9" />
+                      placeholder="Item description" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9" />
                   </div>
                   <div className="col-span-2">
                     <Input type="number" value={item.qty} onChange={e => updateLineItem(i, "qty", parseFloat(e.target.value) || 0)}
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm h-9 text-center" />
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-center" />
                   </div>
                   <div className="col-span-2">
                     <Input type="number" value={item.unitPrice} onChange={e => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm h-9 text-right" />
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-right" />
                   </div>
                   <div className="col-span-2 text-right font-dm text-sm font-semibold text-ink">
                     ${item.total.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
@@ -626,7 +656,7 @@ export default function ProposalBuilder() {
                   <div className="col-span-1 flex justify-center">
                     {lineItems.length > 1 && (
                       <button onClick={() => setLineItems(prev => prev.filter((_, idx) => idx !== i))}
-                        className="text-muted-foreground/40 hover:text-tomato transition-colors">
+                        className="text-muted-foreground/40 hover:text-primary transition-colors">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -645,25 +675,91 @@ export default function ProposalBuilder() {
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">GST</span>
                   <Input type="number" value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm h-7 w-16 text-center" />
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-7 w-16 text-center" />
                   <span className="text-muted-foreground">%</span>
                 </div>
                 <span>${taxAmount.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between font-alfa text-lg text-ink border-t-2 border-border pt-2">
                 <span>TOTAL (NZD)</span>
-                <span className="text-tomato">${total.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span className="text-primary">${total.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between items-center font-dm text-sm bg-amber/10 border border-amber/30 p-3">
+              <div className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
-                  <span className="font-bebas text-xs tracking-widest text-amber">DEPOSIT REQUIRED</span>
+                  <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
                   <Input type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
-                    className="rounded-none border-2 border-amber/40 focus-visible:ring-0 focus-visible:border-amber text-sm h-7 w-16 text-center bg-transparent" />
-                  <span className="text-amber text-xs">%</span>
+                    className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
+                  <span className="text-sage-green text-xs">%</span>
                 </div>
                 <span className="font-alfa text-lg text-ink">${deposit.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
+          </div>
+
+          {/* Food Items */}
+          <div className="bg-cream-card border border-border shadow-sm">
+            <button
+              onClick={() => setFoodSectionOpen(o => !o)}
+              className="w-full flex items-center justify-between p-5 hover:bg-black/5 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <UtensilsCrossed className="w-4 h-4 text-primary" />
+                <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">FOOD ITEMS</h2>
+                {customFoodItems.length > 0 && (
+                  <span className="bg-primary text-white font-bebas text-xs px-2 py-0.5 tracking-widest">
+                    {customFoodItems.length} ADDED
+                  </span>
+                )}
+              </div>
+              {foodSectionOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            </button>
+            {foodSectionOpen && (
+              <div className="px-5 pb-5 space-y-4 border-t border-border">
+                <div className="pt-4">
+                  {customFoodItems.length === 0 && (
+                    <p className="font-dm text-sm text-muted-foreground mb-3">No food items added yet. Use this to list specific dishes, courses, or catering items.</p>
+                  )}
+                  {customFoodItems.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 mb-2 p-2 bg-sage-tint border border-sage-green/20">
+                      <div className="flex-1 min-w-0">
+                        <span className="font-dm text-sm text-ink">{item.name}</span>
+                        {item.description && <span className="font-dm text-xs text-muted-foreground ml-2">{item.description}</span>}
+                        {item.pricePerHead && <span className="font-dm text-xs text-primary ml-2">${item.pricePerHead}/head</span>}
+                      </div>
+                      <button onClick={() => removeFoodItem(i)} className="text-muted-foreground/40 hover:text-primary transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <Input
+                      value={newFoodItem.name}
+                      onChange={e => setNewFoodItem(p => ({ ...p, name: e.target.value }))}
+                      placeholder="Dish name"
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
+                    />
+                    <Input
+                      value={newFoodItem.description}
+                      onChange={e => setNewFoodItem(p => ({ ...p, description: e.target.value }))}
+                      placeholder="Description (optional)"
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        value={newFoodItem.pricePerHead}
+                        onChange={e => setNewFoodItem(p => ({ ...p, pricePerHead: e.target.value }))}
+                        placeholder="$/head"
+                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
+                      />
+                      <Button size="sm" onClick={addFoodItem} className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
+                        <Plus className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Drinks Selection */}
@@ -673,10 +769,10 @@ export default function ProposalBuilder() {
               className="w-full flex items-center justify-between p-5 hover:bg-black/5 transition-colors"
             >
               <div className="flex items-center gap-2">
-                <Wine className="w-4 h-4 text-tomato" />
+                <Wine className="w-4 h-4 text-primary" />
                 <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">DRINKS SELECTION</h2>
                 {selectedDrinks.length > 0 && (
-                  <span className="bg-tomato text-white font-bebas text-xs px-2 py-0.5 tracking-widest">
+                  <span className="bg-primary text-white font-bebas text-xs px-2 py-0.5 tracking-widest">
                     {selectedDrinks.length + customDrinks.length} SELECTED
                   </span>
                 )}
@@ -696,8 +792,8 @@ export default function ProposalBuilder() {
                         onClick={() => setBarOption(opt.key)}
                         className={`p-3 border-2 text-left transition-colors ${
                           barOption === opt.key
-                            ? 'border-tomato bg-tomato/5'
-                            : 'border-border hover:border-tomato/40'
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-primary/40'
                         }`}
                       >
                         <div className="font-bebas text-xs tracking-widest text-ink">{opt.label}</div>
@@ -713,7 +809,7 @@ export default function ProposalBuilder() {
                         value={tabAmount}
                         onChange={e => setTabAmount(e.target.value)}
                         placeholder="e.g. 1500"
-                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm w-36"
+                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm w-36"
                       />
                     </div>
                   )}
@@ -722,20 +818,20 @@ export default function ProposalBuilder() {
                 {/* Drinks Menu */}
                 {DRINKS_MENU.map(cat => (
                   <div key={cat.category}>
-                    <div className="font-playfair italic text-sm text-tomato mb-2 border-b border-tomato/20 pb-1">{cat.category}</div>
+                    <div className="font-playfair italic text-sm text-primary mb-2 border-b border-primary/20 pb-1">{cat.category}</div>
                     <div className="space-y-1.5">
                       {cat.items.map((item: any) => (
                         <label
                           key={item.key}
                           className={`flex items-start gap-3 p-2 cursor-pointer rounded-sm transition-colors ${
-                            selectedDrinks.includes(item.key) ? 'bg-tomato/5 border border-tomato/20' : 'hover:bg-black/5 border border-transparent'
+                            selectedDrinks.includes(item.key) ? 'bg-primary/5 border border-primary/20' : 'hover:bg-black/5 border border-transparent'
                           }`}
                         >
                           <input
                             type="checkbox"
                             checked={selectedDrinks.includes(item.key)}
                             onChange={() => toggleDrink(item.key)}
-                            className="mt-0.5 accent-[oklch(0.45_0.18_25)]"
+                            className="mt-0.5 accent-primary"
                           />
                           <div className="flex-1 min-w-0">
                             <div className="font-dm text-sm text-ink">{item.name}</div>
@@ -756,13 +852,13 @@ export default function ProposalBuilder() {
                 <div>
                   <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">CUSTOM DRINKS</div>
                   {customDrinks.map((d, i) => (
-                    <div key={i} className="flex items-center gap-2 mb-2 p-2 bg-amber/5 border border-amber/20">
+                    <div key={i} className="flex items-center gap-2 mb-2 p-2 bg-sage-tint/50 border border-sage-green/20">
                       <div className="flex-1 min-w-0">
                         <span className="font-dm text-sm text-ink">{d.name}</span>
                         {d.description && <span className="font-dm text-xs text-muted-foreground ml-2">{d.description}</span>}
-                        {d.price && <span className="font-dm text-xs text-amber ml-2">${d.price}</span>}
+                        {d.price && <span className="font-dm text-xs text-sage-green ml-2">${d.price}</span>}
                       </div>
-                      <button onClick={() => removeCustomDrink(i)} className="text-muted-foreground/40 hover:text-tomato transition-colors">
+                      <button onClick={() => removeCustomDrink(i)} className="text-muted-foreground/40 hover:text-primary transition-colors">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -772,13 +868,13 @@ export default function ProposalBuilder() {
                       value={newCustomDrink.name}
                       onChange={e => setNewCustomDrink(p => ({ ...p, name: e.target.value }))}
                       placeholder="Drink name"
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm"
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <Input
                       value={newCustomDrink.description}
                       onChange={e => setNewCustomDrink(p => ({ ...p, description: e.target.value }))}
                       placeholder="Description (optional)"
-                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm"
+                      className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <div className="flex gap-2">
                       <Input
@@ -786,9 +882,9 @@ export default function ProposalBuilder() {
                         value={newCustomDrink.price}
                         onChange={e => setNewCustomDrink(p => ({ ...p, price: e.target.value }))}
                         placeholder="Price"
-                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm"
+                        className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                       />
-                      <Button size="sm" onClick={addCustomDrink} className="bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none px-3">
+                      <Button size="sm" onClick={addCustomDrink} className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
                         <Plus className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -863,7 +959,7 @@ export default function ProposalBuilder() {
                 {/* Min Spend Breakdown */}
                 {minimumSpend && (
                   <div className="bg-ink text-cream p-4 space-y-2">
-                    <div className="font-bebas text-xs tracking-widest text-amber mb-2">MINIMUM SPEND BREAKDOWN</div>
+                    <div className="font-bebas text-xs tracking-widest text-sage-green mb-2">MINIMUM SPEND BREAKDOWN</div>
                     <div className="flex justify-between font-dm text-sm">
                       <span className="text-cream/60">Food &amp; Beverage</span>
                       <span>${_foodBase().toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
@@ -875,7 +971,7 @@ export default function ProposalBuilder() {
                       </div>
                     ))}
                     {autoBarTab && autoBarTabAmount > 0 && (
-                      <div className="flex justify-between font-dm text-sm text-amber">
+                      <div className="flex justify-between font-dm text-sm text-sage-green">
                         <span>Bar Tab (auto remainder)</span>
                         <span>${autoBarTabAmount.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
                       </div>
@@ -949,7 +1045,7 @@ export default function ProposalBuilder() {
           <div className="bg-cream-card border border-border p-5 shadow-sm">
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">TERMS & CONDITIONS</h2>
             <Textarea value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)}
-              rows={5} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato resize-none text-sm font-dm" />
+              rows={5} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
           </div>
 
           {/* Internal Notes */}
@@ -957,22 +1053,22 @@ export default function ProposalBuilder() {
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">INTERNAL NOTES <span className="font-dm text-xs text-muted-foreground normal-case">(not shown to client)</span></h2>
             <Textarea value={internalNotes} onChange={e => setInternalNotes(e.target.value)}
               placeholder="Notes for your team only..." rows={2}
-              className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato resize-none text-sm font-dm" />
+              className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
           </div>
         </div>
 
         {/* Right: Summary & Actions */}
         <div className="space-y-4">
 
-          {/* Appearance */}
-          <div className="bg-cream-card border border-border shadow-sm">
+          {/* Appearance — hidden; managed via Venue Settings */}
+          {false && <div className="bg-cream-card border border-border shadow-sm">
             <button
               type="button"
-              className="w-full flex items-center justify-between p-4 text-left hover:bg-amber/5 transition-colors"
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-sage-tint/50 transition-colors"
               onClick={() => setAppearanceSectionOpen(o => !o)}
             >
               <div className="flex items-center gap-2">
-                <Palette className="w-4 h-4 text-amber" />
+                <Palette className="w-4 h-4 text-sage-green" />
                 <span className="font-bebas text-xs tracking-widest text-muted-foreground">PROPOSAL APPEARANCE</span>
               </div>
               {appearanceSectionOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
@@ -989,7 +1085,7 @@ export default function ProposalBuilder() {
                         type="button"
                         onClick={() => setAppearanceThemeKey(theme.id)}
                         className={`p-2 border-2 text-left transition-all rounded-sm ${
-                          appearanceThemeKey === theme.id ? 'border-tomato' : 'border-border hover:border-tomato/40'
+                          appearanceThemeKey === theme.id ? 'border-primary' : 'border-border hover:border-primary/40'
                         }`}
                       >
                         <div className="flex gap-0.5 mb-1">
@@ -999,7 +1095,7 @@ export default function ProposalBuilder() {
                         </div>
                         <div className="font-bebas text-xs tracking-wide text-ink leading-tight">{theme.label}</div>
                         {appearanceThemeKey === theme.id && (
-                          <div className="font-bebas text-xs text-tomato tracking-widest">✓</div>
+                          <div className="font-bebas text-xs text-primary tracking-widest">✓</div>
                         )}
                       </button>
                     ))}
@@ -1016,7 +1112,7 @@ export default function ProposalBuilder() {
                     value={appearanceLogoUrl}
                     onChange={e => setAppearanceLogoUrl(e.target.value)}
                     placeholder="https://example.com/logo.png"
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-xs h-8"
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-xs h-8"
                   />
                   {appearanceLogoUrl && (
                     <div className="mt-1.5 p-2 bg-ink rounded-sm flex items-center justify-center h-12">
@@ -1035,7 +1131,7 @@ export default function ProposalBuilder() {
                     value={appearanceVenuePhotoUrl}
                     onChange={e => setAppearanceVenuePhotoUrl(e.target.value)}
                     placeholder="https://example.com/venue.jpg"
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-xs h-8"
+                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-xs h-8"
                   />
                   {appearanceVenuePhotoUrl && (
                     <div className="mt-1.5 h-16 bg-cover bg-center rounded-sm border border-border" style={{ backgroundImage: `url(${appearanceVenuePhotoUrl})` }} />
@@ -1047,26 +1143,26 @@ export default function ProposalBuilder() {
                   type="button"
                   onClick={handleSaveAppearance}
                   disabled={updateVenue.isPending}
-                  className="w-full bg-amber hover:bg-amber/90 text-white font-bebas tracking-widest rounded-none h-9 text-xs gap-1"
+                  className="w-full bg-sage-green hover:bg-sage-green/90 text-white font-bebas tracking-widest rounded-none h-9 text-xs gap-1"
                 >
                   <Palette className="w-3.5 h-3.5" />
                   {updateVenue.isPending ? "SAVING..." : "SAVE APPEARANCE"}
                 </Button>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Expiry */}
           <div className="bg-cream-card border border-border p-4 shadow-sm">
             <h3 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL EXPIRY</h3>
             <Input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
-              className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-tomato text-sm" />
+              className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm" />
             <p className="font-dm text-xs text-muted-foreground mt-2">Client must respond before this date</p>
           </div>
 
           {/* Summary */}
           <div className="bg-ink text-cream p-5 shadow-sm">
-            <div className="font-bebas text-xs tracking-widest text-amber mb-3">PROPOSAL SUMMARY</div>
+            <div className="font-bebas text-xs tracking-widest text-sage-green mb-3">PROPOSAL SUMMARY</div>
             <div className="space-y-2 font-dm text-sm">
               <div className="flex justify-between">
                 <span className="text-cream/60">For</span>
@@ -1087,7 +1183,7 @@ export default function ProposalBuilder() {
               <div className="border-t border-cream/20 pt-2 mt-2">
                 <div className="flex justify-between font-alfa text-xl">
                   <span className="text-cream/60 text-sm">TOTAL</span>
-                  <span className="text-amber">${total.toLocaleString("en-NZ", { minimumFractionDigits: 0 })}</span>
+                  <span className="text-sage-green">${total.toLocaleString("en-NZ", { minimumFractionDigits: 0 })}</span>
                 </div>
                 <div className="flex justify-between text-xs text-cream/50 mt-1">
                   <span>Deposit ({depositPercent}%)</span>
@@ -1099,7 +1195,7 @@ export default function ProposalBuilder() {
 
           {/* Actions */}
           {!savedProposal ? (
-            <Button onClick={handleSave} disabled={createProposal.isPending} className="w-full bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none h-11">
+            <Button onClick={handleSave} disabled={createProposal.isPending} className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11">
               {createProposal.isPending ? "SAVING..." : "SAVE DRAFT"}
             </Button>
           ) : !sent ? (
@@ -1109,7 +1205,7 @@ export default function ProposalBuilder() {
                 <div className="font-dm text-xs text-green-600 mt-0.5">Ready to send to client</div>
               </div>
               <Button onClick={handleSend} disabled={sendProposal.isPending}
-                className="w-full bg-tomato hover:bg-tomato/90 text-white font-bebas tracking-widest rounded-none h-11 gap-2">
+                className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11 gap-2">
                 <Send className="w-4 h-4" />
                 {sendProposal.isPending ? "SENDING..." : "SEND TO CLIENT"}
               </Button>

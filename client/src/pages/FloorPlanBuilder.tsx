@@ -94,7 +94,7 @@ export default function FloorPlanBuilder() {
   const [canvasSize] = useState({ w: 900, h: 600 });
   const [zoom, setZoom] = useState(1);
   const [savedPlanId, setSavedPlanId] = useState<number | undefined>(planId);
-  const [sidebarTab, setSidebarTab] = useState<"elements" | "inventory">("elements");
+  const [sidebarTab, setSidebarTab] = useState<"elements" | "inventory">("inventory");
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Inventory state
@@ -319,16 +319,16 @@ export default function FloorPlanBuilder() {
           {/* Tab switcher */}
           <div className="flex border-b border-cream/10">
             <button
-              onClick={() => setSidebarTab("elements")}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 font-bebas text-xs tracking-widest transition-colors ${sidebarTab === "elements" ? "bg-cream/10 text-cream" : "text-cream/40 hover:text-cream/70"}`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" /> ELEMENTS
-            </button>
-            <button
               onClick={() => setSidebarTab("inventory")}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 font-bebas text-xs tracking-widest transition-colors ${sidebarTab === "inventory" ? "bg-cream/10 text-cream" : "text-cream/40 hover:text-cream/70"}`}
             >
               <Package className="w-3.5 h-3.5" /> INVENTORY
+            </button>
+            <button
+              onClick={() => setSidebarTab("elements")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 font-bebas text-xs tracking-widest transition-colors ${sidebarTab === "elements" ? "bg-cream/10 text-cream" : "text-cream/40 hover:text-cream/70"}`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" /> ELEMENTS
             </button>
           </div>
 
