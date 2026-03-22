@@ -565,6 +565,18 @@ export default function Dashboard() {
     },
     onError: () => toast.error("Failed to update source"),
   });
+
+  const [editingEventDetails, setEditingEventDetails] = useState(false);
+  const [eventDetailForm, setEventDetailForm] = useState<any>({});
+  const updateLeadDetails = trpc.leads.update.useMutation({
+    onSuccess: (_data, vars) => {
+      refetchLeads();
+      setSelectedLead((prev: any) => prev ? { ...prev, ...vars } : prev);
+      setEditingEventDetails(false);
+      toast.success("Event details saved");
+    },
+    onError: () => toast.error("Failed to save event details"),
+  });
   const updateStatus = trpc.leads.updateStatus.useMutation({
     onSuccess: (_data, variables) => {
       refetchLeads();
@@ -636,6 +648,7 @@ export default function Dashboard() {
   // Helper: select a lead and mark it as read
   function selectLead(lead: any) {
     setSelectedLead(lead);
+    setEditingEventDetails(false);
     // Note: selectLead is defined below; this is the inner implementation
     if (lead && !lead.readAt) {
       markRead.mutate({ id: lead.id });
@@ -1827,21 +1840,90 @@ export default function Dashboard() {
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-                      <h3 className="font-inter text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Event Details</h3>
-                      <div className="space-y-2 text-sm font-dm">
-                        {[
-                          ["Event Type", selectedLead.eventType],
-                          ["Date", selectedLead.eventDate ? new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) : null],
-                          ["Guests", selectedLead.guestCount],
-                          ["Budget", selectedLead.budget ? `$${Number(selectedLead.budget).toLocaleString()} NZD` : null],
-                          ["Company", selectedLead.company],
-                        ].filter(([, v]) => v).map(([label, value]) => (
-                          <div key={label as string} className="flex gap-2">
-                            <span className="text-ink/60 w-24 flex-shrink-0">{label}:</span>
-                            <span className="text-foreground font-medium">{String(value)}</span>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-inter text-xs font-semibold text-gray-400 uppercase tracking-wider">Event Details</h3>
+                        {!editingEventDetails ? (
+                          <button onClick={() => {
+                            setEventDetailForm({
+                              firstName: selectedLead.firstName ?? '',
+                              lastName: selectedLead.lastName ?? '',
+                              email: selectedLead.email ?? '',
+                              phone: selectedLead.phone ?? '',
+                              company: selectedLead.company ?? '',
+                              eventType: selectedLead.eventType ?? '',
+                              eventDate: selectedLead.eventDate ? new Date(selectedLead.eventDate).toISOString().slice(0, 10) : '',
+                              guestCount: selectedLead.guestCount ?? '',
+                              budget: selectedLead.budget ?? '',
+                            });
+                            setEditingEventDetails(true);
+                          }} className="text-xs text-sage hover:text-forest font-dm flex items-center gap-1">
+                            <Edit2 className="w-3 h-3" /> Edit
+                          </button>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button onClick={() => setEditingEventDetails(false)} className="text-xs text-ink/40 hover:text-ink font-dm">Cancel</button>
+                            <button onClick={() => {
+                              updateLeadDetails.mutate({
+                                id: selectedLead.id,
+                                firstName: eventDetailForm.firstName || undefined,
+                                lastName: eventDetailForm.lastName || null,
+                                email: eventDetailForm.email || undefined,
+                                phone: eventDetailForm.phone || null,
+                                company: eventDetailForm.company || null,
+                                eventType: eventDetailForm.eventType || null,
+                                eventDate: eventDetailForm.eventDate || null,
+                                guestCount: eventDetailForm.guestCount !== '' ? Number(eventDetailForm.guestCount) : null,
+                                budget: eventDetailForm.budget !== '' ? Number(eventDetailForm.budget) : null,
+                              });
+                            }} disabled={updateLeadDetails.isPending} className="text-xs text-forest hover:text-forest-dark font-dm font-semibold">
+                              {updateLeadDetails.isPending ? 'Saving...' : 'Save'}
+                            </button>
                           </div>
-                        ))}
+                        )}
                       </div>
+                      {!editingEventDetails ? (
+                        <div className="space-y-2 text-sm font-dm">
+                          {[
+                            ["Name", `${selectedLead.firstName} ${selectedLead.lastName ?? ''}`.trim()],
+                            ["Email", selectedLead.email],
+                            ["Phone", selectedLead.phone],
+                            ["Event Type", selectedLead.eventType],
+                            ["Date", selectedLead.eventDate ? new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) : null],
+                            ["Guests", selectedLead.guestCount],
+                            ["Budget", selectedLead.budget ? `$${Number(selectedLead.budget).toLocaleString()} NZD` : null],
+                            ["Company", selectedLead.company],
+                          ].filter(([, v]) => v).map(([label, value]) => (
+                            <div key={label as string} className="flex gap-2">
+                              <span className="text-ink/60 w-24 flex-shrink-0">{label}:</span>
+                              <span className="text-foreground font-medium">{String(value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-2 text-sm">
+                          {[
+                            { label: "First Name", key: "firstName", type: "text" },
+                            { label: "Last Name", key: "lastName", type: "text" },
+                            { label: "Email", key: "email", type: "email" },
+                            { label: "Phone", key: "phone", type: "text" },
+                            { label: "Company", key: "company", type: "text" },
+                            { label: "Event Type", key: "eventType", type: "text" },
+                            { label: "Date", key: "eventDate", type: "date" },
+                            { label: "Guests", key: "guestCount", type: "number" },
+                            { label: "Budget (NZD)", key: "budget", type: "number" },
+                          ].map(({ label, key, type }) => (
+                            <div key={key} className="flex items-center gap-2">
+                              <span className="text-ink/60 w-24 flex-shrink-0 text-xs">{label}:</span>
+                              <input
+                                type={type}
+                                value={eventDetailForm[key] ?? ''}
+                                onChange={e => setEventDetailForm((f: any) => ({ ...f, [key]: e.target.value }))}
+                                className="flex-1 border-b border-gold/40 focus:border-forest bg-transparent text-sm text-ink focus:outline-none py-0.5 font-dm"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Status & Actions */}

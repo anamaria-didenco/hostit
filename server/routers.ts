@@ -384,13 +384,24 @@ export const appRouter = router({
         followUpDate: z.string().optional(),
         assignedTo: z.number().optional(),
         source: z.string().optional(),
+        firstName: z.string().optional(),
+        lastName: z.string().nullable().optional(),
+        phone: z.string().nullable().optional(),
+        email: z.string().optional(),
+        company: z.string().nullable().optional(),
+        eventType: z.string().nullable().optional(),
+        eventDate: z.string().nullable().optional(),
+        guestCount: z.coerce.number().nullable().optional(),
+        budget: z.coerce.number().nullable().optional(),
+        message: z.string().nullable().optional(),
       }))
       .mutation(async ({ input }) => {
-        const { id, followUpDate, ...rest } = input;
+        const { id, followUpDate, eventDate, ...rest } = input;
         await updateLead(id, {
           ...rest,
           followUpDate: followUpDate ? new Date(followUpDate) : undefined,
-        });
+          eventDate: eventDate ? new Date(eventDate) : eventDate === null ? null : undefined,
+        } as any);
         return { success: true };
       }),
 
