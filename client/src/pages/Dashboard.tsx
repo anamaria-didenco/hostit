@@ -10,7 +10,8 @@ import {
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
-  ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type
+  ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
+  SlidersHorizontal
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -329,6 +330,95 @@ function NewEnquiriesWidget({ newEnquiries, overdueLeads, onSelectLead, onViewAl
   );
 }
 
+// ── Kanban Stage Customisation Dialog ─────────────────────────────────────
+function KanbanSettingsDialog({
+  open, onClose, allStages, currentPrefs, onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  allStages: { key: string; label: string; color: string; swatch?: string }[];
+  currentPrefs: { visible: string[]; order: string[] } | null;
+  onSave: (prefs: { visible: string[]; order: string[] }) => void;
+}) {
+  const initialOrder = React.useMemo(() => {
+    if (currentPrefs?.order?.length) {
+      const ordered = currentPrefs.order.map(k => allStages.find(s => s.key === k)).filter(Boolean) as typeof allStages;
+      const rest = allStages.filter(s => !currentPrefs.order.includes(s.key));
+      return [...ordered, ...rest];
+    }
+    return allStages;
+  }, [allStages, currentPrefs]);
+
+  const [order, setOrder] = React.useState<typeof allStages>(initialOrder);
+  const [visible, setVisible] = React.useState<Set<string>>(() => {
+    if (currentPrefs?.visible?.length) return new Set(currentPrefs.visible);
+    return new Set(allStages.map(s => s.key));
+  });
+
+  function moveUp(i: number) {
+    if (i === 0) return;
+    setOrder(prev => { const a = [...prev]; [a[i - 1], a[i]] = [a[i], a[i - 1]]; return a; });
+  }
+  function moveDown(i: number) {
+    if (i === order.length - 1) return;
+    setOrder(prev => { const a = [...prev]; [a[i], a[i + 1]] = [a[i + 1], a[i]]; return a; });
+  }
+  function toggleVisible(key: string) {
+    setVisible(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="font-inter text-base font-bold text-gray-900">Customise Pipeline Columns</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-gray-500 -mt-2 mb-3">Choose which stages to show and drag to reorder them.</p>
+        <div className="space-y-1.5 max-h-80 overflow-y-auto">
+          {order.map((stage, i) => (
+            <div key={stage.key}
+              className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-white hover:bg-gray-50 transition-colors">
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.swatch ?? '#d4c5a9' }} />
+              <span className="flex-1 font-inter text-sm font-medium text-gray-800">{stage.label}</span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => moveUp(i)} disabled={i === 0}
+                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
+                  <MoveUp className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => moveDown(i)} disabled={i === order.length - 1}
+                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
+                  <MoveDown className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => toggleVisible(stage.key)}
+                  className={`ml-1 w-8 h-4 rounded-full transition-colors relative flex-shrink-0 ${visible.has(stage.key) ? 'bg-sage-green' : 'bg-gray-200'}`}>
+                  <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform ${visible.has(stage.key) ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 pt-3 border-t border-border">
+          <button
+            onClick={() => { onSave({ visible: Array.from(visible), order: order.map(s => s.key) }); onClose(); }}
+            className="flex-1 bg-sage-green text-white font-inter text-sm font-semibold py-2 rounded-lg hover:bg-sage-dark transition-colors">
+            Save
+          </button>
+          <button
+            onClick={() => { onSave({ visible: allStages.map(s => s.key), order: allStages.map(s => s.key) }); onClose(); }}
+            className="font-inter text-xs text-gray-400 hover:text-gray-600 px-3 py-2">
+            Reset
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PipelineSnapshotWidget({ allLeads, onViewLeads, stages }: { allLeads: any; onViewLeads: () => void; stages?: { key: string; label: string; color: string }[] }) {
   const stageList = stages ?? PIPELINE_STAGES;
   const counts = stageList.map(s => ({
@@ -470,6 +560,8 @@ export default function Dashboard() {
   const [customDateTo, setCustomDateTo] = useState("");
   const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("list");
   const [kanbanDetailOpen, setKanbanDetailOpen] = useState(false);
+  const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
+  const [kanbanStagePrefs, setKanbanStagePrefs] = useState<{ visible: string[]; order: string[] } | null>(null);
   const [eventSortBy, setEventSortBy] = useState<"event_date"|"date_booked"|"status">("event_date");
   const [eventSortDir, setEventSortDir] = useState<"asc"|"desc">("asc");
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -530,6 +622,21 @@ export default function Dashboard() {
       return { key: d.key, label: d.label, color: preset.classes, swatch: preset.swatch };
     });
   }, [venueSettings]);
+
+  const saveKanbanPrefs = React.useCallback((prefs: { visible: string[]; order: string[] }) => {
+    const key = `kanban_stage_prefs_${user?.id ?? "default"}`;
+    localStorage.setItem(key, JSON.stringify(prefs));
+    setKanbanStagePrefs(prefs);
+  }, [user?.id]);
+
+  const kanbanStages = React.useMemo(() => {
+    if (!kanbanStagePrefs) return pipelineStages;
+    const { visible, order } = kanbanStagePrefs;
+    const ordered = order.length > 0
+      ? order.map(k => pipelineStages.find(s => s.key === k)).filter(Boolean) as typeof pipelineStages
+      : pipelineStages;
+    return ordered.filter(s => !visible.length || visible.includes(s.key));
+  }, [pipelineStages, kanbanStagePrefs]);
   const { data: contacts, refetch: refetchContacts } = trpc.contacts.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: monthBookings } = trpc.bookings.byMonth.useQuery(
@@ -1027,6 +1134,15 @@ export default function Dashboard() {
     document.documentElement.setAttribute('data-theme', themeKey);
   }, [venueSettings]);
 
+  // Load kanban stage prefs from localStorage once user is known
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const raw = localStorage.getItem(`kanban_stage_prefs_${user.id}`);
+      if (raw) setKanbanStagePrefs(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, [user?.id]);
+
   // Confirmed statuses are treated as Events (shown on Calendar), not Enquiries
   const CONFIRMED_STATUSES = ['booked', 'confirmed'];
   const allEnquiries = (allLeads ?? []);
@@ -1034,6 +1150,13 @@ export default function Dashboard() {
   const newEnquiries = activeEnquiries.filter((l: any) => l.status === "new");
   const unreadCount = newEnquiries.filter((l: any) => !l.readAt).length;
   const repliedLeads = allEnquiries.filter((l: any) => l.status !== "new");
+
+  // Auto-switch to "all" when there are no new enquiries
+  useEffect(() => {
+    if (allLeads && newEnquiries.length === 0 && leadsSubTab === "new") {
+      setLeadsSubTab("all");
+    }
+  }, [newEnquiries.length, allLeads]);
 
   function applyDateFilter(list: any[]) {
     if (leadDateFilter === "all") return list;
@@ -1477,30 +1600,36 @@ export default function Dashboard() {
               `}>
                 <div className="p-4 border-b border-gold/15">
                   {/* Sub-tab toggle */}
-                  <div className="flex mb-3 bg-muted rounded-xl p-1 gap-1">
-                    <button
-                      onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
-                      className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
-                        leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
-                      }`}>
-                      New Enquiries
-                      {newEnquiries.length > 0 && (
+                  {/* Sub-tab toggle: only show New Enquiries tab when there are some */}
+                  {newEnquiries.length > 0 ? (
+                    <div className="flex mb-3 bg-muted rounded-xl p-1 gap-1">
+                      <button
+                        onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
+                        className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
+                          leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
+                        }`}>
+                        New Enquiries
                         <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                          leadsSubTab === "new" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"
+                          leadsSubTab === "new" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"
                         }`}>{newEnquiries.length}</span>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
-                      className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
-                        leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
-                      }`}>
-                      Events
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                        leadsSubTab === "all" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"
-                      }`}>{repliedLeads.length}</span>
-                    </button>
-                  </div>
+                      </button>
+                      <button
+                        onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
+                        className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
+                          leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
+                        }`}>
+                        All Enquiries
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                          leadsSubTab === "all" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"
+                        }`}>{repliedLeads.length}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mb-3 flex items-center gap-2">
+                      <h3 className="font-inter text-xs font-semibold text-gray-500 uppercase tracking-wider">All Enquiries</h3>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-gray-100 text-gray-500">{repliedLeads.length}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <h2 className="font-cormorant text-2xl font-semibold text-ink">
@@ -1786,6 +1915,12 @@ export default function Dashboard() {
                     <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{filteredLeads.length} records</span>
                     <div className="ml-auto flex items-center gap-2">
                       <button
+                        onClick={() => setKanbanSettingsOpen(true)}
+                        title="Customise columns"
+                        className="flex items-center gap-1.5 font-inter text-xs font-medium px-3 py-1.5 border border-border text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                        <SlidersHorizontal className="w-3.5 h-3.5" /> Customise
+                      </button>
+                      <button
                         onClick={() => setShowAddLead(true)}
                         className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
                         <Plus className="w-3.5 h-3.5" /> Add New
@@ -1795,7 +1930,7 @@ export default function Dashboard() {
                   {/* Kanban columns */}
                   <div className="flex-1 overflow-x-auto p-5">
                     <div className="flex gap-3 min-w-max h-full">
-                      {pipelineStages.map(stage => {
+                      {kanbanStages.map(stage => {
                         const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
                         return (
                           <div key={stage.key} className="w-72 flex-shrink-0 flex flex-col gap-2">
@@ -2173,6 +2308,16 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
+              {/* Kanban Stage Customisation Dialog */}
+              {kanbanSettingsOpen && (
+                <KanbanSettingsDialog
+                  open={kanbanSettingsOpen}
+                  onClose={() => setKanbanSettingsOpen(false)}
+                  allStages={pipelineStages}
+                  currentPrefs={kanbanStagePrefs}
+                  onSave={saveKanbanPrefs}
+                />
+              )}
               {/* Kanban Lead Quick-View Modal */}
               {leadViewMode === "kanban" && kanbanDetailOpen && selectedLead && (
                 <Dialog open={kanbanDetailOpen} onOpenChange={(v) => { setKanbanDetailOpen(v); if (!v) setSelectedLead(null); }}>
