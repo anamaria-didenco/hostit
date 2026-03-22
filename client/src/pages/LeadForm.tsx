@@ -65,10 +65,16 @@ export default function LeadForm() {
   const { slug } = useParams<{ slug?: string }>();
   const [submitted, setSubmitted] = useState(false);
 
-  const { data: venue, isLoading } = trpc.venue.getBySlug.useQuery(
+  const { data: venueBySlug, isLoading: loadingBySlug } = trpc.venue.getBySlug.useQuery(
     { slug: slug ?? "" },
     { enabled: !!slug }
   );
+  const { data: venueDefault, isLoading: loadingDefault } = trpc.venue.getDefault.useQuery(
+    undefined,
+    { enabled: !slug }
+  );
+  const venue = slug ? venueBySlug : venueDefault;
+  const isLoading = slug ? loadingBySlug : loadingDefault;
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});

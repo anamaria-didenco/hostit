@@ -144,6 +144,15 @@ export const appRouter = router({
         const result = await db.select().from(venueSettings).where(eq(venueSettings.slug, input.slug)).limit(1);
         return result[0] ?? null;
       }),
+    getDefault: publicProcedure.query(async () => {
+      // Returns the first venue (single-venue system) for use on /enquire without a slug
+      const { getDb } = await import("./db");
+      const { venueSettings } = await import("../drizzle/schema");
+      const db = await getDb();
+      if (!db) return null;
+      const result = await db.select().from(venueSettings).limit(1);
+      return result[0] ?? null;
+    }),
   }),
 
   // ─── Event Spaces ──────────────────────────────────────────────────────────
