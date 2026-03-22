@@ -1,117 +1,71 @@
+import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { Link } from "wouter";
 import {
-  Calendar, ClipboardList, Users, FileText,
-  ChevronRight, CheckCircle, Star, ArrowRight,
-  LayoutGrid, Mail, Utensils
+  ArrowRight, Play, CheckCircle, Star,
+  ChevronDown, Zap
 } from "lucide-react";
+
+const features = [
+  { icon: "📋", title: "Enquiry Pipeline", action: "Manage leads →", desc: "Kanban-style view of every lead from first contact to confirmed booking." },
+  { icon: "📄", title: "Proposal Builder", action: "Build a quote →", desc: "Drag-and-drop builder with your menus, spaces, pricing, and branding." },
+  { icon: "🗓️", title: "Event Calendar", action: "View calendar →", desc: "Single calendar showing enquiries and confirmed events. Click to create." },
+  { icon: "📋", title: "Runsheet Generator", action: "Generate runsheet →", desc: "Full FOH and Kitchen runsheet, auto-populated from event details." },
+];
+
+const faqs = [
+  { q: "How long does setup take?", a: "Most venues are up and running within 30 minutes. We walk you through every step." },
+  { q: "Can my whole team use it?", a: "Yes — unlimited team members on all plans. Assign roles so staff only see what they need." },
+  { q: "Do I need a credit card to start?", a: "No credit card required for the free trial. Upgrade whenever you're ready." },
+  { q: "Can I import my existing data?", a: "Yes. We support CSV import for contacts, and our team can help with data migration." },
+];
 
 export default function Home() {
   const { user, loading: isLoading } = useAuth();
-
-  const features = [
-    {
-      icon: <Users className="w-6 h-6" />,
-      title: "Enquiry Management",
-      desc: "Capture, track, and respond to event enquiries in one place. Never miss a lead.",
-    },
-    {
-      icon: <Calendar className="w-6 h-6" />,
-      title: "Event Calendar",
-      desc: "See all confirmed events and enquiries on a single calendar. Click any date to create.",
-    },
-    {
-      icon: <FileText className="w-6 h-6" />,
-      title: "Proposals & Quotes",
-      desc: "Build polished proposals with your menu, spaces, and pricing — sent in minutes.",
-    },
-    {
-      icon: <ClipboardList className="w-6 h-6" />,
-      title: "Runsheet Builder",
-      desc: "Create detailed FOH and Kitchen runsheets for every event, fully editable.",
-    },
-    {
-      icon: <LayoutGrid className="w-6 h-6" />,
-      title: "Floor Plans",
-      desc: "Design and save interactive floor plan templates for your event spaces.",
-    },
-    {
-      icon: <Utensils className="w-6 h-6" />,
-      title: "Menu Management",
-      desc: "Manage menu sections, sales categories, and items — linked to proposals.",
-    },
-    {
-      icon: <Mail className="w-6 h-6" />,
-      title: "Email Templates",
-      desc: "Send branded emails with custom templates directly from your dashboard.",
-    },
-    {
-      icon: <CheckCircle className="w-6 h-6" />,
-      title: "Task Automation",
-      desc: "Set automated task reminders triggered by event milestones.",
-    },
-  ];
-
-  const testimonials = [
-    {
-      quote: "VenueFlowHQ has completely transformed how we manage events. The runsheet builder alone saves us hours every week.",
-      name: "Sarah M.",
-      role: "Events Manager, Auckland",
-      rating: 5,
-    },
-    {
-      quote: "Finally a platform built for NZ venues. The enquiry-to-event flow is seamless and our team loves it.",
-      name: "James T.",
-      role: "Venue Director, Wellington",
-      rating: 5,
-    },
-    {
-      quote: "The proposal builder is beautiful. Our clients always comment on how professional our quotes look.",
-      name: "Priya K.",
-      role: "Functions Coordinator, Christchurch",
-      rating: 5,
-    },
-  ];
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   return (
     <div className="min-h-screen bg-white font-inter text-gray-900">
 
       {/* ── Nav ──────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100">
+      <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-sage-green flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-sage-green flex items-center justify-center shadow-sm">
               <span className="text-white font-bold text-sm tracking-tight">V</span>
             </div>
             <span className="font-bold text-gray-900 tracking-tight text-lg">VenueFlowHQ</span>
           </div>
 
-          {/* Nav links */}
-          <nav className="hidden md:flex items-center gap-8">
+          {/* Nav links — visually clickable surfaces */}
+          <nav className="hidden md:flex items-center gap-1">
             {["Features", "Pricing", "About"].map(item => (
-              <a key={item} href="#" className="text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium">
+              <a key={item} href="#"
+                className="text-sm font-medium text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-100 hover:text-gray-900 transition-colors border border-transparent hover:border-gray-200">
                 {item}
               </a>
             ))}
           </nav>
 
           {/* CTA */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {isLoading ? null : user ? (
               <Link href="/dashboard">
-                <button className="bg-sage-green text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-sage-dark transition-colors flex items-center gap-1.5">
-                  Go to Dashboard <ArrowRight className="w-4 h-4" />
+                <button className="bg-sage-green text-white text-sm font-bold px-5 py-2.5 rounded-lg shadow-md hover:bg-sage-dark hover:shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
+                  Go to Dashboard <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </Link>
             ) : (
               <>
-                <a href={getLoginUrl()} className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                <a href={getLoginUrl()}
+                  className="text-sm font-semibold text-gray-700 px-4 py-2 rounded-lg border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-all">
                   Sign in
                 </a>
-                <a href={getLoginUrl()} className="bg-sage-green text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-sage-dark transition-colors">
-                  Get started
+                <a href={getLoginUrl()}
+                  className="bg-sage-green text-white text-sm font-bold px-5 py-2.5 rounded-lg shadow-md hover:bg-sage-dark hover:shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
+                  Get started <ArrowRight className="w-3.5 h-3.5" />
                 </a>
               </>
             )}
@@ -120,104 +74,118 @@ export default function Home() {
       </header>
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-white pt-20 pb-28">
-        {/* Subtle background texture */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 right-0 w-[600px] h-[600px] rounded-full opacity-[0.07]"
-            style={{ background: 'radial-gradient(circle, #8D957E 0%, transparent 70%)', transform: 'translate(30%, -30%)' }} />
-          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full opacity-[0.05]"
-            style={{ background: 'radial-gradient(circle, #8D957E 0%, transparent 70%)', transform: 'translate(-30%, 30%)' }} />
-        </div>
-
-        <div className="relative max-w-6xl mx-auto px-6 text-center">
+      <section className="bg-gradient-to-b from-white to-gray-50 pt-20 pb-24 px-6">
+        <div className="max-w-5xl mx-auto text-center">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 bg-sage-tint text-sage-dark text-xs font-semibold px-3 py-1.5 rounded-full mb-8 tracking-wide uppercase">
-            <span className="w-1.5 h-1.5 rounded-full bg-sage-green inline-block" />
+          <div className="inline-flex items-center gap-2 bg-sage-tint text-sage-dark text-xs font-bold px-4 py-2 rounded-full mb-8 tracking-wide uppercase border border-sage-green/20">
+            <span className="w-2 h-2 rounded-full bg-sage-green inline-block animate-pulse" />
             New Zealand's Venue Management Platform
           </div>
 
           {/* Headline */}
-          <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6 max-w-4xl mx-auto leading-[1.05]"
+          <h1 className="text-5xl md:text-6xl font-black text-gray-950 mb-6 leading-[1.05]"
             style={{ letterSpacing: '-0.04em' }}>
             Run your venue.<br />
-            <span style={{ color: '#8D957E' }}>Not spreadsheets.</span>
+            <span className="text-sage-green">Not spreadsheets.</span>
           </h1>
 
           {/* Sub */}
-          <p className="text-xl text-gray-500 mb-10 max-w-xl mx-auto leading-relaxed font-normal">
-            VenueFlowHQ brings enquiries, proposals, calendars, runsheets, and menus together — so your team can focus on the experience.
+          <p className="text-lg text-gray-500 mb-10 max-w-lg mx-auto leading-relaxed">
+            Everything your functions team needs in one place — enquiries, proposals, runsheets, and more.
           </p>
 
-          {/* CTAs */}
-          <div className="flex items-center justify-center gap-4 flex-wrap">
+          {/* CTAs — differentiated by visual weight */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a href={getLoginUrl()}
-              className="bg-sage-green text-white font-semibold px-7 py-3.5 rounded-xl hover:bg-sage-dark transition-colors text-base flex items-center gap-2 shadow-sm">
-              Start free trial <ArrowRight className="w-4 h-4" />
+              className="w-full sm:w-auto bg-sage-green text-white font-bold text-lg px-8 py-4 rounded-xl shadow-lg hover:bg-sage-dark hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+              Start free trial
+              <ArrowRight className="w-5 h-5" />
             </a>
             <a href="#features"
-              className="text-gray-600 font-medium px-7 py-3.5 rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors text-base">
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white text-gray-700 font-semibold text-base px-6 py-4 rounded-xl border-2 border-gray-200 hover:border-sage-green hover:text-sage-green transition-all">
+              <Play className="w-4 h-4" />
               See all features
             </a>
           </div>
 
-          {/* Social proof */}
-          <p className="mt-8 text-sm text-gray-400">
-            Trusted by venues across New Zealand &nbsp;·&nbsp; No credit card required
-          </p>
+          {/* Proof */}
+          <div className="flex items-center justify-center gap-2 mt-6 text-sm text-gray-400">
+            <CheckCircle className="w-4 h-4 text-sage-green" />
+            No credit card required &nbsp;·&nbsp; Cancel any time
+          </div>
         </div>
       </section>
 
-      {/* ── Feature grid ─────────────────────────────────────────────────── */}
-      <section id="features" className="bg-gray-50 py-24">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-xs font-bold uppercase tracking-widest text-sage-green mb-3">Everything you need</p>
-            <h2 className="text-4xl font-bold text-gray-900 mb-4" style={{ letterSpacing: '-0.03em' }}>
-              Built for functions teams
+      {/* ── Feature cards ────────────────────────────────────────────────── */}
+      <section id="features" className="bg-white py-20 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="text-xs font-bold uppercase tracking-widest text-sage-green mb-2">Core features</p>
+            <h2 className="text-3xl font-black text-gray-900" style={{ letterSpacing: '-0.03em' }}>
+              Everything you need to run events
             </h2>
-            <p className="text-lg text-gray-500 max-w-xl mx-auto">
-              Every tool your venue needs, designed to work together seamlessly.
-            </p>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {features.map((f, i) => (
               <div key={i}
-                className="bg-white rounded-2xl p-6 border border-gray-100 hover:border-sage-green/30 hover:shadow-md transition-all duration-200 group">
-                <div className="w-11 h-11 rounded-xl bg-sage-tint text-sage-dark flex items-center justify-center mb-4 group-hover:bg-sage-green group-hover:text-white transition-colors">
-                  {f.icon}
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-2 text-base">{f.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{f.desc}</p>
+                className="bg-white rounded-2xl p-7 border-2 border-gray-100 hover:border-sage-green hover:shadow-lg transition-all duration-200 group cursor-pointer">
+                <div className="text-3xl mb-4">{f.icon}</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">{f.title}</h3>
+                <p className="text-gray-500 text-sm mb-4 leading-relaxed">{f.desc}</p>
+                <span className="text-sage-green font-semibold text-sm group-hover:underline flex items-center gap-1">
+                  {f.action} <ArrowRight className="w-3.5 h-3.5" />
+                </span>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── How it works ─────────────────────────────────────────────────── */}
-      <section className="bg-white py-24">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-xs font-bold uppercase tracking-widest text-sage-green mb-3">Simple workflow</p>
-            <h2 className="text-4xl font-bold text-gray-900 mb-4" style={{ letterSpacing: '-0.03em' }}>
-              From enquiry to event in minutes
-            </h2>
+      {/* ── Social proof ─────────────────────────────────────────────────── */}
+      <section className="bg-sage-tint py-16 px-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex flex-col md:flex-row items-center gap-10">
+            <div className="flex-1 text-center md:text-left">
+              <div className="flex justify-center md:justify-start gap-1 mb-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star key={i} className="w-5 h-5 fill-sage-green text-sage-green" />
+                ))}
+              </div>
+              <p className="text-lg font-semibold text-gray-900 leading-snug mb-4">
+                "Finally a platform built for NZ venues. The enquiry-to-event flow is seamless and our team loves it."
+              </p>
+              <p className="text-sm font-semibold text-gray-900">James T.</p>
+              <p className="text-xs text-gray-500 mt-0.5">Venue Director, Wellington</p>
+            </div>
+            <div className="flex-shrink-0">
+              <div className="bg-sage-green text-white rounded-2xl px-8 py-5 text-center shadow-md">
+                <Zap className="w-7 h-7 mx-auto mb-2" />
+                <p className="font-black text-2xl">30 min</p>
+                <p className="text-sm text-white/80">average setup time</p>
+              </div>
+            </div>
           </div>
+        </div>
+      </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              { step: "01", title: "Capture enquiries", desc: "Embed your contact form on your website. All enquiries land in your dashboard instantly." },
-              { step: "02", title: "Send a proposal", desc: "Build a branded proposal with spaces, menus, and pricing. Send it with one click." },
-              { step: "03", title: "Run the event", desc: "Generate a detailed runsheet for FOH and Kitchen. Everything your team needs, on one page." },
-            ].map((s, i) => (
-              <div key={i} className="relative">
-                <div className="text-6xl font-bold text-gray-100 mb-4 select-none" style={{ letterSpacing: '-0.04em' }}>{s.step}</div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{s.title}</h3>
-                <p className="text-gray-500 leading-relaxed">{s.desc}</p>
-                {i < 2 && (
-                  <div className="hidden md:block absolute top-8 -right-4 text-gray-200">
-                    <ChevronRight className="w-8 h-8" />
+      {/* ── FAQ ──────────────────────────────────────────────────────────── */}
+      <section className="bg-white py-20 px-6">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-3xl font-black text-gray-900 mb-10 text-center" style={{ letterSpacing: '-0.03em' }}>
+            Common questions
+          </h2>
+          <div className="space-y-2">
+            {faqs.map((f, i) => (
+              <div key={i} className="border-2 border-gray-100 rounded-xl overflow-hidden hover:border-gray-200 transition-colors">
+                <button
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  className="w-full text-left px-6 py-4 flex items-center justify-between font-semibold text-gray-900 hover:bg-gray-50 transition-colors">
+                  {f.q}
+                  <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 flex-shrink-0 ${openFaq === i ? 'rotate-180' : ''}`} />
+                </button>
+                {openFaq === i && (
+                  <div className="px-6 pt-4 pb-5 text-gray-600 text-sm leading-relaxed border-t border-gray-100">
+                    {f.a}
                   </div>
                 )}
               </div>
@@ -226,50 +194,19 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Testimonials ─────────────────────────────────────────────────── */}
-      <section className="bg-gray-50 py-24">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-xs font-bold uppercase tracking-widest text-sage-green mb-3">Testimonials</p>
-            <h2 className="text-4xl font-bold text-gray-900" style={{ letterSpacing: '-0.03em' }}>
-              Loved by venue teams
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map((t, i) => (
-              <div key={i} className="bg-white rounded-2xl p-7 border border-gray-100">
-                <div className="flex gap-0.5 mb-4">
-                  {Array.from({ length: t.rating }).map((_, j) => (
-                    <Star key={j} className="w-4 h-4 fill-sage-green text-sage-green" />
-                  ))}
-                </div>
-                <p className="text-gray-700 leading-relaxed mb-5 text-sm">"{t.quote}"</p>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">{t.name}</p>
-                  <p className="text-gray-400 text-xs mt-0.5">{t.role}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── CTA ──────────────────────────────────────────────────────────── */}
-      <section className="bg-sage-green py-24">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-5" style={{ letterSpacing: '-0.03em' }}>
-            Ready to simplify your venue?
-          </h2>
-          <p className="text-white/80 text-lg mb-10 leading-relaxed">
-            Join venues across New Zealand using VenueFlowHQ to manage events with confidence.
-          </p>
-          <a href={getLoginUrl()}
-            className="inline-flex items-center gap-2 bg-white text-sage-dark font-semibold px-8 py-4 rounded-xl hover:bg-gray-50 transition-colors text-base shadow-sm">
-            Get started free <ArrowRight className="w-4 h-4" />
-          </a>
-          <p className="text-white/60 text-sm mt-5">No credit card required · Set up in minutes</p>
-        </div>
+      <section className="bg-sage-green py-20 px-6 text-center">
+        <h2 className="text-4xl font-black text-white mb-4" style={{ letterSpacing: '-0.03em' }}>
+          Ready to simplify your venue?
+        </h2>
+        <p className="text-white/80 mb-8 text-lg">
+          Join venues across New Zealand using VenueFlowHQ to manage events with confidence.
+        </p>
+        <a href={getLoginUrl()}
+          className="inline-flex items-center gap-2 bg-white text-sage-dark font-bold px-10 py-5 rounded-xl hover:bg-gray-50 hover:shadow-lg transition-all active:scale-95 text-lg shadow-md">
+          Get started free <ArrowRight className="w-5 h-5" />
+        </a>
+        <p className="text-white/60 text-sm mt-4">No credit card required · Cancel any time</p>
       </section>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
