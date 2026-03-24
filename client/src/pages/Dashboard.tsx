@@ -11,7 +11,7 @@ import {
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
-  SlidersHorizontal
+  SlidersHorizontal, GripVertical
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -1051,6 +1051,8 @@ export default function Dashboard() {
 
   const [settingsForm, setSettingsForm] = useState<any>(null);
   const [formFields, setFormFields] = useState<FormFieldDef[] | null>(null);
+  const [galleryDragIdx, setGalleryDragIdx] = useState<number | null>(null);
+  const [galleryDragOverIdx, setGalleryDragOverIdx] = useState<number | null>(null);
   const [newCustomFieldLabel, setNewCustomFieldLabel] = useState('');
   const [newCustomFieldType, setNewCustomFieldType] = useState<FormFieldDef['type']>('text');
 
@@ -4050,15 +4052,45 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="flex flex-wrap justify-center gap-3">
                     {(() => {
                       let imgs: string[] = [];
                       try { imgs = JSON.parse(settingsForm.formGalleryImages || '[]'); } catch {}
                       const ph = settingsForm.galleryPhotoHeight ?? 128;
+                      const tileW = 140;
+                      const reorder = (from: number, to: number) => {
+                        const next = [...imgs];
+                        const [moved] = next.splice(from, 1);
+                        next.splice(to, 0, moved);
+                        setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify(next) }));
+                      };
                       return [
                         ...imgs.map((url, i) => (
-                          <div key={i} className="relative group bg-gray-100 overflow-hidden border border-gold/20" style={{ height: `${ph}px` }}>
-                            <img src={url} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover" />
+                          <div
+                            key={url + i}
+                            draggable
+                            onDragStart={() => setGalleryDragIdx(i)}
+                            onDragOver={e => { e.preventDefault(); setGalleryDragOverIdx(i); }}
+                            onDrop={e => {
+                              e.preventDefault();
+                              if (galleryDragIdx !== null && galleryDragIdx !== i) reorder(galleryDragIdx, i);
+                              setGalleryDragIdx(null); setGalleryDragOverIdx(null);
+                            }}
+                            onDragEnd={() => { setGalleryDragIdx(null); setGalleryDragOverIdx(null); }}
+                            className={`relative group bg-gray-100 overflow-hidden border-2 cursor-grab active:cursor-grabbing transition-all flex-shrink-0 ${
+                              galleryDragOverIdx === i && galleryDragIdx !== i
+                                ? "border-sage-green scale-105 shadow-lg"
+                                : galleryDragIdx === i
+                                  ? "border-gold/40 opacity-50"
+                                  : "border-gold/20"
+                            }`}
+                            style={{ width: `${tileW}px`, height: `${ph}px` }}
+                          >
+                            <img src={url} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover pointer-events-none" />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors pointer-events-none" />
+                            <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                              <GripVertical className="w-3.5 h-3.5 text-white drop-shadow" />
+                            </div>
                             <button type="button"
                               onClick={() => {
                                 const newImgs = imgs.filter((_, j) => j !== i);
@@ -4070,7 +4102,7 @@ export default function Dashboard() {
                           </div>
                         )),
                         imgs.length < 6 ? (
-                          <label key="add" className="bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors" style={{ height: `${ph}px` }}>
+                          <label key="add" className="bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors flex-shrink-0" style={{ width: `${tileW}px`, height: `${ph}px` }}>
                             <Upload className="w-5 h-5 text-ink/30 mb-1" />
                             <span className="font-dm text-xs text-ink/40">Upload photo</span>
                             <input type="file" accept="image/*" className="hidden"
