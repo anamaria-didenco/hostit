@@ -1067,7 +1067,7 @@ export default function Dashboard() {
   }, [settingsSubTab, settingsForm, formFields]);
 
   useMemo(() => {
-    if (!settingsForm) {
+    if (!settingsForm && venueSettings) {
       const vs = venueSettings as any;
       setSettingsForm({
         name: vs?.name ?? "",
@@ -1617,7 +1617,7 @@ export default function Dashboard() {
                         className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
                           leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
                         }`}>
-                        All Enquiries
+                        All Events
                         <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
                           leadsSubTab === "all" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"
                         }`}>{repliedLeads.length}</span>
@@ -1625,7 +1625,7 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <div className="mb-3 flex items-center gap-2">
-                      <h3 className="font-inter text-xs font-semibold text-gray-500 uppercase tracking-wider">All Enquiries</h3>
+                      <h3 className="font-inter text-xs font-semibold text-gray-500 uppercase tracking-wider">All Events</h3>
                       <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-gray-100 text-gray-500">{repliedLeads.length}</span>
                     </div>
                   )}
