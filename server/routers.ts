@@ -1737,6 +1737,83 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         await db.delete(checklistInstances).where(and(eq(checklistInstances.id, input.id), eq(checklistInstances.ownerId, ctx.user.id)));
         return { success: true };
       }),
+
+    getOrCreateForRunsheet: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        name: z.string().optional(),
+        defaultItems: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), checked: z.boolean() })).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { checklistInstances } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const crypto = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const existing = await db.select().from(checklistInstances)
+          .where(and(eq(checklistInstances.runsheetId, input.runsheetId), eq(checklistInstances.ownerId, ctx.user.id)))
+          .limit(1);
+        if (existing[0]) return existing[0];
+        const shareToken = crypto.randomBytes(24).toString('hex');
+        const items = (input.defaultItems ?? []).map(i => ({ ...i, checked: false, checkedAt: undefined, notes: undefined }));
+        const [result] = await db.insert(checklistInstances).values({
+          runsheetId: input.runsheetId,
+          ownerId: ctx.user.id,
+          name: input.name ?? 'Staff Checklist',
+          items,
+          shareToken,
+        }).returning();
+        return result;
+      }),
+
+    getByShareToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { checklistInstances } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [instance] = await db.select().from(checklistInstances).where(eq(checklistInstances.shareToken, input.token)).limit(1);
+        return instance ?? null;
+      }),
+
+    toggleItemByToken: publicProcedure
+      .input(z.object({ token: z.string(), itemId: z.string(), checked: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { checklistInstances } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [instance] = await db.select().from(checklistInstances).where(eq(checklistInstances.shareToken, input.token)).limit(1);
+        if (!instance) throw new Error('Checklist not found');
+        const items = (instance.items as any[]).map(item =>
+          item.id === input.itemId
+            ? { ...item, checked: input.checked, checkedAt: input.checked ? new Date().toISOString() : undefined }
+            : item
+        );
+        await db.update(checklistInstances).set({ items, updatedAt: new Date() }).where(eq(checklistInstances.id, instance.id));
+        return { success: true, items };
+      }),
+
+    saveItemsForRunsheet: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        items: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), checked: z.boolean(), checkedAt: z.string().optional(), notes: z.string().optional() })),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { checklistInstances } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.update(checklistInstances)
+          .set({ items: input.items, updatedAt: new Date() })
+          .where(and(eq(checklistInstances.runsheetId, input.runsheetId), eq(checklistInstances.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
   }),
 
   // ─── Runsheets ────────────────────────────────────────────────────────────

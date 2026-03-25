@@ -348,7 +348,7 @@ export default function RunsheetBuilder() {
     if (applied.length > 0) toast.success(`Applied: ${applied.join(', ')}`);
   }
 
-  const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>([
+  const DEFAULT_CHECKLIST_ITEMS = [
     { id: "c1", text: "Confirm final guest numbers with client", checked: false, category: "admin" },
     { id: "c2", text: "Send final invoice / confirm payment", checked: false, category: "admin" },
     { id: "c3", text: "Brief all FOH staff on event details", checked: false, category: "staff" },
@@ -359,8 +359,36 @@ export default function RunsheetBuilder() {
     { id: "c8", text: "Print runsheets for all staff", checked: false, category: "admin" },
     { id: "c9", text: "Confirm dietary meals with kitchen", checked: false, category: "kitchen" },
     { id: "c10", text: "Welcome client on arrival", checked: false, category: "guest" },
-  ]);
+  ];
+  const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>(DEFAULT_CHECKLIST_ITEMS);
+  const [checklistInstance, setChecklistInstance] = useState<any>(null);
   const [newChecklistText, setNewChecklistText] = useState("");
+
+  const getOrCreateChecklist = trpc.checklists.getOrCreateForRunsheet.useMutation({
+    onSuccess: (instance) => {
+      if (!instance) return;
+      setChecklistInstance(instance);
+      const dbItems = (instance.items ?? []) as any[];
+      if (dbItems.length > 0) setChecklistItems(dbItems);
+    },
+  });
+
+  const saveChecklistItems = trpc.checklists.saveItemsForRunsheet.useMutation();
+  const toggleByToken = trpc.checklists.toggleItemByToken.useMutation({
+    onSuccess: (data) => {
+      if (data?.items) setChecklistItems(data.items as any);
+    },
+  });
+
+  useEffect(() => {
+    if (sheetId && !checklistInstance) {
+      getOrCreateChecklist.mutate({
+        runsheetId: sheetId,
+        name: title ? `${title} — Staff Checklist` : 'Staff Checklist',
+        defaultItems: DEFAULT_CHECKLIST_ITEMS,
+      });
+    }
+  }, [sheetId]);
 
   // Venue settings for customisable dietaries and setup templates
   const { data: venueSettings, refetch: refetchVenueSettings } = trpc.venue.getOwn.useQuery();
@@ -931,22 +959,28 @@ export default function RunsheetBuilder() {
   }
 
   function toggleChecklistItem(id: string) {
-    setChecklistItems(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
+    const updated = checklistItems.map(item => item.id === id ? { ...item, checked: !item.checked, checkedAt: !item.checked ? new Date().toISOString() : undefined } : item);
+    setChecklistItems(updated);
+    if (checklistInstance?.shareToken) {
+      const item = checklistItems.find(i => i.id === id);
+      toggleByToken.mutate({ token: checklistInstance.shareToken, itemId: id, checked: item ? !item.checked : true });
+    } else if (sheetId) {
+      saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+    }
   }
 
   function addChecklistItem() {
     if (!newChecklistText.trim()) return;
-    setChecklistItems(prev => [...prev, {
-      id: `c-${Date.now()}`,
-      text: newChecklistText.trim(),
-      checked: false,
-      category: "other",
-    }]);
+    const updated = [...checklistItems, { id: `c-${Date.now()}`, text: newChecklistText.trim(), checked: false, category: "other" }];
+    setChecklistItems(updated);
     setNewChecklistText("");
+    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
   }
 
   function removeChecklistItem(id: string) {
-    setChecklistItems(prev => prev.filter(item => item.id !== id));
+    const updated = checklistItems.filter(item => item.id !== id);
+    setChecklistItems(updated);
+    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
   }
 
   // Format event date for display
@@ -2137,11 +2171,28 @@ export default function RunsheetBuilder() {
                 <h2 className="font-bebas tracking-widest text-ink/60 text-sm">EVENT CHECKLIST</h2>
                 <span className="font-dm text-xs text-ink/40">{checkedCount} of {checklistItems.length} complete</span>
               </div>
-              {checkedCount === checklistItems.length && checklistItems.length > 0 && (
-                <span className="font-bebas tracking-widest text-xs text-forest flex items-center gap-1">
-                  <CheckSquare className="w-3.5 h-3.5" /> ALL DONE
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {checkedCount === checklistItems.length && checklistItems.length > 0 && (
+                  <span className="font-bebas tracking-widest text-xs text-forest flex items-center gap-1">
+                    <CheckSquare className="w-3.5 h-3.5" /> ALL DONE
+                  </span>
+                )}
+                {checklistInstance?.shareToken ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = `${window.location.origin}/staff-checklist/${checklistInstance.shareToken}`;
+                      navigator.clipboard.writeText(url);
+                      toast.success('Staff checklist link copied!');
+                    }}
+                    className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/5 px-3 py-1 transition-colors"
+                  >
+                    <Share2 className="w-3.5 h-3.5" /> SHARE LINK
+                  </button>
+                ) : sheetId && getOrCreateChecklist.isPending ? (
+                  <span className="font-dm text-xs text-ink/30">Generating link…</span>
+                ) : null}
+              </div>
             </div>
 
             {/* Progress bar */}
