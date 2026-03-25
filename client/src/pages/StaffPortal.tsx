@@ -59,6 +59,7 @@ export default function StaffPortal() {
 
   const checklist: any = (data as any)?.checklist ?? null;
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  const [activePortalTab, setActivePortalTab] = useState<'runsheet' | 'checklist'>('runsheet');
   useEffect(() => { setOptimistic({}); }, [checklist]);
   const toggleItem = trpc.checklists.toggleItemByToken.useMutation({
     onSuccess: (result) => { if (result?.items) setOptimistic({}); },
@@ -155,9 +156,43 @@ export default function StaffPortal() {
             <span className="font-bebas tracking-widest text-white/90 text-xs">LIVE</span>
           </div>
         </div>
+        {/* Tab bar */}
+        <div className="max-w-4xl mx-auto px-4 flex border-t border-white/10">
+          <button
+            onClick={() => setActivePortalTab('runsheet')}
+            className={`font-bebas tracking-widest text-sm px-5 py-2 transition-colors border-b-2 ${
+              activePortalTab === 'runsheet'
+                ? 'text-white border-white'
+                : 'text-white/45 border-transparent hover:text-white/70'
+            }`}
+          >
+            RUNSHEET
+          </button>
+          <button
+            onClick={() => setActivePortalTab('checklist')}
+            className={`font-bebas tracking-widest text-sm px-5 py-2 transition-colors border-b-2 flex items-center gap-2 ${
+              activePortalTab === 'checklist'
+                ? 'text-white border-white'
+                : 'text-white/45 border-transparent hover:text-white/70'
+            }`}
+          >
+            CHECKLIST
+            {effectiveItems.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-dm ${
+                checkedCount === effectiveItems.length
+                  ? 'bg-green-400/30 text-green-200'
+                  : 'bg-white/20 text-white/80'
+              }`}>
+                {checkedCount}/{effectiveItems.length}
+              </span>
+            )}
+          </button>
+        </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-5 space-y-4">
+
+        {activePortalTab === 'runsheet' && (<>
 
         {/* ── Event Details ── */}
         <div className="bg-white border border-gold/30 shadow-sm">
@@ -433,53 +468,65 @@ export default function StaffPortal() {
           </div>
         )}
 
-        {/* ── Staff Checklist ── */}
-        {checklist && effectiveItems.length > 0 && (
-          <div className="bg-white border border-gold/30 shadow-sm">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
-              <div className="flex items-center gap-2">
-                <ClipboardCheck className="w-4 h-4 text-forest" />
-                <span className="font-bebas tracking-widest text-sm text-forest">STAFF CHECKLIST</span>
+        </>)}
+
+        {/* ── Checklist Tab ── */}
+        {activePortalTab === 'checklist' && (
+          <>
+            {effectiveItems.length > 0 ? (
+              <div className="bg-white border border-gold/30 shadow-sm">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
+                  <div className="flex items-center gap-2">
+                    <ClipboardCheck className="w-4 h-4 text-forest" />
+                    <span className="font-bebas tracking-widest text-sm text-forest">STAFF CHECKLIST</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-dm text-xs text-ink/40">{checkedCount} of {effectiveItems.length} done</span>
+                    {checkedCount === effectiveItems.length && (
+                      <span className="flex items-center gap-1 font-bebas tracking-widest text-xs text-forest">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> ALL DONE
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div className="h-1.5 bg-gold/20">
+                  <div
+                    className="h-1.5 bg-forest transition-all duration-300"
+                    style={{ width: effectiveItems.length > 0 ? `${(checkedCount / effectiveItems.length) * 100}%` : "0%" }}
+                  />
+                </div>
+                <div className="divide-y divide-gold/20">
+                  {effectiveItems.map((item: any) => (
+                    <button
+                      key={item.id}
+                      onClick={() => handleToggle(item.id, item.checked)}
+                      disabled={toggleItem.isPending}
+                      className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-linen/50 transition-colors"
+                    >
+                      <span className={`flex-shrink-0 transition-colors ${item.checked ? "text-forest" : "text-ink/25"}`}>
+                        {item.checked ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6" />}
+                      </span>
+                      <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? "line-through text-ink/35" : "text-ink"}`}>
+                        {item.text}
+                      </span>
+                      {item.category && (
+                        <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 flex-shrink-0 ${CATEGORY_STYLES[item.category] ?? CATEGORY_STYLES.other}`}>
+                          {item.category}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="font-dm text-xs text-ink/40">{checkedCount} of {effectiveItems.length} done</span>
-                {checkedCount === effectiveItems.length && (
-                  <span className="flex items-center gap-1 font-bebas tracking-widest text-xs text-forest">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> ALL DONE
-                  </span>
-                )}
+            ) : (
+              <div className="bg-white border border-gold/30 shadow-sm px-6 py-16 text-center">
+                <ClipboardCheck className="w-12 h-12 mx-auto mb-4 text-ink/15" />
+                <p className="font-bebas tracking-widest text-sm text-ink/40">NO CHECKLIST ITEMS YET</p>
+                <p className="font-dm text-xs text-ink/30 mt-1">Your venue manager will add checklist items to this event.</p>
               </div>
-            </div>
-            {/* Progress bar */}
-            <div className="h-1 bg-gold/20">
-              <div
-                className="h-1 bg-forest transition-all duration-300"
-                style={{ width: effectiveItems.length > 0 ? `${(checkedCount / effectiveItems.length) * 100}%` : "0%" }}
-              />
-            </div>
-            <div className="divide-y divide-gold/20">
-              {effectiveItems.map((item: any) => (
-                <button
-                  key={item.id}
-                  onClick={() => handleToggle(item.id, item.checked)}
-                  disabled={toggleItem.isPending}
-                  className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-linen/50 transition-colors"
-                >
-                  <span className={`flex-shrink-0 transition-colors ${item.checked ? "text-forest" : "text-ink/25"}`}>
-                    {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                  </span>
-                  <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? "line-through text-ink/35" : "text-ink"}`}>
-                    {item.text}
-                  </span>
-                  {item.category && (
-                    <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 flex-shrink-0 ${CATEGORY_STYLES[item.category] ?? CATEGORY_STYLES.other}`}>
-                      {item.category}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
+            )}
+          </>
         )}
 
         {/* ── Footer ── */}
