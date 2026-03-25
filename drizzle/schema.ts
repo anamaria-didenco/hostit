@@ -303,6 +303,7 @@ export const runsheets = pgTable("runsheets", {
   proposalId: integer("proposalId"),
   floorPlanId: integer("floorPlanId"),
   costItems: json("costItems").$type<{ _id: string; label: string; qty: number; unitPrice: number; category?: string }[]>(),
+  fnbColumns: json("fnbColumns").$type<{ dietary?: boolean; serviceTime?: boolean; staff?: boolean; notes?: boolean }>(),
   publicToken: varchar("publicToken", { length: 64 }).unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),

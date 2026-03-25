@@ -92,6 +92,11 @@ export default function StaffPortal() {
 
   const { runsheet, items, fnb, contactName, contactEmail, contactPhone } = data;
   const payments: any[] = (data as any).payments ?? [];
+  const fnbCols = (runsheet as any).fnbColumns ?? {};
+  const showDietary = fnbCols.dietary !== false;
+  const showServiceTime = fnbCols.serviceTime !== false;
+  const showStaff = fnbCols.staff !== false;
+  const showNotes = fnbCols.notes !== false;
 
   const checklistItems: any[] = checklist?.items ?? [];
   const effectiveItems = checklistItems.map((item: any) => ({
@@ -347,34 +352,39 @@ export default function StaffPortal() {
               <span className="font-bebas tracking-widest text-sm text-white">FRONT OF HOUSE — F&amp;B SHEET</span>
             </div>
             {/* Column headers */}
-            <div className="grid grid-cols-[1fr_60px_80px_90px_1fr_1fr] gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5">
+            <div className="grid gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5"
+              style={{ gridTemplateColumns: ['1fr', '50px', showDietary && '70px', showServiceTime && '80px', showStaff && '1fr', showNotes && '1fr'].filter(Boolean).join(' ') }}>
               <span className="font-bebas tracking-widest text-[10px] text-ink/40">DISH</span>
               <span className="font-bebas tracking-widest text-[10px] text-ink/40">QTY</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">DIETARY</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">SERVICE TIME</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">STAFF</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">NOTES</span>
+              {showDietary && <span className="font-bebas tracking-widest text-[10px] text-ink/40">DIETARY</span>}
+              {showServiceTime && <span className="font-bebas tracking-widest text-[10px] text-ink/40">SERVICE TIME</span>}
+              {showStaff && <span className="font-bebas tracking-widest text-[10px] text-ink/40">STAFF</span>}
+              {showNotes && <span className="font-bebas tracking-widest text-[10px] text-ink/40">NOTES</span>}
             </div>
-            {orderedFohCourses.map(course => (
-              <div key={course}>
-                <div className="px-5 py-1.5 font-bebas tracking-widest text-xs border-b border-gold/30 bg-gold/10 text-[#a07820]">
-                  {course}
-                </div>
-                {fohByCourse[course].map((item, idx) => (
-                  <div
-                    key={item.id ?? idx}
-                    className="grid grid-cols-[1fr_60px_80px_90px_1fr_1fr] gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm hover:bg-linen/50"
-                  >
-                    <span className="font-medium text-ink">{item.dishName}</span>
-                    <span className="text-ink/70">{item.qty}</span>
-                    <span className="text-ink/60 text-xs">{item.dietary || "—"}</span>
-                    <span className="text-ink/60 text-xs">{item.serviceTime ? formatTime12(item.serviceTime) : "—"}</span>
-                    <span className="text-ink/60 text-xs">{item.staffAssigned || "—"}</span>
-                    <span className="text-ink/50 text-xs">{(item as any).platingNotes || "—"}</span>
+            {orderedFohCourses.map(course => {
+              const isDrinks = course === 'Drinks';
+              return (
+                <div key={course}>
+                  <div className={`px-5 py-1.5 font-bebas tracking-widest text-xs border-b ${isDrinks ? 'bg-blue-50 border-blue-200/60 text-blue-700' : 'bg-amber-50 border-amber-200/60 text-amber-700'}`}>
+                    {course}
                   </div>
-                ))}
-              </div>
-            ))}
+                  {fohByCourse[course].map((item, idx) => (
+                    <div
+                      key={item.id ?? idx}
+                      className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm hover:bg-linen/50 ${isDrinks ? 'border-l-4 border-l-blue-300' : 'border-l-4 border-l-amber-300'}`}
+                      style={{ gridTemplateColumns: ['1fr', '50px', showDietary && '70px', showServiceTime && '80px', showStaff && '1fr', showNotes && '1fr'].filter(Boolean).join(' ') }}
+                    >
+                      <span className="font-medium text-ink">{item.dishName}</span>
+                      <span className="text-ink/70">{item.qty}</span>
+                      {showDietary && <span className="text-ink/60 text-xs">{item.dietary || "—"}</span>}
+                      {showServiceTime && <span className="text-ink/60 text-xs">{item.serviceTime ? formatTime12(item.serviceTime) : "—"}</span>}
+                      {showStaff && <span className="text-ink/60 text-xs">{item.staffAssigned || "—"}</span>}
+                      {showNotes && <span className="text-ink/50 text-xs">{(item as any).platingNotes || "—"}</span>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -386,34 +396,39 @@ export default function StaffPortal() {
               <span className="font-bebas tracking-widest text-sm text-white">KITCHEN SHEET</span>
             </div>
             {/* Column headers */}
-            <div className="grid grid-cols-[1fr_60px_80px_90px_1fr_1fr] gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5">
+            <div className="grid gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5"
+              style={{ gridTemplateColumns: ['1fr', '50px', showDietary && '70px', showServiceTime && '80px', showNotes && '1fr', showNotes && '1fr'].filter(Boolean).join(' ') }}>
               <span className="font-bebas tracking-widest text-[10px] text-ink/40">DISH</span>
               <span className="font-bebas tracking-widest text-[10px] text-ink/40">QTY</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">DIETARY</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">SERVICE TIME</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">PREP NOTES</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">PLATING</span>
+              {showDietary && <span className="font-bebas tracking-widest text-[10px] text-ink/40">DIETARY</span>}
+              {showServiceTime && <span className="font-bebas tracking-widest text-[10px] text-ink/40">SERVICE TIME</span>}
+              {showNotes && <span className="font-bebas tracking-widest text-[10px] text-ink/40">PREP NOTES</span>}
+              {showNotes && <span className="font-bebas tracking-widest text-[10px] text-ink/40">PLATING</span>}
             </div>
-            {orderedKitchenCourses.map(course => (
-              <div key={course}>
-                <div className="px-5 py-1.5 font-bebas tracking-widest text-xs border-b border-gold/30 bg-gold/10 text-[#a07820]">
-                  {course}
-                </div>
-                {kitchenByCourse[course].map((item, idx) => (
-                  <div
-                    key={item.id ?? idx}
-                    className="grid grid-cols-[1fr_60px_80px_90px_1fr_1fr] gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm hover:bg-linen/50"
-                  >
-                    <span className="font-medium text-ink">{item.dishName}</span>
-                    <span className="text-ink/70">{item.qty}</span>
-                    <span className="text-ink/60 text-xs">{item.dietary || "—"}</span>
-                    <span className="text-ink/60 text-xs">{item.serviceTime ? formatTime12(item.serviceTime) : "—"}</span>
-                    <span className="text-ink/50 text-xs">{(item as any).prepNotes || "—"}</span>
-                    <span className="text-ink/50 text-xs">{(item as any).platingNotes || "—"}</span>
+            {orderedKitchenCourses.map(course => {
+              const isDrinks = course === 'Drinks';
+              return (
+                <div key={course}>
+                  <div className={`px-5 py-1.5 font-bebas tracking-widest text-xs border-b ${isDrinks ? 'bg-blue-50 border-blue-200/60 text-blue-700' : 'bg-amber-50 border-amber-200/60 text-amber-700'}`}>
+                    {course}
                   </div>
-                ))}
-              </div>
-            ))}
+                  {kitchenByCourse[course].map((item, idx) => (
+                    <div
+                      key={item.id ?? idx}
+                      className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm hover:bg-linen/50 ${isDrinks ? 'border-l-4 border-l-blue-300' : 'border-l-4 border-l-amber-300'}`}
+                      style={{ gridTemplateColumns: ['1fr', '50px', showDietary && '70px', showServiceTime && '80px', showNotes && '1fr', showNotes && '1fr'].filter(Boolean).join(' ') }}
+                    >
+                      <span className="font-medium text-ink">{item.dishName}</span>
+                      <span className="text-ink/70">{item.qty}</span>
+                      {showDietary && <span className="text-ink/60 text-xs">{item.dietary || "—"}</span>}
+                      {showServiceTime && <span className="text-ink/60 text-xs">{item.serviceTime ? formatTime12(item.serviceTime) : "—"}</span>}
+                      {showNotes && <span className="text-ink/50 text-xs">{(item as any).prepNotes || "—"}</span>}
+                      {showNotes && <span className="text-ink/50 text-xs">{(item as any).platingNotes || "—"}</span>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
 

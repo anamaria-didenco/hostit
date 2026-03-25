@@ -438,12 +438,13 @@ export default function RunsheetBuilder() {
   }
 
   // F&B column visibility toggles
+  const [showDietaryCol, setShowDietaryCol] = useState(true);
   const [showTimeCol, setShowTimeCol] = useState(true);
   const [showStaffCol, setShowStaffCol] = useState(true);
   const [showPrepPlatingCol, setShowPrepPlatingCol] = useState(true);
 
   // Derived: dynamic grid template for F&B table (header + rows)
-  const fnbGridCols = ['90px', '1fr', '60px', showTimeCol ? '80px' : null, '90px', showStaffCol ? '1fr' : null, showPrepPlatingCol ? '1fr' : null, '64px'].filter(Boolean).join(' ');
+  const fnbGridCols = ['90px', '1fr', '60px', showDietaryCol ? '80px' : null, showTimeCol ? '80px' : null, showStaffCol ? '90px' : null, showPrepPlatingCol ? '1fr' : null, '64px'].filter(Boolean).join(' ');
 
   // Custom item mode for F&B add form
   const [fnbCustomMode, setFnbCustomMode] = useState(false);
@@ -649,6 +650,13 @@ export default function RunsheetBuilder() {
       setLinkedProposalId((existing as any).proposalId ?? undefined);
       setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
       setItems((existing.items ?? []).map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
+      const cols = (existing as any).fnbColumns;
+      if (cols) {
+        if (cols.dietary !== undefined) setShowDietaryCol(cols.dietary);
+        if (cols.serviceTime !== undefined) setShowTimeCol(cols.serviceTime);
+        if (cols.staff !== undefined) setShowStaffCol(cols.staff);
+        if (cols.notes !== undefined) setShowPrepPlatingCol(cols.notes);
+      }
     }
   }, [existing]);
 
@@ -797,6 +805,7 @@ export default function RunsheetBuilder() {
     onSuccess: () => { utils.runsheets.get.invalidate({ id: sheetId! }); toast.success("Saved!"); },
     onError: () => toast.error("Failed to save"),
   });
+  const silentUpdateMutation = trpc.runsheets.update.useMutation();
   const addItemMutation = trpc.runsheets.addItem.useMutation({
     onSuccess: () => utils.runsheets.get.invalidate({ id: sheetId! }),
     onError: () => toast.error("Failed to add item"),
@@ -808,6 +817,30 @@ export default function RunsheetBuilder() {
     onSuccess: () => utils.runsheets.get.invalidate({ id: sheetId! }),
     onError: () => toast.error("Failed to delete item"),
   });
+
+  // Auto-save F&B column visibility whenever it changes (only after initial load)
+  const fnbColsInitialized = React.useRef(false);
+  useEffect(() => {
+    if (!fnbColsInitialized.current) { fnbColsInitialized.current = true; return; }
+    if (!sheetId) return;
+    silentUpdateMutation.mutate({
+      id: sheetId,
+      fnbColumns: { dietary: showDietaryCol, serviceTime: showTimeCol, staff: showStaffCol, notes: showPrepPlatingCol },
+    } as any);
+  }, [showDietaryCol, showTimeCol, showStaffCol, showPrepPlatingCol]);
+
+  // Auto-create a staff portal link when the runsheet loads and none exist yet
+  const staffLinkAutoCreated = React.useRef(false);
+  useEffect(() => {
+    if (!sheetId || staffLinkAutoCreated.current) return;
+    if (staffLinks === undefined) return;
+    if (staffLinks.length === 0) {
+      staffLinkAutoCreated.current = true;
+      createStaffLinkMutation.mutate({ runsheetId: sheetId, label: 'Staff Portal' });
+    } else {
+      staffLinkAutoCreated.current = true;
+    }
+  }, [sheetId, staffLinks]);
 
   async function handleSave() {
     setSaving(true);
@@ -1747,10 +1780,15 @@ export default function RunsheetBuilder() {
               <div className="flex items-center gap-2">
                 {/* Column visibility toggles */}
                 <button
+                  onClick={() => setShowDietaryCol(v => !v)}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDietaryCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  title="Toggle Dietary column"
+                >DIETARY</button>
+                <button
                   onClick={() => setShowTimeCol(v => !v)}
                   className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showTimeCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
                   title="Toggle Time column"
-                >TIME</button>
+                >SERVICE TIME</button>
                 <button
                   onClick={() => setShowStaffCol(v => !v)}
                   className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showStaffCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
@@ -1759,8 +1797,8 @@ export default function RunsheetBuilder() {
                 <button
                   onClick={() => setShowPrepPlatingCol(v => !v)}
                   className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPrepPlatingCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
-                  title="Toggle Prep/Plating column"
-                >PREP/PLATING</button>
+                  title="Toggle Notes column"
+                >NOTES</button>
                 <div className="w-px h-4 bg-ink/10 mx-1" />
                 <button
                   onClick={() => { setShowFnbPaste(true); setFnbPasteText(''); setFnbParsedItems([]); }}
@@ -2072,10 +2110,10 @@ export default function RunsheetBuilder() {
                   <div>COURSE</div>
                   <div>DISH</div>
                   <div>QTY</div>
-                  {showTimeCol && <div>TIME</div>}
-                  <div>DIETARY</div>
+                  {showDietaryCol && <div>DIETARY</div>}
+                  {showTimeCol && <div>SERVICE TIME</div>}
                   {showStaffCol && <div>STAFF</div>}
-                  {showPrepPlatingCol && <div>PREP / PLATING</div>}
+                  {showPrepPlatingCol && <div>NOTES</div>}
                   <div className="no-print"></div>
                 </div>
                 {/* Group by course — derived from actual items so renamed courses still render */}
@@ -2129,16 +2167,18 @@ export default function RunsheetBuilder() {
                                       />
                                     )}
                                   </div>
+                                  {showDietaryCol && (
+                                    <div>
+                                      {item.dietary && (
+                                        <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>
+                                      )}
+                                    </div>
+                                  )}
                                   {showTimeCol && (
                                     <div className="text-xs text-ink/50 font-dm">
                                       {item.serviceTime ? formatTime12(item.serviceTime) : '—'}
                                     </div>
                                   )}
-                                  <div>
-                                    {item.dietary && (
-                                      <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>
-                                    )}
-                                  </div>
                                   {showStaffCol && (
                                     <div>
                                       <input

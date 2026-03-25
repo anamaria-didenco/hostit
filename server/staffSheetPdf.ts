@@ -246,7 +246,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
 
   /* ── Header ── */
   .doc-header {
-    background: #2d5a27;
+    background: oklch(0.545 0.195 264);
     color: white;
     padding: 14px 20px;
     display: flex;
@@ -340,14 +340,14 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     font-size: 9px;
     letter-spacing: 0.16em;
     color: white;
-    background: #2d5a27;
+    background: oklch(0.545 0.195 264);
     padding: 5px 12px;
     display: flex;
     align-items: center;
     gap: 10px;
   }
-  .fnb-header { background: #1a3518; }
-  .timeline-header { background: #2d5a27; }
+  .fnb-header { background: oklch(0.400 0.185 264); }
+  .timeline-header { background: oklch(0.545 0.195 264); }
   .header-sub {
     font-family: 'DM Sans', sans-serif;
     font-size: 8px;
@@ -382,7 +382,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
   .dietary-badge {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 13px;
-    color: #2d5a27;
+    color: oklch(0.545 0.195 264);
     line-height: 1;
   }
   .dietary-name {
@@ -422,7 +422,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
   .tl-time-start { font-weight: 700; font-size: 9.5px; }
   .tl-item-title { font-weight: 600; font-size: 9.5px; }
   .tl-item-desc { font-size: 8.5px; color: rgba(26,18,9,0.55); margin-top: 1px; }
-  .tl-staff { font-size: 8.5px; color: #2d5a27; }
+  .tl-staff { font-size: 8.5px; color: oklch(0.545 0.195 264); }
 
   /* ── F&B table ── */
   .fnb-head {
@@ -459,8 +459,8 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
   .fnb-dish-desc { font-size: 8px; color: rgba(26,18,9,0.45); margin-top: 1px; }
   .dietary-tag {
     display: inline-block;
-    background: #d1fae5;
-    color: #065f46;
+    background: oklch(0.92 0.055 264);
+    color: oklch(0.400 0.185 264);
     font-family: 'Bebas Neue', sans-serif;
     font-size: 7.5px;
     letter-spacing: 0.06em;

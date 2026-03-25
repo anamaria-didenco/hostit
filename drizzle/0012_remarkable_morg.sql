@@ -1,0 +1,1 @@
+ALTER TABLE "runsheets" ADD COLUMN "fnbColumns" json;

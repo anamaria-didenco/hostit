@@ -1934,6 +1934,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         footerText: z.string().optional(),
         proposalId: z.number().nullable().optional(),
         floorPlanId: z.number().nullable().optional(),
+        fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional() }).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1955,6 +1956,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.footerText !== undefined) updateData.footerText = fields.footerText;
         if (fields.proposalId !== undefined) updateData.proposalId = fields.proposalId;
         if (fields.floorPlanId !== undefined) updateData.floorPlanId = fields.floorPlanId;
+        if (fields.fnbColumns !== undefined) updateData.fnbColumns = fields.fnbColumns;
         updateData.updatedAt = new Date();
         await db.update(runsheets).set(updateData)
           .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)));
@@ -3589,6 +3591,10 @@ Return ONLY valid JSON. Example structure:
             shareToken,
           }).returning();
           checklistInstance = created;
+        } else if (!checklistInstance.shareToken) {
+          const shareToken = cryptoMod.randomBytes(24).toString('hex');
+          await db.update(checklistInstances).set({ shareToken }).where(eq(checklistInstances.id, checklistInstance.id));
+          checklistInstance = { ...checklistInstance, shareToken };
         }
         // Fetch contact info from lead if linked
         let contactName: string | null = null;
