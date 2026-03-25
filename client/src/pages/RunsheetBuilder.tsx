@@ -348,19 +348,7 @@ export default function RunsheetBuilder() {
     if (applied.length > 0) toast.success(`Applied: ${applied.join(', ')}`);
   }
 
-  const DEFAULT_CHECKLIST_ITEMS = [
-    { id: "c1", text: "Confirm final guest numbers with client", checked: false, category: "admin" },
-    { id: "c2", text: "Send final invoice / confirm payment", checked: false, category: "admin" },
-    { id: "c3", text: "Brief all FOH staff on event details", checked: false, category: "staff" },
-    { id: "c4", text: "Brief kitchen on menu and dietary requirements", checked: false, category: "staff" },
-    { id: "c5", text: "Set up floor plan and tables", checked: false, category: "setup" },
-    { id: "c6", text: "Check AV / sound system", checked: false, category: "setup" },
-    { id: "c7", text: "Prepare bar stock and ice", checked: false, category: "bar" },
-    { id: "c8", text: "Print runsheets for all staff", checked: false, category: "admin" },
-    { id: "c9", text: "Confirm dietary meals with kitchen", checked: false, category: "kitchen" },
-    { id: "c10", text: "Welcome client on arrival", checked: false, category: "guest" },
-  ];
-  const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>(DEFAULT_CHECKLIST_ITEMS);
+  const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>([]);
   const [checklistInstance, setChecklistInstance] = useState<any>(null);
   const [newChecklistText, setNewChecklistText] = useState("");
 
@@ -385,7 +373,7 @@ export default function RunsheetBuilder() {
       getOrCreateChecklist.mutate({
         runsheetId: sheetId,
         name: title ? `${title} — Staff Checklist` : 'Staff Checklist',
-        defaultItems: DEFAULT_CHECKLIST_ITEMS,
+        defaultItems: [],
       });
     }
   }, [sheetId]);
