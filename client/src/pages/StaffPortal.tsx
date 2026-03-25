@@ -57,6 +57,13 @@ export default function StaffPortal() {
     { enabled: !!token, retry: false }
   );
 
+  const checklist: any = (data as any)?.checklist ?? null;
+  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  useEffect(() => { setOptimistic({}); }, [checklist]);
+  const toggleItem = trpc.checklists.toggleItemByToken.useMutation({
+    onSuccess: (result) => { if (result?.items) setOptimistic({}); },
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-linen flex items-center justify-center">
@@ -84,14 +91,6 @@ export default function StaffPortal() {
 
   const { runsheet, items, fnb, contactName, contactEmail, contactPhone } = data;
   const payments: any[] = (data as any).payments ?? [];
-  const checklist: any = (data as any).checklist ?? null;
-
-  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
-  useEffect(() => { setOptimistic({}); }, [checklist]);
-
-  const toggleItem = trpc.checklists.toggleItemByToken.useMutation({
-    onSuccess: (result) => { if (result?.items) setOptimistic({}); },
-  });
 
   const checklistItems: any[] = checklist?.items ?? [];
   const effectiveItems = checklistItems.map((item: any) => ({
