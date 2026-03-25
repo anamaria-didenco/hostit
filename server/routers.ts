@@ -3575,7 +3575,31 @@ Return ONLY valid JSON. Example structure:
         const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, link.runsheetId));
         const fnb = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
         const { checklistInstances } = await import('../drizzle/schema');
-        const [checklistInstance] = await db.select().from(checklistInstances).where(eq(checklistInstances.runsheetId, link.runsheetId)).limit(1);
+        const cryptoMod = await import('crypto');
+        let [checklistInstance] = await db.select().from(checklistInstances).where(eq(checklistInstances.runsheetId, link.runsheetId)).limit(1);
+        if (!checklistInstance) {
+          const defaultItems = [
+            { id: "c1", text: "Confirm final guest numbers with client", checked: false, category: "admin" },
+            { id: "c2", text: "Send final invoice / confirm payment", checked: false, category: "admin" },
+            { id: "c3", text: "Brief all FOH staff on event details", checked: false, category: "staff" },
+            { id: "c4", text: "Brief kitchen on menu and dietary requirements", checked: false, category: "staff" },
+            { id: "c5", text: "Set up floor plan and tables", checked: false, category: "setup" },
+            { id: "c6", text: "Check AV / sound system", checked: false, category: "setup" },
+            { id: "c7", text: "Prepare bar stock and ice", checked: false, category: "bar" },
+            { id: "c8", text: "Print runsheets for all staff", checked: false, category: "admin" },
+            { id: "c9", text: "Confirm dietary meals with kitchen", checked: false, category: "kitchen" },
+            { id: "c10", text: "Welcome client on arrival", checked: false, category: "guest" },
+          ];
+          const shareToken = cryptoMod.randomBytes(24).toString('hex');
+          const [created] = await db.insert(checklistInstances).values({
+            runsheetId: link.runsheetId,
+            ownerId: link.ownerId,
+            name: runsheet.title ? `${runsheet.title} — Staff Checklist` : 'Staff Checklist',
+            items: defaultItems,
+            shareToken,
+          }).returning();
+          checklistInstance = created;
+        }
         // Fetch contact info from lead if linked
         let contactName: string | null = null;
         let contactEmail: string | null = null;
