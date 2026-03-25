@@ -1,9 +1,10 @@
+import { useState, useEffect } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import {
   Clock, Calendar, ChefHat, UtensilsCrossed,
   AlertCircle, CheckCircle2, Loader2, User, Phone, Mail,
-  Building2, DollarSign,
+  Building2, DollarSign, CheckSquare, Square, ClipboardCheck,
 } from "lucide-react";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
@@ -83,6 +84,37 @@ export default function StaffPortal() {
 
   const { runsheet, items, fnb, contactName, contactEmail, contactPhone } = data;
   const payments: any[] = (data as any).payments ?? [];
+  const checklist: any = (data as any).checklist ?? null;
+
+  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  useEffect(() => { setOptimistic({}); }, [checklist]);
+
+  const toggleItem = trpc.checklists.toggleItemByToken.useMutation({
+    onSuccess: (result) => { if (result?.items) setOptimistic({}); },
+  });
+
+  const checklistItems: any[] = checklist?.items ?? [];
+  const effectiveItems = checklistItems.map((item: any) => ({
+    ...item,
+    checked: optimistic[item.id] !== undefined ? optimistic[item.id] : item.checked,
+  }));
+  const checkedCount = effectiveItems.filter((i: any) => i.checked).length;
+
+  const CATEGORY_STYLES: Record<string, string> = {
+    admin: "bg-blue-100 text-blue-700",
+    staff: "bg-purple-100 text-purple-700",
+    setup: "bg-amber-100 text-amber-700",
+    bar: "bg-green-100 text-green-700",
+    kitchen: "bg-red-100 text-red-700",
+    guest: "bg-pink-100 text-pink-700",
+    other: "bg-gray-100 text-gray-600",
+  };
+
+  function handleToggle(itemId: string, currentChecked: boolean) {
+    if (!checklist?.shareToken) return;
+    setOptimistic(prev => ({ ...prev, [itemId]: !currentChecked }));
+    toggleItem.mutate({ token: checklist.shareToken, itemId, checked: !currentChecked });
+  }
 
   const sortedItems = [...items].sort((a, b) => {
     if (a.time < b.time) return -1;
@@ -398,6 +430,55 @@ export default function StaffPortal() {
                 </span>
                 <span></span>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Staff Checklist ── */}
+        {checklist && effectiveItems.length > 0 && (
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-forest" />
+                <span className="font-bebas tracking-widest text-sm text-forest">STAFF CHECKLIST</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-dm text-xs text-ink/40">{checkedCount} of {effectiveItems.length} done</span>
+                {checkedCount === effectiveItems.length && (
+                  <span className="flex items-center gap-1 font-bebas tracking-widest text-xs text-forest">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> ALL DONE
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="h-1 bg-gold/20">
+              <div
+                className="h-1 bg-forest transition-all duration-300"
+                style={{ width: effectiveItems.length > 0 ? `${(checkedCount / effectiveItems.length) * 100}%` : "0%" }}
+              />
+            </div>
+            <div className="divide-y divide-gold/20">
+              {effectiveItems.map((item: any) => (
+                <button
+                  key={item.id}
+                  onClick={() => handleToggle(item.id, item.checked)}
+                  disabled={toggleItem.isPending}
+                  className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-linen/50 transition-colors"
+                >
+                  <span className={`flex-shrink-0 transition-colors ${item.checked ? "text-forest" : "text-ink/25"}`}>
+                    {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                  </span>
+                  <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? "line-through text-ink/35" : "text-ink"}`}>
+                    {item.text}
+                  </span>
+                  {item.category && (
+                    <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 flex-shrink-0 ${CATEGORY_STYLES[item.category] ?? CATEGORY_STYLES.other}`}>
+                      {item.category}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           </div>
         )}

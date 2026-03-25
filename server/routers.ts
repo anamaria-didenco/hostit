@@ -3574,6 +3574,8 @@ Return ONLY valid JSON. Example structure:
         if (!runsheet) return null;
         const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, link.runsheetId));
         const fnb = await db.select().from(fnbItems).where(eq(fnbItems.runsheetId, link.runsheetId));
+        const { checklistInstances } = await import('../drizzle/schema');
+        const [checklistInstance] = await db.select().from(checklistInstances).where(eq(checklistInstances.runsheetId, link.runsheetId)).limit(1);
         // Fetch contact info from lead if linked
         let contactName: string | null = null;
         let contactEmail: string | null = null;
@@ -3600,7 +3602,7 @@ Return ONLY valid JSON. Example structure:
             notes: payments.notes,
           }).from(payments).where(eq(payments.bookingId, runsheet.bookingId)).orderBy(payments.paidAt);
         }
-        return { link, runsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData };
+        return { link, runsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null };
       }),
 
     // Protected: create a new staff portal link
