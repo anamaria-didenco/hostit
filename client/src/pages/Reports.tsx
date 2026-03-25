@@ -96,7 +96,7 @@ export default function Reports() {
             {[
               { label: "Total Enquiries", value: totalLeads, icon: <Users className="w-5 h-5 text-burgundy" />, sub: "all time" },
               { label: "Confirmed Bookings", value: confirmedBookings.length, icon: <Calendar className="w-5 h-5 text-blue" />, sub: "all time" },
-              { label: "Conversion Rate", value: `${conversionRate}%`, icon: <TrendingUp className="w-5 h-5 text-emerald-600" />, sub: "enquiry to booking" },
+              { label: "Conversion Rate", value: `${conversionRate}%`, icon: <TrendingUp className="w-5 h-5 text-forest" />, sub: "enquiry to booking" },
               { label: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, icon: <DollarSign className="w-5 h-5 text-amber-600" />, sub: "NZD, all bookings" },
             ].map(s => (
               <div key={s.label} className="dante-card p-5">
@@ -160,7 +160,7 @@ export default function Reports() {
               { label: "Contacted", bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-700" },
               { label: "Proposal Sent", bg: "bg-violet-50", border: "border-violet-300", text: "text-violet-700" },
               { label: "Negotiating", bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-700" },
-              { label: "Booked", bg: "bg-emerald-50", border: "border-emerald-400", text: "text-emerald-700" },
+              { label: "Booked", bg: "bg-blue-50", border: "border-blue-400", text: "text-forest" },
               { label: "Lost", bg: "bg-gray-50", border: "border-gray-300", text: "text-gray-500" },
               { label: "Cancelled", bg: "bg-red-50", border: "border-red-300", text: "text-red-600" },
             ].map(s => (
@@ -191,7 +191,7 @@ export default function Reports() {
                     return (order[a.status] ?? 9) - (order[b.status] ?? 9);
                   }).map((l: any) => {
                     const rowBg =
-                      l.status === "booked" ? "bg-emerald-50/60 hover:bg-emerald-50" :
+                      l.status === "booked" ? "bg-blue-50/60 hover:bg-blue-50" :
                       l.status === "negotiating" ? "bg-amber-50/60 hover:bg-amber-50" :
                       l.status === "proposal_sent" ? "bg-violet-50/60 hover:bg-violet-50" :
                       l.status === "contacted" ? "bg-blue-50/60 hover:bg-blue-50" :
@@ -199,7 +199,7 @@ export default function Reports() {
                       l.status === "lost" ? "bg-gray-50/60 hover:bg-gray-50" :
                       "bg-red-50/60 hover:bg-red-50";
                     const badgeClass =
-                      l.status === "booked" ? "border-emerald-400 bg-emerald-100 text-emerald-700" :
+                      l.status === "booked" ? "border-blue-400 bg-blue-100 text-forest" :
                       l.status === "negotiating" ? "border-amber-400 bg-amber-100 text-amber-700" :
                       l.status === "proposal_sent" ? "border-violet-400 bg-violet-100 text-violet-700" :
                       l.status === "contacted" ? "border-blue-400 bg-blue-100 text-blue-700" :
@@ -246,12 +246,12 @@ export default function Reports() {
                 <tbody className="divide-y divide-border/40">
                   {(allBookings ?? []).map((b: any) => {
                     const rowBg =
-                      b.status === "confirmed" ? "bg-emerald-50/60 hover:bg-emerald-50" :
+                      b.status === "confirmed" ? "bg-blue-50/60 hover:bg-blue-50" :
                       b.status === "tentative" ? "bg-amber-50/60 hover:bg-amber-50" :
                       b.status === "cancelled" ? "bg-gray-50/60 hover:bg-gray-50" :
                       "bg-blue-50/60 hover:bg-blue-50";
                     const badgeClass =
-                      b.status === "confirmed" ? "border-emerald-400 bg-emerald-100 text-emerald-700" :
+                      b.status === "confirmed" ? "border-blue-400 bg-blue-100 text-forest" :
                       b.status === "tentative" ? "border-amber-400 bg-amber-100 text-amber-700" :
                       b.status === "cancelled" ? "border-gray-300 bg-gray-100 text-gray-500" :
                       "border-blue-300 bg-blue-100 text-blue-700";
@@ -418,7 +418,7 @@ export default function Reports() {
                     <td className="px-4 py-3 font-dm text-sm font-semibold text-ink">${Number(b.totalValue).toLocaleString()}</td>
                     <td className="px-4 py-3">
                       <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${
-                        b.status === "confirmed" ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-amber-400 bg-amber-50 text-amber-700"
+                        b.status === "confirmed" ? "border-blue-400 bg-blue-50 text-forest" : "border-amber-400 bg-amber-50 text-amber-700"
                       }`}>{b.status?.toUpperCase()}</span>
                     </td>
                   </tr>

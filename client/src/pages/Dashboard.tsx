@@ -127,9 +127,9 @@ function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date |
 const PIPELINE_STAGES = [
   { key: "new", label: "NEW", color: "border-amber-400 bg-amber-100 text-amber-900" },
   { key: "contacted", label: "CONTACTED", color: "border-sky-400 bg-sky-100 text-sky-800" },
-  { key: "proposal_sent", label: "PROPOSAL SENT", color: "border-emerald-600 bg-emerald-100 text-emerald-900" },
+  { key: "proposal_sent", label: "PROPOSAL SENT", color: "border-blue-600 bg-blue-100 text-blue-900" },
   { key: "negotiating", label: "NEGOTIATING", color: "border-orange-400 bg-orange-100 text-orange-800" },
-  { key: "booked", label: "CONFIRMED", color: "border-emerald-500 bg-emerald-100 text-emerald-800" },
+  { key: "booked", label: "CONFIRMED", color: "border-blue-500 bg-blue-100 text-blue-800" },
   { key: "lost", label: "LOST", color: "border-stone-400 bg-stone-200 text-stone-700" },
 ];
 
@@ -210,7 +210,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
 
       {showLegend && (
         <div className="flex items-center gap-4 px-4 pt-3 pb-1 flex-wrap">
-          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />Confirmed</span>
+          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-forest inline-block" />Confirmed</span>
           <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Tentative</span>
           <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-stone-400 inline-block" />Cancelled</span>
           <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />Enquiry</span>
@@ -233,7 +233,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
             const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
             const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
             const hasEnquiry = dayLeads.length > 0;
-            const cellBg = hasConfirmed ? 'bg-emerald-50 border-emerald-300' : hasTentative ? 'bg-amber-50 border-amber-300' : hasCancelled ? 'bg-stone-50 border-stone-300' : hasEnquiry ? 'bg-rose-50 border-rose-300' : isToday ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-linen';
+            const cellBg = hasConfirmed ? 'bg-blue-50 border-blue-300' : hasTentative ? 'bg-amber-50 border-amber-300' : hasCancelled ? 'bg-stone-50 border-stone-300' : hasEnquiry ? 'bg-rose-50 border-rose-300' : isToday ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-linen';
             const isEmpty = dayBookings.length === 0 && dayLeads.length === 0;
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             return (
@@ -257,14 +257,14 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
                 )}
                 <div className="flex flex-wrap gap-0.5 mt-auto">
                   {dayBookings.slice(0, 3).map((b: any) => (
-                    <span key={b.id} className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === 'confirmed' ? 'bg-emerald-500' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'}`} />
+                    <span key={b.id} className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === 'confirmed' ? 'bg-forest' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'}`} />
                   ))}
                   {dayLeads.slice(0, 2).map((l: any) => (
                     <span key={l.id} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
                   ))}
                 </div>
                 {dayBookings.slice(0, 1).map((b: any) => (
-                  <div key={b.id} className={`text-[9px] leading-tight font-dm truncate w-full mt-0.5 ${b.status === 'confirmed' ? 'text-emerald-700' : b.status === 'tentative' ? 'text-amber-700' : 'text-stone-500'}`}>{b.firstName}</div>
+                  <div key={b.id} className={`text-[9px] leading-tight font-dm truncate w-full mt-0.5 ${b.status === 'confirmed' ? 'text-forest' : b.status === 'tentative' ? 'text-amber-700' : 'text-stone-500'}`}>{b.firstName}</div>
                 ))}
               </div>
             );
@@ -295,7 +295,7 @@ function NewEnquiriesWidget({ newEnquiries, overdueLeads, onSelectLead, onViewAl
       </div>
       {newEnquiries.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-          <CheckCircle className="w-10 h-10 text-emerald-400 mb-3" />
+          <CheckCircle className="w-10 h-10 text-forest mb-3" />
           <p className="font-cormorant text-lg text-ink/60 italic">All caught up!</p>
           <p className="font-dm text-xs text-ink/40 mt-1">No new enquiries waiting for a reply.</p>
         </div>
@@ -1337,7 +1337,7 @@ export default function Dashboard() {
                   { id: "active_enquiries", label: "Active Enquiries", value: stats?.newLeads ?? 0, sub: "in pipeline", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-3.5 h-3.5" /> },
                   { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", iconBg: "bg-blue-50", iconColor: "text-blue-600", icon: <Calendar className="w-3.5 h-3.5" /> },
                   { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-sage-tint", iconColor: "text-sage-green", icon: <FileText className="w-3.5 h-3.5" /> },
-                  { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", icon: <TrendingUp className="w-3.5 h-3.5" /> },
+                  { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", iconBg: "bg-blue-50", iconColor: "text-forest", icon: <TrendingUp className="w-3.5 h-3.5" /> },
                   { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: <DollarSign className="w-3.5 h-3.5" /> },
                   { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueTasks ?? 0) > 0 ? "bg-red-50" : "bg-gray-50", iconColor: (stats?.overdueTasks ?? 0) > 0 ? "text-red-500" : "text-gray-400", icon: <AlertCircle className="w-3.5 h-3.5" /> },
                   { id: "overdue_followups", label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-50", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-3.5 h-3.5" /> },
@@ -2016,7 +2016,7 @@ export default function Dashboard() {
                           s.key === 'contacted' ? 'border-blue-400/50 text-blue-300' :
                           s.key === 'proposal_sent' ? 'border-purple-400/50 text-purple-300' :
                           s.key === 'negotiating' ? 'border-amber-400/50 text-amber-300' :
-                          s.key === 'booked' ? 'border-emerald-400/50 text-emerald-300' :
+                          s.key === 'booked' ? 'border-blue-400/50 text-blue-300' :
                           s.key === 'lost' ? 'border-red-400/50 text-red-300' :
                           'border-cream/20 text-cream/50'
                         }`}>
@@ -2584,7 +2584,7 @@ export default function Dashboard() {
 
               {/* Legend */}
               <div className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto">
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-emerald-500 rounded-sm" /><span>Confirmed</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-forest rounded-sm" /><span>Confirmed</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-sky-400 rounded-sm" /><span>Tentative</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-300 rounded-sm" /><span>Enquiry / Lead</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-violet-400 rounded-sm" /><span>Proposal Sent</span></div>
@@ -2625,13 +2625,13 @@ export default function Dashboard() {
                         // Colour helper per status
                         const statusCard = (status: string) => {
                           switch(status) {
-                            case 'confirmed': return 'bg-emerald-500 text-white';
+                            case 'confirmed': return 'bg-forest text-white';
                             case 'tentative': return 'bg-sky-400 text-white';
                             case 'proposal_sent': return 'bg-violet-400 text-white';
                             case 'negotiating': return 'bg-rose-400 text-white';
                             case 'new': return 'bg-amber-300 text-amber-900';
                             case 'contacted': return 'bg-amber-400 text-amber-900';
-                            case 'booked': return 'bg-emerald-600 text-white';
+                            case 'booked': return 'bg-forest-dark text-white';
                             case 'lost': return 'bg-stone-300 text-stone-700';
                             case 'cancelled': return 'bg-stone-200 text-stone-500';
                             default: return 'bg-gold/30 text-ink';
@@ -2923,12 +2923,12 @@ export default function Dashboard() {
                             {b.guestCount ? ` · ${b.guestCount} guests` : ""}
                           </div>
                           <div className={`font-bebas text-xs tracking-widest mt-1 ${
-                            b.status === 'confirmed' ? 'text-emerald-600' : b.status === 'tentative' ? 'text-amber-600' : 'text-stone-400'
+                            b.status === 'confirmed' ? 'text-forest' : b.status === 'tentative' ? 'text-amber-600' : 'text-stone-400'
                           }`}>{b.status?.toUpperCase()}</div>
                         </div>
                         <div className="text-right flex flex-col items-end gap-2">
                           {b.totalNzd && <div className="font-cormorant text-xl font-semibold text-forest">${Number(b.totalNzd).toLocaleString()}</div>}
-                          <div className={`font-bebas text-xs tracking-widest ${b.depositPaid ? "text-emerald-600" : "text-gold"}`}>
+                          <div className={`font-bebas text-xs tracking-widest ${b.depositPaid ? "text-forest" : "text-gold"}`}>
                             {b.depositPaid ? "DEPOSIT PAID" : "DEPOSIT PENDING"}
                           </div>
                           <div className="flex gap-1">
@@ -2989,7 +2989,7 @@ export default function Dashboard() {
                       const eventDate = new Date(lead.eventDate);
                       const statusColors: Record<string, string> = {
                         new: 'text-amber-700', contacted: 'text-sky-700', proposal_sent: 'text-forest',
-                        negotiating: 'text-orange-600', booked: 'text-emerald-700', lost: 'text-stone-500', cancelled: 'text-stone-400',
+                        negotiating: 'text-orange-600', booked: 'text-forest', lost: 'text-stone-500', cancelled: 'text-stone-400',
                       };
                       return (
                         <button key={lead.id}
@@ -3037,7 +3037,7 @@ export default function Dashboard() {
                   {/* Status + Type */}
                   <div className="flex items-center gap-2">
                     <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${
-                      selectedBooking.status === 'confirmed' ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                      selectedBooking.status === 'confirmed' ? 'text-forest bg-blue-50 border-blue-200'
                       : selectedBooking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
                       : 'text-stone-500 bg-stone-50 border-stone-200'
                     }`}>{selectedBooking.status?.toUpperCase()}</span>
@@ -3099,7 +3099,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className={`mt-2 font-bebas text-xs tracking-widest ${
-                      selectedBooking.depositPaid ? 'text-emerald-600' : 'text-amber-600'
+                      selectedBooking.depositPaid ? 'text-forest' : 'text-amber-600'
                     }`}>{selectedBooking.depositPaid ? '✓ DEPOSIT PAID' : '⚠ DEPOSIT PENDING'}</div>
                   </div>
                   {/* Quick Actions */}
@@ -4989,10 +4989,10 @@ export default function Dashboard() {
                         <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="p-3 text-sm text-gray-500">{i + 1}</td>
                           <td className="p-3 text-sm font-medium text-gray-800">{s.name}</td>
-                          <td className="p-3 text-center">{s.hasSalesTax ? <span className="text-green-500">✓</span> : <span className="text-gray-300">—</span>}</td>
-                          <td className="p-3 text-center">{s.hasAdminFee ? <span className="text-green-500">✓</span> : <span className="text-gray-300">—</span>}</td>
-                          <td className="p-3 text-center">{s.hasGratuity ? <span className="text-green-500">✓</span> : <span className="text-gray-300">—</span>}</td>
-                          <td className="p-3 text-center">{s.applyToMin ? <span className="text-green-500">✓</span> : <span className="text-gray-300">—</span>}</td>
+                          <td className="p-3 text-center">{s.hasSalesTax ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
+                          <td className="p-3 text-center">{s.hasAdminFee ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
+                          <td className="p-3 text-center">{s.hasGratuity ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
+                          <td className="p-3 text-center">{s.applyToMin ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
                           <td className="p-3 text-sm text-gray-500">{s.salesCategory || 'None'}</td>
                           <td className="p-3 text-right"><button onClick={() => deleteMenuSection.mutate({ id: s.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
                         </tr>

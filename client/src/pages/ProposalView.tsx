@@ -37,10 +37,10 @@ function getThemeTokens(themeKey: string | null | undefined): ThemeTokens {
       ink: '#2d3520', stone: '#7a8a72', border: '#ddd8ce',
     },
     forest: {
-      header: '#2d5a27', headerText: '#FBF7E8', headerMuted: '#9abf94',
+      header: '#4f72e0', headerText: '#FBF7E8', headerMuted: '#8fa5e8',
       bg: '#FBF7E8', card: '#ffffff', cardBorder: '#d0cbb8',
       accent: '#c9a84c', accentText: '#ffffff',
-      ink: '#1a3d15', stone: '#4a6645', border: '#d0cbb8',
+      ink: '#2d4ec2', stone: '#4a6645', border: '#d0cbb8',
     },
     'dusty-merlot': {
       header: '#62202F', headerText: '#FBF7E8', headerMuted: '#c49090',

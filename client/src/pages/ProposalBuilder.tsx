@@ -577,8 +577,8 @@ export default function ProposalBuilder() {
                     {menuPackages.filter(p => p.type === 'food_and_beverages').length > 0 && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
-                          <ChefHat className="w-3.5 h-3.5 text-green-700" />
-                          <span className="font-bebas text-xs tracking-widest text-green-700">FOOD & BEVERAGES PACKAGES</span>
+                          <ChefHat className="w-3.5 h-3.5 text-forest" />
+                          <span className="font-bebas text-xs tracking-widest text-forest">FOOD & BEVERAGES PACKAGES</span>
                         </div>
                         <div className="grid gap-2">
                           {menuPackages.filter(p => p.type === 'food_and_beverages').map(pkg => (
@@ -587,8 +587,8 @@ export default function ProposalBuilder() {
                               onClick={() => toggleMenuPackage(pkg.id)}
                               className={`w-full text-left p-3 border-2 transition-all ${
                                 selectedMenuPackageIds.includes(pkg.id)
-                                  ? 'border-green-600 bg-green-50'
-                                  : 'border-border hover:border-green-600/40'
+                                  ? 'border-forest bg-blue-50'
+                                  : 'border-border hover:border-forest/40'
                               }`}
                             >
                               <div className="flex items-start justify-between gap-2">
@@ -598,10 +598,10 @@ export default function ProposalBuilder() {
                                 </div>
                                 <div className="text-right shrink-0">
                                   {pkg.pricePerHead && (
-                                    <div className="font-alfa text-sm text-green-700">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
+                                    <div className="font-alfa text-sm text-forest">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
                                   )}
                                   {selectedMenuPackageIds.includes(pkg.id) && (
-                                    <div className="font-bebas text-xs text-green-700 tracking-widest mt-0.5">✓ SELECTED</div>
+                                    <div className="font-bebas text-xs text-forest tracking-widest mt-0.5">✓ SELECTED</div>
                                   )}
                                 </div>
                               </div>
@@ -978,7 +978,7 @@ export default function ProposalBuilder() {
                     )}
                     <div className="border-t border-cream/20 pt-2 flex justify-between font-bebas text-sm">
                       <span>TOTAL vs MINIMUM SPEND</span>
-                      <span className={(_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount) >= parseFloat(minimumSpend) ? "text-green-400" : "text-red-400"}>
+                      <span className={(_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount) >= parseFloat(minimumSpend) ? "text-forest" : "text-red-400"}>
                         ${(_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })} / ${parseFloat(minimumSpend).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                       </span>
                     </div>
@@ -1200,9 +1200,9 @@ export default function ProposalBuilder() {
             </Button>
           ) : !sent ? (
             <div className="space-y-2">
-              <div className="bg-green-50 border-2 border-green-200 p-3 text-center">
-                <div className="font-bebas text-xs tracking-widest text-green-700">DRAFT SAVED</div>
-                <div className="font-dm text-xs text-green-600 mt-0.5">Ready to send to client</div>
+              <div className="bg-blue-50 border-2 border-blue-200 p-3 text-center">
+                <div className="font-bebas text-xs tracking-widest text-forest">DRAFT SAVED</div>
+                <div className="font-dm text-xs text-forest mt-0.5">Ready to send to client</div>
               </div>
               <Button onClick={handleSend} disabled={sendProposal.isPending}
                 className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11 gap-2">
@@ -1212,10 +1212,10 @@ export default function ProposalBuilder() {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="bg-green-50 border-2 border-green-400 p-4 text-center">
-                <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                <div className="font-alfa text-lg text-green-700">PROPOSAL SENT!</div>
-                <p className="font-dm text-xs text-green-600 mt-1">Share this link with your client</p>
+              <div className="bg-blue-50 border-2 border-blue-300 p-4 text-center">
+                <CheckCircle className="w-8 h-8 text-forest mx-auto mb-2" />
+                <div className="font-alfa text-lg text-forest">PROPOSAL SENT!</div>
+                <p className="font-dm text-xs text-forest mt-1">Share this link with your client</p>
               </div>
               {proposalUrl && (
                 <div className="bg-white border-2 border-border p-3">

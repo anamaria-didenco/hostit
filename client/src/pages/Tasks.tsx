@@ -193,7 +193,7 @@ export default function Tasks() {
                   className="mt-0.5 flex-shrink-0 text-sage hover:text-burgundy transition-colors"
                 >
                   {task.completed
-                    ? <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                    ? <CheckCircle2 className="w-5 h-5 text-forest" />
                     : <Circle className="w-5 h-5" />
                   }
                 </button>

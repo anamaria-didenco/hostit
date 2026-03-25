@@ -115,7 +115,7 @@ export default function EventDetail() {
     });
   };
 
-  const statusColor = booking.status === 'confirmed' ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+  const statusColor = booking.status === 'confirmed' ? 'text-forest bg-blue-50 border-blue-200'
     : booking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
     : 'text-stone-500 bg-stone-50 border-stone-200';
 
@@ -317,19 +317,19 @@ export default function EventDetail() {
               </div>
               <div className="text-center p-3 bg-cream border border-gold/20">
                 <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">PAID</div>
-                <div className="font-cormorant text-2xl font-semibold text-emerald-600">
+                <div className="font-cormorant text-2xl font-semibold text-forest">
                   ${totalPaid.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                 </div>
               </div>
-              <div className={`text-center p-3 border ${outstanding > 0 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+              <div className={`text-center p-3 border ${outstanding > 0 ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
                 <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">OUTSTANDING</div>
-                <div className={`font-cormorant text-2xl font-semibold ${outstanding > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                <div className={`font-cormorant text-2xl font-semibold ${outstanding > 0 ? 'text-red-600' : 'text-forest'}`}>
                   ${outstanding.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                 </div>
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <span className={`font-bebas text-xs tracking-widest px-2 py-1 ${booking.depositPaid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+              <span className={`font-bebas text-xs tracking-widest px-2 py-1 ${booking.depositPaid ? 'bg-blue-100 text-forest' : 'bg-amber-100 text-amber-700'}`}>
                 {booking.depositPaid ? "✓ DEPOSIT PAID" : "⚠ DEPOSIT PENDING"}
               </span>
               <Link href={`/payments?bookingId=${bookingId}`}>
@@ -354,7 +354,7 @@ export default function EventDetail() {
                         {p.method && ` · ${p.method}`}
                       </div>
                     </div>
-                    <div className="font-cormorant text-lg font-semibold text-emerald-600">
+                    <div className="font-cormorant text-lg font-semibold text-forest">
                       +${Number(p.amount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                     </div>
                   </div>
@@ -968,9 +968,9 @@ function SeatingTab({ bookingId, booking }: { bookingId: number; booking: any })
             onMouseDown={e => handleMouseDown(e, table.id)}
           >
             {table.shape === 'round' ? (
-              <div className="w-20 h-20 rounded-full bg-[#2d5a27]/10 border-2 border-[#2d5a27]/40 flex flex-col items-center justify-center">
-                <span className="text-xs font-bebas tracking-widest text-[#2d5a27]">{table.label}</span>
-                <span className="text-xs text-[#2d5a27]/60">{table.seats} seats</span>
+              <div className="w-20 h-20 rounded-full bg-[#4f72e0]/10 border-2 border-[#4f72e0]/40 flex flex-col items-center justify-center">
+                <span className="text-xs font-bebas tracking-widest text-[#4f72e0]">{table.label}</span>
+                <span className="text-xs text-[#4f72e0]/60">{table.seats} seats</span>
               </div>
             ) : (
               <div className="w-28 h-16 bg-[#c9a84c]/10 border-2 border-[#c9a84c]/40 flex flex-col items-center justify-center">

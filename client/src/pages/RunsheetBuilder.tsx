@@ -19,7 +19,7 @@ const CATEGORIES = [
   { value: "setup", label: "Setup", color: "bg-blue-100 text-blue-700" },
   { value: "guest", label: "Guest", color: "bg-purple-100 text-purple-700" },
   { value: "food", label: "Food", color: "bg-amber-100 text-amber-700" },
-  { value: "beverage", label: "Beverage", color: "bg-green-100 text-green-700" },
+  { value: "beverage", label: "Beverage", color: "bg-blue-100 text-blue-700" },
   { value: "speech", label: "Speech", color: "bg-pink-100 text-pink-700" },
   { value: "entertainment", label: "Entertainment", color: "bg-indigo-100 text-indigo-700" },
   { value: "packdown", label: "Packdown", color: "bg-gray-100 text-gray-700" },
@@ -1042,7 +1042,7 @@ export default function RunsheetBuilder() {
               href={`/api/staff-sheet/${sheetId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-bebas tracking-widest text-xs bg-[#2d5a27]/80 hover:bg-[#2d5a27] text-white px-3 py-1.5 flex items-center gap-1.5 transition-colors"
+              className="font-bebas tracking-widest text-xs bg-forest/80 hover:bg-forest-dark text-white px-3 py-1.5 flex items-center gap-1.5 transition-colors"
             >
               <FileText className="w-3.5 h-3.5" /> STAFF SHEET PDF
             </a>
@@ -1870,7 +1870,7 @@ export default function RunsheetBuilder() {
                     {(proposalDrinks.selectedDrinks as string[])?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-1">
                         {(proposalDrinks.selectedDrinks as string[]).map(k => (
-                          <span key={k} className="bg-green-100 text-green-800 text-[10px] px-2 py-0.5 font-dm border border-green-200">
+                          <span key={k} className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 font-dm border border-blue-200">
                             {k.replace(/_/g, ' ')}
                           </span>
                         ))}
@@ -2090,7 +2090,7 @@ export default function RunsheetBuilder() {
                           )}
                           <div>
                             {item.dietary && (
-                              <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>
+                              <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>
                             )}
                           </div>
                           {showStaffCol && (
@@ -2136,11 +2136,11 @@ export default function RunsheetBuilder() {
 
             {/* Dietary summary */}
             {dietaries.length > 0 && (
-              <div className="px-5 py-4 border-t border-gold/30 bg-green-50/50">
+              <div className="px-5 py-4 border-t border-gold/30 bg-blue-50/50">
                 <div className="font-bebas tracking-widest text-xs text-forest mb-2">DIETARY SUMMARY</div>
                 <div className="flex flex-wrap gap-2">
                   {dietaries.map((d, i) => (
-                    <div key={i} className="bg-white border border-green-200 px-3 py-1.5 text-sm font-dm">
+                    <div key={i} className="bg-white border border-blue-200 px-3 py-1.5 text-sm font-dm">
                       <span className="font-bold">{d.count}×</span> {d.name}
                       {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
                     </div>
@@ -2207,7 +2207,7 @@ export default function RunsheetBuilder() {
                     item.category === 'admin' ? 'bg-blue-100 text-blue-700' :
                     item.category === 'staff' ? 'bg-purple-100 text-purple-700' :
                     item.category === 'setup' ? 'bg-amber-100 text-amber-700' :
-                    item.category === 'bar' ? 'bg-green-100 text-green-700' :
+                    item.category === 'bar' ? 'bg-blue-100 text-blue-700' :
                     item.category === 'kitchen' ? 'bg-red-100 text-red-700' :
                     item.category === 'guest' ? 'bg-pink-100 text-pink-700' :
                     'bg-gray-100 text-gray-600'
@@ -2426,7 +2426,7 @@ export default function RunsheetBuilder() {
                         {(proposalDrinks.selectedDrinks as string[])?.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
                             {(proposalDrinks.selectedDrinks as string[]).map(k => (
-                              <span key={k} className="bg-green-100 text-green-700 text-xs px-2 py-0.5 font-dm">{k.replace(/_/g, " ")}</span>
+                              <span key={k} className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 font-dm">{k.replace(/_/g, " ")}</span>
                             ))}
                           </div>
                         )}
@@ -2709,10 +2709,10 @@ export default function RunsheetBuilder() {
                       </div>
                       <div className="p-3 flex flex-wrap gap-2">
                         {parsedData.dietaries.map((d, i) => (
-                          <div key={i} className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-dm">
-                            <span className="font-semibold text-emerald-800">{d.name}</span>
-                            <span className="text-emerald-600 ml-1">×{d.count}</span>
-                            {d.notes && <span className="text-emerald-500 ml-1">({d.notes})</span>}
+                          <div key={i} className="bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-dm">
+                            <span className="font-semibold text-blue-800">{d.name}</span>
+                            <span className="text-forest ml-1">×{d.count}</span>
+                            {d.notes && <span className="text-forest ml-1">({d.notes})</span>}
                           </div>
                         ))}
                       </div>
@@ -3204,7 +3204,7 @@ export default function RunsheetBuilder() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-dm text-sm font-semibold text-ink">{item.dishName}</span>
                             <span className="font-bebas text-[10px] tracking-widest text-gold bg-gold/10 px-1.5 py-0.5">{item.course}</span>
-                            {item.dietary && <span className="font-dm text-[10px] text-green-700 bg-green-50 px-1.5 py-0.5">{item.dietary}</span>}
+                            {item.dietary && <span className="font-dm text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5">{item.dietary}</span>}
                           </div>
                           <div className="flex items-center gap-3 mt-0.5 text-[11px] font-dm text-ink/50">
                             {item.qty > 1 && <span>Qty: {item.qty}</span>}

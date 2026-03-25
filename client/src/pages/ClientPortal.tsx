@@ -6,7 +6,7 @@ const STATUS_COLORS: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600",
   sent: "bg-blue-100 text-blue-700",
   viewed: "bg-yellow-100 text-yellow-700",
-  accepted: "bg-green-100 text-green-700",
+  accepted: "bg-blue-100 text-blue-700",
   declined: "bg-red-100 text-red-700",
   expired: "bg-gray-100 text-gray-500",
 };
@@ -24,7 +24,7 @@ export default function ClientPortal() {
     return (
       <div className="min-h-screen bg-[#f8f6f1] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-[#2d5a27] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-4 border-[#4f72e0] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-500 font-medium">Loading your event details…</p>
         </div>
       </div>
@@ -70,7 +70,7 @@ export default function ClientPortal() {
       <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Event Summary Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="bg-[#2d5a27] text-white px-6 py-4">
+          <div className="bg-[#4f72e0] text-white px-6 py-4">
             <h2 className="text-xl font-bold">{eventName}</h2>
             <div className="flex gap-4 mt-2 text-sm text-white/80">
               {eventDate && <span>📅 {new Date(eventDate).toLocaleDateString("en-NZ", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>}
@@ -143,7 +143,7 @@ export default function ClientPortal() {
                     <span>${Number(proposal.totalNzd ?? 0).toFixed(2)} NZD</span>
                   </div>
                   {proposal.depositNzd && (
-                    <div className="flex justify-between text-[#2d5a27] font-medium">
+                    <div className="flex justify-between text-[#4f72e0] font-medium">
                       <span>Deposit Required ({proposal.depositPercent ?? 25}%)</span>
                       <span>${Number(proposal.depositNzd).toFixed(2)} NZD</span>
                     </div>
@@ -175,7 +175,7 @@ export default function ClientPortal() {
                   value={signerName}
                   onChange={e => setSignerName(e.target.value)}
                   placeholder="Your full legal name"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2d5a27]"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#4f72e0]"
                 />
               </div>
               <div>
@@ -185,7 +185,7 @@ export default function ClientPortal() {
                   value={signatureData}
                   onChange={e => setSignatureData(e.target.value)}
                   placeholder="Type your name as your electronic signature"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2d5a27] font-serif italic text-lg"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#4f72e0] font-serif italic text-lg"
                 />
                 <p className="text-xs text-gray-400 mt-1">By typing your name above, you agree this constitutes your legal electronic signature.</p>
               </div>
@@ -203,7 +203,7 @@ export default function ClientPortal() {
                     setSigning(false);
                   }
                 }}
-                className="w-full bg-[#2d5a27] text-white py-3 rounded-lg font-semibold text-sm hover:bg-[#1a3a16] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full bg-[#4f72e0] text-white py-3 rounded-lg font-semibold text-sm hover:bg-[#2d4ec2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {signing ? "Signing…" : "Sign & Confirm Booking"}
               </button>
@@ -212,7 +212,7 @@ export default function ClientPortal() {
         )}
 
         {signed && (
-          <div className="bg-green-50 border border-green-200 rounded-xl px-6 py-6 text-center">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl px-6 py-6 text-center">
             <div className="text-4xl mb-2">✅</div>
             <h3 className="font-bold text-green-800 text-lg">Contract Signed!</h3>
             <p className="text-green-700 text-sm mt-1">Thank you. Your booking is confirmed. Your coordinator will be in touch shortly.</p>
@@ -221,7 +221,7 @@ export default function ClientPortal() {
 
         {/* Footer */}
         <div className="text-center text-xs text-gray-400 py-4">
-          Powered by <span className="font-semibold text-[#2d5a27]">VenueFlowHQ</span> · New Zealand Venue Management
+          Powered by <span className="font-semibold text-[#4f72e0]">VenueFlowHQ</span> · New Zealand Venue Management
         </div>
       </div>
     </div>
