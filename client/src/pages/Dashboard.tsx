@@ -1587,7 +1587,7 @@ export default function Dashboard() {
                       <div className="border-t border-red-200 bg-red-50/50 px-4 py-2 flex items-center gap-2">
                         <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                         <span className="font-inter text-xs font-semibold text-red-700">{(overdueLeads ?? []).length} overdue follow-up{(overdueLeads ?? []).length > 1 ? 's' : ''}</span>
-                        <button onClick={() => setTab('enquiries')} className="ml-auto font-inter text-xs text-red-600 hover:text-red-800 transition-colors">View →</button>
+                        <button onClick={() => { setTab('enquiries'); setLeadsSubTab('all'); if (overdueLeads?.[0]) selectLead(overdueLeads[0]); }} className="ml-auto font-inter text-xs text-red-600 hover:text-red-800 transition-colors">View →</button>
                       </div>
                     )}
                   </div>

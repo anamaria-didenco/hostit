@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import {
@@ -58,11 +58,19 @@ export default function StaffPortal() {
   );
 
   const checklist: any = (data as any)?.checklist ?? null;
-  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  const [localItems, setLocalItems] = useState<any[]>([]);
+  const localItemsInitialized = useRef(false);
   const [activePortalTab, setActivePortalTab] = useState<'runsheet' | 'checklist'>('runsheet');
-  useEffect(() => { setOptimistic({}); }, [checklist]);
+  useEffect(() => {
+    if (checklist?.items && !localItemsInitialized.current) {
+      setLocalItems(checklist.items);
+      localItemsInitialized.current = true;
+    }
+  }, [checklist]);
   const toggleItem = trpc.checklists.toggleItemByToken.useMutation({
-    onSuccess: (result) => { if (result?.items) setOptimistic({}); },
+    onError: () => {
+      if (checklist?.items) setLocalItems(checklist.items);
+    },
   });
 
   if (isLoading) {
@@ -98,12 +106,7 @@ export default function StaffPortal() {
   const showStaff = fnbCols.staff !== false;
   const showNotes = fnbCols.notes !== false;
 
-  const checklistItems: any[] = checklist?.items ?? [];
-  const effectiveItems = checklistItems.map((item: any) => ({
-    ...item,
-    checked: optimistic[item.id] !== undefined ? optimistic[item.id] : item.checked,
-  }));
-  const checkedCount = effectiveItems.filter((i: any) => i.checked).length;
+  const checkedCount = localItems.filter((i: any) => i.checked).length;
 
   const CATEGORY_STYLES: Record<string, string> = {
     admin: "bg-blue-100 text-blue-700",
@@ -117,8 +120,9 @@ export default function StaffPortal() {
 
   function handleToggle(itemId: string, currentChecked: boolean) {
     if (!checklist?.shareToken) return;
-    setOptimistic(prev => ({ ...prev, [itemId]: !currentChecked }));
-    toggleItem.mutate({ token: checklist.shareToken, itemId, checked: !currentChecked });
+    const nextChecked = !currentChecked;
+    setLocalItems(prev => prev.map(i => i.id === itemId ? { ...i, checked: nextChecked } : i));
+    toggleItem.mutate({ token: checklist.shareToken, itemId, checked: nextChecked });
   }
 
   const sortedItems = [...items].sort((a, b) => {
@@ -182,13 +186,13 @@ export default function StaffPortal() {
             }`}
           >
             CHECKLIST
-            {effectiveItems.length > 0 && (
+            {localItems.length > 0 && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-dm ${
-                checkedCount === effectiveItems.length
+                checkedCount === localItems.length
                   ? 'bg-green-400/30 text-green-200'
                   : 'bg-white/20 text-white/80'
               }`}>
-                {checkedCount}/{effectiveItems.length}
+                {checkedCount}/{localItems.length}
               </span>
             )}
           </button>
@@ -488,7 +492,7 @@ export default function StaffPortal() {
         {/* ── Checklist Tab ── */}
         {activePortalTab === 'checklist' && (
           <>
-            {effectiveItems.length > 0 ? (
+            {localItems.length > 0 ? (
               <div className="bg-white border border-gold/30 shadow-sm">
                 <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
                   <div className="flex items-center gap-2">
@@ -496,8 +500,8 @@ export default function StaffPortal() {
                     <span className="font-bebas tracking-widest text-sm text-forest">STAFF CHECKLIST</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-dm text-xs text-ink/40">{checkedCount} of {effectiveItems.length} done</span>
-                    {checkedCount === effectiveItems.length && (
+                    <span className="font-dm text-xs text-ink/40">{checkedCount} of {localItems.length} done</span>
+                    {checkedCount === localItems.length && (
                       <span className="flex items-center gap-1 font-bebas tracking-widest text-xs text-forest">
                         <CheckCircle2 className="w-3.5 h-3.5" /> ALL DONE
                       </span>
@@ -508,11 +512,11 @@ export default function StaffPortal() {
                 <div className="h-1.5 bg-gold/20">
                   <div
                     className="h-1.5 bg-forest transition-all duration-300"
-                    style={{ width: effectiveItems.length > 0 ? `${(checkedCount / effectiveItems.length) * 100}%` : "0%" }}
+                    style={{ width: localItems.length > 0 ? `${(checkedCount / localItems.length) * 100}%` : "0%" }}
                   />
                 </div>
                 <div className="divide-y divide-gold/20">
-                  {effectiveItems.map((item: any) => (
+                  {localItems.map((item: any) => (
                     <button
                       key={item.id}
                       onClick={() => handleToggle(item.id, item.checked)}
