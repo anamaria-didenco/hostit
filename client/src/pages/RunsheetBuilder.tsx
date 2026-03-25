@@ -11,7 +11,7 @@ import {
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
-  Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw,
+  Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine,
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
@@ -978,6 +978,28 @@ export default function RunsheetBuilder() {
     const updated = checklistItems.filter(item => item.id !== id);
     setChecklistItems(updated);
     if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+  }
+
+  function pullDrinksFromFnb() {
+    const drinkItems = fnbItems.filter(i => i.course === 'Drinks' && i.dishName?.trim());
+    if (drinkItems.length === 0) {
+      toast.info('No drinks listed in the F&B sheet yet — add them there first.');
+      return;
+    }
+    const toAdd: typeof checklistItems = [];
+    for (const drink of drinkItems) {
+      const text = `Stock bar: ${drink.dishName.trim()}`;
+      if (checklistItems.some(ci => ci.text === text)) continue;
+      toAdd.push({ id: `c-bar-${Date.now()}-${Math.random().toString(36).slice(2)}`, text, checked: false, category: 'bar' });
+    }
+    if (toAdd.length === 0) {
+      toast.info('All drinks are already in the checklist.');
+      return;
+    }
+    const updated = [...checklistItems, ...toAdd];
+    setChecklistItems(updated);
+    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+    toast.success(`Added ${toAdd.length} bar stock item${toAdd.length !== 1 ? 's' : ''} to the checklist`);
   }
 
   // Format event date for display
@@ -2277,6 +2299,15 @@ export default function RunsheetBuilder() {
                   <span className="font-bebas tracking-widest text-xs text-forest flex items-center gap-1">
                     <CheckSquare className="w-3.5 h-3.5" /> ALL DONE
                   </span>
+                )}
+                {fnbItems.some(i => i.course === 'Drinks' && i.dishName?.trim()) && (
+                  <button
+                    onClick={pullDrinksFromFnb}
+                    className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
+                    title="Add each drink from the F&B sheet as a bar stock item to tick off"
+                  >
+                    <Wine className="w-3.5 h-3.5" /> PULL BAR DRINKS
+                  </button>
                 )}
                 {checklistInstance?.shareToken ? (
                   <button

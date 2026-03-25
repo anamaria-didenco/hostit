@@ -1864,6 +1864,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
         venueSetup: z.string().optional(),
         footerText: z.string().optional(),
+        costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).optional(),
         items: z.array(z.object({
           time: z.string(),
           duration: z.number().optional(),
@@ -1895,6 +1896,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           dietaries: input.dietaries ?? null,
           venueSetup: input.venueSetup ?? null,
           footerText: input.footerText ?? null,
+          costItems: input.costItems ?? null,
           proposalId: input.proposalId ?? null,
           publicToken: token,
         }).returning({ id: runsheets.id });

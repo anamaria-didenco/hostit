@@ -302,6 +302,7 @@ export const runsheets = pgTable("runsheets", {
   footerText: text("footerText"),
   proposalId: integer("proposalId"),
   floorPlanId: integer("floorPlanId"),
+  costItems: json("costItems").$type<{ _id: string; label: string; qty: number; unitPrice: number; category?: string }[]>(),
   publicToken: varchar("publicToken", { length: 64 }).unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
