@@ -46,14 +46,14 @@
    VenueFlowHQ — Sage & White Design System
    ─────────────────────────────────────────────────────────────────────────────
    Primary pairing:
-     Sage Green   #8D957E  oklch(0.520 0.110 148)  → primary accent, CTAs, active
+     Sage Green   #8D957E  oklch(0.545 0.195 264)  → primary accent, CTAs, active
      White        #FFFFFF  oklch(1.000 0.000 0)     → all surfaces, cards, nav
 
    Supporting palette:
-     Sage Light   #B8C0AD  oklch(0.730 0.070 148)   → tints, hover fills
-     Sage Dark    #6e7862  oklch(0.430 0.100 148)   → hover/pressed states
+     Sage Light   #B8C0AD  oklch(0.730 0.080 264)   → tints, hover fills
+     Sage Dark    #6e7862  oklch(0.430 0.185 264)   → hover/pressed states
      Sage Tint    #F0F2EE  oklch(0.960 0.012 140)   → subtle fills, page bg
-     Charcoal     #2D3028  oklch(0.210 0.020 140)   → primary text (warm dark)
+     Charcoal     #2D3028  oklch(0.210 0.015 255)   → primary text (warm dark)
      Mid Grey     #6B7280  oklch(0.520 0.010 220)   → secondary text, borders
      Light Grey   #E8EAE6  oklch(0.920 0.010 140)   → borders, dividers
    ─────────────────────────────────────────────────────────────────────────────
@@ -65,42 +65,42 @@
 
   /* ── Surfaces ── */
   /* Page background = very pale sage tint (almost white, slight warmth) */
-  --background:             oklch(0.970 0.006 140);
-  --foreground:             oklch(0.210 0.020 140);   /* Warm charcoal */
+  --background:             oklch(0.970 0.006 264);
+  --foreground:             oklch(0.210 0.015 255);   /* Warm charcoal */
 
   /* Cards & popovers = pure white */
   --card:                   oklch(1.000 0.000 0);
-  --card-foreground:        oklch(0.210 0.020 140);
+  --card-foreground:        oklch(0.210 0.015 255);
   --popover:                oklch(1.000 0.000 0);
-  --popover-foreground:     oklch(0.210 0.020 140);
+  --popover-foreground:     oklch(0.210 0.015 255);
 
   /* ── Primary = Sage Green ── */
-  --primary:                oklch(0.520 0.110 148);   /* #8D957E */
+  --primary:                oklch(0.545 0.195 264);   /* #8D957E */
   --primary-foreground:     oklch(1.000 0.000 0);
 
   /* Secondary = pale sage fill */
-  --secondary:              oklch(0.950 0.012 140);
-  --secondary-foreground:   oklch(0.210 0.020 140);
+  --secondary:              oklch(0.950 0.012 264);
+  --secondary-foreground:   oklch(0.210 0.015 255);
 
   /* Muted = cool light grey */
-  --muted:                  oklch(0.940 0.008 140);
+  --muted:                  oklch(0.940 0.008 264);
   --muted-foreground:       oklch(0.520 0.010 220);
 
   /* Accent = sage tint */
-  --accent:                 oklch(0.940 0.018 140);
-  --accent-foreground:      oklch(0.430 0.100 148);   /* Sage Dark */
+  --accent:                 oklch(0.945 0.018 264);
+  --accent-foreground:      oklch(0.430 0.185 264);   /* Sage Dark */
 
   /* ── Utility ── */
   --destructive:            oklch(0.580 0.200 25);
   --destructive-foreground: oklch(1.000 0.000 0);
 
   /* Borders = light sage-grey */
-  --border:                 oklch(0.900 0.012 140);
-  --input:                  oklch(0.950 0.008 140);
-  --ring:                   oklch(0.520 0.110 148);   /* Sage Green focus ring */
+  --border:                 oklch(0.900 0.010 264);
+  --input:                  oklch(0.950 0.008 264);
+  --ring:                   oklch(0.545 0.195 264);   /* Sage Green focus ring */
 
   /* ── Charts ── */
-  --chart-1: oklch(0.520 0.110 148);   /* Sage Green */
+  --chart-1: oklch(0.545 0.195 264);   /* Sage Green */
   --chart-2: oklch(0.460 0.120 40);    /* Burnt Sienna (supporting) */
   --chart-3: oklch(0.560 0.022 220);   /* Stormy Sky (supporting) */
   --chart-4: oklch(0.720 0.140 65);    /* Warm amber */
@@ -108,13 +108,13 @@
 
   /* ── Sidebar = white with sage border ── */
   --sidebar:                    oklch(1.000 0.000 0);
-  --sidebar-foreground:         oklch(0.210 0.020 140);
-  --sidebar-primary:            oklch(0.520 0.110 148);
+  --sidebar-foreground:         oklch(0.210 0.015 255);
+  --sidebar-primary:            oklch(0.545 0.195 264);
   --sidebar-primary-foreground: oklch(1.000 0.000 0);
-  --sidebar-accent:             oklch(0.940 0.018 140);
-  --sidebar-accent-foreground:  oklch(0.430 0.100 148);
-  --sidebar-border:             oklch(0.900 0.012 140);
-  --sidebar-ring:               oklch(0.520 0.110 148);
+  --sidebar-accent:             oklch(0.945 0.018 264);
+  --sidebar-accent-foreground:  oklch(0.430 0.185 264);
+  --sidebar-border:             oklch(0.900 0.010 264);
+  --sidebar-ring:               oklch(0.545 0.195 264);
 }
 
 /* ── Base Layer ──────────────────────────────────────────────────────────── */
@@ -143,14 +143,14 @@
     font-weight: 700;
     letter-spacing: -0.03em;
     line-height: 1.05;
-    color: oklch(0.210 0.020 140);
+    color: oklch(0.210 0.015 255);
   }
   h2 {
     font-family: 'Inter', -apple-system, system-ui, sans-serif;
     font-weight: 600;
     letter-spacing: -0.025em;
     line-height: 1.15;
-    color: oklch(0.210 0.020 140);
+    color: oklch(0.210 0.015 255);
   }
   h3 {
     font-family: 'Inter', -apple-system, system-ui, sans-serif;
@@ -170,7 +170,7 @@
     letter-spacing: 0.06em;
     font-size: 0.7rem;
     text-transform: uppercase;
-    color: oklch(0.520 0.110 148);  /* Sage Green for section labels */
+    color: oklch(0.545 0.195 264);  /* Sage Green for section labels */
   }
 
   label {
@@ -195,7 +195,7 @@
 
   hr {
     border: none;
-    border-top: 1px solid oklch(0.900 0.012 140);
+    border-top: 1px solid oklch(0.900 0.010 264);
     margin: 1.5rem 0;
   }
 }
@@ -215,24 +215,24 @@
   .font-pacifico  { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-style: italic; font-weight: 600; }
 
   /* ── Sage Green palette (text) ── */
-  .text-sage-green  { color: oklch(0.520 0.110 148); }
-  .text-sage-dark   { color: oklch(0.430 0.100 148); }
-  .text-sage-light  { color: oklch(0.730 0.070 148); }
+  .text-sage-green  { color: oklch(0.545 0.195 264); }
+  .text-sage-dark   { color: oklch(0.430 0.185 264); }
+  .text-sage-light  { color: oklch(0.730 0.080 264); }
 
   /* Legacy aliases → all map to sage/charcoal roles */
-  .text-forest    { color: oklch(0.520 0.110 148); }
-  .text-teal      { color: oklch(0.520 0.110 148); }
-  .text-burgundy  { color: oklch(0.520 0.110 148); }
-  .text-terra     { color: oklch(0.520 0.110 148); }
-  .text-blue      { color: oklch(0.520 0.110 148); }
-  .text-gold      { color: oklch(0.520 0.110 148); }
-  .text-sienna    { color: oklch(0.520 0.110 148); }
+  .text-forest    { color: oklch(0.545 0.195 264); }
+  .text-teal      { color: oklch(0.545 0.195 264); }
+  .text-burgundy  { color: oklch(0.545 0.195 264); }
+  .text-terra     { color: oklch(0.545 0.195 264); }
+  .text-blue      { color: oklch(0.545 0.195 264); }
+  .text-gold      { color: oklch(0.545 0.195 264); }
+  .text-sienna    { color: oklch(0.545 0.195 264); }
   .text-sage      { color: oklch(0.520 0.010 220); }
   .text-stone     { color: oklch(0.520 0.010 220); }
   .text-taupe     { color: oklch(0.520 0.010 220); }
   .text-stormy    { color: oklch(0.520 0.010 220); }
-  .text-ink       { color: oklch(0.210 0.020 140); }
-  .text-brown     { color: oklch(0.210 0.020 140); }
+  .text-ink       { color: oklch(0.210 0.015 255); }
+  .text-brown     { color: oklch(0.210 0.015 255); }
   .text-cream     { color: oklch(1.000 0.000 0); }
   .text-warm-white { color: oklch(1.000 0.000 0); }
   .text-ivory     { color: oklch(1.000 0.000 0); }
@@ -241,48 +241,48 @@
   .text-amber     { color: oklch(0.720 0.140 65); }
 
   /* ── Sage Green palette (bg) ── */
-  .bg-sage-green  { background-color: oklch(0.520 0.110 148); }
-  .bg-sage-dark   { background-color: oklch(0.430 0.100 148); }
-  .bg-sage-tint   { background-color: oklch(0.940 0.018 140); }
-  .bg-sage-light  { background-color: oklch(0.730 0.070 148); }
+  .bg-sage-green  { background-color: oklch(0.545 0.195 264); }
+  .bg-sage-dark   { background-color: oklch(0.430 0.185 264); }
+  .bg-sage-tint   { background-color: oklch(0.945 0.018 264); }
+  .bg-sage-light  { background-color: oklch(0.730 0.080 264); }
 
   /* Legacy aliases */
-  .bg-forest      { background-color: oklch(0.520 0.110 148); }
-  .bg-forest-dark { background-color: oklch(0.430 0.100 148); }
-  .bg-teal        { background-color: oklch(0.520 0.110 148); }
-  .bg-teal-dark   { background-color: oklch(0.430 0.100 148); }
-  .bg-terra       { background-color: oklch(0.520 0.110 148); }
-  .bg-burgundy    { background-color: oklch(0.520 0.110 148); }
-  .bg-burg-dark   { background-color: oklch(0.430 0.100 148); }
-  .bg-blue        { background-color: oklch(0.520 0.110 148); }
-  .bg-gold        { background-color: oklch(0.520 0.110 148); }
-  .bg-sienna      { background-color: oklch(0.520 0.110 148); }
-  .bg-sienna-tint { background-color: oklch(0.940 0.018 140); }
+  .bg-forest      { background-color: oklch(0.545 0.195 264); }
+  .bg-forest-dark { background-color: oklch(0.430 0.185 264); }
+  .bg-teal        { background-color: oklch(0.545 0.195 264); }
+  .bg-teal-dark   { background-color: oklch(0.430 0.185 264); }
+  .bg-terra       { background-color: oklch(0.545 0.195 264); }
+  .bg-burgundy    { background-color: oklch(0.545 0.195 264); }
+  .bg-burg-dark   { background-color: oklch(0.430 0.185 264); }
+  .bg-blue        { background-color: oklch(0.545 0.195 264); }
+  .bg-gold        { background-color: oklch(0.545 0.195 264); }
+  .bg-sienna      { background-color: oklch(0.545 0.195 264); }
+  .bg-sienna-tint { background-color: oklch(0.945 0.018 264); }
   .bg-cream       { background-color: oklch(1.000 0.000 0); }
   .bg-ivory       { background-color: oklch(1.000 0.000 0); }
-  .bg-ivory-sand  { background-color: oklch(0.960 0.010 140); }
-  .bg-linen       { background-color: oklch(0.960 0.010 140); }
-  .bg-warm-white  { background-color: oklch(0.980 0.005 140); }
+  .bg-ivory-sand  { background-color: oklch(0.965 0.010 264); }
+  .bg-linen       { background-color: oklch(0.965 0.010 264); }
+  .bg-warm-white  { background-color: oklch(0.980 0.005 264); }
   .bg-parchment   { background-color: oklch(1.000 0.000 0); }
-  .bg-ink         { background-color: oklch(0.210 0.020 140); }
+  .bg-ink         { background-color: oklch(0.210 0.015 255); }
   .bg-stormy      { background-color: oklch(0.560 0.022 220); }
   .bg-stormy-tint { background-color: oklch(0.940 0.010 220); }
   .bg-tomato      { background-color: oklch(0.580 0.200 25); }
   .bg-amber       { background-color: oklch(0.720 0.140 65); }
 
   /* ── Sage Green palette (border) ── */
-  .border-sage-green { border-color: oklch(0.520 0.110 148); }
-  .border-sage-dark  { border-color: oklch(0.430 0.100 148); }
+  .border-sage-green { border-color: oklch(0.545 0.195 264); }
+  .border-sage-dark  { border-color: oklch(0.430 0.185 264); }
 
   /* Legacy aliases */
-  .border-forest   { border-color: oklch(0.520 0.110 148); }
-  .border-teal     { border-color: oklch(0.520 0.110 148); }
-  .border-terra    { border-color: oklch(0.520 0.110 148); }
-  .border-burgundy { border-color: oklch(0.520 0.110 148); }
-  .border-gold     { border-color: oklch(0.590 0.040 140 / 0.25); }
-  .border-sienna   { border-color: oklch(0.520 0.110 148); }
+  .border-forest   { border-color: oklch(0.545 0.195 264); }
+  .border-teal     { border-color: oklch(0.545 0.195 264); }
+  .border-terra    { border-color: oklch(0.545 0.195 264); }
+  .border-burgundy { border-color: oklch(0.545 0.195 264); }
+  .border-gold     { border-color: oklch(0.590 0.040 264 / 0.25); }
+  .border-sienna   { border-color: oklch(0.545 0.195 264); }
   .border-stormy   { border-color: oklch(0.560 0.022 220); }
-  .border-ink      { border-color: oklch(0.210 0.020 140); }
+  .border-ink      { border-color: oklch(0.210 0.015 255); }
   .border-amber    { border-color: oklch(0.720 0.140 65); }
   .border-tomato   { border-color: oklch(0.580 0.200 25); }
 
@@ -296,20 +296,20 @@
     font-size: 0.65rem;
     font-family: 'Inter', system-ui, sans-serif;
     font-weight: 700;
-    color: oklch(0.590 0.040 140 / 0.55);
+    color: oklch(0.590 0.040 264 / 0.55);
   }
   .terra-rule::before, .terra-rule::after,
   .gold-rule::before, .gold-rule::after {
     content: '';
     flex: 1;
     height: 1px;
-    background: oklch(0.900 0.012 140);
+    background: oklch(0.900 0.010 264);
   }
 
   /* ── Cards — white on sage-tint page bg ── */
   .paradiso-card, .dante-card, .cream-card {
     background-color: oklch(1.000 0.000 0);
-    border: 1px solid oklch(0.900 0.012 140);
+    border: 1px solid oklch(0.900 0.010 264);
     border-radius: 0.875rem;
     box-shadow:
       0 1px 3px oklch(0.210 0.020 140 / 0.06),
@@ -320,8 +320,8 @@
   .stripe-pattern {
     background-image: repeating-linear-gradient(
       90deg,
-      oklch(0.900 0.012 140) 0px,
-      oklch(0.900 0.012 140) 1px,
+      oklch(0.900 0.010 264) 0px,
+      oklch(0.900 0.010 264) 1px,
       transparent 1px,
       transparent 12px
     );
@@ -329,8 +329,8 @@
   .stripe-pattern-v {
     background-image: repeating-linear-gradient(
       180deg,
-      oklch(0.900 0.012 140) 0px,
-      oklch(0.900 0.012 140) 1px,
+      oklch(0.900 0.010 264) 0px,
+      oklch(0.900 0.010 264) 1px,
       transparent 1px,
       transparent 12px
     );
@@ -352,25 +352,25 @@
     cursor: pointer;
   }
   .nav-item:hover {
-    color: oklch(0.210 0.020 140);
-    background-color: oklch(0.940 0.018 140);  /* sage tint */
+    color: oklch(0.210 0.015 255);
+    background-color: oklch(0.945 0.018 264);  /* sage tint */
   }
   .nav-item.active {
-    color: oklch(0.430 0.100 148);   /* Sage Dark */
-    background-color: oklch(0.940 0.018 140);
+    color: oklch(0.430 0.185 264);   /* Sage Dark */
+    background-color: oklch(0.945 0.018 264);
     font-weight: 600;
   }
 
   /* ── Status pill badges ── */
-  .status-new       { background: oklch(0.940 0.018 140); color: oklch(0.430 0.100 148); }
+  .status-new       { background: oklch(0.945 0.018 264); color: oklch(0.430 0.185 264); }
   .status-quoted    { background: oklch(0.940 0.040 65 / 0.50); color: oklch(0.500 0.120 65); }
-  .status-confirmed { background: oklch(0.940 0.018 140); color: oklch(0.380 0.050 140); }
+  .status-confirmed { background: oklch(0.945 0.018 264); color: oklch(0.380 0.060 264); }
   .status-cancelled { background: oklch(0.940 0.008 220); color: oklch(0.520 0.010 220); }
 
   /* ── Stat card ── */
   .stat-card {
     background: oklch(1.000 0.000 0);
-    border: 1px solid oklch(0.900 0.012 140);
+    border: 1px solid oklch(0.900 0.010 264);
     border-radius: 0.875rem;
     padding: 1.25rem;
     box-shadow: 0 1px 4px oklch(0.210 0.020 140 / 0.05);
@@ -378,7 +378,7 @@
 
   /* ── Primary button = Sage Green ── */
   .btn-teal, .btn-forest {
-    background-color: oklch(0.520 0.110 148);
+    background-color: oklch(0.545 0.195 264);
     color: oklch(1.000 0.000 0);
     border-radius: 0.625rem;
     font-family: 'Inter', system-ui, sans-serif;
@@ -387,14 +387,14 @@
     letter-spacing: -0.01em;
     transition: background-color 0.15s ease, transform 0.1s ease;
   }
-  .btn-teal:hover, .btn-forest:hover { background-color: oklch(0.430 0.100 148); }
+  .btn-teal:hover, .btn-forest:hover { background-color: oklch(0.430 0.185 264); }
   .btn-teal:active, .btn-forest:active { transform: scale(0.98); }
 
   /* ── Outline button = Sage Green outline ── */
   .btn-terra-outline, .btn-gold-outline {
     background-color: oklch(1.000 0.000 0);
-    color: oklch(0.430 0.100 148);
-    border: 1.5px solid oklch(0.590 0.040 140 / 0.50);
+    color: oklch(0.430 0.185 264);
+    border: 1.5px solid oklch(0.590 0.040 264 / 0.50);
     border-radius: 0.625rem;
     font-family: 'Inter', system-ui, sans-serif;
     font-weight: 500;
@@ -403,13 +403,13 @@
     transition: background-color 0.15s ease, border-color 0.15s ease;
   }
   .btn-terra-outline:hover, .btn-gold-outline:hover {
-    background-color: oklch(0.940 0.018 140);
-    border-color: oklch(0.590 0.040 140 / 0.80);
+    background-color: oklch(0.945 0.018 264);
+    border-color: oklch(0.590 0.040 264 / 0.80);
   }
 
   /* ── Input focus = Sage ring ── */
   .input-paradiso, .input-dante {
-    border: 1px solid oklch(0.900 0.012 140);
+    border: 1px solid oklch(0.900 0.010 264);
     border-radius: 0.625rem;
     background: oklch(1.000 0.000 0);
     font-family: 'Inter', system-ui, sans-serif;
@@ -417,8 +417,8 @@
   }
   .input-paradiso:focus, .input-dante:focus {
     outline: none;
-    border-color: oklch(0.520 0.110 148);
-    box-shadow: 0 0 0 3px oklch(0.590 0.040 140 / 0.15);
+    border-color: oklch(0.545 0.195 264);
+    box-shadow: 0 0 0 3px oklch(0.590 0.040 264 / 0.15);
   }
 
   /* ── Logo ── */
@@ -426,13 +426,13 @@
     font-family: 'Inter', system-ui, sans-serif;
     font-weight: 700;
     letter-spacing: -0.04em;
-    color: oklch(0.210 0.020 140);
+    color: oklch(0.210 0.015 255);
     line-height: 1;
   }
 
   /* ── Dot grid texture ── */
   .checkerboard {
-    background-image: radial-gradient(circle, oklch(0.900 0.012 140) 1px, transparent 1px);
+    background-image: radial-gradient(circle, oklch(0.900 0.010 264) 1px, transparent 1px);
     background-size: 20px 20px;
   }
 
@@ -460,31 +460,31 @@
 
 /* ── Theme: Sage (default — already in :root, kept for explicitness) ── */
 [data-theme="sage"] {
-  --background:             oklch(0.970 0.006 140);
-  --foreground:             oklch(0.210 0.020 140);
+  --background:             oklch(0.970 0.006 264);
+  --foreground:             oklch(0.210 0.015 255);
   --card:                   oklch(1.000 0.000 0);
-  --card-foreground:        oklch(0.210 0.020 140);
+  --card-foreground:        oklch(0.210 0.015 255);
   --popover:                oklch(1.000 0.000 0);
-  --popover-foreground:     oklch(0.210 0.020 140);
-  --primary:                oklch(0.520 0.110 148);
+  --popover-foreground:     oklch(0.210 0.015 255);
+  --primary:                oklch(0.545 0.195 264);
   --primary-foreground:     oklch(1.000 0.000 0);
-  --secondary:              oklch(0.950 0.012 140);
-  --secondary-foreground:   oklch(0.210 0.020 140);
-  --muted:                  oklch(0.940 0.008 140);
+  --secondary:              oklch(0.950 0.012 264);
+  --secondary-foreground:   oklch(0.210 0.015 255);
+  --muted:                  oklch(0.940 0.008 264);
   --muted-foreground:       oklch(0.520 0.010 220);
-  --accent:                 oklch(0.940 0.018 140);
-  --accent-foreground:      oklch(0.430 0.100 148);
-  --border:                 oklch(0.900 0.012 140);
-  --input:                  oklch(0.950 0.008 140);
-  --ring:                   oklch(0.520 0.110 148);
+  --accent:                 oklch(0.945 0.018 264);
+  --accent-foreground:      oklch(0.430 0.185 264);
+  --border:                 oklch(0.900 0.010 264);
+  --input:                  oklch(0.950 0.008 264);
+  --ring:                   oklch(0.545 0.195 264);
   --sidebar:                oklch(1.000 0.000 0);
-  --sidebar-foreground:     oklch(0.210 0.020 140);
-  --sidebar-primary:        oklch(0.520 0.110 148);
+  --sidebar-foreground:     oklch(0.210 0.015 255);
+  --sidebar-primary:        oklch(0.545 0.195 264);
   --sidebar-primary-foreground: oklch(1.000 0.000 0);
-  --sidebar-accent:         oklch(0.940 0.018 140);
-  --sidebar-accent-foreground: oklch(0.430 0.100 148);
-  --sidebar-border:         oklch(0.900 0.012 140);
-  --sidebar-ring:           oklch(0.520 0.110 148);
+  --sidebar-accent:         oklch(0.945 0.018 264);
+  --sidebar-accent-foreground: oklch(0.430 0.185 264);
+  --sidebar-border:         oklch(0.900 0.010 264);
+  --sidebar-ring:           oklch(0.545 0.195 264);
   /* Brand tokens */
   --brand-primary:   #8D957E;
   --brand-accent:    #6e7862;

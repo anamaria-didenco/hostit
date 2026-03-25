@@ -77,7 +77,7 @@ export default function StaffChecklist() {
             <div className="w-7 h-7 rounded-lg bg-forest flex items-center justify-center">
               <span className="text-white font-bold text-xs">V</span>
             </div>
-            <span className="font-bebas tracking-widest text-forest text-lg">VENUEFLOWHQ</span>
+            <span className="font-bebas tracking-widest text-forest text-lg">VenueFlow</span>
           </div>
           <h1 className="font-bebas tracking-widest text-3xl text-ink mt-2">{instance.name}</h1>
           <p className="font-dm text-sm text-ink/50 mt-1">{checkedCount} of {total} complete</p>
