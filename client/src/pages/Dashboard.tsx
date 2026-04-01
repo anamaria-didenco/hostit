@@ -714,6 +714,7 @@ export default function Dashboard() {
   const updateStatus = trpc.leads.updateStatus.useMutation({
     onSuccess: (_data, variables) => {
       refetchLeads();
+      setSelectedLead((prev: any) => prev ? { ...prev, status: variables.status } : prev);
       if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
       if (suppressStatusToast.current) {
         suppressStatusToast.current = false;
