@@ -35,11 +35,8 @@ export default function Login() {
     <div className="min-h-screen bg-[#f2f5fa] flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-4">
-            <div className="w-9 h-9 rounded-xl bg-[#718fc4] flex items-center justify-center">
-              <span className="text-white font-bold text-sm">V</span>
-            </div>
-            <span className="font-bold text-gray-900 text-xl tracking-tight">VenueFlowHQ</span>
+          <div className="flex items-center justify-center mb-4">
+            <img src="/logo-icon.png" alt="VenueFlow" className="h-12 w-auto" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Sign in</h1>
           <p className="text-gray-500 text-sm mt-1">Enter your admin password to continue</p>
@@ -58,7 +55,7 @@ export default function Login() {
               placeholder="Enter admin password"
               required
               autoFocus
-              className="w-full px-3 py-2.5 rounded-lg border border-[#dde3ee] text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#718fc4]/40 focus:border-[#718fc4] transition"
+              className="w-full px-3 py-2.5 rounded-lg border border-[#dde3ee] text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6b98e7]/40 focus:border-[#6b98e7] transition"
             />
           </div>
 
@@ -69,7 +66,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading || !password}
-            className="w-full bg-[#718fc4] text-white font-semibold py-2.5 rounded-lg text-sm hover:bg-[#5a7ab5] transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-[#6b98e7] text-white font-semibold py-2.5 rounded-lg text-sm hover:bg-[#5580cc] transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>

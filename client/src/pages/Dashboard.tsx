@@ -1229,11 +1229,8 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center max-w-sm w-full mx-4">
         <div className="mb-8">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-9 h-9 rounded-lg bg-sage-green flex items-center justify-center shadow-sm">
-              <span className="text-white font-bold text-sm tracking-tight">V</span>
-            </div>
-            <span className="font-bold text-gray-900 tracking-tight text-xl">VenueFlow</span>
+          <div className="flex items-center justify-center mb-4">
+            <img src="/logo-full.png" alt="VenueFlow" className="h-9 w-auto" />
           </div>
           <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Event CRM for NZ Venues</p>
         </div>
@@ -1261,11 +1258,8 @@ export default function Dashboard() {
       {/* ── TOP NAVIGATION BAR ──────────────────────────────────────────────── */}
       <nav className="bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
-        <div className="flex items-center gap-2 pr-5 border-r border-border mr-4 flex-shrink-0">
-          <div className="w-7 h-7 rounded-md bg-sage-green flex items-center justify-center shadow-sm">
-            <span className="text-white font-bold text-xs tracking-tight">V</span>
-          </div>
-          <span className="font-bold text-gray-900 tracking-tight text-sm">VenueFlow</span>
+        <div className="flex items-center pr-5 border-r border-border mr-4 flex-shrink-0">
+          <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
         </div>
         {/* Primary nav tabs — hidden on mobile (shown in bottom bar instead) */}
         <div className="hidden md:flex items-center">

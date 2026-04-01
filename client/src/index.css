@@ -46,12 +46,12 @@
    VenueFlowHQ — Blue & White Design System
    ─────────────────────────────────────────────────────────────────────────────
    Primary pairing:
-     Blue Primary  #718fc4  → primary accent, CTAs, active states
+     Blue Primary  #6b98e7  → primary accent, CTAs, active states
      White         #FFFFFF  → all surfaces, cards, nav
 
    Supporting palette:
      Blue Secondary #9cabca  → tints, hover fills, light accents
-     Blue Dark      #5a7ab5  → hover/pressed states
+     Blue Dark      #5580cc  → hover/pressed states
      Blue Tint      #e8edf6  → subtle fills, selected bg
      Blue Bg        #f2f5fa  → page background
      Charcoal       #2D3028  oklch(0.210 0.015 255)  → primary text
@@ -76,7 +76,7 @@
   --popover-foreground:     oklch(0.210 0.015 255);
 
   /* ── Primary = VenueFlow Blue ── */
-  --primary:                #718fc4;   /* VenueFlow Blue */
+  --primary:                #6b98e7;   /* VenueFlow Blue */
   --primary-foreground:     oklch(1.000 0.000 0);
 
   /* Secondary = pale sage fill */
@@ -89,7 +89,7 @@
 
   /* Accent = sage tint */
   --accent:                 #e8edf6;
-  --accent-foreground:      #5a7ab5;   /* Sage Dark */
+  --accent-foreground:      #5580cc;   /* Sage Dark */
 
   /* ── Utility ── */
   --destructive:            oklch(0.580 0.200 25);
@@ -98,10 +98,10 @@
   /* Borders = light sage-grey */
   --border:                 #dde3ee;
   --input:                  #edf0f7;
-  --ring:                   #718fc4;   /* Sage Green focus ring */
+  --ring:                   #6b98e7;   /* Sage Green focus ring */
 
   /* ── Charts ── */
-  --chart-1: #718fc4;   /* Sage Green */
+  --chart-1: #6b98e7;   /* Sage Green */
   --chart-2: oklch(0.460 0.120 40);    /* Burnt Sienna (supporting) */
   --chart-3: oklch(0.560 0.022 220);   /* Stormy Sky (supporting) */
   --chart-4: oklch(0.720 0.140 65);    /* Warm amber */
@@ -110,12 +110,12 @@
   /* ── Sidebar = white with sage border ── */
   --sidebar:                    oklch(1.000 0.000 0);
   --sidebar-foreground:         oklch(0.210 0.015 255);
-  --sidebar-primary:            #718fc4;
+  --sidebar-primary:            #6b98e7;
   --sidebar-primary-foreground: oklch(1.000 0.000 0);
   --sidebar-accent:             #e8edf6;
-  --sidebar-accent-foreground:  #5a7ab5;
+  --sidebar-accent-foreground:  #5580cc;
   --sidebar-border:             #dde3ee;
-  --sidebar-ring:               #718fc4;
+  --sidebar-ring:               #6b98e7;
 }
 
 /* ── Base Layer ──────────────────────────────────────────────────────────── */
@@ -171,7 +171,7 @@
     letter-spacing: 0.06em;
     font-size: 0.7rem;
     text-transform: uppercase;
-    color: #718fc4;  /* Sage Green for section labels */
+    color: #6b98e7;  /* Sage Green for section labels */
   }
 
   label {
@@ -216,18 +216,18 @@
   .font-pacifico  { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-style: italic; font-weight: 600; }
 
   /* ── Sage Green palette (text) ── */
-  .text-sage-green  { color: #718fc4; }
-  .text-sage-dark   { color: #5a7ab5; }
+  .text-sage-green  { color: #6b98e7; }
+  .text-sage-dark   { color: #5580cc; }
   .text-sage-light  { color: #9cabca; }
 
   /* Legacy aliases → all map to sage/charcoal roles */
-  .text-forest    { color: #718fc4; }
-  .text-teal      { color: #718fc4; }
-  .text-burgundy  { color: #718fc4; }
-  .text-terra     { color: #718fc4; }
-  .text-blue      { color: #718fc4; }
-  .text-gold      { color: #718fc4; }
-  .text-sienna    { color: #718fc4; }
+  .text-forest    { color: #6b98e7; }
+  .text-teal      { color: #6b98e7; }
+  .text-burgundy  { color: #6b98e7; }
+  .text-terra     { color: #6b98e7; }
+  .text-blue      { color: #6b98e7; }
+  .text-gold      { color: #6b98e7; }
+  .text-sienna    { color: #6b98e7; }
   .text-sage      { color: oklch(0.520 0.010 220); }
   .text-stone     { color: oklch(0.520 0.010 220); }
   .text-taupe     { color: oklch(0.520 0.010 220); }
@@ -242,22 +242,22 @@
   .text-amber     { color: oklch(0.720 0.140 65); }
 
   /* ── Sage Green palette (bg) ── */
-  .bg-sage-green  { background-color: #718fc4; }
-  .bg-sage-dark   { background-color: #5a7ab5; }
+  .bg-sage-green  { background-color: #6b98e7; }
+  .bg-sage-dark   { background-color: #5580cc; }
   .bg-sage-tint   { background-color: #e8edf6; }
   .bg-sage-light  { background-color: #9cabca; }
 
   /* Legacy aliases */
-  .bg-forest      { background-color: #718fc4; }
-  .bg-forest-dark { background-color: #5a7ab5; }
-  .bg-teal        { background-color: #718fc4; }
-  .bg-teal-dark   { background-color: #5a7ab5; }
-  .bg-terra       { background-color: #718fc4; }
-  .bg-burgundy    { background-color: #718fc4; }
-  .bg-burg-dark   { background-color: #5a7ab5; }
-  .bg-blue        { background-color: #718fc4; }
-  .bg-gold        { background-color: #718fc4; }
-  .bg-sienna      { background-color: #718fc4; }
+  .bg-forest      { background-color: #6b98e7; }
+  .bg-forest-dark { background-color: #5580cc; }
+  .bg-teal        { background-color: #6b98e7; }
+  .bg-teal-dark   { background-color: #5580cc; }
+  .bg-terra       { background-color: #6b98e7; }
+  .bg-burgundy    { background-color: #6b98e7; }
+  .bg-burg-dark   { background-color: #5580cc; }
+  .bg-blue        { background-color: #6b98e7; }
+  .bg-gold        { background-color: #6b98e7; }
+  .bg-sienna      { background-color: #6b98e7; }
   .bg-sienna-tint { background-color: #e8edf6; }
   .bg-cream       { background-color: oklch(1.000 0.000 0); }
   .bg-ivory       { background-color: oklch(1.000 0.000 0); }
@@ -272,16 +272,16 @@
   .bg-amber       { background-color: oklch(0.720 0.140 65); }
 
   /* ── Sage Green palette (border) ── */
-  .border-sage-green { border-color: #718fc4; }
-  .border-sage-dark  { border-color: #5a7ab5; }
+  .border-sage-green { border-color: #6b98e7; }
+  .border-sage-dark  { border-color: #5580cc; }
 
   /* Legacy aliases */
-  .border-forest   { border-color: #718fc4; }
-  .border-teal     { border-color: #718fc4; }
-  .border-terra    { border-color: #718fc4; }
-  .border-burgundy { border-color: #718fc4; }
+  .border-forest   { border-color: #6b98e7; }
+  .border-teal     { border-color: #6b98e7; }
+  .border-terra    { border-color: #6b98e7; }
+  .border-burgundy { border-color: #6b98e7; }
   .border-gold     { border-color: oklch(0.590 0.040 264 / 0.25); }
-  .border-sienna   { border-color: #718fc4; }
+  .border-sienna   { border-color: #6b98e7; }
   .border-stormy   { border-color: oklch(0.560 0.022 220); }
   .border-ink      { border-color: oklch(0.210 0.015 255); }
   .border-amber    { border-color: oklch(0.720 0.140 65); }
@@ -357,15 +357,15 @@
     background-color: #e8edf6;  /* sage tint */
   }
   .nav-item.active {
-    color: #5a7ab5;   /* Sage Dark */
+    color: #5580cc;   /* Sage Dark */
     background-color: #e8edf6;
     font-weight: 600;
   }
 
   /* ── Status pill badges ── */
-  .status-new       { background: #e8edf6; color: #5a7ab5; }
+  .status-new       { background: #e8edf6; color: #5580cc; }
   .status-quoted    { background: oklch(0.940 0.040 65 / 0.50); color: oklch(0.500 0.120 65); }
-  .status-confirmed { background: #e8edf6; color: #5a7ab5; }
+  .status-confirmed { background: #e8edf6; color: #5580cc; }
   .status-cancelled { background: oklch(0.940 0.008 220); color: oklch(0.520 0.010 220); }
 
   /* ── Stat card ── */
@@ -379,7 +379,7 @@
 
   /* ── Primary button = Sage Green ── */
   .btn-teal, .btn-forest {
-    background-color: #718fc4;
+    background-color: #6b98e7;
     color: oklch(1.000 0.000 0);
     border-radius: 0.625rem;
     font-family: 'Inter', system-ui, sans-serif;
@@ -388,13 +388,13 @@
     letter-spacing: -0.01em;
     transition: background-color 0.15s ease, transform 0.1s ease;
   }
-  .btn-teal:hover, .btn-forest:hover { background-color: #5a7ab5; }
+  .btn-teal:hover, .btn-forest:hover { background-color: #5580cc; }
   .btn-teal:active, .btn-forest:active { transform: scale(0.98); }
 
   /* ── Outline button = Sage Green outline ── */
   .btn-terra-outline, .btn-gold-outline {
     background-color: oklch(1.000 0.000 0);
-    color: #5a7ab5;
+    color: #5580cc;
     border: 1.5px solid oklch(0.590 0.040 264 / 0.50);
     border-radius: 0.625rem;
     font-family: 'Inter', system-ui, sans-serif;
@@ -418,7 +418,7 @@
   }
   .input-paradiso:focus, .input-dante:focus {
     outline: none;
-    border-color: #718fc4;
+    border-color: #6b98e7;
     box-shadow: 0 0 0 3px oklch(0.590 0.040 264 / 0.15);
   }
 
@@ -467,25 +467,25 @@
   --card-foreground:        oklch(0.210 0.015 255);
   --popover:                oklch(1.000 0.000 0);
   --popover-foreground:     oklch(0.210 0.015 255);
-  --primary:                #718fc4;
+  --primary:                #6b98e7;
   --primary-foreground:     oklch(1.000 0.000 0);
   --secondary:              #edf0f7;
   --secondary-foreground:   oklch(0.210 0.015 255);
   --muted:                  #edf0f7;
   --muted-foreground:       oklch(0.520 0.010 220);
   --accent:                 #e8edf6;
-  --accent-foreground:      #5a7ab5;
+  --accent-foreground:      #5580cc;
   --border:                 #dde3ee;
   --input:                  #edf0f7;
-  --ring:                   #718fc4;
+  --ring:                   #6b98e7;
   --sidebar:                oklch(1.000 0.000 0);
   --sidebar-foreground:     oklch(0.210 0.015 255);
-  --sidebar-primary:        #718fc4;
+  --sidebar-primary:        #6b98e7;
   --sidebar-primary-foreground: oklch(1.000 0.000 0);
   --sidebar-accent:         #e8edf6;
-  --sidebar-accent-foreground: #5a7ab5;
+  --sidebar-accent-foreground: #5580cc;
   --sidebar-border:         #dde3ee;
-  --sidebar-ring:           #718fc4;
+  --sidebar-ring:           #6b98e7;
   /* Brand tokens */
   --brand-primary:   #8D957E;
   --brand-accent:    #6e7862;

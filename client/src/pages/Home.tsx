@@ -32,11 +32,8 @@ export default function Home() {
       <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-lg bg-sage-green flex items-center justify-center shadow-sm">
-              <span className="text-white font-bold text-sm tracking-tight">V</span>
-            </div>
-            <span className="font-bold text-gray-900 tracking-tight text-lg">VenueFlowHQ</span>
+          <div className="flex items-center">
+            <img src="/logo-full.png" alt="VenueFlow" className="h-8 w-auto" />
           </div>
 
           {/* Nav links — visually clickable surfaces */}
@@ -212,11 +209,8 @@ export default function Home() {
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer className="bg-white border-t border-gray-100 py-12">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-sage-green flex items-center justify-center">
-              <span className="text-white font-bold text-xs">V</span>
-            </div>
-            <span className="font-bold text-gray-900 tracking-tight">VenueFlowHQ</span>
+          <div className="flex items-center">
+            <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
           </div>
           <p className="text-sm text-gray-400">© {new Date().getFullYear()} VenueFlowHQ. New Zealand's Venue Management Platform.</p>
           <div className="flex gap-6">
