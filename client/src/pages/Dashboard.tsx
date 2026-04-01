@@ -25,6 +25,7 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
+import EventSpendSection from "@/components/EventSpendSection";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 type FormFieldDef = {
@@ -3138,6 +3139,8 @@ export default function Dashboard() {
                       <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap bg-cream border border-gold/20 p-3">{selectedBooking.notes}</div>
                     </div>
                   )}
+                  {/* Event Spend */}
+                  <EventSpendSection bookingId={selectedBooking.id} />
                 </div>
               </div>
             </div>
