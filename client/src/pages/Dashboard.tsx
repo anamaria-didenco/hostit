@@ -1325,89 +1325,93 @@ export default function Dashboard() {
         <main className={`flex-1 ${tab === "enquiries" ? "overflow-hidden" : "overflow-auto pb-16 md:pb-0"}`}>
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
-          {tab === "overview" && (
-            <div className="flex flex-col min-h-full md:h-full md:overflow-hidden">
-              {/* Stats bar */}
-              {(() => {
-                const allStats = [
-                  { id: "active_enquiries", label: "Active Enquiries", value: stats?.newLeads ?? 0, sub: "in pipeline", iconBg: "bg-sage-tint", iconColor: "text-sage-dark", icon: <MessageSquare className="w-3.5 h-3.5" /> },
-                  { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", iconBg: "bg-blue-50", iconColor: "text-blue-600", icon: <Calendar className="w-3.5 h-3.5" /> },
-                  { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", iconBg: "bg-sage-tint", iconColor: "text-sage-green", icon: <FileText className="w-3.5 h-3.5" /> },
-                  { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", iconBg: "bg-blue-50", iconColor: "text-forest", icon: <TrendingUp className="w-3.5 h-3.5" /> },
-                  { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", iconBg: "bg-amber-50", iconColor: "text-amber-600", icon: <DollarSign className="w-3.5 h-3.5" /> },
-                  { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueTasks ?? 0) > 0 ? "bg-red-50" : "bg-gray-50", iconColor: (stats?.overdueTasks ?? 0) > 0 ? "text-red-500" : "text-gray-400", icon: <AlertCircle className="w-3.5 h-3.5" /> },
-                  { id: "overdue_followups", label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", iconBg: (stats?.overdueFollowUps ?? 0) > 0 ? "bg-red-100" : "bg-gray-50", iconColor: (stats?.overdueFollowUps ?? 0) > 0 ? "text-red-600" : "text-gray-400", icon: <Clock className="w-3.5 h-3.5" /> },
-                ];
-                const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
-                const cols = visibleStats.length;
-                return (
-                  <div className="relative border-b border-border flex-shrink-0">
-                    <div className={`grid gap-0`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-                      {visibleStats.map((s, i) => (
-                        <div key={s.id} className={`px-4 py-2.5 border-r border-border last:border-r-0`}>
-                          <div className="font-inter text-[11px] text-gray-400 leading-tight mb-1 truncate">{s.label}</div>
-                          <div className={`font-inter text-xl font-bold leading-none ${s.iconColor}`}>{s.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Customize button */}
-                    <div className="absolute top-1.5 right-1.5">
-                      <button
-                        onClick={() => setShowStatsCustomize(v => !v)}
-                        className="p-1 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors"
-                        title="Customise stats">
-                        <Settings className="w-3 h-3" />
-                      </button>
-                      {showStatsCustomize && (
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg rounded-lg p-3 z-30 w-52">
-                          <div className="font-inter text-xs font-semibold text-gray-700 mb-2">Show / hide stats</div>
-                          {allStats.map(s => (
-                            <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 px-1 rounded">
-                              <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
-                                setHiddenStats(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
-                                  localStorage.setItem('vfhq_hidden_stats', JSON.stringify([...next]));
-                                  return next;
-                                });
-                              }} className="w-3.5 h-3.5 accent-sage-green" />
-                              <span className="font-inter text-xs text-gray-600">{s.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Main area: full calendar + sidebar */}
-              <div className="flex flex-col md:flex-row flex-1 overflow-auto md:overflow-hidden">
-
-                {/* Full Calendar */}
-                <div className="flex-1 flex flex-col overflow-hidden md:border-r border-border">
-                  {/* Calendar toolbar */}
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-white flex-shrink-0">
-                    <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-sage-tint rounded-lg transition-colors text-gray-500"><ChevronLeft className="w-4 h-4" /></button>
-                    <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-sage-tint rounded-lg transition-colors text-gray-500"><ChevronRight className="w-4 h-4" /></button>
-                    <h2 className="font-inter font-semibold text-gray-900 text-base flex-1" style={{ letterSpacing: '-0.02em' }}>{MONTHS[month]} {year}</h2>
-                    <button onClick={() => setCalDate(new Date())} className="font-inter text-xs font-medium px-3 py-1.5 border border-border rounded-lg text-gray-500 hover:bg-sage-tint hover:text-sage-dark transition-colors">Today</button>
+          {tab === "overview" && (() => {
+            const allStats = [
+              { id: "active_enquiries", label: "Active Enquiries", value: stats?.newLeads ?? 0, sub: "in pipeline", icon: <MessageSquare className="w-5 h-5 text-sage-dark" /> },
+              { id: "upcoming_events", label: "Upcoming Events", value: stats?.upcomingEvents ?? 0, sub: "next 30 days", icon: <Calendar className="w-5 h-5 text-blue-500" /> },
+              { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", icon: <FileText className="w-5 h-5 text-forest" /> },
+              { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", icon: <TrendingUp className="w-5 h-5 text-forest" /> },
+              { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-amber-600" /> },
+              { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${(stats?.overdueTasks ?? 0) > 0 ? 'text-red-500' : 'text-sage/40'}`} /> },
+              { id: "overdue_followups", label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", icon: <Clock className={`w-5 h-5 ${(stats?.overdueFollowUps ?? 0) > 0 ? 'text-red-600' : 'text-sage/40'}`} /> },
+            ];
+            const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
+            return (
+            <div className="p-6 space-y-6">
+              {/* Header */}
+              <div className="flex items-start justify-between">
+                <div>
+                  <h1 className="font-cormorant text-3xl font-semibold text-ink">Overview</h1>
+                  <p className="font-dm text-sm text-sage mt-0.5">Your venue at a glance</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
                     <button
-                      onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
-                      className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
-                      <Plus className="w-3.5 h-3.5" /> Add Event
+                      onClick={() => setShowStatsCustomize(v => !v)}
+                      className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 border border-border text-sage hover:text-ink hover:border-ink/30 transition-colors"
+                    >
+                      <Settings className="w-3 h-3" /> CUSTOMISE
                     </button>
+                    {showStatsCustomize && (
+                      <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg p-3 z-30 w-52">
+                        <div className="font-bebas text-xs tracking-widest text-ink/50 mb-2">SHOW / HIDE CARDS</div>
+                        {allStats.map(s => (
+                          <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
+                            <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
+                              setHiddenStats(prev => {
+                                const next = new Set(prev);
+                                if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                                localStorage.setItem('vfhq_hidden_stats', JSON.stringify([...next]));
+                                return next;
+                              });
+                            }} className="w-3.5 h-3.5 accent-forest" />
+                            <span className="font-dm text-xs text-ink">{s.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {/* Day headers */}
+                  <button
+                    onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
+                    className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 bg-forest text-cream hover:bg-forest-dark transition-colors">
+                    <Plus className="w-3.5 h-3.5" /> ADD EVENT
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Cards */}
+              {visibleStats.length > 0 && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {visibleStats.map(s => (
+                    <div key={s.id} className="dante-card p-5">
+                      <div className="mb-3">{s.icon}</div>
+                      <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
+                      <div className="font-bebas text-xs tracking-widest text-sage">{s.label}</div>
+                      <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Calendar + Sidebar */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Calendar card */}
+                <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0">
+                    <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
+                    <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
+                    <h2 className="font-cormorant text-lg font-semibold text-ink flex-1">{MONTHS[month]} {year}</h2>
+                    <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
+                    <button onClick={() => setTab('calendar' as any)} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors">FULL VIEW</button>
+                  </div>
                   <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
                     {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
-                      <div key={d} className={`text-center font-inter text-xs font-semibold py-2 border-r border-border last:border-r-0 ${
-                        d === 'SAT' || d === 'SUN' ? 'text-sage-green bg-sage-tint/30' : 'text-gray-400'
+                      <div key={d} className={`text-center font-bebas tracking-widest text-xs py-2 border-r border-border last:border-r-0 ${
+                        d === 'SAT' || d === 'SUN' ? 'text-forest bg-linen/40' : 'text-sage'
                       }`}>{d}</div>
                     ))}
                   </div>
-                  {/* Calendar grid */}
-                  <div className="flex-1 overflow-auto">
+                  <div className="overflow-auto" style={{ minHeight: 340 }}>
                     {(() => {
                       const firstDayOfMonth = new Date(year, month, 1).getDay();
                       const mondayOffset = (firstDayOfMonth + 6) % 7;
@@ -1420,9 +1424,9 @@ export default function Dashboard() {
                       for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
                       const numWeeks = weeks.length;
                       return weeks.map((week, wi) => (
-                        <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(100 / numWeeks)}%` }}>
+                        <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(340 / numWeeks)}px` }}>
                           {week.map((day, di) => {
-                            if (!day) return <div key={di} className="border-r border-border last:border-r-0 bg-gray-50/50" />;
+                            if (!day) return <div key={di} className="border-r border-border last:border-r-0 bg-linen/20" />;
                             const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
                             const isWeekend = di >= 5;
                             const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
@@ -1430,7 +1434,7 @@ export default function Dashboard() {
                             const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                             const statusColor = (status: string) => {
                               switch(status) {
-                                case 'confirmed': case 'booked': return 'bg-sage-green text-white';
+                                case 'confirmed': case 'booked': return 'bg-forest text-cream';
                                 case 'tentative': return 'bg-amber-400 text-white';
                                 case 'proposal_sent': return 'bg-violet-400 text-white';
                                 case 'negotiating': return 'bg-orange-400 text-white';
@@ -1442,41 +1446,39 @@ export default function Dashboard() {
                             };
                             return (
                               <div key={di}
-                                className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[90px] ${
-                                  isWeekend ? 'bg-sage-tint/10' : 'bg-white'
-                                } ${isToday ? 'ring-2 ring-inset ring-sage-green' : ''} hover:bg-sage-tint/20 transition-colors`}
+                                className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
+                                  isWeekend ? 'bg-linen/20' : 'bg-white'
+                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} hover:bg-linen/30 transition-colors`}
                               >
                                 <div className="flex items-center justify-between mb-0.5">
-                                  <span className={`font-inter text-xs font-semibold leading-none ${
-                                    isToday ? 'w-5 h-5 bg-sage-green text-white rounded-full flex items-center justify-center text-[10px]' : isWeekend ? 'text-sage-dark' : 'text-gray-600'
+                                  <span className={`font-dm text-xs font-semibold leading-none ${
+                                    isToday ? 'w-5 h-5 bg-forest text-cream rounded-full flex items-center justify-center text-[10px]' : isWeekend ? 'text-forest' : 'text-ink/60'
                                   }`}>{day}</span>
                                   <button
                                     onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' }); }}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-sage-tint rounded"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
                                     title="Add event">
-                                    <Plus className="w-3 h-3 text-sage-green" />
+                                    <Plus className="w-3 h-3 text-forest" />
                                   </button>
                                 </div>
-                                {dayBookings.slice(0, 3).map((b: any) => (
+                                {dayBookings.slice(0, 2).map((b: any) => (
                                   <button key={b.id}
                                     onClick={() => { setSelectedBooking(b); setTab('calendar'); }}
-                                    className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-inter ${statusColor(b.status)} hover:opacity-80 transition-opacity`}
-                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.status}`}>
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${statusColor(b.status)} hover:opacity-80 transition-opacity`}
+                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}`}>
                                     <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                                    {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
                                   </button>
                                 ))}
-                                {dayLeads.slice(0, 2).map((l: any) => (
+                                {dayLeads.slice(0, 1).map((l: any) => (
                                   <button key={l.id}
                                     onClick={() => { selectLead(l); setTab('enquiries'); }}
-                                    className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-inter ${statusColor(l.status)} hover:opacity-80 transition-opacity`}
-                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.status}`}>
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${statusColor(l.status)} hover:opacity-80 transition-opacity`}
+                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}`}>
                                     <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                    {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
                                   </button>
                                 ))}
-                                {(dayBookings.length + dayLeads.length) > 4 && (
-                                  <span className="font-inter text-[9px] text-gray-400 px-1">+{dayBookings.length + dayLeads.length - 4} more</span>
+                                {(dayBookings.length + dayLeads.length) > 3 && (
+                                  <span className="font-dm text-[9px] text-sage px-1">+{dayBookings.length + dayLeads.length - 3} more</span>
                                 )}
                               </div>
                             );
@@ -1487,13 +1489,13 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Right sidebar: upcoming events + new enquiries */}
-                <div className="w-full md:w-72 flex-shrink-0 flex flex-col md:overflow-hidden bg-white border-t md:border-t-0 border-border">
-                  {/* Upcoming confirmed events */}
-                  <div className="flex-1 overflow-auto border-b border-border">
+                {/* Sidebar cards */}
+                <div className="space-y-4">
+                  {/* Upcoming Events */}
+                  <div className="dante-card overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                      <h3 className="font-inter text-sm font-semibold text-gray-900">Upcoming Events</h3>
-                      <button onClick={() => setTab('calendar')} className="font-inter text-xs text-sage-green hover:text-sage-dark transition-colors">View all</button>
+                      <h3 className="font-cormorant text-base font-semibold text-ink">Upcoming Events</h3>
+                      <button onClick={() => setTab('calendar')} className="font-dm text-xs text-forest hover:text-forest-dark transition-colors">View all</button>
                     </div>
                     {(() => {
                       const upcoming = [...(monthBookings ?? []), ...(monthLeadEvents ?? []).filter((l: any) => l.status === 'booked' || l.status === 'confirmed')]
@@ -1502,24 +1504,24 @@ export default function Dashboard() {
                         .slice(0, 8);
                       if (upcoming.length === 0) return (
                         <div className="flex flex-col items-center justify-center p-6 text-center">
-                          <Calendar className="w-8 h-8 text-gray-200 mb-2" />
-                          <p className="font-inter text-xs text-gray-400">No upcoming events this month</p>
+                          <Calendar className="w-8 h-8 text-sage/20 mx-auto mb-2" />
+                          <p className="font-dm text-xs text-sage/50">No upcoming events this month</p>
                         </div>
                       );
                       return (
-                        <div className="divide-y divide-border">
+                        <div className="divide-y divide-border max-h-56 overflow-auto">
                           {upcoming.map((e: any) => {
                             const isConfirmed = e.status === 'confirmed' || e.status === 'booked';
                             return (
                               <button key={e.id}
                                 onClick={() => e._type === 'booking' ? setLocation(`/event/${e.id}`) : (setSelectedLead(e), setTab('enquiries'))}
-                                className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-sage-tint/30 transition-colors text-left">
-                                <div className={`w-1 h-full min-h-[32px] rounded-full flex-shrink-0 mt-0.5 ${
-                                  isConfirmed ? 'bg-sage-green' : e.status === 'tentative' ? 'bg-amber-400' : e.status === 'proposal_sent' ? 'bg-violet-400' : 'bg-rose-400'
+                                className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
+                                <div className={`w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5 ${
+                                  isConfirmed ? 'bg-forest' : e.status === 'tentative' ? 'bg-amber-400' : e.status === 'proposal_sent' ? 'bg-violet-400' : 'bg-rose-400'
                                 }`} />
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-inter text-xs font-semibold text-gray-900 truncate">{e.firstName} {e.lastName}</div>
-                                  <div className="font-inter text-xs text-gray-400">{new Date(e.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
+                                  <div className="font-dm text-xs font-semibold text-ink truncate">{e.firstName} {e.lastName}</div>
+                                  <div className="font-dm text-xs text-sage">{new Date(e.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
                                 </div>
                               </button>
                             );
@@ -1529,31 +1531,31 @@ export default function Dashboard() {
                     })()}
                   </div>
 
-                  {/* New enquiries */}
-                  <div className="flex-1 overflow-auto">
+                  {/* New Enquiries */}
+                  <div className="dante-card overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-inter text-sm font-semibold text-gray-900">New Enquiries</h3>
+                        <h3 className="font-cormorant text-base font-semibold text-ink">New Enquiries</h3>
                         {newEnquiries.length > 0 && (
-                          <span className="bg-sage-green text-white font-inter text-[10px] font-bold px-1.5 py-0.5 rounded-full">{newEnquiries.length}</span>
+                          <span className="bg-forest text-cream font-bebas text-[10px] tracking-widest px-1.5 py-0.5">{newEnquiries.length}</span>
                         )}
                       </div>
-                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} className="font-inter text-xs text-sage-green hover:text-sage-dark transition-colors">View all</button>
+                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} className="font-dm text-xs text-forest hover:text-forest-dark transition-colors">View all</button>
                     </div>
                     {newEnquiries.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
-                        <CheckCircle className="w-8 h-8 text-sage-green/30 mb-2" />
-                        <p className="font-inter text-xs text-gray-400">All caught up!</p>
+                        <CheckCircle className="w-8 h-8 text-forest/20 mx-auto mb-2" />
+                        <p className="font-dm text-xs text-sage/50">All caught up!</p>
                       </div>
                     ) : (
-                      <div className="divide-y divide-border">
+                      <div className="divide-y divide-border max-h-56 overflow-auto">
                         {newEnquiries.slice(0, 6).map((lead: any) => (
                           <button key={lead.id} onClick={() => { selectLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-sage-tint/30 transition-colors text-left">
+                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                             <div className="w-1.5 h-1.5 rounded-full bg-rose-400 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <div className="font-inter text-xs font-semibold text-gray-900 truncate">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-inter text-xs text-gray-400 truncate">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : ''}</div>
+                              <div className="font-dm text-xs font-semibold text-ink truncate">{lead.firstName} {lead.lastName}</div>
+                              <div className="font-dm text-xs text-sage truncate">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : ''}</div>
                             </div>
                           </button>
                         ))}
@@ -1561,16 +1563,17 @@ export default function Dashboard() {
                     )}
                     {(overdueLeads ?? []).length > 0 && (
                       <div className="border-t border-red-200 bg-red-50/50 px-4 py-2 flex items-center gap-2">
-                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                        <span className="font-inter text-xs font-semibold text-red-700">{(overdueLeads ?? []).length} overdue follow-up{(overdueLeads ?? []).length > 1 ? 's' : ''}</span>
-                        <button onClick={() => { setTab('enquiries'); setLeadsSubTab('all'); if (overdueLeads?.[0]) selectLead(overdueLeads[0]); }} className="ml-auto font-inter text-xs text-red-600 hover:text-red-800 transition-colors">View →</button>
+                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+                        <span className="font-bebas text-xs tracking-widest text-red-700">{(overdueLeads ?? []).length} OVERDUE FOLLOW-UP{(overdueLeads ?? []).length > 1 ? 'S' : ''}</span>
+                        <button onClick={() => { setTab('enquiries'); setLeadsSubTab('all'); if (overdueLeads?.[0]) selectLead(overdueLeads[0]); }} className="ml-auto font-dm text-xs text-red-600 hover:text-red-800 transition-colors">View →</button>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ── ENQUIRIES INBOX ──────────────────────────────────────────────────── */}
           {tab === "enquiries" && (
@@ -2501,7 +2504,7 @@ export default function Dashboard() {
           {tab === "pipeline" && (
             <div className="p-6 overflow-x-auto">
               <div className="gold-rule max-w-xs mb-3"><span>CRM</span></div>
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Pipeline</h1>
+              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Pipeline</h1>
               <div className="flex gap-4 min-w-max">
                 {pipelineStages.slice(0, 5).map(stage => {
                   const stageLeads = (allLeads ?? []).filter((l: any) => l.status === stage.key);
@@ -3128,8 +3131,10 @@ export default function Dashboard() {
           {/* ── CONTACTS ─────────────────────────────────────────────────────── */}
           {tab === "contacts" && (
             <div className="p-6">
-              <div className="gold-rule max-w-xs mb-3"><span>DATABASE</span></div>
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Contacts</h1>
+              <div className="mb-6">
+                <h1 className="font-cormorant text-3xl font-semibold text-ink">Contacts</h1>
+                <p className="font-dm text-sm text-sage mt-0.5">All contacts from enquiries and bookings</p>
+              </div>
               {(contacts ?? []).length === 0 ? (
                 <div className="border border-dashed border-gold/20 p-12 text-center max-w-md">
                   <Users className="w-12 h-12 text-sage/20 mx-auto mb-4" />
@@ -3213,7 +3218,7 @@ export default function Dashboard() {
               {/* ── VENUE (unified: Details + Profile + Spaces) ─────── */}
               {settingsSubTab === "venue" && (
               <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-ink mb-4" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Venue Settings</h1>
+              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-4">Venue Settings</h1>
 
               {/* Section tabs */}
               <div className="flex gap-0 mb-6 border-b border-gold/20">
@@ -3635,7 +3640,7 @@ export default function Dashboard() {
               {/* ── EMAIL SUB-TAB ────────────────────────────── */}
               {settingsSubTab === "email" && (
               <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Email</h1>
+              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Email</h1>
               {/* Email / SMTP Settings */}
               <div className="border-gold/20">
                 <h2 className="font-cormorant text-xl font-semibold text-ink mb-1">Email Settings</h2>
@@ -3783,7 +3788,7 @@ export default function Dashboard() {
               {/* ── PROPOSAL/TEMPLATES SUB-TAB ────────────────── */}
               {settingsSubTab === "templates" && (
               <div>
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Proposal & Templates</h1>
+              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Proposal & Templates</h1>
               {/* Email Templates */}
               <div className="mt-0">
                 <div className="flex items-center justify-between mb-4">
@@ -3870,7 +3875,7 @@ export default function Dashboard() {
               {settingsSubTab === "lead-form" && (
               <div className="max-w-3xl mx-auto">
                 <div className="flex items-center justify-between mb-4">
-                  <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Contact Form</h1>
+                  <h1 className="font-cormorant text-3xl font-semibold text-ink">Contact Form</h1>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/enquire/${venueSettings?.slug || ''}`); toast.success('Form link copied!'); }}
                       className="flex items-center gap-2 border border-gold/30 text-ink text-sm px-4 py-2 hover:bg-gold/10 font-bebas tracking-widest">
@@ -4234,7 +4239,7 @@ export default function Dashboard() {
               {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
               {settingsSubTab === "integrations" && (
               <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Integrations</h1>
+              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Integrations</h1>
               <div className="space-y-4">
                 {[{name:'Google Calendar',desc:'Sync bookings to your Google Calendar automatically.',icon:'📅'},{name:'Xero',desc:'Export invoices and payments to Xero accounting.',icon:'💼'},{name:'Mailchimp',desc:'Add new contacts to your Mailchimp mailing list.',icon:'📧'},{name:'Zapier',desc:'Connect VenueFlowHQ to 5,000+ apps via Zapier webhooks.',icon:'⚡'}].map(i => (
                   <div key={i.name} className="dante-card p-4 flex items-center justify-between">
@@ -4255,7 +4260,7 @@ export default function Dashboard() {
               {/* ── TAXES & FEES SUB-TAB ───────────────────────── */}
               {settingsSubTab === "taxes" && (
               <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Taxes & Fees</h1>
+              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Taxes & Fees</h1>
               <div className="dante-card p-5">
                 <p className="font-dm text-sm text-ink/70 mb-4">Configure GST/VAT and service fees that apply to your proposals and invoices.</p>
                 <div className="space-y-3">
@@ -4281,7 +4286,7 @@ export default function Dashboard() {
               {/* ── TEAM SUB-TAB ───────────────────────────────── */}
               {settingsSubTab === "team" && (
               <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Team</h1>
+              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Team</h1>
               <div className="dante-card p-5">
                 <div className="flex items-center justify-between mb-4">
                   <p className="font-dm text-sm text-ink/70">Manage team members who can access your VenueFlowHQ account.</p>
@@ -4313,7 +4318,7 @@ export default function Dashboard() {
                 return (
                 <div className="max-w-3xl mx-auto">
                   <div className="flex items-center justify-between mb-6">
-                    <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Automated Tasks</h1>
+                    <h1 className="font-cormorant text-3xl font-semibold text-ink">Automated Tasks</h1>
                   </div>
                   <p className="font-dm text-sm text-ink/60 mb-4">When a trigger fires, a task is automatically created and linked to the event.</p>
                   <div className="bg-white border border-gray-200 rounded">
@@ -4360,7 +4365,7 @@ export default function Dashboard() {
               {/* ── GROUP SETTINGS ──────────────────────────────── */}
               {settingsSubTab === "group-settings" && (
               <div className="max-w-3xl mx-auto space-y-6">
-                <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Group Settings</h1>
+                <h1 className="font-cormorant text-3xl font-semibold text-ink">Group Settings</h1>
                 {/* Automated Reminder Emails */}
                 <div className="bg-white border border-gray-200 rounded">
                   <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -4444,7 +4449,7 @@ export default function Dashboard() {
               {/* ── EMAIL SETTINGS ──────────────────────────────── */}
               {settingsSubTab === "email-settings" && (
               <div className="max-w-3xl mx-auto space-y-6">
-                <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Email</h1>
+                <h1 className="font-cormorant text-3xl font-semibold text-ink">Email</h1>
                 {/* Automated Reminder Emails */}
                 <div className="bg-white border border-gray-200 rounded">
                   <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -4545,7 +4550,7 @@ export default function Dashboard() {
               {/* ── PROFILE ─────────────────────────────────────── */}
               {settingsSubTab === "profile" && (
               <div className="max-w-3xl mx-auto space-y-6">
-                <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Profile</h1>
+                <h1 className="font-cormorant text-3xl font-semibold text-ink">Profile</h1>
                 {/* Account Details */}
                 <div className="bg-white border border-gray-200 rounded p-6">
                   <h2 className="font-semibold text-gray-800 mb-4">Account Details</h2>
@@ -4653,7 +4658,7 @@ export default function Dashboard() {
                   <div>
                     <div className="flex items-center justify-between mb-6">
                       <div>
-                        <h1 className="font-cormorant text-ink" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Floor Plans</h1>
+                        <h1 className="font-cormorant text-3xl font-semibold text-ink">Floor Plans</h1>
                         <p className="font-dm text-sm text-ink/50 mt-1">Create and manage floor plan templates for your event spaces.</p>
                       </div>
                       <button
@@ -4890,7 +4895,7 @@ export default function Dashboard() {
               {/* ── MENU & CATALOGUE ─────────────────────────────── */}
               {settingsSubTab === "menu" && (
               <div className="max-w-5xl mx-auto">
-                <h1 className="font-cormorant text-ink mb-4" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Menu & Catalogue</h1>
+                <h1 className="font-cormorant text-3xl font-semibold text-ink mb-4">Menu & Catalogue</h1>
 
                 {/* Sub-section tabs */}
                 <div className="flex gap-0 mb-6 border-b border-gold/20">
@@ -5273,7 +5278,7 @@ export default function Dashboard() {
 
               {settingsSubTab === "statuses" && (
               <div className="max-w-2xl mx-auto">
-                <h1 className="font-cormorant text-ink mb-2" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Enquiry Statuses</h1>
+                <h1 className="font-cormorant text-3xl font-semibold text-ink mb-2">Enquiry Statuses</h1>
                 <p className="text-sm text-gray-500 mb-6">Define the pipeline stages your enquiries move through. Rename, reorder, add or remove stages to match your workflow.</p>
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
                   <StatusManager
@@ -5286,7 +5291,7 @@ export default function Dashboard() {
 
               {settingsSubTab === "billing" && (
               <div className="max-w-3xl mx-auto">
-                <h1 className="font-cormorant text-ink mb-6" style={{ fontSize: '2.2rem', fontWeight: 600 }}>Billing</h1>
+                <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Billing</h1>
                 <div className="bg-white border border-gray-200 rounded p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div>

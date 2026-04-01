@@ -92,24 +92,34 @@ export default function Home() {
           </p>
 
           {/* CTAs — differentiated by visual weight */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href={getLoginUrl()}
-              className="w-full sm:w-auto bg-sage-green text-white font-bold text-lg px-8 py-4 rounded-xl shadow-lg hover:bg-sage-dark hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
-              Start free trial
-              <ArrowRight className="w-5 h-5" />
-            </a>
-            <a href="#features"
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white text-gray-700 font-semibold text-base px-6 py-4 rounded-xl border-2 border-gray-200 hover:border-sage-green hover:text-sage-green transition-all">
-              <Play className="w-4 h-4" />
-              Watch a 2-min demo
-            </a>
-          </div>
-
-          {/* Proof */}
-          <div className="flex items-center justify-center gap-2 mt-6 text-sm text-gray-400">
-            <CheckCircle className="w-4 h-4 text-sage-green" />
-            No credit card required &nbsp;·&nbsp; Cancel any time
-          </div>
+          {isLoading ? null : user ? (
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link href="/dashboard">
+                <button className="w-full sm:w-auto bg-sage-green text-white font-bold text-lg px-8 py-4 rounded-xl shadow-lg hover:bg-sage-dark hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                  Go to Dashboard <ArrowRight className="w-5 h-5" />
+                </button>
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <a href={getLoginUrl()}
+                  className="w-full sm:w-auto bg-sage-green text-white font-bold text-lg px-8 py-4 rounded-xl shadow-lg hover:bg-sage-dark hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                  Start free trial
+                  <ArrowRight className="w-5 h-5" />
+                </a>
+                <a href={getLoginUrl()}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white text-gray-700 font-semibold text-base px-6 py-4 rounded-xl border-2 border-gray-200 hover:border-sage-green hover:text-sage-green transition-all">
+                  Sign in
+                </a>
+              </div>
+              {/* Proof */}
+              <div className="flex items-center justify-center gap-2 mt-6 text-sm text-gray-400">
+                <CheckCircle className="w-4 h-4 text-sage-green" />
+                No credit card required &nbsp;·&nbsp; Cancel any time
+              </div>
+            </>
+          )}
         </div>
       </section>
 

@@ -6,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend
 } from "recharts";
-import { FileText, TrendingUp, DollarSign, Users, Calendar, ArrowUpRight } from "lucide-react";
+import { FileText, TrendingUp, DollarSign, Users, Calendar, ArrowUpRight, Settings } from "lucide-react";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -20,6 +20,11 @@ const BRAND_COLORS = ["#6B1A2A", "#B8C8D8", "#8A7E74", "#4A0F1C", "#8AAABB"];
 
 export default function Reports() {
   const [tab, setTab] = useState("overview");
+  const [showCustomize, setShowCustomize] = useState(false);
+  const [hiddenCards, setHiddenCards] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('vfhq_hidden_report_cards') ?? '[]')); }
+    catch { return new Set(); }
+  });
   const currentYear = new Date().getFullYear();
   const { data: revenueData } = trpc.analytics.revenueByMonth.useQuery({ year: currentYear });
   const { data: sourceData } = trpc.analytics.sourceBreakdown.useQuery();
@@ -66,9 +71,44 @@ export default function Reports() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="font-cormorant text-3xl font-semibold text-ink">Reports</h1>
-        <p className="font-dm text-sm text-sage mt-0.5">Analytics and performance insights for your venue</p>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="font-cormorant text-3xl font-semibold text-ink">Reports</h1>
+          <p className="font-dm text-sm text-sage mt-0.5">Analytics and performance insights for your venue</p>
+        </div>
+        {tab === "overview" && (
+          <div className="relative">
+            <button
+              onClick={() => setShowCustomize(v => !v)}
+              className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 border border-border text-sage hover:text-ink hover:border-ink/30 transition-colors"
+            >
+              <Settings className="w-3 h-3" /> CUSTOMISE
+            </button>
+            {showCustomize && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg p-3 z-30 w-52">
+                <div className="font-bebas text-xs tracking-widest text-ink/50 mb-2">SHOW / HIDE CARDS</div>
+                {[
+                  { id: "total_enquiries", label: "Total Enquiries" },
+                  { id: "confirmed_bookings", label: "Confirmed Bookings" },
+                  { id: "conversion_rate", label: "Conversion Rate" },
+                  { id: "total_revenue", label: "Total Revenue" },
+                ].map(c => (
+                  <label key={c.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
+                    <input type="checkbox" checked={!hiddenCards.has(c.id)} onChange={() => {
+                      setHiddenCards(prev => {
+                        const next = new Set(prev);
+                        if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
+                        localStorage.setItem('vfhq_hidden_report_cards', JSON.stringify([...next]));
+                        return next;
+                      });
+                    }} className="w-3.5 h-3.5 accent-forest" />
+                    <span className="font-dm text-xs text-ink">{c.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Sub-tabs */}
@@ -92,21 +132,27 @@ export default function Reports() {
       {tab === "overview" && (
         <div className="space-y-6">
           {/* KPI cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: "Total Enquiries", value: totalLeads, icon: <Users className="w-5 h-5 text-burgundy" />, sub: "all time" },
-              { label: "Confirmed Bookings", value: confirmedBookings.length, icon: <Calendar className="w-5 h-5 text-blue" />, sub: "all time" },
-              { label: "Conversion Rate", value: `${conversionRate}%`, icon: <TrendingUp className="w-5 h-5 text-forest" />, sub: "enquiry to booking" },
-              { label: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, icon: <DollarSign className="w-5 h-5 text-amber-600" />, sub: "NZD, all bookings" },
-            ].map(s => (
-              <div key={s.label} className="dante-card p-5">
-                <div className="flex items-start justify-between mb-3">{s.icon}</div>
-                <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
-                <div className="font-bebas text-xs tracking-widest text-sage">{s.label}</div>
-                <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
+          {(() => {
+            const cards = [
+              { id: "total_enquiries", label: "Total Enquiries", value: totalLeads, icon: <Users className="w-5 h-5 text-burgundy" />, sub: "all time" },
+              { id: "confirmed_bookings", label: "Confirmed Bookings", value: confirmedBookings.length, icon: <Calendar className="w-5 h-5 text-blue-500" />, sub: "all time" },
+              { id: "conversion_rate", label: "Conversion Rate", value: `${conversionRate}%`, icon: <TrendingUp className="w-5 h-5 text-forest" />, sub: "enquiry to booking" },
+              { id: "total_revenue", label: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, icon: <DollarSign className="w-5 h-5 text-amber-600" />, sub: "NZD, all bookings" },
+            ].filter(c => !hiddenCards.has(c.id));
+            if (cards.length === 0) return null;
+            return (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {cards.map(s => (
+                  <div key={s.id} className="dante-card p-5">
+                    <div className="mb-3">{s.icon}</div>
+                    <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
+                    <div className="font-bebas text-xs tracking-widest text-sage">{s.label}</div>
+                    <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           {/* Two charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
