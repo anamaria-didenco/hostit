@@ -1344,13 +1344,9 @@ export default function Dashboard() {
                   <div className="relative border-b border-border flex-shrink-0">
                     <div className={`grid gap-0`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
                       {visibleStats.map((s, i) => (
-                        <div key={s.id} className={`px-3 py-3 border-r border-border last:border-r-0`}>
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <div className={`w-6 h-6 rounded ${s.iconBg} ${s.iconColor} flex items-center justify-center flex-shrink-0`}>{s.icon}</div>
-                            <div className="font-inter text-xs text-gray-400 leading-tight truncate">{s.label}</div>
-                          </div>
-                          <div className="font-inter text-xl text-gray-900 font-bold leading-none mb-0.5">{s.value}</div>
-                          <div className="font-inter text-xs text-gray-400">{s.sub}</div>
+                        <div key={s.id} className={`px-4 py-2.5 border-r border-border last:border-r-0`}>
+                          <div className="font-inter text-[11px] text-gray-400 leading-tight mb-1 truncate">{s.label}</div>
+                          <div className={`font-inter text-xl font-bold leading-none ${s.iconColor}`}>{s.value}</div>
                         </div>
                       ))}
                     </div>
@@ -1401,14 +1397,6 @@ export default function Dashboard() {
                       className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
                       <Plus className="w-3.5 h-3.5" /> Add Event
                     </button>
-                  </div>
-                  {/* Legend */}
-                  <div className="flex items-center gap-4 px-4 py-1.5 border-b border-border bg-gray-50 flex-shrink-0">
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-sage-green inline-block" />Confirmed</span>
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Tentative</span>
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-violet-400 inline-block" />Proposal</span>
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />Enquiry</span>
-                    <span className="flex items-center gap-1.5 font-inter text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 inline-block" />Cancelled</span>
                   </div>
                   {/* Day headers */}
                   <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
@@ -1525,18 +1513,14 @@ export default function Dashboard() {
                             return (
                               <button key={e.id}
                                 onClick={() => e._type === 'booking' ? setLocation(`/event/${e.id}`) : (setSelectedLead(e), setTab('enquiries'))}
-                                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-sage-tint/30 transition-colors text-left">
-                                <div className={`w-1.5 h-full min-h-[36px] rounded-full flex-shrink-0 mt-0.5 ${
+                                className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-sage-tint/30 transition-colors text-left">
+                                <div className={`w-1 h-full min-h-[32px] rounded-full flex-shrink-0 mt-0.5 ${
                                   isConfirmed ? 'bg-sage-green' : e.status === 'tentative' ? 'bg-amber-400' : e.status === 'proposal_sent' ? 'bg-violet-400' : 'bg-rose-400'
                                 }`} />
                                 <div className="flex-1 min-w-0">
                                   <div className="font-inter text-xs font-semibold text-gray-900 truncate">{e.firstName} {e.lastName}</div>
-                                  <div className="font-inter text-xs text-gray-500 truncate">{e.eventType || (isConfirmed ? 'Event' : 'Enquiry')}</div>
-                                  <div className="font-inter text-xs text-gray-400">{new Date(e.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}{e.guestCount ? ` · ${e.guestCount} guests` : ''}</div>
+                                  <div className="font-inter text-xs text-gray-400">{new Date(e.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
                                 </div>
-                                <span className={`font-inter text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${
-                                  isConfirmed ? 'bg-sage-tint text-sage-dark' : e.status === 'tentative' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
-                                }`}>{isConfirmed ? 'CONFIRMED' : e.status?.replace('_',' ').toUpperCase()}</span>
                               </button>
                             );
                           })}
@@ -1565,15 +1549,11 @@ export default function Dashboard() {
                       <div className="divide-y divide-border">
                         {newEnquiries.slice(0, 6).map((lead: any) => (
                           <button key={lead.id} onClick={() => { selectLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
-                            className="w-full flex items-start gap-3 px-4 py-3 hover:bg-sage-tint/30 transition-colors text-left">
-                            <div className="w-2 h-2 rounded-full bg-rose-400 mt-1.5 flex-shrink-0 animate-pulse" />
+                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-sage-tint/30 transition-colors text-left">
+                            <div className="w-1.5 h-1.5 rounded-full bg-rose-400 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <div className="font-inter text-xs font-semibold text-gray-900">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-inter text-xs text-gray-500 truncate">{lead.eventType || 'Event'}{lead.guestCount ? ` · ${lead.guestCount} guests` : ''}</div>
-                              {lead.eventDate && <div className="font-inter text-xs text-gray-400">{new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</div>}
-                            </div>
-                            <div className="font-inter text-[10px] text-gray-400 flex-shrink-0">
-                              {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''}
+                              <div className="font-inter text-xs font-semibold text-gray-900 truncate">{lead.firstName} {lead.lastName}</div>
+                              <div className="font-inter text-xs text-gray-400 truncate">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : ''}</div>
                             </div>
                           </button>
                         ))}
