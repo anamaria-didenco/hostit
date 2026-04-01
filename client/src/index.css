@@ -43,19 +43,20 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   VenueFlowHQ — Sage & White Design System
+   VenueFlowHQ — Blue & White Design System
    ─────────────────────────────────────────────────────────────────────────────
    Primary pairing:
-     Sage Green   #8D957E  oklch(0.545 0.195 264)  → primary accent, CTAs, active
-     White        #FFFFFF  oklch(1.000 0.000 0)     → all surfaces, cards, nav
+     Blue Primary  #718fc4  → primary accent, CTAs, active states
+     White         #FFFFFF  → all surfaces, cards, nav
 
    Supporting palette:
-     Sage Light   #B8C0AD  oklch(0.730 0.080 264)   → tints, hover fills
-     Sage Dark    #6e7862  oklch(0.430 0.185 264)   → hover/pressed states
-     Sage Tint    #F0F2EE  oklch(0.960 0.012 140)   → subtle fills, page bg
-     Charcoal     #2D3028  oklch(0.210 0.015 255)   → primary text (warm dark)
-     Mid Grey     #6B7280  oklch(0.520 0.010 220)   → secondary text, borders
-     Light Grey   #E8EAE6  oklch(0.920 0.010 140)   → borders, dividers
+     Blue Secondary #9cabca  → tints, hover fills, light accents
+     Blue Dark      #5a7ab5  → hover/pressed states
+     Blue Tint      #e8edf6  → subtle fills, selected bg
+     Blue Bg        #f2f5fa  → page background
+     Charcoal       #2D3028  oklch(0.210 0.015 255)  → primary text
+     Mid Grey       #6B7280  oklch(0.520 0.010 220)  → secondary text, borders
+     Border         #dde3ee  → borders, dividers
    ─────────────────────────────────────────────────────────────────────────────
    Typography: Inter
 ─────────────────────────────────────────────────────────────────────────────── */
@@ -65,7 +66,7 @@
 
   /* ── Surfaces ── */
   /* Page background = very pale sage tint (almost white, slight warmth) */
-  --background:             oklch(0.970 0.006 264);
+  --background:             #f2f5fa;
   --foreground:             oklch(0.210 0.015 255);   /* Warm charcoal */
 
   /* Cards & popovers = pure white */
@@ -74,33 +75,33 @@
   --popover:                oklch(1.000 0.000 0);
   --popover-foreground:     oklch(0.210 0.015 255);
 
-  /* ── Primary = Sage Green ── */
-  --primary:                oklch(0.545 0.195 264);   /* #8D957E */
+  /* ── Primary = VenueFlow Blue ── */
+  --primary:                #718fc4;   /* VenueFlow Blue */
   --primary-foreground:     oklch(1.000 0.000 0);
 
   /* Secondary = pale sage fill */
-  --secondary:              oklch(0.950 0.012 264);
+  --secondary:              #edf0f7;
   --secondary-foreground:   oklch(0.210 0.015 255);
 
   /* Muted = cool light grey */
-  --muted:                  oklch(0.940 0.008 264);
+  --muted:                  #edf0f7;
   --muted-foreground:       oklch(0.520 0.010 220);
 
   /* Accent = sage tint */
-  --accent:                 oklch(0.945 0.018 264);
-  --accent-foreground:      oklch(0.430 0.185 264);   /* Sage Dark */
+  --accent:                 #e8edf6;
+  --accent-foreground:      #5a7ab5;   /* Sage Dark */
 
   /* ── Utility ── */
   --destructive:            oklch(0.580 0.200 25);
   --destructive-foreground: oklch(1.000 0.000 0);
 
   /* Borders = light sage-grey */
-  --border:                 oklch(0.900 0.010 264);
-  --input:                  oklch(0.950 0.008 264);
-  --ring:                   oklch(0.545 0.195 264);   /* Sage Green focus ring */
+  --border:                 #dde3ee;
+  --input:                  #edf0f7;
+  --ring:                   #718fc4;   /* Sage Green focus ring */
 
   /* ── Charts ── */
-  --chart-1: oklch(0.545 0.195 264);   /* Sage Green */
+  --chart-1: #718fc4;   /* Sage Green */
   --chart-2: oklch(0.460 0.120 40);    /* Burnt Sienna (supporting) */
   --chart-3: oklch(0.560 0.022 220);   /* Stormy Sky (supporting) */
   --chart-4: oklch(0.720 0.140 65);    /* Warm amber */
@@ -109,12 +110,12 @@
   /* ── Sidebar = white with sage border ── */
   --sidebar:                    oklch(1.000 0.000 0);
   --sidebar-foreground:         oklch(0.210 0.015 255);
-  --sidebar-primary:            oklch(0.545 0.195 264);
+  --sidebar-primary:            #718fc4;
   --sidebar-primary-foreground: oklch(1.000 0.000 0);
-  --sidebar-accent:             oklch(0.945 0.018 264);
-  --sidebar-accent-foreground:  oklch(0.430 0.185 264);
-  --sidebar-border:             oklch(0.900 0.010 264);
-  --sidebar-ring:               oklch(0.545 0.195 264);
+  --sidebar-accent:             #e8edf6;
+  --sidebar-accent-foreground:  #5a7ab5;
+  --sidebar-border:             #dde3ee;
+  --sidebar-ring:               #718fc4;
 }
 
 /* ── Base Layer ──────────────────────────────────────────────────────────── */
@@ -170,7 +171,7 @@
     letter-spacing: 0.06em;
     font-size: 0.7rem;
     text-transform: uppercase;
-    color: oklch(0.545 0.195 264);  /* Sage Green for section labels */
+    color: #718fc4;  /* Sage Green for section labels */
   }
 
   label {
@@ -195,7 +196,7 @@
 
   hr {
     border: none;
-    border-top: 1px solid oklch(0.900 0.010 264);
+    border-top: 1px solid #dde3ee;
     margin: 1.5rem 0;
   }
 }
@@ -215,18 +216,18 @@
   .font-pacifico  { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-style: italic; font-weight: 600; }
 
   /* ── Sage Green palette (text) ── */
-  .text-sage-green  { color: oklch(0.545 0.195 264); }
-  .text-sage-dark   { color: oklch(0.430 0.185 264); }
-  .text-sage-light  { color: oklch(0.730 0.080 264); }
+  .text-sage-green  { color: #718fc4; }
+  .text-sage-dark   { color: #5a7ab5; }
+  .text-sage-light  { color: #9cabca; }
 
   /* Legacy aliases → all map to sage/charcoal roles */
-  .text-forest    { color: oklch(0.545 0.195 264); }
-  .text-teal      { color: oklch(0.545 0.195 264); }
-  .text-burgundy  { color: oklch(0.545 0.195 264); }
-  .text-terra     { color: oklch(0.545 0.195 264); }
-  .text-blue      { color: oklch(0.545 0.195 264); }
-  .text-gold      { color: oklch(0.545 0.195 264); }
-  .text-sienna    { color: oklch(0.545 0.195 264); }
+  .text-forest    { color: #718fc4; }
+  .text-teal      { color: #718fc4; }
+  .text-burgundy  { color: #718fc4; }
+  .text-terra     { color: #718fc4; }
+  .text-blue      { color: #718fc4; }
+  .text-gold      { color: #718fc4; }
+  .text-sienna    { color: #718fc4; }
   .text-sage      { color: oklch(0.520 0.010 220); }
   .text-stone     { color: oklch(0.520 0.010 220); }
   .text-taupe     { color: oklch(0.520 0.010 220); }
@@ -241,28 +242,28 @@
   .text-amber     { color: oklch(0.720 0.140 65); }
 
   /* ── Sage Green palette (bg) ── */
-  .bg-sage-green  { background-color: oklch(0.545 0.195 264); }
-  .bg-sage-dark   { background-color: oklch(0.430 0.185 264); }
-  .bg-sage-tint   { background-color: oklch(0.945 0.018 264); }
-  .bg-sage-light  { background-color: oklch(0.730 0.080 264); }
+  .bg-sage-green  { background-color: #718fc4; }
+  .bg-sage-dark   { background-color: #5a7ab5; }
+  .bg-sage-tint   { background-color: #e8edf6; }
+  .bg-sage-light  { background-color: #9cabca; }
 
   /* Legacy aliases */
-  .bg-forest      { background-color: oklch(0.545 0.195 264); }
-  .bg-forest-dark { background-color: oklch(0.430 0.185 264); }
-  .bg-teal        { background-color: oklch(0.545 0.195 264); }
-  .bg-teal-dark   { background-color: oklch(0.430 0.185 264); }
-  .bg-terra       { background-color: oklch(0.545 0.195 264); }
-  .bg-burgundy    { background-color: oklch(0.545 0.195 264); }
-  .bg-burg-dark   { background-color: oklch(0.430 0.185 264); }
-  .bg-blue        { background-color: oklch(0.545 0.195 264); }
-  .bg-gold        { background-color: oklch(0.545 0.195 264); }
-  .bg-sienna      { background-color: oklch(0.545 0.195 264); }
-  .bg-sienna-tint { background-color: oklch(0.945 0.018 264); }
+  .bg-forest      { background-color: #718fc4; }
+  .bg-forest-dark { background-color: #5a7ab5; }
+  .bg-teal        { background-color: #718fc4; }
+  .bg-teal-dark   { background-color: #5a7ab5; }
+  .bg-terra       { background-color: #718fc4; }
+  .bg-burgundy    { background-color: #718fc4; }
+  .bg-burg-dark   { background-color: #5a7ab5; }
+  .bg-blue        { background-color: #718fc4; }
+  .bg-gold        { background-color: #718fc4; }
+  .bg-sienna      { background-color: #718fc4; }
+  .bg-sienna-tint { background-color: #e8edf6; }
   .bg-cream       { background-color: oklch(1.000 0.000 0); }
   .bg-ivory       { background-color: oklch(1.000 0.000 0); }
-  .bg-ivory-sand  { background-color: oklch(0.965 0.010 264); }
-  .bg-linen       { background-color: oklch(0.965 0.010 264); }
-  .bg-warm-white  { background-color: oklch(0.980 0.005 264); }
+  .bg-ivory-sand  { background-color: #edf0f8; }
+  .bg-linen       { background-color: #edf0f8; }
+  .bg-warm-white  { background-color: #f5f8fc; }
   .bg-parchment   { background-color: oklch(1.000 0.000 0); }
   .bg-ink         { background-color: oklch(0.210 0.015 255); }
   .bg-stormy      { background-color: oklch(0.560 0.022 220); }
@@ -271,16 +272,16 @@
   .bg-amber       { background-color: oklch(0.720 0.140 65); }
 
   /* ── Sage Green palette (border) ── */
-  .border-sage-green { border-color: oklch(0.545 0.195 264); }
-  .border-sage-dark  { border-color: oklch(0.430 0.185 264); }
+  .border-sage-green { border-color: #718fc4; }
+  .border-sage-dark  { border-color: #5a7ab5; }
 
   /* Legacy aliases */
-  .border-forest   { border-color: oklch(0.545 0.195 264); }
-  .border-teal     { border-color: oklch(0.545 0.195 264); }
-  .border-terra    { border-color: oklch(0.545 0.195 264); }
-  .border-burgundy { border-color: oklch(0.545 0.195 264); }
+  .border-forest   { border-color: #718fc4; }
+  .border-teal     { border-color: #718fc4; }
+  .border-terra    { border-color: #718fc4; }
+  .border-burgundy { border-color: #718fc4; }
   .border-gold     { border-color: oklch(0.590 0.040 264 / 0.25); }
-  .border-sienna   { border-color: oklch(0.545 0.195 264); }
+  .border-sienna   { border-color: #718fc4; }
   .border-stormy   { border-color: oklch(0.560 0.022 220); }
   .border-ink      { border-color: oklch(0.210 0.015 255); }
   .border-amber    { border-color: oklch(0.720 0.140 65); }
@@ -303,13 +304,13 @@
     content: '';
     flex: 1;
     height: 1px;
-    background: oklch(0.900 0.010 264);
+    background: #dde3ee;
   }
 
   /* ── Cards — white on sage-tint page bg ── */
   .paradiso-card, .dante-card, .cream-card {
     background-color: oklch(1.000 0.000 0);
-    border: 1px solid oklch(0.900 0.010 264);
+    border: 1px solid #dde3ee;
     border-radius: 0.875rem;
     box-shadow:
       0 1px 3px oklch(0.210 0.020 140 / 0.06),
@@ -320,8 +321,8 @@
   .stripe-pattern {
     background-image: repeating-linear-gradient(
       90deg,
-      oklch(0.900 0.010 264) 0px,
-      oklch(0.900 0.010 264) 1px,
+      #dde3ee 0px,
+      #dde3ee 1px,
       transparent 1px,
       transparent 12px
     );
@@ -329,8 +330,8 @@
   .stripe-pattern-v {
     background-image: repeating-linear-gradient(
       180deg,
-      oklch(0.900 0.010 264) 0px,
-      oklch(0.900 0.010 264) 1px,
+      #dde3ee 0px,
+      #dde3ee 1px,
       transparent 1px,
       transparent 12px
     );
@@ -353,24 +354,24 @@
   }
   .nav-item:hover {
     color: oklch(0.210 0.015 255);
-    background-color: oklch(0.945 0.018 264);  /* sage tint */
+    background-color: #e8edf6;  /* sage tint */
   }
   .nav-item.active {
-    color: oklch(0.430 0.185 264);   /* Sage Dark */
-    background-color: oklch(0.945 0.018 264);
+    color: #5a7ab5;   /* Sage Dark */
+    background-color: #e8edf6;
     font-weight: 600;
   }
 
   /* ── Status pill badges ── */
-  .status-new       { background: oklch(0.945 0.018 264); color: oklch(0.430 0.185 264); }
+  .status-new       { background: #e8edf6; color: #5a7ab5; }
   .status-quoted    { background: oklch(0.940 0.040 65 / 0.50); color: oklch(0.500 0.120 65); }
-  .status-confirmed { background: oklch(0.945 0.018 264); color: oklch(0.380 0.060 264); }
+  .status-confirmed { background: #e8edf6; color: #5a7ab5; }
   .status-cancelled { background: oklch(0.940 0.008 220); color: oklch(0.520 0.010 220); }
 
   /* ── Stat card ── */
   .stat-card {
     background: oklch(1.000 0.000 0);
-    border: 1px solid oklch(0.900 0.010 264);
+    border: 1px solid #dde3ee;
     border-radius: 0.875rem;
     padding: 1.25rem;
     box-shadow: 0 1px 4px oklch(0.210 0.020 140 / 0.05);
@@ -378,7 +379,7 @@
 
   /* ── Primary button = Sage Green ── */
   .btn-teal, .btn-forest {
-    background-color: oklch(0.545 0.195 264);
+    background-color: #718fc4;
     color: oklch(1.000 0.000 0);
     border-radius: 0.625rem;
     font-family: 'Inter', system-ui, sans-serif;
@@ -387,13 +388,13 @@
     letter-spacing: -0.01em;
     transition: background-color 0.15s ease, transform 0.1s ease;
   }
-  .btn-teal:hover, .btn-forest:hover { background-color: oklch(0.430 0.185 264); }
+  .btn-teal:hover, .btn-forest:hover { background-color: #5a7ab5; }
   .btn-teal:active, .btn-forest:active { transform: scale(0.98); }
 
   /* ── Outline button = Sage Green outline ── */
   .btn-terra-outline, .btn-gold-outline {
     background-color: oklch(1.000 0.000 0);
-    color: oklch(0.430 0.185 264);
+    color: #5a7ab5;
     border: 1.5px solid oklch(0.590 0.040 264 / 0.50);
     border-radius: 0.625rem;
     font-family: 'Inter', system-ui, sans-serif;
@@ -403,13 +404,13 @@
     transition: background-color 0.15s ease, border-color 0.15s ease;
   }
   .btn-terra-outline:hover, .btn-gold-outline:hover {
-    background-color: oklch(0.945 0.018 264);
+    background-color: #e8edf6;
     border-color: oklch(0.590 0.040 264 / 0.80);
   }
 
   /* ── Input focus = Sage ring ── */
   .input-paradiso, .input-dante {
-    border: 1px solid oklch(0.900 0.010 264);
+    border: 1px solid #dde3ee;
     border-radius: 0.625rem;
     background: oklch(1.000 0.000 0);
     font-family: 'Inter', system-ui, sans-serif;
@@ -417,7 +418,7 @@
   }
   .input-paradiso:focus, .input-dante:focus {
     outline: none;
-    border-color: oklch(0.545 0.195 264);
+    border-color: #718fc4;
     box-shadow: 0 0 0 3px oklch(0.590 0.040 264 / 0.15);
   }
 
@@ -432,7 +433,7 @@
 
   /* ── Dot grid texture ── */
   .checkerboard {
-    background-image: radial-gradient(circle, oklch(0.900 0.010 264) 1px, transparent 1px);
+    background-image: radial-gradient(circle, #dde3ee 1px, transparent 1px);
     background-size: 20px 20px;
   }
 
@@ -460,31 +461,31 @@
 
 /* ── Theme: Sage (default — already in :root, kept for explicitness) ── */
 [data-theme="sage"] {
-  --background:             oklch(0.970 0.006 264);
+  --background:             #f2f5fa;
   --foreground:             oklch(0.210 0.015 255);
   --card:                   oklch(1.000 0.000 0);
   --card-foreground:        oklch(0.210 0.015 255);
   --popover:                oklch(1.000 0.000 0);
   --popover-foreground:     oklch(0.210 0.015 255);
-  --primary:                oklch(0.545 0.195 264);
+  --primary:                #718fc4;
   --primary-foreground:     oklch(1.000 0.000 0);
-  --secondary:              oklch(0.950 0.012 264);
+  --secondary:              #edf0f7;
   --secondary-foreground:   oklch(0.210 0.015 255);
-  --muted:                  oklch(0.940 0.008 264);
+  --muted:                  #edf0f7;
   --muted-foreground:       oklch(0.520 0.010 220);
-  --accent:                 oklch(0.945 0.018 264);
-  --accent-foreground:      oklch(0.430 0.185 264);
-  --border:                 oklch(0.900 0.010 264);
-  --input:                  oklch(0.950 0.008 264);
-  --ring:                   oklch(0.545 0.195 264);
+  --accent:                 #e8edf6;
+  --accent-foreground:      #5a7ab5;
+  --border:                 #dde3ee;
+  --input:                  #edf0f7;
+  --ring:                   #718fc4;
   --sidebar:                oklch(1.000 0.000 0);
   --sidebar-foreground:     oklch(0.210 0.015 255);
-  --sidebar-primary:        oklch(0.545 0.195 264);
+  --sidebar-primary:        #718fc4;
   --sidebar-primary-foreground: oklch(1.000 0.000 0);
-  --sidebar-accent:         oklch(0.945 0.018 264);
-  --sidebar-accent-foreground: oklch(0.430 0.185 264);
-  --sidebar-border:         oklch(0.900 0.010 264);
-  --sidebar-ring:           oklch(0.545 0.195 264);
+  --sidebar-accent:         #e8edf6;
+  --sidebar-accent-foreground: #5a7ab5;
+  --sidebar-border:         #dde3ee;
+  --sidebar-ring:           #718fc4;
   /* Brand tokens */
   --brand-primary:   #8D957E;
   --brand-accent:    #6e7862;
