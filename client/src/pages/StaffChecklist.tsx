@@ -73,11 +73,8 @@ export default function StaffChecklist() {
     <div className="min-h-screen bg-linen">
       <div className="max-w-lg mx-auto px-4 py-8">
         <div className="mb-6 text-center">
-          <div className="inline-flex items-center gap-2 mb-1">
-            <div className="w-7 h-7 rounded-lg bg-forest flex items-center justify-center">
-              <span className="text-white font-bold text-xs">V</span>
-            </div>
-            <span className="font-bebas tracking-widest text-forest text-lg">VenueFlow</span>
+          <div className="inline-flex items-center mb-1">
+            <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
           </div>
           <h1 className="font-bebas tracking-widest text-3xl text-ink mt-2">{instance.name}</h1>
           <p className="font-dm text-sm text-ink/50 mt-1">{checkedCount} of {total} complete</p>
