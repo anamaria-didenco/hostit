@@ -914,3 +914,14 @@
   --brand-header-fg: #f0d8a8;
   --brand-gold:      #d4a843;
 }
+
+/* ── Rich Text Editor ────────────────────────────────────────────────── */
+.vf-rich-editor:empty:before {
+  content: attr(data-placeholder);
+  color: rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  display: block;
+}
+.vf-rich-editor:focus {
+  outline: none;
+}

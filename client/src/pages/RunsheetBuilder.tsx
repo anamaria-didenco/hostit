@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { RichTextarea } from "@/components/ui/RichTextarea";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
@@ -1496,17 +1497,17 @@ export default function RunsheetBuilder() {
                             </button>
                           ))}
                         </div>
-                        <Textarea
+                        <RichTextarea
                           value={venueSetup}
-                          onChange={e => setVenueSetup(e.target.value)}
+                          onChange={setVenueSetup}
                           placeholder="Describe the room layout, table arrangement, AV setup, decorations, bar position, dance floor, stage..."
-                          rows={3}
-                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm"
+                          minHeight="72px"
+                          className="no-print"
                         />
                       </div>
                     )}
                     {!isHidden && venueSetup && (
-                      <div className="hidden print:block px-5 py-3 font-dm text-sm text-ink/80 whitespace-pre-wrap">{venueSetup}</div>
+                      <div className="hidden print:block px-5 py-3 font-dm text-sm text-ink/80" dangerouslySetInnerHTML={{ __html: venueSetup }} />
                     )}
                   </div>
                 </SortableSection>
@@ -1737,14 +1738,14 @@ export default function RunsheetBuilder() {
             {/* General notes — at top */}
             <div className="px-5 py-3 border-b border-gold/30 bg-linen/30">
               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1.5">GENERAL NOTES</label>
-              <Textarea
+              <RichTextarea
                 value={notes}
-                onChange={e => setNotes(e.target.value)}
+                onChange={setNotes}
                 placeholder="Any additional notes for the event..."
-                rows={2}
-                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm no-print"
+                minHeight="56px"
+                className="no-print"
               />
-              {notes && <div className="hidden print:block font-dm text-sm text-ink/70 whitespace-pre-wrap">{notes}</div>}
+              {notes && <div className="hidden print:block font-dm text-sm text-ink/70" dangerouslySetInnerHTML={{ __html: notes }} />}
             </div>
 
             {items.length === 0 ? (
@@ -1934,14 +1935,14 @@ export default function RunsheetBuilder() {
             <div className="px-5 py-4 border-t border-gold/30">
               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">FOOTER NOTE</label>
               <p className="font-dm text-[10px] text-ink/35 mb-2">Shown at the bottom of the runsheet — use for payment info, terms, or any closing note.</p>
-              <Textarea
+              <RichTextarea
                 value={footerText}
-                onChange={e => setFooterText(e.target.value)}
+                onChange={setFooterText}
                 placeholder="e.g. Final payment of $2,400 due on the day. Thank you for choosing us!"
-                rows={3}
-                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm no-print"
+                minHeight="72px"
+                className="no-print"
               />
-              {footerText && <div className="hidden print:block font-dm text-sm text-ink/60 whitespace-pre-wrap italic">{footerText}</div>}
+              {footerText && <div className="hidden print:block font-dm text-sm text-ink/60" dangerouslySetInnerHTML={{ __html: footerText }} />}
             </div>
           </div>
         )}
@@ -3164,9 +3165,7 @@ export default function RunsheetBuilder() {
         {/* Print footer */}
         <div className="hidden print:block mt-8 border-t-2 border-gold/40 pt-4 space-y-2">
           {footerText && (
-            <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap bg-linen/60 border border-gold/30 px-4 py-3">
-              {footerText}
-            </div>
+            <div className="font-dm text-sm text-ink/80 bg-linen/60 border border-gold/30 px-4 py-3" dangerouslySetInnerHTML={{ __html: footerText }} />
           )}
           <div className="text-xs text-ink/40 font-dm text-center">
             Prepared by VenueFlowHQ — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
