@@ -1263,9 +1263,9 @@ export default function Dashboard() {
       {/* ── TOP NAVIGATION BAR ──────────────────────────────────────────────── */}
       <nav className="bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
-        <div className="flex items-center pr-5 border-r border-border mr-4 flex-shrink-0">
+        <button onClick={() => setTab("overview" as any)} className="flex items-center pr-5 border-r border-border mr-4 flex-shrink-0 focus:outline-none">
           <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
-        </div>
+        </button>
         {/* Primary nav tabs — hidden on mobile (shown in bottom bar instead) */}
         <div className="hidden md:flex items-center">
           {[
