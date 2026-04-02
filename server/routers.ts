@@ -1941,6 +1941,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         proposalId: z.number().nullable().optional(),
         floorPlanId: z.number().nullable().optional(),
         fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional() }).optional(),
+        costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1963,6 +1964,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.proposalId !== undefined) updateData.proposalId = fields.proposalId;
         if (fields.floorPlanId !== undefined) updateData.floorPlanId = fields.floorPlanId;
         if (fields.fnbColumns !== undefined) updateData.fnbColumns = fields.fnbColumns;
+        if (fields.costItems !== undefined) updateData.costItems = fields.costItems;
         updateData.updatedAt = new Date();
         await db.update(runsheets).set(updateData)
           .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)));

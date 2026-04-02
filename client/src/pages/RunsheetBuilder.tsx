@@ -12,7 +12,7 @@ import {
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
   Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine, Package,
-  Eye, EyeOff,
+  Eye, EyeOff, DollarSign, Download,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -173,8 +173,12 @@ export default function RunsheetBuilder() {
   const [newDietary, setNewDietary] = useState({ name: "", count: "1", notes: "" });
   const [dietarySectionOpen, setDietarySectionOpen] = useState(true);
 
+  // Costs
+  type CostItem = { _id: string; label: string; qty: number; unitPrice: number; category: string };
+  const [costItems, setCostItems] = useState<CostItem[]>([]);
+
   // F&B
-  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'checklist' | 'tableplan' | 'equipment'>('timeline');
+  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'checklist' | 'tableplan' | 'equipment' | 'costs'>('timeline');
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
   const [fnbSaving, setFnbSaving] = useState(false);
   const [expandedFnbIdx, setExpandedFnbIdx] = useState<number | null>(null);
@@ -717,6 +721,7 @@ export default function RunsheetBuilder() {
       setLinkedProposalId((existing as any).proposalId ?? undefined);
       setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
       setItems((existing.items ?? []).map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
+      if ((existing as any).costItems) setCostItems((existing as any).costItems as CostItem[]);
       const cols = (existing as any).fnbColumns;
       if (cols) {
         if (cols.dietary !== undefined) setShowDietaryCol(cols.dietary);
@@ -956,6 +961,7 @@ export default function RunsheetBuilder() {
           footerText: footerText || undefined,
           proposalId: linkedProposalId,
           floorPlanId: linkedFloorPlanId ?? null,
+          costItems: costItems.length ? costItems : null,
         });
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
@@ -1672,6 +1678,7 @@ export default function RunsheetBuilder() {
             { id: 'fnb', label: 'F&B SHEET', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
             { id: 'checklist', label: 'CHECKLIST', icon: <CheckSquare className="w-4 h-4" />, count: `${checkedCount}/${checklistItems.length}` },
             { id: 'tableplan', label: 'TABLE PLAN', icon: <LayoutGrid className="w-4 h-4" /> },
+            { id: 'costs', label: 'COSTS', icon: <DollarSign className="w-4 h-4" />, count: costItems.length || undefined },
           ].map(tab => (
             <button
               key={tab.id}
@@ -2971,6 +2978,186 @@ export default function RunsheetBuilder() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── COSTS TAB ────────────────────────────────────────────────────── */}
+        {activeMainTab === 'costs' && (
+          <div className="bg-white border border-gold/30 border-t-0 shadow-sm no-print">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-gold" />
+                <span className="font-bebas tracking-widest text-sm text-ink">EVENT COSTS</span>
+                {costItems.length > 0 && (
+                  <span className="text-xs font-bebas px-1.5 py-0.5 bg-forest/10 text-ink/60">{costItems.length} item{costItems.length !== 1 ? 's' : ''}</span>
+                )}
+              </div>
+              {linkedProposalId && (
+                <button
+                  onClick={() => {
+                    const imported: CostItem[] = [];
+                    // Food line items from proposal
+                    if ((linkedProposal as any)?.lineItems) {
+                      try {
+                        const li = JSON.parse((linkedProposal as any).lineItems as string ?? '[]') as any[];
+                        li.filter((i: any) => i.description).forEach((i: any, idx: number) => {
+                          imported.push({ _id: `li-${Date.now()}-${idx}`, label: i.description, qty: Number(i.qty) || 1, unitPrice: Number(i.price ?? (Number(i.total) / (Number(i.qty) || 1))) || 0, category: 'Food & Beverage' });
+                        });
+                      } catch {}
+                    }
+                    // Quote items (hire, styling, etc.)
+                    if ((proposalQuote as any)?.items?.length) {
+                      (proposalQuote as any).items.forEach((i: any, idx: number) => {
+                        imported.push({ _id: `q-${Date.now()}-${idx}`, label: i.name + (i.description ? ` — ${i.description}` : ''), qty: Number(i.qty) || 1, unitPrice: Number(i.unitPrice) || 0, category: 'Additional' });
+                      });
+                    }
+                    // Bar tab
+                    if ((proposalDrinks as any)?.tabAmount) {
+                      imported.push({ _id: `bar-${Date.now()}`, label: 'Bar Tab', qty: 1, unitPrice: Number((proposalDrinks as any).tabAmount) || 0, category: 'Bar & Beverages' });
+                    }
+                    if (imported.length === 0) { toast.error('No cost items found in linked proposal'); return; }
+                    setCostItems(prev => {
+                      const existingIds = new Set(prev.map(x => x._id));
+                      const newItems = imported.filter(x => !existingIds.has(x._id));
+                      return [...prev, ...newItems];
+                    });
+                    toast.success(`${imported.length} item${imported.length !== 1 ? 's' : ''} imported from proposal`);
+                  }}
+                  className="font-bebas tracking-widest text-[10px] text-[#8b6914] hover:text-forest flex items-center gap-1 border border-gold/40 px-2 py-1 hover:bg-forest/5 hover:border-forest/30 transition-colors"
+                >
+                  <Download className="w-3 h-3" /> IMPORT FROM PROPOSAL
+                </button>
+              )}
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm font-dm">
+                <thead>
+                  <tr className="border-b border-gold/30 bg-linen/50">
+                    <th className="text-left px-4 py-2 font-bebas tracking-widest text-[10px] text-ink/40">DESCRIPTION</th>
+                    <th className="text-left px-4 py-2 font-bebas tracking-widest text-[10px] text-ink/40 w-36">CATEGORY</th>
+                    <th className="text-center px-3 py-2 font-bebas tracking-widest text-[10px] text-ink/40 w-16">QTY</th>
+                    <th className="text-right px-4 py-2 font-bebas tracking-widest text-[10px] text-ink/40 w-28">UNIT PRICE</th>
+                    <th className="text-right px-4 py-2 font-bebas tracking-widest text-[10px] text-ink/40 w-28">TOTAL</th>
+                    <th className="w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {costItems.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-ink/30 font-dm text-sm">
+                        No cost items yet — add one below{linkedProposalId ? ' or import from the linked proposal' : ''}
+                      </td>
+                    </tr>
+                  )}
+                  {costItems.map((ci, idx) => (
+                    <tr key={ci._id} className="group border-b border-gold/20 hover:bg-linen/40 transition-colors">
+                      <td className="px-4 py-2">
+                        <input
+                          value={ci.label}
+                          onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, label: e.target.value } : x))}
+                          placeholder="Item description..."
+                          className="w-full bg-transparent border-0 focus:outline-none text-ink font-dm text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <select
+                          value={ci.category}
+                          onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, category: e.target.value } : x))}
+                          className="w-full bg-transparent border-0 focus:outline-none text-ink/70 font-dm text-xs cursor-pointer"
+                        >
+                          {['Food & Beverage', 'Bar & Beverages', 'Venue Hire', 'AV & Tech', 'Styling & Decor', 'Staffing', 'Additional', 'Other'].map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="number" min={1}
+                          value={ci.qty}
+                          onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, qty: Number(e.target.value) || 1 } : x))}
+                          className="w-full bg-transparent border-0 focus:outline-none text-ink text-center font-dm text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-ink/40 text-xs">$</span>
+                          <input
+                            type="number" min={0} step={0.01}
+                            value={ci.unitPrice}
+                            onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, unitPrice: Number(e.target.value) || 0 } : x))}
+                            className="w-20 bg-transparent border-0 focus:outline-none text-ink text-right font-dm text-sm"
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-right font-semibold text-ink">
+                        ${(ci.qty * ci.unitPrice).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-2 py-2">
+                        <button
+                          onClick={() => setCostItems(prev => prev.filter((_, i) => i !== idx))}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/30 hover:text-red-500"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Add row */}
+            <div className="px-4 py-3 border-t border-gold/20">
+              <button
+                onClick={() => setCostItems(prev => [...prev, { _id: `new-${Date.now()}`, label: '', qty: 1, unitPrice: 0, category: 'Other' }])}
+                className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-3 py-1.5 hover:bg-forest/5 transition-colors"
+              >
+                <Plus className="w-3 h-3" /> ADD ITEM
+              </button>
+            </div>
+
+            {/* Totals */}
+            {costItems.length > 0 && (() => {
+              const subtotal = costItems.reduce((sum, ci) => sum + ci.qty * ci.unitPrice, 0);
+              const gst = subtotal * 0.15;
+              const total = subtotal + gst;
+              const byCategory = costItems.reduce((acc, ci) => {
+                acc[ci.category] = (acc[ci.category] ?? 0) + ci.qty * ci.unitPrice;
+                return acc;
+              }, {} as Record<string, number>);
+              return (
+                <div className="border-t border-gold/30 px-5 py-4 flex flex-col md:flex-row gap-6 items-start justify-between bg-linen/30">
+                  {/* Category breakdown */}
+                  <div className="space-y-1">
+                    <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-2">BY CATEGORY</div>
+                    {Object.entries(byCategory).map(([cat, amt]) => (
+                      <div key={cat} className="flex items-center gap-6 text-xs font-dm">
+                        <span className="text-ink/60 w-36">{cat}</span>
+                        <span className="text-ink font-semibold">${amt.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Summary */}
+                  <div className="min-w-[220px] space-y-1">
+                    <div className="flex justify-between text-xs font-dm text-ink/70">
+                      <span>Subtotal (excl. GST)</span>
+                      <span className="font-semibold">${subtotal.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-xs font-dm text-ink/50">
+                      <span>GST (15%)</span>
+                      <span>${gst.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-dm font-bold text-ink border-t border-gold/40 pt-1.5 mt-1.5">
+                      <span>Total (incl. GST)</span>
+                      <span>${total.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
