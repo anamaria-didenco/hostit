@@ -463,6 +463,53 @@ function MenuTabRedirect({ setTab, setSettingsSubTab }: {
 }
 
 // ── Settings Sidebar (Perfect Venue style) ─────────────────────────────────
+function WaitlistPanel() {
+  const waitlistData = trpc.waitlist.list.useQuery();
+  const entries = waitlistData.data ?? [];
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="font-cormorant text-3xl font-semibold text-ink">Waitlist</h1>
+        <span className="font-bebas tracking-widest text-xs text-forest bg-forest/10 px-3 py-1.5 rounded">{entries.length} {entries.length === 1 ? 'ENTRY' : 'ENTRIES'}</span>
+      </div>
+      {waitlistData.isLoading ? (
+        <div className="text-center py-16 text-gray-400 text-sm">Loading…</div>
+      ) : entries.length === 0 ? (
+        <div className="text-center py-16 text-gray-400 text-sm">No waitlist entries yet.</div>
+      ) : (
+        <div className="bg-white border border-border rounded overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-ivory-sand">
+                <th className="text-left px-4 py-3 font-bebas tracking-widest text-xs text-gray-500">Name</th>
+                <th className="text-left px-4 py-3 font-bebas tracking-widest text-xs text-gray-500">Email</th>
+                <th className="text-left px-4 py-3 font-bebas tracking-widest text-xs text-gray-500">Venue</th>
+                <th className="text-left px-4 py-3 font-bebas tracking-widest text-xs text-gray-500">Message</th>
+                <th className="text-left px-4 py-3 font-bebas tracking-widest text-xs text-gray-500">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e: any, i: number) => (
+                <tr key={e.id} className={`border-b border-border last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-ivory-sand/40'}`}>
+                  <td className="px-4 py-3 font-dm text-ink">{e.name}</td>
+                  <td className="px-4 py-3 text-forest">
+                    <a href={`mailto:${e.email}`} className="hover:underline">{e.email}</a>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{e.venueName ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{e.message ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                    {new Date(e.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl }: {
   settingsSubTab: string;
   setSettingsSubTab: (t: any) => void;
@@ -483,6 +530,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { id: "billing", label: "Billing" },
     { id: "group-settings", label: "Group Settings" },
     { id: "statuses", label: "Enquiry Statuses" },
+    { id: "waitlist", label: "Waitlist" },
   ];
   const currentLabel = items.find(i => i.id === settingsSubTab)?.label ?? 'Settings';
   return (
@@ -536,9 +584,9 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
   type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook";
-  type SettingsSubTab = "venue"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses";
+  type SettingsSubTab = "venue"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
   const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","expressbook"];
-  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","lead-form","integrations","menu","templates","email","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses"];
+  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","lead-form","integrations","menu","templates","email","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist"];
   const isDashTab = (v: string | null): v is DashTab => v !== null && (DASH_TABS as readonly string[]).includes(v);
   const isSettingsSubTab = (v: string | null): v is SettingsSubTab => v !== null && (SETTINGS_SUB_TABS as readonly string[]).includes(v);
   const _qp = new URLSearchParams(window.location.search);
@@ -5367,6 +5415,8 @@ export default function Dashboard() {
                 </div>
               </div>
               )}
+
+              {settingsSubTab === "waitlist" && <WaitlistPanel />}
 
               </div>
             </div>

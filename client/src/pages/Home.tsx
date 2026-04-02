@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { Link } from "wouter";
+import { trpc } from "@/lib/trpc";
 import {
-  ArrowRight, Play, CheckCircle, Star,
-  ChevronDown, Zap
+  ArrowRight, CheckCircle, Star,
+  ChevronDown, Zap, X, Loader2
 } from "lucide-react";
 
 const features = [
@@ -15,28 +16,139 @@ const features = [
 ];
 
 const faqs = [
-  { q: "How long does setup take?", a: "Most venues are up and running within 30 minutes. We walk you through every step." },
+  { q: "When will I get access?", a: "We're onboarding NZ venues in small batches to ensure a great experience. Join the waitlist and we'll be in touch as soon as your spot is ready." },
   { q: "Can my whole team use it?", a: "Yes — unlimited team members on all plans. Assign roles so staff only see what they need." },
-  { q: "Do I need a credit card to start?", a: "No credit card required for the free trial. Upgrade whenever you're ready." },
+  { q: "How long does setup take?", a: "Most venues are up and running within 30 minutes. We walk you through every step." },
   { q: "Can I import my existing data?", a: "Yes. We support CSV import for contacts, and our team can help with data migration." },
 ];
+
+function WaitlistModal({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [venueName, setVenueName] = useState("");
+  const [message, setMessage] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const joinMutation = trpc.waitlist.join.useMutation({
+    onSuccess: () => setSubmitted(true),
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) return;
+    joinMutation.mutate({ name: name.trim(), email: email.trim(), venueName: venueName.trim() || undefined, message: message.trim() || undefined });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative"
+        onClick={e => e.stopPropagation()}
+      >
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors">
+          <X className="w-5 h-5" />
+        </button>
+
+        {submitted ? (
+          <div className="text-center py-6">
+            <div className="w-16 h-16 bg-sage-tint rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-sage-green" />
+            </div>
+            <h3 className="text-2xl font-black text-gray-900 mb-2" style={{ letterSpacing: '-0.03em' }}>You're on the list!</h3>
+            <p className="text-gray-500 text-sm leading-relaxed">
+              Thanks for your interest in VenueFlow. We'll be in touch as soon as your spot is ready — keep an eye on your inbox.
+            </p>
+            <button onClick={onClose} className="mt-6 bg-sage-green text-white font-semibold px-6 py-2.5 rounded-lg hover:bg-sage-dark transition-colors text-sm">
+              Done
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mb-6">
+              <h3 className="text-2xl font-black text-gray-900 mb-1" style={{ letterSpacing: '-0.03em' }}>Join the waitlist</h3>
+              <p className="text-gray-500 text-sm">We're onboarding NZ venues in small batches. Drop your details and we'll reach out when your spot is ready.</p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Your name <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Jane Smith"
+                  required
+                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm font-inter text-gray-900 focus:outline-none focus:border-sage-green transition-colors placeholder:text-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Email <span className="text-red-400">*</span></label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="jane@yourvenue.co.nz"
+                  required
+                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm font-inter text-gray-900 focus:outline-none focus:border-sage-green transition-colors placeholder:text-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Venue name</label>
+                <input
+                  type="text"
+                  value={venueName}
+                  onChange={e => setVenueName(e.target.value)}
+                  placeholder="The Grand Room, Auckland"
+                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm font-inter text-gray-900 focus:outline-none focus:border-sage-green transition-colors placeholder:text-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Anything else? <span className="text-gray-300 font-normal normal-case">(optional)</span></label>
+                <textarea
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  placeholder="Tell us a bit about your venue or what you're looking for..."
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm font-inter text-gray-900 focus:outline-none focus:border-sage-green transition-colors placeholder:text-gray-300 resize-none"
+                />
+              </div>
+
+              {joinMutation.error && (
+                <p className="text-red-500 text-xs">{joinMutation.error.message}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={joinMutation.isPending || !name.trim() || !email.trim()}
+                className="w-full bg-sage-green text-white font-bold py-3.5 rounded-lg hover:bg-sage-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {joinMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <>Join the waitlist <ArrowRight className="w-4 h-4" /></>}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const { user, loading: isLoading } = useAuth();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [showWaitlist, setShowWaitlist] = useState(false);
 
   return (
     <div className="min-h-screen bg-white font-inter text-gray-900">
 
+      {showWaitlist && <WaitlistModal onClose={() => setShowWaitlist(false)} />}
+
       {/* ── Nav ──────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
+      <header className="sticky top-0 z-40 bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          {/* Logo */}
           <div className="flex items-center">
             <img src="/logo-full.png" alt="VenueFlow" className="h-8 w-auto" />
           </div>
 
-          {/* Nav links — visually clickable surfaces */}
           <nav className="hidden md:flex items-center gap-1">
             {["Features", "Pricing", "About"].map(item => (
               <a key={item} href="#"
@@ -46,7 +158,6 @@ export default function Home() {
             ))}
           </nav>
 
-          {/* CTA */}
           <div className="flex items-center gap-2">
             {isLoading ? null : user ? (
               <Link href="/dashboard">
@@ -60,10 +171,11 @@ export default function Home() {
                   className="text-sm font-semibold text-gray-700 px-4 py-2 rounded-lg border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-all">
                   Sign in
                 </a>
-                <a href={getLoginUrl()}
+                <button
+                  onClick={() => setShowWaitlist(true)}
                   className="bg-sage-green text-white text-sm font-bold px-5 py-2.5 rounded-lg shadow-md hover:bg-sage-dark hover:shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
-                  Get started <ArrowRight className="w-3.5 h-3.5" />
-                </a>
+                  Join waitlist <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </>
             )}
           </div>
@@ -73,25 +185,21 @@ export default function Home() {
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="bg-gradient-to-b from-white to-gray-50 pt-20 pb-24 px-6">
         <div className="max-w-5xl mx-auto text-center">
-          {/* Badge */}
           <div className="inline-flex items-center gap-2 bg-sage-tint text-sage-dark text-xs font-bold px-4 py-2 rounded-full mb-8 tracking-wide uppercase border border-sage-green/20">
             <span className="w-2 h-2 rounded-full bg-sage-green inline-block animate-pulse" />
             New Zealand's Venue Management Platform
           </div>
 
-          {/* Headline */}
           <h1 className="text-5xl md:text-6xl font-black text-gray-950 mb-6 leading-[1.05]"
             style={{ letterSpacing: '-0.04em' }}>
             Run your venue.<br />
             <span className="text-sage-green">Not spreadsheets.</span>
           </h1>
 
-          {/* Sub */}
           <p className="text-lg text-gray-500 mb-10 max-w-lg mx-auto leading-relaxed">
             Everything your functions team needs in one place — enquiries, proposals, runsheets, and more.
           </p>
 
-          {/* CTAs — differentiated by visual weight */}
           {isLoading ? null : user ? (
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link href="/dashboard">
@@ -103,20 +211,20 @@ export default function Home() {
           ) : (
             <>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <a href={getLoginUrl()}
+                <button
+                  onClick={() => setShowWaitlist(true)}
                   className="w-full sm:w-auto bg-sage-green text-white font-bold text-lg px-8 py-4 rounded-xl shadow-lg hover:bg-sage-dark hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
-                  Start free trial
+                  Join the waitlist
                   <ArrowRight className="w-5 h-5" />
-                </a>
+                </button>
                 <a href={getLoginUrl()}
                   className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white text-gray-700 font-semibold text-base px-6 py-4 rounded-xl border-2 border-gray-200 hover:border-sage-green hover:text-sage-green transition-all">
                   Sign in
                 </a>
               </div>
-              {/* Proof */}
               <div className="flex items-center justify-center gap-2 mt-6 text-sm text-gray-400">
                 <CheckCircle className="w-4 h-4 text-sage-green" />
-                No credit card required &nbsp;·&nbsp; Cancel any time
+                Limited spots available &nbsp;·&nbsp; NZ venues only
               </div>
             </>
           )}
@@ -207,13 +315,14 @@ export default function Home() {
           Ready to simplify your venue?
         </h2>
         <p className="text-white/80 mb-8 text-lg">
-          Join venues across New Zealand using VenueFlowHQ to manage events with confidence.
+          Join the waitlist and be first in line when your spot opens up.
         </p>
-        <a href={getLoginUrl()}
+        <button
+          onClick={() => setShowWaitlist(true)}
           className="inline-flex items-center gap-2 bg-white text-sage-dark font-bold px-10 py-5 rounded-xl hover:bg-gray-50 hover:shadow-lg transition-all active:scale-95 text-lg shadow-md">
-          Get started free <ArrowRight className="w-5 h-5" />
-        </a>
-        <p className="text-white/60 text-sm mt-4">No credit card required · Cancel any time</p>
+          Join the waitlist <ArrowRight className="w-5 h-5" />
+        </button>
+        <p className="text-white/60 text-sm mt-4">Limited spots · NZ venues only</p>
       </section>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}

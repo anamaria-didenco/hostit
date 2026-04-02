@@ -1629,6 +1629,38 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
   }),
 
+  // ─── Waitlist ────────────────────────────────────────────────────────────────
+  waitlist: router({
+    join: publicProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        email: z.string().email(),
+        venueName: z.string().optional(),
+        message: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { waitlist } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.insert(waitlist).values({
+          name: input.name,
+          email: input.email,
+          venueName: input.venueName ?? null,
+          message: input.message ?? null,
+        });
+        return { success: true };
+      }),
+
+    list: protectedProcedure.query(async () => {
+      const { getDb } = await import('./db');
+      const { waitlist } = await import('../drizzle/schema');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(waitlist).orderBy(waitlist.createdAt);
+    }),
+  }),
+
   // ─── Checklists ─────────────────────────────────────────────────────────────
   checklists: router({
     listTemplates: protectedProcedure.query(async ({ ctx }) => {

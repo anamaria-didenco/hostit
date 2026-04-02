@@ -836,3 +836,15 @@ export const staffPortalLinks = pgTable("staff_portal_links", {
 });
 export type StaffPortalLink = typeof staffPortalLinks.$inferSelect;
 export type InsertStaffPortalLink = typeof staffPortalLinks.$inferInsert;
+
+// ─── Waitlist ─────────────────────────────────────────────────────────────────
+export const waitlist = pgTable("waitlist", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  venueName: varchar("venue_name", { length: 255 }),
+  message: text("message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type Waitlist = typeof waitlist.$inferSelect;
+export type InsertWaitlist = typeof waitlist.$inferInsert;
