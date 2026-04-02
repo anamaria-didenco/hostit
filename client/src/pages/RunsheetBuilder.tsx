@@ -1600,6 +1600,19 @@ export default function RunsheetBuilder() {
               <span className="font-bebas tracking-widest text-sm text-white">EVENT TIMELINE</span>
             </div>
 
+            {/* General notes — at top */}
+            <div className="px-5 py-3 border-b border-gold/30 bg-linen/30">
+              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1.5">GENERAL NOTES</label>
+              <Textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Any additional notes for the event..."
+                rows={2}
+                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm no-print"
+              />
+              {notes && <div className="hidden print:block font-dm text-sm text-ink/70 whitespace-pre-wrap">{notes}</div>}
+            </div>
+
             {items.length === 0 ? (
               <div className="text-center py-16 text-ink/30 font-dm text-sm">
                 <Clock className="w-10 h-10 mx-auto mb-3 opacity-20" />
@@ -1742,19 +1755,6 @@ export default function RunsheetBuilder() {
                 })}
               </div>
             )}
-
-            {/* General notes */}
-            <div className="px-5 py-4 border-t border-gold/30">
-              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">GENERAL NOTES</label>
-              <Textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Any additional notes for the event..."
-                rows={3}
-                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm no-print"
-              />
-              {notes && <div className="hidden print:block font-dm text-sm text-ink/70 whitespace-pre-wrap">{notes}</div>}
-            </div>
 
             {/* Footer / payment notes */}
             <div className="px-5 py-4 border-t border-gold/30">
