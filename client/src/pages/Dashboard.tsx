@@ -961,6 +961,10 @@ export default function Dashboard() {
   const [catalogItemForm, setCatalogItemForm] = useState({ name: '', description: '', pricingType: 'per_person' as 'per_person'|'per_item', price: '', unit: 'person', allergens: '' });
   const [catalogCsvText, setCatalogCsvText] = useState('');
   const [showCatalogCsvImport, setShowCatalogCsvImport] = useState(false);
+  const [catalogGuestCount, setCatalogGuestCount] = useState('');
+  const duplicateCatalogItem = trpc.menuCatalog.createItem.useMutation({
+    onSuccess: () => { refetchCatalogItems(); toast.success('Item duplicated!'); }
+  });
 
   // Automated task rules
   const [showAddTaskRule, setShowAddTaskRule] = useState(false);
@@ -5138,7 +5142,18 @@ export default function Dashboard() {
                           <span className="font-bebas tracking-widest text-xs text-ink/50">
                             {(catalogCategories ?? []).find((c: any) => c.id === catalogActiveCategoryId)?.name?.toUpperCase() ?? 'ITEMS'}
                           </span>
-                          <div className="flex gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 border border-gold/30 px-2 py-1">
+                              <Users className="w-3 h-3 text-sage" />
+                              <input
+                                type="number"
+                                min="1"
+                                value={catalogGuestCount}
+                                onChange={e => setCatalogGuestCount(e.target.value)}
+                                placeholder="Guests"
+                                className="w-16 font-dm text-xs text-ink bg-transparent outline-none placeholder:text-ink/30"
+                              />
+                            </div>
                             <button onClick={() => setShowCatalogCsvImport(v => !v)}
                               className="border border-gold/30 text-ink/60 font-bebas tracking-widest text-xs px-3 py-1.5 hover:border-forest hover:text-forest transition-colors">CSV IMPORT</button>
                             <button onClick={() => { setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); setShowCatalogItemForm(true); }}
@@ -5231,42 +5246,90 @@ export default function Dashboard() {
                         )}
 
                         {/* Items list */}
-                        <div className="divide-y divide-gold/10">
-                          {(catalogItems ?? []).length === 0 && !showCatalogItemForm && (
-                            <p className="p-6 text-center text-sm text-ink/40">No items yet. Click + Add Item to get started, or use CSV Import.</p>
-                          )}
-                          {(catalogItems ?? []).map((item: any) => (
-                            <div key={item.id} className="flex items-start justify-between px-4 py-3 hover:bg-linen/30 group">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-dm text-sm font-medium text-ink">{item.name}</span>
-                                  <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 ${
-                                    item.pricingType === 'per_person' ? 'bg-forest/10 text-forest' : 'bg-gold/15 text-amber-700'
-                                  }`}>{item.pricingType === 'per_person' ? 'PER PERSON' : 'PER ITEM'}</span>
-                                  {item.allergens && <span className="font-dm text-[10px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{item.allergens}</span>}
+                        {(() => {
+                          const items = catalogItems ?? [];
+                          const guests = parseInt(catalogGuestCount) || 0;
+                          const totalCost = items.reduce((sum: number, item: any) => {
+                            if (item.price <= 0) return sum;
+                            return sum + (item.pricingType === 'per_person' ? (item.price / 100) * guests : item.price / 100);
+                          }, 0);
+                          return (
+                          <div>
+                            <div className="divide-y divide-gold/10">
+                              {items.length === 0 && !showCatalogItemForm && (
+                                <p className="p-6 text-center text-sm text-ink/40">No items yet. Click + Add Item to get started, or use CSV Import.</p>
+                              )}
+                              {items.map((item: any) => {
+                                const unitPrice = item.price / 100;
+                                const lineTotal = item.price > 0 && guests > 0
+                                  ? (item.pricingType === 'per_person' ? unitPrice * guests : unitPrice)
+                                  : null;
+                                return (
+                                <div key={item.id} className="flex items-start justify-between px-4 py-3 hover:bg-linen/30 group">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-dm text-sm font-medium text-ink">{item.name}</span>
+                                      <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 ${
+                                        item.pricingType === 'per_person' ? 'bg-forest/10 text-forest' : 'bg-gold/15 text-amber-700'
+                                      }`}>{item.pricingType === 'per_person' ? 'PER PERSON' : 'PER ITEM'}</span>
+                                      {item.allergens && <span className="font-dm text-[10px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{item.allergens}</span>}
+                                    </div>
+                                    {item.description && <p className="font-dm text-xs text-ink/50 mt-0.5 truncate">{item.description}</p>}
+                                  </div>
+                                  <div className="flex items-center gap-3 ml-3 flex-shrink-0">
+                                    {item.price > 0 && (
+                                      <div className="text-right">
+                                        <div className="font-dm text-sm font-semibold text-ink">
+                                          ${unitPrice.toFixed(2)}
+                                          <span className="text-xs text-ink/40 font-normal"> /{item.unit ?? (item.pricingType === 'per_person' ? 'person' : 'item')}</span>
+                                        </div>
+                                        {lineTotal !== null && (
+                                          <div className="font-bebas text-xs tracking-widest text-forest">
+                                            = ${lineTotal.toFixed(2)} {item.pricingType === 'per_person' ? `× ${guests}` : ''}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    <button
+                                      onClick={() => duplicateCatalogItem.mutate({
+                                        categoryId: catalogActiveCategoryId!,
+                                        name: `${item.name} (copy)`,
+                                        description: item.description ?? undefined,
+                                        pricingType: item.pricingType,
+                                        price: item.price / 100,
+                                        unit: item.unit ?? 'person',
+                                        allergens: item.allergens ?? undefined,
+                                      })}
+                                      title="Duplicate item"
+                                      className="opacity-0 group-hover:opacity-100 text-sage hover:text-ink transition-opacity">
+                                      <Copy className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => {
+                                      setEditingCatalogItemId(item.id);
+                                      setCatalogItemForm({ name: item.name, description: item.description ?? '', pricingType: item.pricingType, price: item.price > 0 ? String(item.price / 100) : '', unit: item.unit ?? 'person', allergens: item.allergens ?? '' });
+                                      setShowCatalogItemForm(true);
+                                    }} className="opacity-0 group-hover:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
+                                      <Edit2 className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteCatalogItem.mutate({ id: item.id }); }}
+                                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                                      <Trash2 className="w-3.5 h-3.5" /></button>
+                                  </div>
                                 </div>
-                                {item.description && <p className="font-dm text-xs text-ink/50 mt-0.5 truncate">{item.description}</p>}
-                              </div>
-                              <div className="flex items-center gap-3 ml-3 flex-shrink-0">
-                                {item.price > 0 && (
-                                  <span className="font-dm text-sm font-semibold text-ink">
-                                    ${(item.price / 100).toFixed(2)}
-                                    <span className="text-xs text-ink/40 font-normal"> /{item.unit ?? (item.pricingType === 'per_person' ? 'person' : 'item')}</span>
-                                  </span>
-                                )}
-                                <button onClick={() => {
-                                  setEditingCatalogItemId(item.id);
-                                  setCatalogItemForm({ name: item.name, description: item.description ?? '', pricingType: item.pricingType, price: item.price > 0 ? String(item.price / 100) : '', unit: item.unit ?? 'person', allergens: item.allergens ?? '' });
-                                  setShowCatalogItemForm(true);
-                                }} className="opacity-0 group-hover:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
-                                  <Edit2 className="w-3.5 h-3.5" /></button>
-                                <button onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteCatalogItem.mutate({ id: item.id }); }}
-                                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
-                                  <Trash2 className="w-3.5 h-3.5" /></button>
-                              </div>
+                                );
+                              })}
                             </div>
-                          ))}
-                        </div>
+                            {/* Running total */}
+                            {guests > 0 && items.some((i: any) => i.price > 0) && (
+                              <div className="flex items-center justify-between px-4 py-3 bg-linen/50 border-t border-gold/20">
+                                <div>
+                                  <span className="font-bebas tracking-widest text-xs text-ink/50">ESTIMATED TOTAL</span>
+                                  <span className="font-dm text-xs text-ink/40 ml-2">({guests} guest{guests !== 1 ? 's' : ''})</span>
+                                </div>
+                                <span className="font-cormorant text-2xl font-semibold text-ink">${totalCost.toFixed(2)}</span>
+                              </div>
+                            )}
+                          </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
