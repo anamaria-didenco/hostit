@@ -3324,17 +3324,17 @@ Return ONLY valid JSON. Example structure:
         return db.select().from(eventEquipment).where(and(...conditions)).orderBy(asc(eventEquipment.sortOrder), asc(eventEquipment.createdAt));
       }),
     addToEvent: protectedProcedure
-      .input(z.object({ name: z.string(), category: z.string().default('other'), quantity: z.number().default(1), notes: z.string().optional(), bookingId: z.number().optional(), leadId: z.number().optional(), equipmentId: z.number().optional() }))
+      .input(z.object({ name: z.string(), category: z.string().default('other'), quantity: z.number().default(1), notes: z.string().optional(), providedBy: z.enum(['venue','client']).default('venue'), bookingId: z.number().optional(), leadId: z.number().optional(), equipmentId: z.number().optional() }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
         const { eventEquipment } = await import('../drizzle/schema');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        await db.insert(eventEquipment).values({ ownerId: ctx.user.id, bookingId: input.bookingId ?? null, leadId: input.leadId ?? null, equipmentId: input.equipmentId ?? null, name: input.name, category: input.category, quantity: input.quantity, notes: input.notes ?? null, status: 'needed', sortOrder: 0, createdAt: Date.now() });
+        await db.insert(eventEquipment).values({ ownerId: ctx.user.id, bookingId: input.bookingId ?? null, leadId: input.leadId ?? null, equipmentId: input.equipmentId ?? null, name: input.name, category: input.category, quantity: input.quantity, notes: input.notes ?? null, providedBy: input.providedBy, status: 'needed', sortOrder: 0, createdAt: Date.now() });
         return { success: true };
       }),
     updateEvent: protectedProcedure
-      .input(z.object({ id: z.number(), name: z.string().optional(), quantity: z.number().optional(), notes: z.string().optional(), status: z.enum(['needed','confirmed','delivered','returned']).optional() }))
+      .input(z.object({ id: z.number(), name: z.string().optional(), quantity: z.number().optional(), notes: z.string().optional(), providedBy: z.enum(['venue','client']).optional(), status: z.enum(['needed','confirmed','delivered','returned']).optional() }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
         const { eventEquipment } = await import('../drizzle/schema');
@@ -3346,6 +3346,7 @@ Return ONLY valid JSON. Example structure:
         if (input.quantity !== undefined) updates.quantity = input.quantity;
         if (input.notes !== undefined) updates.notes = input.notes;
         if (input.status !== undefined) updates.status = input.status;
+        if (input.providedBy !== undefined) updates.providedBy = input.providedBy;
         if (Object.keys(updates).length > 0) {
           await db.update(eventEquipment).set(updates).where(and(eq(eventEquipment.id, input.id), eq(eventEquipment.ownerId, ctx.user.id)));
         }

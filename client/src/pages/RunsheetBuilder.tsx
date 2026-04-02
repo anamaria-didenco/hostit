@@ -11,7 +11,7 @@ import {
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
-  Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine,
+  Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine, Package,
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
@@ -138,7 +138,7 @@ export default function RunsheetBuilder() {
   const [dietarySectionOpen, setDietarySectionOpen] = useState(true);
 
   // F&B
-  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'checklist' | 'tableplan'>('timeline');
+  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'checklist' | 'tableplan' | 'equipment'>('timeline');
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
   const [fnbSaving, setFnbSaving] = useState(false);
   const [expandedFnbIdx, setExpandedFnbIdx] = useState<number | null>(null);
@@ -1454,37 +1454,38 @@ export default function RunsheetBuilder() {
                 ))}
               </div>
               {dietaries.length > 0 && (
-                <div className="border border-gold/30 divide-y divide-gold/20">
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-linen">
-                    <div className="col-span-4 font-bebas text-xs tracking-widest text-ink/50">REQUIREMENT</div>
-                    <div className="col-span-2 font-bebas text-xs tracking-widest text-ink/50">COUNT</div>
-                    <div className="col-span-5 font-bebas text-xs tracking-widest text-ink/50">NOTES</div>
-                    <div className="col-span-1"></div>
-                  </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {dietaries.map((d, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 px-3 py-2 items-center">
-                      <div className="col-span-4 font-dm text-sm font-medium">{d.name}</div>
-                      <div className="col-span-2">
-                        <Input
+                    <div key={idx} className="border border-gold/30 bg-linen/40 p-3 group relative">
+                      <button
+                        onClick={() => removeDietary(idx)}
+                        className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors no-print opacity-0 group-hover:opacity-100"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                      <div className="flex items-end gap-2 mb-2">
+                        <input
                           type="number" min={1}
                           value={d.count}
                           onChange={e => updateDietary(idx, "count", Number(e.target.value))}
-                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-8"
+                          className="font-cormorant text-3xl font-semibold text-forest bg-transparent border-0 focus:outline-none w-16 no-print leading-none"
                         />
+                        <div className="hidden print:block font-cormorant text-3xl font-semibold text-forest leading-none">{d.count}</div>
+                        <span className="font-bebas tracking-widest text-xs text-ink/40 mb-1">GUESTS</span>
                       </div>
-                      <div className="col-span-5">
-                        <Input
-                          value={d.notes ?? ""}
-                          onChange={e => updateDietary(idx, "notes", e.target.value)}
-                          placeholder="Notes..."
-                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-8"
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <button onClick={() => removeDietary(idx)} className="text-ink/30 hover:text-red-500 transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <input
+                        value={d.name}
+                        onChange={e => updateDietary(idx, "name", e.target.value)}
+                        className="font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none w-full no-print"
+                      />
+                      <div className="hidden print:block font-dm text-sm font-semibold text-ink">{d.name}</div>
+                      <input
+                        value={d.notes ?? ""}
+                        onChange={e => updateDietary(idx, "notes", e.target.value)}
+                        placeholder="Notes..."
+                        className="w-full font-dm text-xs text-ink/40 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20 no-print"
+                      />
+                      {d.notes && <div className="hidden print:block font-dm text-xs text-ink/40 mt-0.5">{d.notes}</div>}
                     </div>
                   ))}
                 </div>
@@ -1627,7 +1628,7 @@ export default function RunsheetBuilder() {
                         </div>
 
                         {/* Title & description */}
-                        <div className="flex-1 px-3 py-3 min-w-0">
+                        <div className="flex-1 px-3 py-2 min-w-0">
                           <input
                             value={item.title}
                             onChange={e => updateItemField(idx, "title", e.target.value)}
@@ -1635,9 +1636,13 @@ export default function RunsheetBuilder() {
                             className="w-full font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none no-print"
                           />
                           <div className="hidden print:block font-dm text-sm font-semibold">{item.title || "—"}</div>
-                          {item.description && (
-                            <div className="font-dm text-xs text-ink/50 mt-0.5 truncate print:whitespace-normal">{item.description}</div>
-                          )}
+                          <input
+                            value={item.description ?? ""}
+                            onChange={e => updateItemField(idx, "description", e.target.value)}
+                            placeholder="Notes / details..."
+                            className="w-full font-dm text-xs text-ink/50 bg-transparent border-0 focus:outline-none placeholder:text-ink/25 mt-0.5 no-print"
+                          />
+                          {item.description && <div className="hidden print:block font-dm text-xs text-ink/50 mt-0.5 whitespace-normal">{item.description}</div>}
                         </div>
 
                         {/* Assigned to */}
@@ -2175,8 +2180,14 @@ export default function RunsheetBuilder() {
                                     </div>
                                   )}
                                   {showTimeCol && (
-                                    <div className="text-xs text-ink/50 font-dm">
-                                      {item.serviceTime ? formatTime12(item.serviceTime) : '—'}
+                                    <div>
+                                      <input
+                                        type="time"
+                                        value={item.serviceTime ?? ''}
+                                        onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)}
+                                        className="font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none w-full no-print"
+                                      />
+                                      {item.serviceTime && <div className="hidden print:block text-xs text-ink/50 font-dm">{formatTime12(item.serviceTime)}</div>}
                                     </div>
                                   )}
                                   {showStaffCol && (

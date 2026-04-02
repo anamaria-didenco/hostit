@@ -727,6 +727,7 @@ export const eventEquipment = pgTable("event_equipment", {
   category: varchar("category", { length: 100 }).notNull().default("other"),
   quantity: integer("quantity").notNull().default(1),
   notes: text("notes"),
+  providedBy: varchar("provided_by", { length: 50 }).notNull().default("venue"),
   status: equipmentStatusEnum("status").notNull().default("needed"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),

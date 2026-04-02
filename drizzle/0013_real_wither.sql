@@ -1,0 +1,1 @@
+ALTER TABLE "event_equipment" ADD COLUMN "provided_by" varchar(50) DEFAULT 'venue' NOT NULL;
