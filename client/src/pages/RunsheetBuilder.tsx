@@ -12,8 +12,41 @@ import {
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
   Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine, Package,
+  Eye, EyeOff,
 } from "lucide-react";
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { getLoginUrl } from "@/const";
+
+function SortableSection({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: "relative",
+    zIndex: isDragging ? 20 : "auto",
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="group/sortable">
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute left-0 top-0 h-[46px] w-5 flex items-center justify-center cursor-grab active:cursor-grabbing z-10 no-print opacity-0 group-hover/sortable:opacity-100 transition-opacity"
+        title="Drag to reorder"
+      >
+        <GripVertical className="w-3.5 h-3.5 text-ink/30" />
+      </div>
+      {children}
+    </div>
+  );
+}
 
 const CATEGORIES = [
   { value: "setup", label: "Setup", color: "bg-blue-100 text-blue-700" },
@@ -158,6 +191,37 @@ export default function RunsheetBuilder() {
   // Floor plan link
   const [linkedFloorPlanId, setLinkedFloorPlanId] = useState<number | undefined>(undefined);
   const [floorPlanSectionOpen, setFloorPlanSectionOpen] = useState(false);
+
+  // Section ordering and visibility (persisted to localStorage)
+  const [sectionOrder, setSectionOrder] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('vfhq_rs_section_order') || '["setup","dietary"]'); }
+    catch { return ['setup', 'dietary']; }
+  });
+  const [hiddenSections, setHiddenSections] = useState<Set<string>>(() => {
+    try {
+      const s = localStorage.getItem('vfhq_rs_hidden_sections');
+      return s ? new Set(JSON.parse(s)) : new Set();
+    } catch { return new Set(); }
+  });
+  function toggleSectionHidden(id: string) {
+    setHiddenSections(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem('vfhq_rs_hidden_sections', JSON.stringify([...next]));
+      return next;
+    });
+  }
+  const sectionSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  function handleSectionDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setSectionOrder(prev => {
+        const next = arrayMove(prev, prev.indexOf(String(active.id)), prev.indexOf(String(over.id)));
+        localStorage.setItem('vfhq_rs_section_order', JSON.stringify(next));
+        return next;
+      });
+    }
+  }
 
   // Staff portal links
   const [creatingStaffLink, setCreatingStaffLink] = useState(false);
@@ -1351,192 +1415,243 @@ export default function RunsheetBuilder() {
           </div>
         </div>
 
-        {/* ── Venue Setup ─────────────────────────────────────────────────── */}
-        <div className="bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none">
-          <button
-            onClick={() => setSetupSectionOpen(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors no-print"
-          >
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
-              {venueSetup && <span className="text-xs text-forest/50 font-dm truncate max-w-[200px]">{venueSetup.substring(0, 40)}{venueSetup.length > 40 ? "..." : ""}</span>}
-            </div>
-            {setupSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
-          </button>
-          <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30">
-            <Building2 className="w-4 h-4 text-forest" />
-            <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
-          </div>
-          {setupSectionOpen && (
-            <div className="px-5 pb-4 pt-2 space-y-3 no-print">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-bebas tracking-widest text-[10px] text-ink/40">QUICK FILL TEMPLATES</span>
-                <button
-                  onClick={openSetupManager}
-                  className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
-                >
-                  <Settings2 className="w-3 h-3" /> CUSTOMISE
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {activeSetupTemplates.map(t => (
-                  <button
-                    key={t.label}
-                    onClick={() => setVenueSetup(t.value)}
-                    className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors"
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <Textarea
-                value={venueSetup}
-                onChange={e => setVenueSetup(e.target.value)}
-                placeholder="Describe the room layout, table arrangement, AV setup, decorations, bar position, dance floor, stage..."
-                rows={3}
-                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm"
-              />
-            </div>
-          )}
-          {venueSetup && (
-            <div className="hidden print:block px-5 py-3 font-dm text-sm text-ink/80 whitespace-pre-wrap">{venueSetup}</div>
-          )}
-        </div>
+        {/* ── Sortable Sections ────────────────────────────────────────────── */}
+        <DndContext sensors={sectionSensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
+          <SortableContext items={sectionOrder} strategy={verticalListSortingStrategy}>
+            {sectionOrder.map(sectionId => {
+              const isHidden = hiddenSections.has(sectionId);
 
-        {/* ── Dietary Requirements ─────────────────────────────────────────── */}
-        <div className="bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none">
-          <button
-            onClick={() => setDietarySectionOpen(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors no-print"
-          >
-            <div className="flex items-center gap-2">
-              <Leaf className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-widest text-sm text-forest">DIETARY REQUIREMENTS</span>
-              {dietaries.length > 0 && (
-                <span className="bg-forest text-cream text-xs font-bebas px-2 py-0.5">{dietaries.length}</span>
-              )}
-            </div>
-            {dietarySectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
-          </button>
-          <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30">
-            <Leaf className="w-4 h-4 text-forest" />
-            <span className="font-bebas tracking-widest text-sm text-forest">DIETARY REQUIREMENTS</span>
-          </div>
-          {dietarySectionOpen && (
-            <div className="px-5 pb-4 pt-2 space-y-4 no-print">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-bebas tracking-widest text-[10px] text-ink/40">QUICK ADD</span>
-                <button
-                  onClick={openDietaryManager}
-                  className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
-                >
-                  <Settings2 className="w-3 h-3" /> CUSTOMISE OPTIONS
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {activeDietaryOptions.map(d => (
-                  <button
-                    key={d}
-                    onClick={() => {
-                      if (!dietaries.find(x => x.name === d)) {
-                        setDietaries(prev => [...prev, { name: d, count: 1 }]);
-                      }
-                    }}
-                    className={`text-xs font-bebas tracking-widest px-3 py-1.5 border transition-colors ${
-                      dietaries.find(x => x.name === d)
-                        ? "bg-forest text-cream border-forest"
-                        : "border-forest/30 text-forest hover:bg-forest/5"
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-              {dietaries.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {dietaries.map((d, idx) => (
-                    <div key={idx} className="border border-gold/30 bg-linen/40 p-3 group relative">
+              if (sectionId === 'setup') return (
+                <SortableSection key="setup" id="setup">
+                  <div className={`bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
+                    {/* Header */}
+                    <div className="flex items-center no-print">
                       <button
-                        onClick={() => removeDietary(idx)}
-                        className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors no-print opacity-0 group-hover:opacity-100"
+                        onClick={() => !isHidden && setSetupSectionOpen(v => !v)}
+                        className="flex-1 flex items-center gap-2 pl-6 pr-3 py-3 hover:bg-linen transition-colors text-left"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <Building2 className="w-4 h-4 text-forest flex-shrink-0" />
+                        <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
+                        {venueSetup && !isHidden && <span className="text-xs text-forest/50 font-dm truncate max-w-[160px]">{venueSetup.substring(0, 35)}{venueSetup.length > 35 ? "…" : ""}</span>}
+                        {isHidden && <span className="text-xs text-ink/30 font-dm italic">hidden from print</span>}
                       </button>
-                      <div className="flex items-end gap-2 mb-2">
-                        <input
-                          type="number" min={1}
-                          value={d.count}
-                          onChange={e => updateDietary(idx, "count", Number(e.target.value))}
-                          className="font-cormorant text-3xl font-semibold text-forest bg-transparent border-0 focus:outline-none w-16 no-print leading-none"
-                        />
-                        <div className="hidden print:block font-cormorant text-3xl font-semibold text-forest leading-none">{d.count}</div>
-                        <span className="font-bebas tracking-widest text-xs text-ink/40 mb-1">GUESTS</span>
+                      <div className="flex items-center gap-1 pr-3">
+                        <button
+                          onClick={() => toggleSectionHidden('setup')}
+                          className="p-1.5 text-ink/25 hover:text-ink/60 transition-colors"
+                          title={isHidden ? "Show section" : "Hide from runsheet"}
+                        >
+                          {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                        </button>
+                        {!isHidden && (
+                          <button onClick={() => setSetupSectionOpen(v => !v)} className="p-1 text-ink/30">
+                            {setupSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
+                        )}
                       </div>
-                      <input
-                        value={d.name}
-                        onChange={e => updateDietary(idx, "name", e.target.value)}
-                        className="font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none w-full no-print"
-                      />
-                      <div className="hidden print:block font-dm text-sm font-semibold text-ink">{d.name}</div>
-                      <input
-                        value={d.notes ?? ""}
-                        onChange={e => updateDietary(idx, "notes", e.target.value)}
-                        placeholder="Notes..."
-                        className="w-full font-dm text-xs text-ink/40 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20 no-print"
-                      />
-                      {d.notes && <div className="hidden print:block font-dm text-xs text-ink/40 mt-0.5">{d.notes}</div>}
                     </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2">
-                <Input
-                  value={newDietary.name}
-                  onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Add requirement..."
-                  className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
-                  onKeyDown={e => e.key === "Enter" && addDietary()}
-                />
-                <Input
-                  type="number" min={1}
-                  value={newDietary.count}
-                  onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
-                  placeholder="Count"
-                  className="w-20 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
-                />
-                <Input
-                  value={newDietary.notes}
-                  onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Notes (optional)"
-                  className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
-                />
-                <Button
-                  onClick={addDietary}
-                  className="bg-forest hover:bg-forest/90 text-cream rounded-none font-bebas tracking-widest text-xs gap-1"
-                >
-                  <Plus className="w-3 h-3" /> ADD
-                </Button>
-              </div>
-              {dietaries.length === 0 && (
-                <div className="text-center py-3 text-ink/30 font-dm text-sm">No dietary requirements recorded</div>
-              )}
-            </div>
-          )}
-          {/* Print view of dietaries */}
-          {dietaries.length > 0 && (
-            <div className="hidden print:block px-5 py-3">
-              <div className="flex flex-wrap gap-2">
-                {dietaries.map((d, i) => (
-                  <div key={i} className="border border-gold/30 px-3 py-1.5 text-sm font-dm">
-                    <span className="font-semibold">{d.count}×</span> {d.name}
-                    {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
+                    {/* Print header */}
+                    <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30">
+                      <Building2 className="w-4 h-4 text-forest" />
+                      <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
+                    </div>
+                    {/* Body */}
+                    {!isHidden && setupSectionOpen && (
+                      <div className="px-5 pb-4 pt-2 space-y-3 no-print">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bebas tracking-widest text-[10px] text-ink/40">QUICK FILL TEMPLATES</span>
+                          <button
+                            onClick={openSetupManager}
+                            className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
+                          >
+                            <Settings2 className="w-3 h-3" /> CUSTOMISE
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {activeSetupTemplates.map(t => (
+                            <button
+                              key={t.label}
+                              onClick={() => setVenueSetup(t.value)}
+                              className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors"
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+                        <Textarea
+                          value={venueSetup}
+                          onChange={e => setVenueSetup(e.target.value)}
+                          placeholder="Describe the room layout, table arrangement, AV setup, decorations, bar position, dance floor, stage..."
+                          rows={3}
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest font-dm text-sm"
+                        />
+                      </div>
+                    )}
+                    {!isHidden && venueSetup && (
+                      <div className="hidden print:block px-5 py-3 font-dm text-sm text-ink/80 whitespace-pre-wrap">{venueSetup}</div>
+                    )}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+                </SortableSection>
+              );
+
+              if (sectionId === 'dietary') return (
+                <SortableSection key="dietary" id="dietary">
+                  <div className={`bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
+                    {/* Header */}
+                    <div className="flex items-center no-print">
+                      <button
+                        onClick={() => !isHidden && setDietarySectionOpen(v => !v)}
+                        className="flex-1 flex items-center gap-2 pl-6 pr-3 py-3 hover:bg-linen transition-colors text-left"
+                      >
+                        <Leaf className="w-4 h-4 text-forest flex-shrink-0" />
+                        <span className="font-bebas tracking-widest text-sm text-forest">DIETARY REQUIREMENTS</span>
+                        {dietaries.length > 0 && !isHidden && (
+                          <span className="bg-forest text-cream text-xs font-bebas px-2 py-0.5">{dietaries.length}</span>
+                        )}
+                        {isHidden && <span className="text-xs text-ink/30 font-dm italic">hidden from print</span>}
+                      </button>
+                      <div className="flex items-center gap-1 pr-3">
+                        <button
+                          onClick={() => toggleSectionHidden('dietary')}
+                          className="p-1.5 text-ink/25 hover:text-ink/60 transition-colors"
+                          title={isHidden ? "Show section" : "Hide from runsheet"}
+                        >
+                          {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                        </button>
+                        {!isHidden && (
+                          <button onClick={() => setDietarySectionOpen(v => !v)} className="p-1 text-ink/30">
+                            {dietarySectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Print header */}
+                    <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30">
+                      <Leaf className="w-4 h-4 text-forest" />
+                      <span className="font-bebas tracking-widest text-sm text-forest">DIETARY REQUIREMENTS</span>
+                    </div>
+                    {/* Body */}
+                    {!isHidden && dietarySectionOpen && (
+                      <div className="px-5 pb-4 pt-2 space-y-4 no-print">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bebas tracking-widest text-[10px] text-ink/40">QUICK ADD</span>
+                          <button
+                            onClick={openDietaryManager}
+                            className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
+                          >
+                            <Settings2 className="w-3 h-3" /> CUSTOMISE OPTIONS
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {activeDietaryOptions.map(d => (
+                            <button
+                              key={d}
+                              onClick={() => {
+                                if (!dietaries.find(x => x.name === d)) {
+                                  setDietaries(prev => [...prev, { name: d, count: 1 }]);
+                                }
+                              }}
+                              className={`text-xs font-bebas tracking-widest px-3 py-1.5 border transition-colors ${
+                                dietaries.find(x => x.name === d)
+                                  ? "bg-forest text-cream border-forest"
+                                  : "border-forest/30 text-forest hover:bg-forest/5"
+                              }`}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
+                        {dietaries.length > 0 && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {dietaries.map((d, idx) => (
+                              <div key={idx} className="border border-gold/30 bg-linen/40 p-3 group relative">
+                                <button
+                                  onClick={() => removeDietary(idx)}
+                                  className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors no-print opacity-0 group-hover:opacity-100"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                                <div className="flex items-end gap-2 mb-2">
+                                  <input
+                                    type="number" min={1}
+                                    value={d.count}
+                                    onChange={e => updateDietary(idx, "count", Number(e.target.value))}
+                                    className="font-cormorant text-3xl font-semibold text-forest bg-transparent border-0 focus:outline-none w-16 no-print leading-none"
+                                  />
+                                  <div className="hidden print:block font-cormorant text-3xl font-semibold text-forest leading-none">{d.count}</div>
+                                  <span className="font-bebas tracking-widest text-xs text-ink/40 mb-1">GUESTS</span>
+                                </div>
+                                <input
+                                  value={d.name}
+                                  onChange={e => updateDietary(idx, "name", e.target.value)}
+                                  className="font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none w-full no-print"
+                                />
+                                <div className="hidden print:block font-dm text-sm font-semibold text-ink">{d.name}</div>
+                                <input
+                                  value={d.notes ?? ""}
+                                  onChange={e => updateDietary(idx, "notes", e.target.value)}
+                                  placeholder="Notes..."
+                                  className="w-full font-dm text-xs text-ink/40 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20 no-print"
+                                />
+                                {d.notes && <div className="hidden print:block font-dm text-xs text-ink/40 mt-0.5">{d.notes}</div>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Input
+                            value={newDietary.name}
+                            onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
+                            placeholder="Add requirement..."
+                            className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                            onKeyDown={e => e.key === "Enter" && addDietary()}
+                          />
+                          <Input
+                            type="number" min={1}
+                            value={newDietary.count}
+                            onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
+                            placeholder="Count"
+                            className="w-20 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                          />
+                          <Input
+                            value={newDietary.notes}
+                            onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
+                            placeholder="Notes (optional)"
+                            className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                          />
+                          <Button
+                            onClick={addDietary}
+                            className="bg-forest hover:bg-forest/90 text-cream rounded-none font-bebas tracking-widest text-xs gap-1"
+                          >
+                            <Plus className="w-3 h-3" /> ADD
+                          </Button>
+                        </div>
+                        {dietaries.length === 0 && (
+                          <div className="text-center py-3 text-ink/30 font-dm text-sm">No dietary requirements recorded</div>
+                        )}
+                      </div>
+                    )}
+                    {/* Print view */}
+                    {!isHidden && dietaries.length > 0 && (
+                      <div className="hidden print:block px-5 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          {dietaries.map((d, i) => (
+                            <div key={i} className="border border-gold/30 px-3 py-1.5 text-sm font-dm">
+                              <span className="font-semibold">{d.count}×</span> {d.name}
+                              {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </SortableSection>
+              );
+
+              return null;
+            })}
+          </SortableContext>
+        </DndContext>
 
         {/* ── Main Tab Navigation ─────────────────────────────────────────── */}
         <div className="no-print flex border-b border-gold/30 bg-white">
