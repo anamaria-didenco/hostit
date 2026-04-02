@@ -98,6 +98,13 @@
       "when": 1775103056086,
       "tag": "0013_real_wither",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1775115924559,
+      "tag": "0014_worthless_lord_hawal",
+      "breakpoints": true
     }
   ]
 }

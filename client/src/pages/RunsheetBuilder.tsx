@@ -101,6 +101,9 @@ type Item = {
   sortOrder: number;
   _tempId?: string;
   checked?: boolean;
+  bold?: boolean;
+  italic?: boolean;
+  highlight?: string;
 };
 
 type Dietary = { name: string; count: number; notes?: string };
@@ -932,6 +935,9 @@ export default function RunsheetBuilder() {
             assignedTo: item.assignedTo,
             category: item.category,
             sortOrder: i,
+            bold: item.bold,
+            italic: item.italic,
+            highlight: item.highlight,
           })),
         });
         if (fnbItems.length > 0 && created?.id) await saveFnb(created.id);
@@ -963,6 +969,9 @@ export default function RunsheetBuilder() {
               assignedTo: item.assignedTo,
               category: item.category,
               sortOrder: i,
+              bold: item.bold,
+              italic: item.italic,
+              highlight: item.highlight,
             });
           } else {
             await updateItemMutation.mutateAsync({
@@ -974,6 +983,9 @@ export default function RunsheetBuilder() {
               assignedTo: item.assignedTo,
               category: item.category,
               sortOrder: i,
+              bold: item.bold,
+              italic: item.italic,
+              highlight: item.highlight,
             });
           }
         }
@@ -1740,8 +1752,9 @@ export default function RunsheetBuilder() {
                   const isExpanded = expandedItem === key;
                   const endTime = addMinutes(item.time, item.duration);
                   const catInfo = CATEGORIES.find(c => c.value === item.category);
+                  const hlBg = item.highlight ? item.highlight : undefined;
                   return (
-                    <div key={key} className={`group hover:bg-linen/50 transition-colors print:hover:bg-transparent ${printColumns === 2 ? 'print:break-inside-avoid print:border-b print:border-gold/20 print:mb-0' : ''}`}>
+                    <div key={key} className={`group hover:bg-linen/50 transition-colors print:hover:bg-transparent ${printColumns === 2 ? 'print:break-inside-avoid print:border-b print:border-gold/20 print:mb-0' : ''}`} style={hlBg ? { backgroundColor: hlBg } : undefined}>
                       {/* Main row */}
                       <div className="flex items-center gap-0 print:gap-3">
                         {/* Time column */}
@@ -1753,6 +1766,9 @@ export default function RunsheetBuilder() {
                             className="font-dm text-sm font-bold text-ink bg-transparent border-0 focus:outline-none w-full no-print"
                           />
                           <div className="hidden print:block font-dm text-sm font-bold">{formatTime12(item.time)}</div>
+                          {item.duration > 0 && (
+                            <div className="text-[10px] text-ink/30 font-dm no-print">{item.duration}m</div>
+                          )}
                         </div>
 
                         {/* Title & description */}
@@ -1761,9 +1777,9 @@ export default function RunsheetBuilder() {
                             value={item.title}
                             onChange={e => updateItemField(idx, "title", e.target.value)}
                             placeholder="Item title..."
-                            className="w-full font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none no-print"
+                            className={`w-full font-dm text-sm text-ink bg-transparent border-0 focus:outline-none no-print ${item.bold ? 'font-bold' : 'font-semibold'} ${item.italic ? 'italic' : ''}`}
                           />
-                          <div className="hidden print:block font-dm text-sm font-semibold">{item.title || "—"}</div>
+                          <div className={`hidden print:block font-dm text-sm ${item.bold ? 'font-bold' : 'font-semibold'} ${item.italic ? 'italic' : ''}`}>{item.title || "—"}</div>
                           <input
                             value={item.description ?? ""}
                             onChange={e => updateItemField(idx, "description", e.target.value)}
@@ -1823,45 +1839,81 @@ export default function RunsheetBuilder() {
 
                       {/* Expanded detail row */}
                       {isExpanded && (
-                        <div className="border-t border-gold/30 px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 bg-linen/50 no-print">
-                          <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DURATION (MINS)</label>
-                            <Input
-                              type="number"
-                              value={item.duration}
-                              onChange={e => updateItemField(idx, "duration", Number(e.target.value))}
-                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
-                            />
+                        <div className="border-t border-gold/30 px-5 py-4 space-y-4 bg-linen/50 no-print">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DURATION (MINS)</label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={item.duration > 0 ? item.duration : ''}
+                                placeholder="—"
+                                onChange={e => updateItemField(idx, "duration", Number(e.target.value) || 0)}
+                                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                              />
+                            </div>
+                            <div>
+                              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">CATEGORY</label>
+                              <select
+                                value={item.category}
+                                onChange={e => updateItemField(idx, "category", e.target.value)}
+                                className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                              >
+                                {CATEGORIES.map(c => (
+                                  <option key={c.value} value={c.value}>{c.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">ASSIGNED TO</label>
+                              <Input
+                                value={item.assignedTo ?? ""}
+                                onChange={e => updateItemField(idx, "assignedTo", e.target.value)}
+                                placeholder="Staff member..."
+                                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                              />
+                            </div>
+                            <div>
+                              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">NOTES</label>
+                              <Input
+                                value={item.description ?? ""}
+                                onChange={e => updateItemField(idx, "description", e.target.value)}
+                                placeholder="Additional notes..."
+                                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">CATEGORY</label>
-                            <select
-                              value={item.category}
-                              onChange={e => updateItemField(idx, "category", e.target.value)}
-                              className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
-                            >
-                              {CATEGORIES.map(c => (
-                                <option key={c.value} value={c.value}>{c.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">ASSIGNED TO</label>
-                            <Input
-                              value={item.assignedTo ?? ""}
-                              onChange={e => updateItemField(idx, "assignedTo", e.target.value)}
-                              placeholder="Staff member..."
-                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
-                            />
-                          </div>
-                          <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">NOTES</label>
-                            <Input
-                              value={item.description ?? ""}
-                              onChange={e => updateItemField(idx, "description", e.target.value)}
-                              placeholder="Additional notes..."
-                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
-                            />
+                          {/* Style controls */}
+                          <div className="flex items-center gap-3">
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">STYLE</span>
+                            <button
+                              onClick={() => updateItemField(idx, "bold", !item.bold)}
+                              className={`font-bold text-xs px-2 py-1 border rounded-none transition-colors font-dm ${item.bold ? 'bg-ink text-white border-ink' : 'bg-white text-ink/50 border-gold/30 hover:border-ink/30'}`}
+                              title="Bold"
+                            >B</button>
+                            <button
+                              onClick={() => updateItemField(idx, "italic", !item.italic)}
+                              className={`italic text-xs px-2 py-1 border rounded-none transition-colors font-dm ${item.italic ? 'bg-ink text-white border-ink' : 'bg-white text-ink/50 border-gold/30 hover:border-ink/30'}`}
+                              title="Italic"
+                            >I</button>
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/40 ml-2">HIGHLIGHT</span>
+                            {[
+                              { label: 'None', value: '' },
+                              { label: 'Yellow', value: '#fef9c3' },
+                              { label: 'Blue', value: '#dbeafe' },
+                              { label: 'Green', value: '#d1fae5' },
+                              { label: 'Pink', value: '#fce7f3' },
+                              { label: 'Purple', value: '#ede9fe' },
+                              { label: 'Peach', value: '#ffedd5' },
+                            ].map(({ label, value }) => (
+                              <button
+                                key={label}
+                                onClick={() => updateItemField(idx, "highlight", value || undefined)}
+                                title={label}
+                                className={`w-5 h-5 border-2 rounded-full transition-all ${(item.highlight ?? '') === value ? 'border-ink scale-110' : 'border-gold/30 hover:border-ink/40'}`}
+                                style={{ backgroundColor: value || '#ffffff' }}
+                              />
+                            ))}
                           </div>
                         </div>
                       )}
@@ -2278,12 +2330,21 @@ export default function RunsheetBuilder() {
                                     {item.description && <div className="text-xs text-ink/40">{item.description}</div>}
                                   </div>
                                   <div>
-                                    {item.course !== 'Drinks' && (
+                                    {item.course !== 'Drinks' && item.qty > 1 && (
                                       <input
                                         type="number" min={1}
                                         value={item.qty}
                                         onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
                                         className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center"
+                                      />
+                                    )}
+                                    {item.course !== 'Drinks' && item.qty <= 1 && (
+                                      <input
+                                        type="number" min={1}
+                                        value={item.qty}
+                                        onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
+                                        className="w-12 font-dm text-sm text-ink/20 bg-transparent border-0 focus:outline-none text-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="Qty (default 1)"
                                       />
                                     )}
                                   </div>

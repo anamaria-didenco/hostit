@@ -1873,6 +1873,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           assignedTo: z.string().optional(),
           category: z.string().optional(),
           sortOrder: z.number().default(0),
+          bold: z.boolean().optional(),
+          italic: z.boolean().optional(),
+          highlight: z.string().optional(),
         })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -1907,12 +1910,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               runsheetId: id,
               ownerId: ctx.user.id,
               time: item.time,
-              duration: item.duration ?? 30,
+              duration: item.duration ?? 0,
               title: item.title,
               description: item.description ?? null,
               assignedTo: item.assignedTo ?? null,
               category: item.category ?? 'other',
               sortOrder: item.sortOrder ?? i,
+              bold: item.bold ?? false,
+              italic: item.italic ?? false,
+              highlight: item.highlight ?? null,
             }))
           );
         }
@@ -1973,6 +1979,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         assignedTo: z.string().nullable().optional(),
         category: z.string().optional(),
         sortOrder: z.number().default(0),
+        bold: z.boolean().optional(),
+        italic: z.boolean().optional(),
+        highlight: z.string().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1983,12 +1992,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           runsheetId: input.runsheetId,
           ownerId: ctx.user.id,
           time: input.time,
-          duration: input.duration ?? 30,
+          duration: input.duration ?? 0,
           title: input.title,
           description: input.description ?? null,
           assignedTo: input.assignedTo ?? null,
           category: input.category ?? 'other',
           sortOrder: input.sortOrder,
+          bold: input.bold ?? false,
+          italic: input.italic ?? false,
+          highlight: input.highlight ?? null,
         }).returning({ id: runsheetItems.id });
         return { id: result.id };
       }),
@@ -2003,6 +2015,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         assignedTo: z.string().nullable().optional(),
         category: z.string().optional(),
         sortOrder: z.number().optional(),
+        bold: z.boolean().optional(),
+        italic: z.boolean().optional(),
+        highlight: z.string().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');

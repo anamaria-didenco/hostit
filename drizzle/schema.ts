@@ -317,12 +317,15 @@ export const runsheetItems = pgTable("runsheet_items", {
   runsheetId: integer("runsheetId").notNull(),
   ownerId: integer("ownerId").notNull().default(0),
   time: varchar("time", { length: 10 }).notNull(),
-  duration: integer("duration").default(30),
+  duration: integer("duration").default(0),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
   assignedTo: varchar("assignedTo", { length: 255 }),
   category: varchar("category", { length: 50 }).default("other").notNull(),
   sortOrder: integer("sortOrder").default(0).notNull(),
+  bold: boolean("bold").default(false),
+  italic: boolean("italic").default(false),
+  highlight: varchar("highlight", { length: 50 }),
 });
 export type RunsheetItem = typeof runsheetItems.$inferSelect;
 export type InsertRunsheetItem = typeof runsheetItems.$inferInsert;
