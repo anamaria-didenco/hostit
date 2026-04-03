@@ -1323,7 +1323,7 @@ export default function RunsheetBuilder() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0">
+      <div className={`max-w-5xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0 ${printColumns === 2 ? 'print-cols-2' : ''}`}>
 
         {/* ── Print Header ────────────────────────────────────────────────── */}
         <div className="hidden print:block mb-6 pb-4 border-b-2 border-ink">
@@ -1507,7 +1507,7 @@ export default function RunsheetBuilder() {
                       </div>
                     )}
                     {!isHidden && venueSetup && (
-                      <div className="hidden print:block px-5 py-3 font-dm text-sm text-ink/80" dangerouslySetInnerHTML={{ __html: venueSetup }} />
+                      <div className="hidden print:block px-5 py-3 font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: venueSetup }} />
                     )}
                   </div>
                 </SortableSection>
@@ -1745,7 +1745,7 @@ export default function RunsheetBuilder() {
                 minHeight="56px"
                 className="no-print"
               />
-              {notes && <div className="hidden print:block font-dm text-sm text-ink/70" dangerouslySetInnerHTML={{ __html: notes }} />}
+              {notes && <div className="hidden print:block font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: notes }} />}
             </div>
 
             {items.length === 0 ? (
@@ -1754,7 +1754,7 @@ export default function RunsheetBuilder() {
                 No items yet. Click "Add Item" to build your runsheet.
               </div>
             ) : (
-              <div className={`divide-y divide-gold/20 ${printColumns === 2 ? 'print-cols-2 print:divide-y-0' : ''}`}>
+              <div className="divide-y divide-gold/20">
                 {items.map((item, idx) => {
                   const key = getItemKey(item);
                   const isExpanded = expandedItem === key;
@@ -1762,7 +1762,7 @@ export default function RunsheetBuilder() {
                   const catInfo = CATEGORIES.find(c => c.value === item.category);
                   const hlBg = item.highlight ? item.highlight : undefined;
                   return (
-                    <div key={key} className={`group hover:bg-linen/50 transition-colors print:hover:bg-transparent ${printColumns === 2 ? 'print:break-inside-avoid print:border-b print:border-gold/20 print:mb-0' : ''}`} style={hlBg ? { backgroundColor: hlBg } : undefined}>
+                    <div key={key} className="group hover:bg-linen/50 transition-colors print:hover:bg-transparent" style={hlBg ? { backgroundColor: hlBg } : undefined}>
                       {/* Main row */}
                       <div className="flex items-center gap-0 print:gap-3">
                         {/* Time column */}
@@ -3818,7 +3818,13 @@ export default function RunsheetBuilder() {
           body { background: white; }
           @page { margin: 1.5cm; }
           .print-cols-2 { columns: 2; column-gap: 1.5rem; }
-          .print-cols-2 > * { break-inside: avoid; border-bottom: 1px solid #d4b896; margin-bottom: 0; }
+          .print-cols-2 > * { break-inside: avoid; }
+          .print-cols-2 .bg-white { break-inside: avoid; }
+          .print-cols-2 .section-card { break-inside: avoid; }
+          .vf-rich-content b, .vf-rich-content strong { font-weight: bold; }
+          .vf-rich-content i, .vf-rich-content em { font-style: italic; }
+          .vf-rich-content u { text-decoration: underline; }
+          .vf-rich-content span[style] { display: inline; }
         }
       `}</style>
     </div>

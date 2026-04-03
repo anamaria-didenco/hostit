@@ -122,7 +122,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     const venueSetupSection = venueSetup ? `
 <div class="card">
   <div class="card-header">VENUE SETUP</div>
-  <div class="notes-text">${venueSetup.replace(/\n/g, "<br>")}</div>
+  <div class="notes-text">${venueSetup}</div>
 </div>` : "";
 
     // ── Section: Dietary ─────────────────────────────────────────────────────
@@ -145,7 +145,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     const notesSection = notes ? `
 <div class="card">
   <div class="card-header">NOTES</div>
-  <div class="notes-text">${notes.replace(/\n/g, "<br>")}</div>
+  <div class="notes-text">${notes}</div>
 </div>` : "";
 
     // ── Section: Timeline ────────────────────────────────────────────────────
@@ -346,7 +346,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     align-items: center;
     gap: 10px;
   }
-  .fnb-header { background: oklch(0.400 0.185 264); }
+  .fnb-header { background: #4a73c9; }
   .timeline-header { background: #6b98e7; }
   .header-sub {
     font-family: 'DM Sans', sans-serif;
@@ -360,7 +360,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     font-size: 9.5px;
     line-height: 1.65;
     color: #3a2e1e;
-    white-space: pre-wrap;
+    white-space: normal;
   }
 
   /* ── Dietary ── */
@@ -459,8 +459,8 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
   .fnb-dish-desc { font-size: 8px; color: rgba(26,18,9,0.45); margin-top: 1px; }
   .dietary-tag {
     display: inline-block;
-    background: oklch(0.92 0.055 264);
-    color: oklch(0.400 0.185 264);
+    background: #dde7f7;
+    color: #3a5ab0;
     font-family: 'Bebas Neue', sans-serif;
     font-size: 7.5px;
     letter-spacing: 0.06em;
@@ -525,7 +525,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
   ${footerText ? `
 <div class="card" style="border-color:rgba(201,168,76,0.5);background:#fdf9f0;">
   <div class="card-header" style="background:#8b6914;">PAYMENT &amp; NOTES</div>
-  <div class="notes-text" style="font-size:9.5px;color:#4a3800;">${footerText.replace(/\n/g, "<br>")}</div>
+  <div class="notes-text" style="font-size:9.5px;color:#4a3800;">${footerText}</div>
 </div>` : ""}
 
   <div class="doc-footer">
