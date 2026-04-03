@@ -3816,15 +3816,12 @@ export default function RunsheetBuilder() {
         @media print {
           .no-print { display: none !important; }
           body { background: white; }
-          @page { margin: 1.5cm; }
-          .print-cols-2 { columns: 2; column-gap: 1.5rem; }
-          .print-cols-2 > * { break-inside: avoid; }
-          .print-cols-2 .bg-white { break-inside: avoid; }
-          .print-cols-2 .section-card { break-inside: avoid; }
+          @page { margin: 1cm 1.5cm; size: A4; }
+          .print-cols-2 { columns: 2; column-gap: 1.5rem; column-fill: auto; }
+          .print-cols-2 .group\/sortable { break-inside: avoid; }
           .vf-rich-content b, .vf-rich-content strong { font-weight: bold; }
           .vf-rich-content i, .vf-rich-content em { font-style: italic; }
           .vf-rich-content u { text-decoration: underline; }
-          .vf-rich-content span[style] { display: inline; }
         }
       `}</style>
     </div>
