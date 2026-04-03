@@ -925,3 +925,11 @@
 .vf-rich-editor:focus {
   outline: none;
 }
+
+/* ── Rich Text Content (read-only display of HTML from RichTextarea) ── */
+.vf-rich-content b, .vf-rich-content strong { font-weight: 700; }
+.vf-rich-content i, .vf-rich-content em { font-style: italic; }
+.vf-rich-content u { text-decoration: underline; }
+.vf-rich-content br { display: block; content: ""; margin-top: 0.25em; }
+.vf-rich-content div { margin-top: 0.1em; }
+.vf-rich-content span[style] { /* preserve inline styles from rich text */ }

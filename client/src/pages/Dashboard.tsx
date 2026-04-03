@@ -3315,7 +3315,7 @@ export default function Dashboard() {
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
                         <Input type="email" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
                           placeholder="events@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-                        <p className="font-dm text-xs text-sage/60 mt-1">Add the email address you want to receive all VenueFlowHQ notifications.</p>
+                        <p className="font-dm text-xs text-sage/60 mt-1">Email address to receive new enquiry notifications. Requires SMTP configured in Settings → Email.</p>
                       </div>
                     </div>
                   </div>

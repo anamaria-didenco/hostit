@@ -295,10 +295,16 @@ export default function ProposalBuilder() {
     onError: () => toast.error("Failed to save proposal"),
   });
 
+  const hasSmtp = !!(venueSettings as any)?.smtpHost && !!(venueSettings as any)?.smtpUser && !!(venueSettings as any)?.smtpPass;
+
   const sendProposal = trpc.proposals.send.useMutation({
     onSuccess: (data) => {
       setSent(true);
-      toast.success("Proposal sent! Share the link with your client.");
+      if (hasSmtp) {
+        toast.success("Proposal sent and emailed to client!");
+      } else {
+        toast.success("Proposal marked as sent — copy the link below to share with your client. (Configure SMTP in Settings → Email to send emails directly.)");
+      }
     },
     onError: () => toast.error("Failed to send proposal"),
   });

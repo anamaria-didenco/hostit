@@ -269,7 +269,7 @@ export default function StaffPortal() {
               <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
             </div>
             <div className="px-5 py-4">
-              <p className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{runsheet.venueSetup}</p>
+              <div className="font-dm text-sm text-ink/80 vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.venueSetup }} />
             </div>
           </div>
         )}
@@ -304,7 +304,7 @@ export default function StaffPortal() {
               <span className="font-bebas tracking-widest text-sm text-ink/60">GENERAL NOTES</span>
             </div>
             <div className="px-5 py-4">
-              <p className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{runsheet.notes}</p>
+              <div className="font-dm text-sm text-ink/80 vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.notes }} />
             </div>
           </div>
         )}

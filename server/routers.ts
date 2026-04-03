@@ -311,6 +311,44 @@ export const appRouter = router({
           source: input.source ?? "lead_form",
           status: "new",
         });
+
+        // Send notification email to venue owner if they have configured one
+        try {
+          const { getDb } = await import('./db');
+          const { venueSettings } = await import('../drizzle/schema');
+          const { eq } = await import('drizzle-orm');
+          const db = await getDb();
+          if (db) {
+            const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId)).limit(1);
+            if (vs?.notificationEmail && vs?.smtpHost && vs?.smtpUser && vs?.smtpPass) {
+              const nodemailer = await import('nodemailer');
+              const transporter = nodemailer.default.createTransport({
+                host: vs.smtpHost, port: vs.smtpPort ?? 587,
+                secure: (vs.smtpSecure ?? 0) === 1,
+                auth: { user: vs.smtpUser, pass: vs.smtpPass },
+              });
+              const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
+              const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
+              const clientName = [input.firstName, input.lastName].filter(Boolean).join(' ');
+              const eventDetails = [
+                input.eventType && `Event type: ${input.eventType}`,
+                input.eventDate && `Event date: ${input.eventDate}`,
+                input.guestCount && `Guests: ${input.guestCount}`,
+                input.message && `Message: ${input.message}`,
+              ].filter(Boolean).join('\n');
+              await transporter.sendMail({
+                from: `"${fromName}" <${fromEmail}>`,
+                to: vs.notificationEmail,
+                subject: `New Enquiry — ${clientName}`,
+                html: `<h2>New Enquiry Received</h2><p><strong>Name:</strong> ${clientName}</p><p><strong>Email:</strong> ${input.email}</p>${input.phone ? `<p><strong>Phone:</strong> ${input.phone}</p>` : ''}${eventDetails.replace(/\n/g, '<br>')}`,
+                text: `New Enquiry from ${clientName}\nEmail: ${input.email}\n${input.phone ? 'Phone: ' + input.phone + '\n' : ''}${eventDetails}`,
+              });
+            }
+          }
+        } catch (notifyErr) {
+          console.error('[LeadSubmit] Notification email error (non-fatal):', notifyErr);
+        }
+
         return lead;
       }),
 
@@ -759,8 +797,45 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             type: "proposal_sent",
             content: `Proposal "${proposal.title}" sent to client`,
           });
+
+          // Attempt to send email to client if SMTP configured
+          if (proposal.publicToken) {
+            try {
+              const { getDb } = await import('./db');
+              const { venueSettings, leads } = await import('../drizzle/schema');
+              const { eq } = await import('drizzle-orm');
+              const db = await getDb();
+              if (db) {
+                const [vs, lead] = await Promise.all([
+                  db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1).then(r => r[0]),
+                  db.select({ firstName: leads.firstName, lastName: leads.lastName, email: leads.email }).from(leads).where(eq(leads.id, proposal.leadId)).limit(1).then(r => r[0]),
+                ]);
+                if (vs?.smtpHost && vs?.smtpUser && vs?.smtpPass && lead?.email) {
+                  const nodemailer = await import('nodemailer');
+                  const transporter = nodemailer.default.createTransport({
+                    host: vs.smtpHost, port: vs.smtpPort ?? 587,
+                    secure: (vs.smtpSecure ?? 0) === 1,
+                    auth: { user: vs.smtpUser, pass: vs.smtpPass },
+                  });
+                  const proposalUrl = `${process.env.REPLIT_DEV_DOMAIN ? 'https://' + process.env.REPLIT_DEV_DOMAIN : 'https://' + (process.env.REPLIT_DOMAINS ?? '').split(',')[0]}/proposal/${proposal.publicToken}`;
+                  const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
+                  const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
+                  const clientName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
+                  await transporter.sendMail({
+                    from: `"${fromName}" <${fromEmail}>`,
+                    to: `"${clientName}" <${lead.email}>`,
+                    subject: `Your event proposal — ${proposal.title}`,
+                    html: `<p>Hi ${lead.firstName},</p><p>Please find your event proposal below:</p><p><a href="${proposalUrl}" style="background:#4f7942;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">View Proposal</a></p><p>Or copy this link: <a href="${proposalUrl}">${proposalUrl}</a></p><p>This proposal includes pricing, details, and terms for your event. Please don't hesitate to reach out if you have any questions.</p><p>Warm regards,<br>${fromName}</p>`,
+                    text: `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`,
+                  });
+                }
+              }
+            } catch (emailErr) {
+              console.error('[ProposalSend] Email error (non-fatal):', emailErr);
+            }
+          }
         }
-        return { success: true, token: proposal?.publicToken };
+        return { success: true, token: proposal?.publicToken, emailSent: true };
       }),
 
     update: protectedProcedure
