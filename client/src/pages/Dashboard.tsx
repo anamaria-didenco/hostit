@@ -580,6 +580,34 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
   );
 }
 
+async function compressToDataUrl(file: File, maxW: number, maxH: number, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (file.type === 'image/svg+xml') {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+    const img = new Image();
+    const blobUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(blobUrl);
+      const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('Failed to load image')); };
+    img.src = blobUrl;
+  });
+}
+
 export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
@@ -3471,17 +3499,10 @@ export default function Dashboard() {
                         <label className="cursor-pointer block">
                           <input type="file" accept="image/*" className="hidden" onChange={async e => {
                             const file = e.target.files?.[0]; if (!file) return;
-                            const fd = new FormData(); fd.append('file', file);
                             try {
-                              const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                              const data = await res.json();
-                              if (data.url) {
-                                const newUrl = data.url;
-                                setSettingsForm((f: any) => ({ ...f, bannerImageUrl: newUrl }));
-                                updateSettings.mutate({ bannerImageUrl: newUrl });
-                              } else {
-                                toast.error("Banner upload failed. Please try again.");
-                              }
+                              const dataUrl = await compressToDataUrl(file, 1600, 800, 0.80);
+                              setSettingsForm((f: any) => ({ ...f, bannerImageUrl: dataUrl }));
+                              updateSettings.mutate({ bannerImageUrl: dataUrl });
                             } catch {
                               toast.error("Banner upload failed. Please check your connection and try again.");
                             }
@@ -3994,11 +4015,11 @@ export default function Dashboard() {
                         <input type="file" accept="image/*"
                           onChange={async e => {
                             const file = e.target.files?.[0]; if (!file) return;
-                            const fd = new FormData(); fd.append('file', file);
-                            const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                            const { url } = await res.json();
-                            setSettingsForm((f: any) => ({ ...f, logoUrl: url }));
-                            toast.success('Logo uploaded!');
+                            try {
+                              const dataUrl = await compressToDataUrl(file, 400, 400, 0.90);
+                              setSettingsForm((f: any) => ({ ...f, logoUrl: dataUrl }));
+                              toast.success('Logo uploaded!');
+                            } catch { toast.error('Logo upload failed.'); }
                           }}
                           className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
                         <p className="font-dm text-xs text-ink/40 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
@@ -4149,12 +4170,12 @@ export default function Dashboard() {
                             <input type="file" accept="image/*" className="hidden"
                               onChange={async e => {
                                 const file = e.target.files?.[0]; if (!file) return;
-                                const fd = new FormData(); fd.append('file', file);
-                                const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                                const { url } = await res.json();
-                                const current: string[] = (() => { try { return JSON.parse(settingsForm.formGalleryImages || '[]'); } catch { return []; } })();
-                                setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify([...current, url]) }));
-                                toast.success('Photo added!');
+                                try {
+                                  const dataUrl = await compressToDataUrl(file, 1200, 900, 0.82);
+                                  const current: string[] = (() => { try { return JSON.parse(settingsForm.formGalleryImages || '[]'); } catch { return []; } })();
+                                  setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify([...current, dataUrl]) }));
+                                  toast.success('Photo added!');
+                                } catch { toast.error('Photo upload failed.'); }
                               }} />
                           </label>
                         ) : null,
