@@ -97,6 +97,11 @@ export const appRouter = router({
         customFormFields: z.string().optional(),
         logoScale: z.coerce.number().optional(),
         galleryPhotoHeight: z.coerce.number().optional(),
+        formPageBg: z.string().optional(),
+        formPageBgImage: z.string().optional(),
+        formCardBg: z.string().optional(),
+        formButtonColor: z.string().optional(),
+        formSuccessMessage: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };

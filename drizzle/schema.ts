@@ -98,6 +98,11 @@ export const venueSettings = pgTable("venue_settings", {
   customFormFields: text("customFormFields"),
   logoScale: integer("logoScale").default(100),
   galleryPhotoHeight: integer("galleryPhotoHeight").default(128),
+  formPageBg: varchar("formPageBg", { length: 20 }).default("#f8f5f0"),
+  formPageBgImage: text("formPageBgImage"),
+  formCardBg: varchar("formCardBg", { length: 20 }).default("#ffffff"),
+  formButtonColor: varchar("formButtonColor", { length: 20 }),
+  formSuccessMessage: text("formSuccessMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

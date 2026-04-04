@@ -1202,6 +1202,11 @@ export default function Dashboard() {
         formGalleryImages: vs?.formGalleryImages ?? "[]",
         logoScale: vs?.logoScale ?? 100,
         galleryPhotoHeight: vs?.galleryPhotoHeight ?? 128,
+        formPageBg: (vs as any)?.formPageBg ?? "#f8f5f0",
+        formPageBgImage: (vs as any)?.formPageBgImage ?? "",
+        formCardBg: (vs as any)?.formCardBg ?? "#ffffff",
+        formButtonColor: (vs as any)?.formButtonColor ?? "",
+        formSuccessMessage: (vs as any)?.formSuccessMessage ?? "",
         operatingHours: vs?.operatingHours ?? JSON.stringify([
           { day: "Sunday", enabled: true, start: "08:00", end: "22:00" },
           { day: "Monday", enabled: true, start: "08:00", end: "22:00" },
@@ -4006,6 +4011,13 @@ export default function Dashboard() {
                   formGalleryImages: settingsForm.formGalleryImages,
                   leadFormTitle: settingsForm.leadFormTitle,
                   leadFormSubtitle: settingsForm.leadFormSubtitle,
+                  logoScale: settingsForm.logoScale,
+                  galleryPhotoHeight: settingsForm.galleryPhotoHeight,
+                  formPageBg: settingsForm.formPageBg,
+                  formPageBgImage: settingsForm.formPageBgImage || undefined,
+                  formCardBg: settingsForm.formCardBg,
+                  formButtonColor: settingsForm.formButtonColor || undefined,
+                  formSuccessMessage: settingsForm.formSuccessMessage || undefined,
                   ...(formFields ? { customFormFields: JSON.stringify(formFields) } : {}),
                 });
               }} className="space-y-4">
@@ -4101,6 +4113,124 @@ export default function Dashboard() {
                     </div>
                     <div className="bg-gray-50 py-1.5 text-center text-[10px] text-gray-400 font-bebas tracking-widest">HEADER PREVIEW</div>
                   </div>
+                </div>
+
+                {/* ── BACKGROUND & COLOURS ── */}
+                <div className="dante-card p-5 space-y-5">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage">BACKGROUND &amp; COLOURS</h2>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Page background colour */}
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">PAGE BACKGROUND</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={settingsForm.formPageBg ?? '#f8f5f0'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, formPageBg: e.target.value }))}
+                          className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
+                        <Input value={settingsForm.formPageBg ?? '#f8f5f0'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, formPageBg: e.target.value }))}
+                          placeholder="#f8f5f0" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+                      </div>
+                      <p className="font-dm text-[10px] text-ink/40 mt-1">Colour behind the form</p>
+                    </div>
+
+                    {/* Form card background colour */}
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">FORM CARD BACKGROUND</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={settingsForm.formCardBg ?? '#ffffff'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, formCardBg: e.target.value }))}
+                          className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
+                        <Input value={settingsForm.formCardBg ?? '#ffffff'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, formCardBg: e.target.value }))}
+                          placeholder="#ffffff" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+                      </div>
+                      <p className="font-dm text-[10px] text-ink/40 mt-1">Colour of the form panels</p>
+                    </div>
+
+                    {/* Button colour */}
+                    <div>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUTTON COLOUR <span className="font-dm text-[9px] tracking-normal normal-case text-ink/30">(optional — defaults to header colour)</span></label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={settingsForm.formButtonColor || settingsForm.primaryColor || '#2D4A3E'}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, formButtonColor: e.target.value }))}
+                          className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
+                        <Input value={settingsForm.formButtonColor ?? ''}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, formButtonColor: e.target.value }))}
+                          placeholder="Same as header colour" className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+                        {settingsForm.formButtonColor && (
+                          <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, formButtonColor: '' }))}
+                            className="font-dm text-xs text-red-400 hover:text-red-600 whitespace-nowrap">Reset</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Background image */}
+                  <div>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BACKGROUND IMAGE <span className="font-dm text-[9px] tracking-normal normal-case text-ink/30">(optional — shows behind the form)</span></label>
+                    {settingsForm.formPageBgImage ? (
+                      <div className="flex items-start gap-3">
+                        <div className="w-32 h-20 rounded border border-gold/20 overflow-hidden flex-shrink-0">
+                          <img src={settingsForm.formPageBgImage} alt="bg" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-dm text-xs text-ink/60">Background image set</p>
+                          <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, formPageBgImage: '' }))}
+                            className="font-dm text-xs text-red-400 hover:text-red-600">Remove image</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-3 border border-dashed border-gold/30 p-3 cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors rounded">
+                        <Upload className="w-4 h-4 text-ink/30 flex-shrink-0" />
+                        <span className="font-dm text-xs text-ink/40">Upload a background image (JPG, PNG)</span>
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={async e => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            try {
+                              const dataUrl = await compressToDataUrl(file, 1920, 1080, 0.82);
+                              setSettingsForm((f: any) => ({ ...f, formPageBgImage: dataUrl }));
+                              toast.success('Background image uploaded!');
+                            } catch { toast.error('Image upload failed.'); }
+                          }} />
+                      </label>
+                    )}
+                    <p className="font-dm text-[10px] text-ink/40 mt-1">When set, the background image overlays your page background colour. The form cards sit on top.</p>
+                  </div>
+
+                  {/* Live preview of bg */}
+                  <div className="border border-gold/20 rounded overflow-hidden">
+                    <div className="relative py-4 px-4"
+                      style={{
+                        backgroundColor: settingsForm.formPageBg ?? '#f8f5f0',
+                        backgroundImage: settingsForm.formPageBgImage ? `url(${settingsForm.formPageBgImage})` : undefined,
+                        backgroundSize: 'cover', backgroundPosition: 'center',
+                      }}>
+                      <div className="rounded border border-gray-100 p-3 shadow-sm text-center text-xs text-gray-500"
+                        style={{ backgroundColor: settingsForm.formCardBg ?? '#ffffff' }}>
+                        Form panel preview
+                      </div>
+                      <div className="mt-2 mx-auto w-fit">
+                        <div className="rounded-sm text-white text-[10px] font-bold px-4 py-1.5"
+                          style={{ backgroundColor: settingsForm.formButtonColor || settingsForm.primaryColor || '#2D4A3E' }}>
+                          SUBMIT ENQUIRY
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 py-1.5 text-center text-[10px] text-gray-400 font-bebas tracking-widest">BACKGROUND PREVIEW</div>
+                  </div>
+                </div>
+
+                {/* ── SUCCESS MESSAGE ── */}
+                <div className="dante-card p-5 space-y-3">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage">SUCCESS MESSAGE</h2>
+                  <p className="font-dm text-xs text-ink/50">Shown after the form is submitted. Use <code className="bg-gray-100 px-1 py-0.5 rounded text-[10px]">&#123;venueName&#125;</code> to insert your venue name.</p>
+                  <Textarea
+                    value={settingsForm.formSuccessMessage ?? ''}
+                    onChange={e => setSettingsForm((f: any) => ({ ...f, formSuccessMessage: e.target.value }))}
+                    placeholder={`Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.`}
+                    rows={3}
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none" />
                 </div>
 
                 {/* ── PHOTOS ── */}

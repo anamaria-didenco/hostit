@@ -125,6 +125,11 @@ export default function LeadForm() {
   const textOnPrimary = isLight(primaryColor) ? "#1a1a1a" : "#ffffff";
   const galleryPhotoHeight = (venue as any)?.galleryPhotoHeight ?? 128;
   const successMsg   = (venue as any)?.formSuccessMessage || "Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.";
+  const formPageBg      = (venue as any)?.formPageBg || "#f8f5f0";
+  const formPageBgImage = (venue as any)?.formPageBgImage || null;
+  const formCardBg      = (venue as any)?.formCardBg || "#ffffff";
+  const formButtonColor = (venue as any)?.formButtonColor || primaryColor;
+  const textOnButton    = isLight(formButtonColor) ? "#1a1a1a" : "#ffffff";
 
   let galleryImages: string[] = [];
   try { galleryImages = JSON.parse((venue as any)?.formGalleryImages ?? '[]') || []; } catch {}
@@ -292,7 +297,7 @@ export default function LeadForm() {
             {/* Submit */}
             <Button type="submit" disabled={submitLead.isPending}
               className="w-full font-bold tracking-widest rounded-sm h-11 text-sm shadow-sm transition-opacity hover:opacity-90 mt-4"
-              style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
+              style={{ backgroundColor: formButtonColor, color: textOnButton }}>
               {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
             </Button>
 
@@ -306,8 +311,13 @@ export default function LeadForm() {
   }
 
   /* ── FULL-PAGE MODE ─────────────────────────────────────────────────── */
+  const pageBgStyle: React.CSSProperties = {
+    backgroundColor: formPageBg,
+    ...(formPageBgImage ? { backgroundImage: `url(${formPageBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' } : {}),
+  };
+
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#f8f5f0", fontFamily }}>
+    <div className="min-h-screen" style={{ ...pageBgStyle, fontFamily }}>
 
       {/* Venue Header */}
       <div style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
@@ -355,8 +365,8 @@ export default function LeadForm() {
 
       <div className="max-w-2xl mx-auto px-6 py-10">
         {submitted ? (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-10 text-center">
-            <CheckCircle className="w-16 h-16 mx-auto mb-5" style={{ color: primaryColor }} />
+          <div className="rounded-lg border border-gray-100 shadow-sm p-10 text-center" style={{ backgroundColor: formCardBg }}>
+            <CheckCircle className="w-16 h-16 mx-auto mb-5" style={{ color: formButtonColor }} />
             <h2 className="text-3xl font-bold mb-3 text-gray-800">Enquiry Received!</h2>
             <p className="text-gray-500 mb-2">
               {successMsg.replace('{venueName}', venueName)}
@@ -370,7 +380,7 @@ export default function LeadForm() {
           <form onSubmit={handleSubmit} className="space-y-5">
 
             {detailFields.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
                 <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">YOUR DETAILS</h2>
                 <div className="grid grid-cols-2 gap-3">
                   {detailFields.map(field => (
@@ -386,7 +396,7 @@ export default function LeadForm() {
             )}
 
             {eventFields.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
                 <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">EVENT DETAILS</h2>
                 <div className="grid grid-cols-2 gap-3">
                   {eventFields.map(field => (
@@ -402,7 +412,7 @@ export default function LeadForm() {
             )}
 
             {customFields.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
                 <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">ADDITIONAL INFORMATION</h2>
                 <div className="space-y-3">
                   {customFields.map(field => (
@@ -418,14 +428,14 @@ export default function LeadForm() {
             )}
 
             {sourceField && (
-              <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
                 <h2 className="font-bold text-xs tracking-widest mb-3 text-gray-400">{sourceField.label.toUpperCase()}</h2>
                 {renderField(sourceField)}
               </div>
             )}
 
             {messageField && (
-              <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
                 <h2 className="font-bold text-xs tracking-widest mb-3 text-gray-400">{messageField.label.toUpperCase()}</h2>
                 {renderField(messageField)}
               </div>
@@ -433,7 +443,7 @@ export default function LeadForm() {
 
             <Button type="submit" disabled={submitLead.isPending}
               className="w-full font-bold tracking-widest rounded-sm h-14 text-base shadow-sm transition-opacity hover:opacity-90"
-              style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
+              style={{ backgroundColor: formButtonColor, color: textOnButton }}>
               {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
             </Button>
 
