@@ -819,8 +819,8 @@ export default function Dashboard() {
   });
   const bulkDelete = trpc.leads.bulkDelete.useMutation({
     onSuccess: (data) => {
-      refetchLeads();
-      refetchOverdue();
+      utils.leads.list.invalidate();
+      utils.leads.overdue.invalidate();
       setSelectedLeadIds(new Set());
       setBulkSelectMode(false);
       setShowBulkDeleteConfirm(false);
@@ -861,8 +861,8 @@ export default function Dashboard() {
   });
   const deleteLead = trpc.leads.delete.useMutation({
     onSuccess: () => {
-      refetchLeads();
-      refetchOverdue();
+      utils.leads.list.invalidate();
+      utils.leads.overdue.invalidate();
       setSelectedLead(null);
       toast.success("Record deleted");
     },
