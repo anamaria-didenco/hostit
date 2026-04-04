@@ -11,7 +11,7 @@ import {
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
-  SlidersHorizontal, GripVertical
+  SlidersHorizontal, GripVertical, Bell
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -677,8 +677,44 @@ export default function Dashboard() {
   const { data: overdueLeads, refetch: refetchOverdue } = trpc.leads.overdue.useQuery(undefined, { enabled: !!user?.id });
   const { data: allLeads, refetch: refetchLeads } = trpc.leads.list.useQuery(
     { status: leadStatusFilter === "all" ? undefined : leadStatusFilter },
-    { enabled: !!user?.id }
+    { enabled: !!user?.id, refetchInterval: 30_000 }
   );
+
+  // ── In-app new enquiry notifications ──────────────────────────────────────
+  const knownMaxLeadId = useRef<number | null>(null);
+  const notifPermission = useRef<string>("default");
+  useEffect(() => {
+    if (typeof Notification !== "undefined") {
+      notifPermission.current = Notification.permission;
+      if (Notification.permission === "default") {
+        Notification.requestPermission().then(p => { notifPermission.current = p; });
+      }
+    }
+  }, []);
+  useEffect(() => {
+    if (!allLeads || allLeads.length === 0) return;
+    const maxId = Math.max(...allLeads.map((l: any) => l.id));
+    if (knownMaxLeadId.current === null) {
+      knownMaxLeadId.current = maxId;
+      return;
+    }
+    if (maxId > knownMaxLeadId.current) {
+      const newest = allLeads.find((l: any) => l.id === maxId);
+      const name = [newest?.firstName, newest?.lastName].filter(Boolean).join(" ") || "Someone";
+      toast.success(`New enquiry from ${name}!`, {
+        description: newest?.email ?? "",
+        duration: 8000,
+        action: { label: "View", onClick: () => setSelectedLead(newest) },
+      });
+      if (notifPermission.current === "granted") {
+        new Notification("New Enquiry — VenueFlow", {
+          body: `${name}${newest?.email ? " · " + newest.email : ""}`,
+          icon: "/logo-icon.png",
+        });
+      }
+      knownMaxLeadId.current = maxId;
+    }
+  }, [allLeads]);
   const { data: selectedLeadActivity } = trpc.leads.getActivity.useQuery(
     { leadId: selectedLead?.id ?? 0 },
     { enabled: !!selectedLead?.id }
@@ -1399,6 +1435,21 @@ export default function Dashboard() {
         <div className="hidden md:flex flex-1" />
         {/* Right: venue name + avatar */}
         <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Notification bell */}
+          <button
+            onClick={() => { setTab("enquiries" as any); setLeadsSubTab("new"); }}
+            className="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+            title={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
+          >
+            <Bell className={`w-4.5 h-4.5 ${unreadCount > 0 ? 'text-sage-dark' : 'text-gray-400'}`} />
+            {unreadCount > 0 && (
+              <>
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none animate-pulse">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              </>
+            )}
+          </button>
           <ThemeSwitcher />
           <span className="font-inter text-stormy text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
           <div className="w-8 h-8 rounded-full bg-sage-green flex items-center justify-center font-inter text-white text-sm font-semibold">
