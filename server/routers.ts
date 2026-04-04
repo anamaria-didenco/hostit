@@ -155,6 +155,37 @@ export const appRouter = router({
       const result = await db.select().from(venueSettings).limit(1);
       return result[0] ?? null;
     }),
+
+    testEmail: protectedProcedure
+      .input(z.object({ toEmail: z.string().email() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('Database unavailable');
+        const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        if (!vs?.smtpHost || !vs?.smtpUser || !vs?.smtpPass) {
+          throw new Error('SMTP not configured. Please fill in Host, Username, and Password first.');
+        }
+        const nodemailer = await import('nodemailer');
+        const port = vs.smtpPort ?? 587;
+        const secure = (vs.smtpSecure ?? 0) === 1 || port === 465;
+        const transporter = nodemailer.default.createTransport({
+          host: vs.smtpHost, port, secure,
+          auth: { user: vs.smtpUser, pass: vs.smtpPass },
+          tls: { rejectUnauthorized: false },
+        } as any);
+        await transporter.verify();
+        await transporter.sendMail({
+          from: `"${vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ'}" <${vs.smtpFromEmail ?? vs.smtpUser}>`,
+          to: input.toEmail,
+          subject: 'VenueFlowHQ — Test Email',
+          html: `<div style="font-family:sans-serif;max-width:500px"><div style="background:#6b98e7;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0"><div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.8">VenueFlowHQ</div><div style="font-size:20px;font-weight:bold;margin-top:4px">Test Email</div></div><div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px"><p style="font-size:15px">Your email notifications are working correctly.</p><p style="font-size:13px;color:#6b7280">This test was sent from <strong>${vs.smtpHost}</strong>. New enquiry notifications will be delivered to <strong>${vs.notificationEmail ?? input.toEmail}</strong>.</p></div></div>`,
+          text: 'Your VenueFlowHQ email notifications are working correctly.',
+        });
+        return { success: true };
+      }),
   }),
 
   // ─── Event Spaces ──────────────────────────────────────────────────────────
@@ -321,32 +352,62 @@ export const appRouter = router({
           if (db) {
             const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId)).limit(1);
             if (vs?.notificationEmail && vs?.smtpHost && vs?.smtpUser && vs?.smtpPass) {
+              console.log(`[LeadSubmit] Sending notification to ${vs.notificationEmail} via ${vs.smtpHost}:${vs.smtpPort ?? 587}`);
               const nodemailer = await import('nodemailer');
+              const port = vs.smtpPort ?? 587;
+              const secure = (vs.smtpSecure ?? 0) === 1 || port === 465;
               const transporter = nodemailer.default.createTransport({
-                host: vs.smtpHost, port: vs.smtpPort ?? 587,
-                secure: (vs.smtpSecure ?? 0) === 1,
+                host: vs.smtpHost,
+                port,
+                secure,
                 auth: { user: vs.smtpUser, pass: vs.smtpPass },
-              });
+                tls: { rejectUnauthorized: false },
+              } as any);
               const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
               const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
               const clientName = [input.firstName, input.lastName].filter(Boolean).join(' ');
-              const eventDetails = [
-                input.eventType && `Event type: ${input.eventType}`,
-                input.eventDate && `Event date: ${input.eventDate}`,
-                input.guestCount && `Guests: ${input.guestCount}`,
-                input.message && `Message: ${input.message}`,
-              ].filter(Boolean).join('\n');
+              const rows = [
+                input.email && `<tr><td style="padding:4px 0;color:#666;font-size:14px;width:130px">Email</td><td style="padding:4px 0;font-size:14px"><a href="mailto:${input.email}">${input.email}</a></td></tr>`,
+                input.phone && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Phone</td><td style="padding:4px 0;font-size:14px">${input.phone}</td></tr>`,
+                input.company && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Company</td><td style="padding:4px 0;font-size:14px">${input.company}</td></tr>`,
+                input.eventType && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event type</td><td style="padding:4px 0;font-size:14px">${input.eventType}</td></tr>`,
+                input.eventDate && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event date</td><td style="padding:4px 0;font-size:14px">${input.eventDate}</td></tr>`,
+                input.guestCount && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Guests</td><td style="padding:4px 0;font-size:14px">${input.guestCount}</td></tr>`,
+                input.budget && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px">$${input.budget} NZD</td></tr>`,
+                input.message && `<tr><td style="padding:4px 0;color:#666;font-size:14px;vertical-align:top">Message</td><td style="padding:4px 0;font-size:14px">${input.message}</td></tr>`,
+              ].filter(Boolean).join('');
+              const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+  <div style="background:#6b98e7;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.8">VenueFlowHQ</div>
+    <div style="font-size:22px;font-weight:bold;margin-top:4px">New Enquiry Received</div>
+    <div style="font-size:15px;opacity:0.9;margin-top:2px">${clientName}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
+    <table style="width:100%;border-collapse:collapse">${rows}</table>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid #f3f4f6;font-size:12px;color:#9ca3af">
+      This notification was sent by VenueFlowHQ · Log in to your dashboard to respond.
+    </div>
+  </div>
+</div>`;
               await transporter.sendMail({
                 from: `"${fromName}" <${fromEmail}>`,
                 to: vs.notificationEmail,
-                subject: `New Enquiry — ${clientName}`,
-                html: `<h2>New Enquiry Received</h2><p><strong>Name:</strong> ${clientName}</p><p><strong>Email:</strong> ${input.email}</p>${input.phone ? `<p><strong>Phone:</strong> ${input.phone}</p>` : ''}${eventDetails.replace(/\n/g, '<br>')}`,
-                text: `New Enquiry from ${clientName}\nEmail: ${input.email}\n${input.phone ? 'Phone: ' + input.phone + '\n' : ''}${eventDetails}`,
+                subject: `New Enquiry from ${clientName} — ${vs.name ?? 'Your Venue'}`,
+                html,
+                text: `New Enquiry from ${clientName}\nEmail: ${input.email}\n${input.phone ? 'Phone: ' + input.phone + '\n' : ''}${input.eventType ? 'Event type: ' + input.eventType + '\n' : ''}${input.eventDate ? 'Event date: ' + input.eventDate + '\n' : ''}${input.guestCount ? 'Guests: ' + input.guestCount + '\n' : ''}${input.message ? 'Message: ' + input.message : ''}`,
               });
+              console.log(`[LeadSubmit] Notification email sent to ${vs.notificationEmail}`);
+            } else {
+              const missing = [];
+              if (!vs?.notificationEmail) missing.push('notificationEmail');
+              if (!vs?.smtpHost) missing.push('smtpHost');
+              if (!vs?.smtpUser) missing.push('smtpUser');
+              if (!vs?.smtpPass) missing.push('smtpPass');
+              if (missing.length) console.log(`[LeadSubmit] Notification email skipped — missing settings: ${missing.join(', ')}`);
             }
           }
-        } catch (notifyErr) {
-          console.error('[LeadSubmit] Notification email error (non-fatal):', notifyErr);
+        } catch (notifyErr: any) {
+          console.error('[LeadSubmit] Notification email error:', notifyErr?.message ?? notifyErr);
         }
 
         return lead;

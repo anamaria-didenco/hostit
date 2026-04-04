@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,14 +81,13 @@ export default function LeadForm() {
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
 
   const submitLead = trpc.leads.submit.useMutation({
-    onSuccess: () => { setSubmitted(true); toast.success("Enquiry submitted! We'll be in touch soon."); },
+    onSuccess: () => { setSubmitted(true); },
     onError: () => toast.error("Failed to submit. Please try again."),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!venue?.ownerId) return toast.error("Venue not found");
-    // Append any custom field values to the message
     const customParts = Object.entries(customFieldValues)
       .filter(([, v]) => v.trim())
       .map(([k, v]) => `${k}: ${v}`);
@@ -110,8 +109,8 @@ export default function LeadForm() {
   };
 
   if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f8f5f0]">
-      <div className="text-2xl italic animate-pulse text-gray-400">Loading…</div>
+    <div className={isEmbed ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center bg-[#f8f5f0]"}>
+      <div className="text-xl italic animate-pulse text-gray-400">Loading…</div>
     </div>
   );
 
@@ -125,12 +124,11 @@ export default function LeadForm() {
   const fontFamily   = FONT_MAP[formFont] ?? FONT_MAP.inter;
   const textOnPrimary = isLight(primaryColor) ? "#1a1a1a" : "#ffffff";
   const galleryPhotoHeight = (venue as any)?.galleryPhotoHeight ?? 128;
+  const successMsg   = (venue as any)?.formSuccessMessage || "Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.";
 
-  // Parse gallery images
   let galleryImages: string[] = [];
   try { galleryImages = JSON.parse((venue as any)?.formGalleryImages ?? '[]') || []; } catch {}
 
-  // Parse form fields
   let fields: FormFieldDef[] = DEFAULT_FORM_FIELDS;
   try {
     const parsed = JSON.parse((venue as any)?.customFormFields ?? '');
@@ -138,7 +136,6 @@ export default function LeadForm() {
   } catch {}
   const visibleFields = fields.filter(f => f.visible);
 
-  // Group fields into sections: details (firstName..company), event (eventType..budget), source, message, custom
   const detailIds = new Set(['firstName', 'lastName', 'email', 'phone', 'company']);
   const eventIds = new Set(['eventType', 'eventDate', 'guestCount', 'budget']);
   const detailFields = visibleFields.filter(f => detailIds.has(f.id));
@@ -148,6 +145,9 @@ export default function LeadForm() {
   const customFields = visibleFields.filter(f => !f.isDefault);
 
   const inputClass = "rounded-sm border border-gray-200 focus-visible:ring-1 focus-visible:ring-offset-0 text-sm bg-white";
+  const labelClass = isEmbed
+    ? "font-semibold text-[10px] tracking-wider block mb-1 text-gray-500 uppercase"
+    : "font-bold text-xs tracking-widest block mb-1 text-gray-500";
 
   function renderField(field: FormFieldDef, isCustom = false) {
     const value = isCustom ? (customFieldValues[field.label] ?? '') : (form[field.id] ?? '');
@@ -183,7 +183,7 @@ export default function LeadForm() {
       return (
         <Textarea value={value} onChange={onChange} required={field.required}
           placeholder="Any additional details about your event, special requirements, dietary needs, etc."
-          rows={4} className={`${inputClass} resize-none`} />
+          rows={isEmbed ? 3 : 4} className={`${inputClass} resize-none`} />
       );
     }
     return (
@@ -199,53 +199,151 @@ export default function LeadForm() {
     );
   }
 
-  return (
-    <div className={isEmbed ? "" : "min-h-screen"} style={{ backgroundColor: "#f8f5f0", fontFamily }}>
+  /* ── EMBED MODE ────────────────────────────────────────────────────── */
+  if (isEmbed) {
+    return (
+      <div style={{ fontFamily, backgroundColor: "transparent" }} className="w-full">
 
-      {/* ── Venue Header (hidden in embed mode) ──────────────────── */}
-      {!isEmbed && (
-        <>
-          <div style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
-            <div className="max-w-2xl mx-auto px-6 py-12 text-center">
-              {/* Logo */}
-              <div className="flex items-center justify-center mb-5">
-                {logoUrl ? (
-                  <img src={logoUrl} alt={venueName}
-                    style={{ height: `${Math.round(logoScale * 0.64)}px`, width: 'auto', objectFit: 'contain', maxWidth: '80%', ...(isLight(primaryColor) ? {} : { filter: 'brightness(0) invert(1)' }) }} />
-                ) : (
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold"
-                    style={{ backgroundColor: `${textOnPrimary}22`, color: textOnPrimary }}>
-                    {venueName.charAt(0).toUpperCase()}
+        {/* Compact embed header — logo + title only */}
+        {(logoUrl || formTitle) && (
+          <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
+            {logoUrl && (
+              <img src={logoUrl} alt={venueName}
+                style={{ height: `${Math.round(logoScale * 0.32)}px`, width: 'auto', objectFit: 'contain', maxWidth: '80px' }} />
+            )}
+            <div>
+              <div className="font-bold text-sm text-gray-800">{formTitle}</div>
+              {formSubtitle && <div className="text-xs text-gray-400 mt-0.5 leading-snug">{formSubtitle}</div>}
+            </div>
+          </div>
+        )}
+
+        {submitted ? (
+          <div className="text-center py-8">
+            <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: primaryColor }} />
+            <p className="font-semibold text-gray-800 text-sm mb-1">Enquiry Received!</p>
+            <p className="text-xs text-gray-400">{successMsg.replace('{venueName}', venueName)}</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-0">
+
+            {/* All fields in a single flat form — no cards */}
+            <div className="space-y-3">
+
+              {/* Personal details */}
+              {detailFields.length > 0 && (
+                <>
+                  <div className="text-[9px] font-bold tracking-widest text-gray-300 uppercase pt-1">Your Details</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {detailFields.map(field => (
+                      <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
+                        <label className={labelClass}>{field.label}{field.required && ' *'}</label>
+                        {renderField(field)}
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
-              {/* Decorative rule */}
-              <div className="flex items-center gap-3 justify-center mb-6">
-                <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
-                <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: `${textOnPrimary}88` }} />
-                <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
-              </div>
-              <div className="text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: textOnPrimary }}>{venueName}</div>
-              <h1 className="text-xl italic mb-3" style={{ color: `${textOnPrimary}cc` }}>{formTitle}</h1>
-              <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}99` }}>{formSubtitle}</p>
-              {/* Venue contact info */}
-              {(venue?.city || venue?.phone || venue?.email) && (
-                <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
-                  {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
-                  {venue.phone && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Phone className="w-3 h-3" /> {venue.phone}</div>}
-                  {venue.email && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Mail className="w-3 h-3" /> {venue.email}</div>}
+                </>
+              )}
+
+              {/* Event details */}
+              {eventFields.length > 0 && (
+                <>
+                  <div className="text-[9px] font-bold tracking-widest text-gray-300 uppercase pt-2 border-t border-gray-100 mt-3">Event Details</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {eventFields.map(field => (
+                      <div key={field.id} className={(field.id === 'eventType' || field.id === 'budget') ? 'col-span-2' : ''}>
+                        <label className={labelClass}>{field.label}{field.required && ' *'}</label>
+                        {renderField(field)}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Custom fields */}
+              {customFields.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-gray-100">
+                  {customFields.map(field => (
+                    <div key={field.id}>
+                      <label className={labelClass}>{field.label}{field.required && ' *'}</label>
+                      {renderField(field, true)}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Source */}
+              {sourceField && (
+                <div className="pt-2 border-t border-gray-100">
+                  <label className={labelClass}>{sourceField.label}</label>
+                  {renderField(sourceField)}
+                </div>
+              )}
+
+              {/* Message */}
+              {messageField && (
+                <div>
+                  <label className={labelClass}>{messageField.label}</label>
+                  {renderField(messageField)}
                 </div>
               )}
             </div>
+
+            {/* Submit */}
+            <Button type="submit" disabled={submitLead.isPending}
+              className="w-full font-bold tracking-widest rounded-sm h-11 text-sm shadow-sm transition-opacity hover:opacity-90 mt-4"
+              style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
+              {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
+            </Button>
+
+            <p className="text-[10px] text-center text-gray-300 mt-2">
+              By submitting you agree to be contacted by {venueName} regarding your event enquiry.
+            </p>
+          </form>
+        )}
+      </div>
+    );
+  }
+
+  /* ── FULL-PAGE MODE ─────────────────────────────────────────────────── */
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: "#f8f5f0", fontFamily }}>
+
+      {/* Venue Header */}
+      <div style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
+        <div className="max-w-2xl mx-auto px-6 py-12 text-center">
+          <div className="flex items-center justify-center mb-5">
+            {logoUrl ? (
+              <img src={logoUrl} alt={venueName}
+                style={{ height: `${Math.round(logoScale * 0.64)}px`, width: 'auto', objectFit: 'contain', maxWidth: '80%', ...(isLight(primaryColor) ? {} : { filter: 'brightness(0) invert(1)' }) }} />
+            ) : (
+              <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold"
+                style={{ backgroundColor: `${textOnPrimary}22`, color: textOnPrimary }}>
+                {venueName.charAt(0).toUpperCase()}
+              </div>
+            )}
           </div>
+          <div className="flex items-center gap-3 justify-center mb-6">
+            <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
+            <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: `${textOnPrimary}88` }} />
+            <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
+          </div>
+          <div className="text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: textOnPrimary }}>{venueName}</div>
+          <h1 className="text-xl italic mb-3" style={{ color: `${textOnPrimary}cc` }}>{formTitle}</h1>
+          <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}99` }}>{formSubtitle}</p>
+          {(venue?.city || venue?.phone || venue?.email) && (
+            <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
+              {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
+              {venue.phone && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Phone className="w-3 h-3" /> {venue.phone}</div>}
+              {venue.email && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Mail className="w-3 h-3" /> {venue.email}</div>}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="h-1" style={{ backgroundColor: `${primaryColor}66` }} />
 
-          {/* Accent band */}
-          <div className="h-1" style={{ backgroundColor: `${primaryColor}66` }} />
-        </>
-      )}
-
-      {/* ── Gallery strip ─────────────────────────────────────── */}
-      {!isEmbed && galleryImages.length > 0 && (
+      {/* Gallery strip */}
+      {galleryImages.length > 0 && (
         <div className="w-full overflow-x-auto flex gap-2 px-4 py-3 bg-white border-b border-gray-100">
           {galleryImages.map((img, i) => (
             <img key={i} src={img} alt={`Venue ${i + 1}`}
@@ -261,9 +359,9 @@ export default function LeadForm() {
             <CheckCircle className="w-16 h-16 mx-auto mb-5" style={{ color: primaryColor }} />
             <h2 className="text-3xl font-bold mb-3 text-gray-800">Enquiry Received!</h2>
             <p className="text-gray-500 mb-2">
-              Thank you for your enquiry. The team at <strong className="text-gray-800">{venueName}</strong> will be in touch within 24 hours.
+              {successMsg.replace('{venueName}', venueName)}
             </p>
-            <p className="text-sm text-gray-400">A confirmation has been noted. Please check your email for updates.</p>
+            <p className="text-sm text-gray-400">Please check your email for updates.</p>
             <div className="mt-8 pt-6 border-t border-dashed border-gray-200">
               <div className="font-bold text-xs tracking-widest text-gray-400">POWERED BY VenueFlowHQ</div>
             </div>
@@ -271,7 +369,6 @@ export default function LeadForm() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
 
-            {/* Personal Details */}
             {detailFields.length > 0 && (
               <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
                 <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">YOUR DETAILS</h2>
@@ -288,7 +385,6 @@ export default function LeadForm() {
               </div>
             )}
 
-            {/* Event Details */}
             {eventFields.length > 0 && (
               <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
                 <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">EVENT DETAILS</h2>
@@ -305,7 +401,6 @@ export default function LeadForm() {
               </div>
             )}
 
-            {/* Custom fields */}
             {customFields.length > 0 && (
               <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
                 <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">ADDITIONAL INFORMATION</h2>
@@ -322,7 +417,6 @@ export default function LeadForm() {
               </div>
             )}
 
-            {/* How did you hear */}
             {sourceField && (
               <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
                 <h2 className="font-bold text-xs tracking-widest mb-3 text-gray-400">{sourceField.label.toUpperCase()}</h2>
@@ -330,7 +424,6 @@ export default function LeadForm() {
               </div>
             )}
 
-            {/* Message */}
             {messageField && (
               <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
                 <h2 className="font-bold text-xs tracking-widest mb-3 text-gray-400">{messageField.label.toUpperCase()}</h2>
@@ -338,7 +431,6 @@ export default function LeadForm() {
               </div>
             )}
 
-            {/* Submit */}
             <Button type="submit" disabled={submitLead.isPending}
               className="w-full font-bold tracking-widest rounded-sm h-14 text-base shadow-sm transition-opacity hover:opacity-90"
               style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
@@ -352,10 +444,9 @@ export default function LeadForm() {
         )}
       </div>
 
-      {/* Footer */}
-      <div className="py-8 text-center mt-4 bg-gray-800 border-t border-gray-700">
+      <div className="py-6 text-center mt-4 bg-gray-800 border-t border-gray-700">
         <div className="font-bold text-xs tracking-widest text-gray-500">POWERED BY VenueFlowHQ · EVENT CRM FOR NEW ZEALAND VENUES</div>
-        <div className="mt-3">
+        <div className="mt-2">
           <Link href="/dashboard">
             <span className="text-xs cursor-pointer transition-colors text-gray-600 hover:text-gray-400">Venue owner? Sign in →</span>
           </Link>

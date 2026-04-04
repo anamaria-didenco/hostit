@@ -937,6 +937,10 @@ export default function Dashboard() {
     onSuccess: () => { refetchSettings(); toast.success("Settings saved!"); },
     onError: (err) => toast.error(err.message || "Failed to save settings"),
   });
+  const testEmailMutation = trpc.venue.testEmail.useMutation({
+    onSuccess: () => toast.success("Test email sent! Check your inbox."),
+    onError: (err) => toast.error(err.message || "Failed to send test email"),
+  });
   const createSpace = trpc.spaces.create.useMutation({
     onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
   });
@@ -3766,11 +3770,21 @@ export default function Dashboard() {
                       className="w-4 h-4 accent-forest" />
                     <label htmlFor="smtpSecure" className="font-dm text-sm text-ink">Use SSL (port 465) — leave unchecked for STARTTLS (port 587)</label>
                   </div>
-                  <div className="md:col-span-2">
+                  <div className="md:col-span-2 flex flex-wrap items-center gap-3">
                     <button type="submit" disabled={updateSettings.isPending}
                       className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
                       {updateSettings.isPending ? "SAVING..." : "SAVE EMAIL SETTINGS"}
                     </button>
+                    <button type="button" disabled={testEmailMutation.isPending}
+                      onClick={() => {
+                        const email = venueSettings?.notificationEmail || venueSettings?.smtpUser;
+                        if (!email) { toast.error("Set a Notification Email in Venue Settings first"); return; }
+                        testEmailMutation.mutate({ toEmail: email });
+                      }}
+                      className="font-bebas tracking-widest text-sm px-6 py-3 border border-gold/40 text-ink hover:bg-gold/10 transition-colors disabled:opacity-50">
+                      {testEmailMutation.isPending ? "SENDING..." : "SEND TEST EMAIL"}
+                    </button>
+                    <p className="font-dm text-xs text-sage/60 w-full md:w-auto">Test sends to your notification email address.</p>
                   </div>
                 </form>
               </div>
@@ -3963,7 +3977,7 @@ export default function Dashboard() {
                 {/* Iframe embed code */}
                 {venueSettings?.slug && (() => {
                   const embedUrl = `${window.location.origin}/enquire/${venueSettings.slug}?embed=1`;
-                  const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="100%"\n  height="700"\n  frameborder="0"\n  style="border:none; border-radius:12px;"\n  title="Event Enquiry Form"\n></iframe>`;
+                  const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="100%"\n  height="580"\n  frameborder="0"\n  style="border:none;"\n  title="Event Enquiry Form"\n></iframe>`;
                   return (
                     <div className="mb-6 bg-sage-tint border border-sage-green/20 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-2">
