@@ -149,9 +149,11 @@ export default function LeadForm() {
   const messageField = visibleFields.find(f => f.id === 'message');
   const customFields = visibleFields.filter(f => !f.isDefault);
 
-  const inputClass = "rounded-sm border border-gray-200 focus-visible:ring-1 focus-visible:ring-offset-0 text-sm bg-white";
+  const inputClass = isEmbed
+    ? "rounded-sm border border-gray-200 focus-visible:ring-1 focus-visible:ring-offset-0 text-xs bg-white h-7 px-2"
+    : "rounded-sm border border-gray-200 focus-visible:ring-1 focus-visible:ring-offset-0 text-sm bg-white";
   const labelClass = isEmbed
-    ? "font-semibold text-[10px] tracking-wider block mb-1 text-gray-500 uppercase"
+    ? "font-semibold text-[9px] tracking-wider block mb-0.5 text-gray-400 uppercase"
     : "font-bold text-xs tracking-widest block mb-1 text-gray-500";
 
   function renderField(field: FormFieldDef, isCustom = false) {
@@ -163,7 +165,7 @@ export default function LeadForm() {
     if (field.id === 'eventType') {
       return (
         <Select value={form.eventType ?? ''} onValueChange={v => setForm(p => ({ ...p, eventType: v }))}>
-          <SelectTrigger className="rounded-sm border border-gray-200 focus:ring-1 text-sm bg-white">
+          <SelectTrigger className={`rounded-sm border border-gray-200 focus:ring-1 bg-white ${isEmbed ? 'text-xs h-7 px-2' : 'text-sm'}`}>
             <SelectValue placeholder="Select event type…" />
           </SelectTrigger>
           <SelectContent>
@@ -175,7 +177,7 @@ export default function LeadForm() {
     if (field.id === 'source') {
       return (
         <Select value={form.source ?? ''} onValueChange={v => setForm(p => ({ ...p, source: v }))}>
-          <SelectTrigger className="rounded-sm border border-gray-200 focus:ring-1 text-sm bg-white">
+          <SelectTrigger className={`rounded-sm border border-gray-200 focus:ring-1 bg-white ${isEmbed ? 'text-xs h-7 px-2' : 'text-sm'}`}>
             <SelectValue placeholder="Select an option…" />
           </SelectTrigger>
           <SelectContent>
@@ -187,8 +189,8 @@ export default function LeadForm() {
     if (field.type === 'textarea') {
       return (
         <Textarea value={value} onChange={onChange} required={field.required}
-          placeholder="Any additional details about your event, special requirements, dietary needs, etc."
-          rows={isEmbed ? 3 : 4} className={`${inputClass} resize-none`} />
+          placeholder="Any additional details…"
+          rows={isEmbed ? 2 : 4} className={`${inputClass} resize-none ${isEmbed ? 'text-xs py-1 px-2' : ''}`} />
       );
     }
     return (
@@ -206,103 +208,57 @@ export default function LeadForm() {
 
   /* ── EMBED MODE ────────────────────────────────────────────────────── */
   if (isEmbed) {
+    // Flatten all fields into one unified 2-column grid
+    const allEmbedFields = [
+      ...detailFields,
+      ...eventFields,
+      ...customFields,
+      ...(sourceField ? [sourceField] : []),
+      ...(messageField ? [messageField] : []),
+    ];
+
+    const fullWidthIds = new Set(['company', 'eventType', 'budget', 'source', 'message']);
+
     return (
       <div style={{ fontFamily, backgroundColor: "transparent" }} className="w-full">
 
-        {/* Compact embed header — logo + title only */}
+        {/* Minimal header — logo + title on one line */}
         {(logoUrl || formTitle) && (
-          <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
             {logoUrl && (
               <img src={logoUrl} alt={venueName}
-                style={{ height: `${Math.round(logoScale * 0.32)}px`, width: 'auto', objectFit: 'contain', maxWidth: '80px' }} />
+                style={{ height: `${Math.round(logoScale * 0.26)}px`, width: 'auto', objectFit: 'contain', maxWidth: '60px' }} />
             )}
-            <div>
-              <div className="font-bold text-sm text-gray-800">{formTitle}</div>
-              {formSubtitle && <div className="text-xs text-gray-400 mt-0.5 leading-snug">{formSubtitle}</div>}
-            </div>
+            <div className="font-bold text-xs text-gray-700 leading-tight">{formTitle}</div>
           </div>
         )}
 
         {submitted ? (
-          <div className="text-center py-8">
-            <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: primaryColor }} />
-            <p className="font-semibold text-gray-800 text-sm mb-1">Enquiry Received!</p>
-            <p className="text-xs text-gray-400">{successMsg.replace('{venueName}', venueName)}</p>
+          <div className="text-center py-6">
+            <CheckCircle className="w-8 h-8 mx-auto mb-2" style={{ color: formButtonColor }} />
+            <p className="font-semibold text-gray-800 text-xs mb-1">Enquiry Received!</p>
+            <p className="text-[11px] text-gray-400 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-0">
-
-            {/* All fields in a single flat form — no cards */}
-            <div className="space-y-3">
-
-              {/* Personal details */}
-              {detailFields.length > 0 && (
-                <>
-                  <div className="text-[9px] font-bold tracking-widest text-gray-300 uppercase pt-1">Your Details</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {detailFields.map(field => (
-                      <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
-                        <label className={labelClass}>{field.label}{field.required && ' *'}</label>
-                        {renderField(field)}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Event details */}
-              {eventFields.length > 0 && (
-                <>
-                  <div className="text-[9px] font-bold tracking-widest text-gray-300 uppercase pt-2 border-t border-gray-100 mt-3">Event Details</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {eventFields.map(field => (
-                      <div key={field.id} className={(field.id === 'eventType' || field.id === 'budget') ? 'col-span-2' : ''}>
-                        <label className={labelClass}>{field.label}{field.required && ' *'}</label>
-                        {renderField(field)}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Custom fields */}
-              {customFields.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-gray-100">
-                  {customFields.map(field => (
-                    <div key={field.id}>
-                      <label className={labelClass}>{field.label}{field.required && ' *'}</label>
-                      {renderField(field, true)}
-                    </div>
-                  ))}
+          <form onSubmit={handleSubmit}>
+            {/* Unified compact 2-column grid — no section headers */}
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
+              {allEmbedFields.map(field => (
+                <div key={field.id} className={fullWidthIds.has(field.id) || !field.isDefault ? 'col-span-2' : ''}>
+                  <label className={labelClass}>{field.label}{field.required && ' *'}</label>
+                  {renderField(field, !field.isDefault)}
                 </div>
-              )}
-
-              {/* Source */}
-              {sourceField && (
-                <div className="pt-2 border-t border-gray-100">
-                  <label className={labelClass}>{sourceField.label}</label>
-                  {renderField(sourceField)}
-                </div>
-              )}
-
-              {/* Message */}
-              {messageField && (
-                <div>
-                  <label className={labelClass}>{messageField.label}</label>
-                  {renderField(messageField)}
-                </div>
-              )}
+              ))}
             </div>
 
-            {/* Submit */}
             <Button type="submit" disabled={submitLead.isPending}
-              className="w-full font-bold tracking-widest rounded-sm h-11 text-sm shadow-sm transition-opacity hover:opacity-90 mt-4"
+              className="w-full font-bold tracking-widest rounded-sm h-8 text-xs shadow-sm transition-opacity hover:opacity-90 mt-3"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
               {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
             </Button>
 
-            <p className="text-[10px] text-center text-gray-300 mt-2">
-              By submitting you agree to be contacted by {venueName} regarding your event enquiry.
+            <p className="text-[9px] text-center text-gray-300 mt-1.5">
+              By submitting you agree to be contacted by {venueName}.
             </p>
           </form>
         )}

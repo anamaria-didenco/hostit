@@ -4073,7 +4073,7 @@ export default function Dashboard() {
                 {/* Iframe embed code */}
                 {venueSettings?.slug && (() => {
                   const embedUrl = `${window.location.origin}/enquire/${venueSettings.slug}?embed=1`;
-                  const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="100%"\n  height="580"\n  frameborder="0"\n  style="border:none;"\n  title="Event Enquiry Form"\n></iframe>`;
+                  const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="100%"\n  height="440"\n  frameborder="0"\n  style="border:none;"\n  title="Event Enquiry Form"\n></iframe>`;
                   return (
                     <div className="mb-6 bg-sage-tint border border-sage-green/20 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-2">
