@@ -394,23 +394,13 @@ export const appRouter = router({
     </div>
   </div>
 </div>`;
-              // Send FROM the enquirer's address so the barfranco mail server
-              // sees it as a normal inbound email (avoids self-send spam filtering).
-              // The SMTP auth credentials still handle actual delivery.
-              const enquirerFrom = input.email
-                ? `"${clientName || input.email}" <${input.email}>`
-                : `"${fromName}" <${fromEmail}>`;
               await transporter.sendMail({
-                from: enquirerFrom,
-                sender: fromEmail,   // actual sending identity for the SMTP envelope
+                from: `"${fromName}" <${fromEmail}>`,
                 replyTo: input.email || fromEmail,
                 to: vs.notificationEmail,
-                subject: `New event enquiry: ${clientName}${vs.name ? ' → ' + vs.name : ''}`,
+                subject: `New Event Enquiry: ${clientName}`,
                 html,
                 text: `New Enquiry from ${clientName}\nEmail: ${input.email}\n${input.phone ? 'Phone: ' + input.phone + '\n' : ''}${input.eventType ? 'Event type: ' + input.eventType + '\n' : ''}${input.eventDate ? 'Event date: ' + input.eventDate + '\n' : ''}${input.guestCount ? 'Guests: ' + input.guestCount + '\n' : ''}${input.message ? 'Message: ' + input.message : ''}`,
-                headers: {
-                  'X-VenueFlow': 'enquiry-notification',
-                },
               });
               console.log(`[LeadSubmit] Notification email sent to ${vs.notificationEmail}`);
             } else {

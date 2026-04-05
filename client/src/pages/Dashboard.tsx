@@ -3776,8 +3776,48 @@ export default function Dashboard() {
               <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Email</h1>
               {/* Email / SMTP Settings */}
               <div className="border-gold/20">
-                <h2 className="font-cormorant text-xl font-semibold text-ink mb-1">Email Settings</h2>
-                <p className="font-dm text-xs text-sage mb-4">Configure your SMTP server to send emails directly from the leads inbox. Use Gmail, Outlook, or any SMTP provider.</p>
+                <h2 className="font-cormorant text-xl font-semibold text-ink mb-1">Email Notifications</h2>
+                <p className="font-dm text-xs text-sage mb-4">When a new enquiry is submitted, VenueFlow emails you the details. Configure SMTP below so it can send on your behalf.</p>
+
+                {/* Config status */}
+                {(() => {
+                  const missing = [];
+                  if (!venueSettings?.smtpHost) missing.push('SMTP Host');
+                  if (!venueSettings?.smtpUser) missing.push('Username');
+                  if (!venueSettings?.smtpPass) missing.push('Password');
+                  if (!venueSettings?.notificationEmail) missing.push('Notification Email (in Venue tab)');
+                  const allGood = missing.length === 0;
+                  return (
+                    <div className={`flex items-start gap-3 p-3 mb-5 rounded border ${allGood ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${allGood ? 'bg-green-500' : 'bg-amber-400'}`} />
+                      <div>
+                        <p className={`font-dm text-sm font-medium ${allGood ? 'text-green-800' : 'text-amber-800'}`}>
+                          {allGood ? 'Email notifications are configured' : 'Email notifications not yet configured'}
+                        </p>
+                        {!allGood && <p className="font-dm text-xs text-amber-700 mt-0.5">Missing: {missing.join(', ')}</p>}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Google Workspace recommended setup */}
+                <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-5">
+                  <p className="font-dm text-sm font-semibold text-blue-900 mb-1">📧 Recommended: Google Workspace / Gmail</p>
+                  <p className="font-dm text-xs text-blue-800 mb-3">Since <strong>barfranco.nz</strong> uses Google Workspace, sending through Google's servers guarantees delivery to your inbox — no spam filtering.</p>
+                  <ol className="font-dm text-xs text-blue-800 space-y-1.5 list-decimal list-inside">
+                    <li>Go to <strong>myaccount.google.com</strong> → Security → 2-Step Verification (enable if not already on)</li>
+                    <li>Search for <strong>"App passwords"</strong> on that page → Create one called "VenueFlow"</li>
+                    <li>Copy the 16-character password Google gives you</li>
+                    <li>Fill in the fields below using the values in the grey box, paste the App Password in the password field</li>
+                  </ol>
+                  <div className="mt-3 bg-blue-100 rounded p-3 font-mono text-xs text-blue-900 space-y-1">
+                    <div><span className="text-blue-600">SMTP Host:</span> smtp.gmail.com</div>
+                    <div><span className="text-blue-600">Port:</span> 587</div>
+                    <div><span className="text-blue-600">Username:</span> anamaria@barfranco.nz</div>
+                    <div><span className="text-blue-600">Password:</span> [16-char App Password from Google]</div>
+                  </div>
+                </div>
+
                 <form onSubmit={e => {
                   e.preventDefault();
                   const fd = new FormData(e.currentTarget);
@@ -3802,29 +3842,29 @@ export default function Dashboard() {
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP USERNAME / EMAIL</label>
-                    <Input name="smtpUser" defaultValue={venueSettings?.smtpUser ?? ''} placeholder="you@gmail.com"
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">USERNAME (your Google Workspace email)</label>
+                    <Input name="smtpUser" defaultValue={venueSettings?.smtpUser ?? ''} placeholder="anamaria@barfranco.nz"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SMTP PASSWORD / APP PASSWORD</label>
-                    <Input name="smtpPass" type="password" defaultValue={venueSettings?.smtpPass ?? ''} placeholder="••••••••••••"
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PASSWORD (Google App Password — 16 chars)</label>
+                    <Input name="smtpPass" type="password" defaultValue={venueSettings?.smtpPass ?? ''} placeholder="xxxx xxxx xxxx xxxx"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM NAME</label>
-                    <Input name="smtpFromName" defaultValue={venueSettings?.smtpFromName ?? ''} placeholder="The Grand Hall"
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM NAME (shown in inbox)</label>
+                    <Input name="smtpFromName" defaultValue={venueSettings?.smtpFromName ?? ''} placeholder="Bar Franco Events"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM EMAIL ADDRESS</label>
-                    <Input name="smtpFromEmail" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="events@yourvenue.co.nz"
+                    <Input name="smtpFromEmail" defaultValue={venueSettings?.smtpFromEmail ?? ''} placeholder="anamaria@barfranco.nz"
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                   </div>
                   <div className="md:col-span-2 flex items-center gap-3">
                     <input type="checkbox" name="smtpSecure" id="smtpSecure" defaultChecked={(venueSettings?.smtpSecure ?? 0) === 1}
                       className="w-4 h-4 accent-forest" />
-                    <label htmlFor="smtpSecure" className="font-dm text-sm text-ink">Use SSL (port 465) — leave unchecked for STARTTLS (port 587)</label>
+                    <label htmlFor="smtpSecure" className="font-dm text-sm text-ink">Use SSL (port 465) — leave unchecked for STARTTLS (port 587, recommended for Gmail)</label>
                   </div>
                   <div className="md:col-span-2 flex flex-wrap items-center gap-3">
                     <button type="submit" disabled={updateSettings.isPending}
@@ -3840,7 +3880,7 @@ export default function Dashboard() {
                       className="font-bebas tracking-widest text-sm px-6 py-3 border border-gold/40 text-ink hover:bg-gold/10 transition-colors disabled:opacity-50">
                       {testEmailMutation.isPending ? "SENDING..." : "SEND TEST EMAIL"}
                     </button>
-                    <p className="font-dm text-xs text-sage/60 w-full md:w-auto">Test sends to your notification email address.</p>
+                    <p className="font-dm text-xs text-sage/60 w-full md:w-auto">Save first, then send a test to confirm delivery.</p>
                   </div>
                 </form>
               </div>
