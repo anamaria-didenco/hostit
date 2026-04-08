@@ -631,7 +631,7 @@ export default function Dashboard() {
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
   const [leadSortBy, setLeadSortBy] = useState<"enquiry_date"|"event_date"|"status">("enquiry_date");
   const [leadSortDir, setLeadSortDir] = useState<"desc"|"asc">("desc");
-  const [leadDateFilter, setLeadDateFilter] = useState<"all"|"today"|"weekend"|"month"|"year"|"custom">("all");
+  const [leadDateFilter, setLeadDateFilter] = useState<"all"|"future"|"today"|"weekend"|"month"|"year"|"custom">("all");
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
   const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("list");
@@ -1296,6 +1296,10 @@ export default function Dashboard() {
     return list.filter((l: any) => {
       const d = l.eventDate ? new Date(l.eventDate) : null;
       if (!d) return false;
+      if (leadDateFilter === "future") {
+        const today = new Date(); today.setHours(0,0,0,0);
+        return d >= today;
+      }
       if (leadDateFilter === "today") {
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
       }
@@ -1853,6 +1857,7 @@ export default function Dashboard() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="font-inter text-xs">All Time</SelectItem>
+                      <SelectItem value="future" className="font-inter text-xs">Future Events Only</SelectItem>
                       <SelectItem value="today" className="font-inter text-xs">Today</SelectItem>
                       <SelectItem value="weekend" className="font-inter text-xs">This Weekend</SelectItem>
                       <SelectItem value="month" className="font-inter text-xs">This Month</SelectItem>
@@ -2003,34 +2008,51 @@ export default function Dashboard() {
                         </label>
                       )}
                     <button onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                      className={`flex-1 p-4 text-left hover:bg-linen transition-colors border-l-4 ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5" : ""}`}
+                      className={`flex-1 p-3 text-left hover:bg-linen transition-colors border-l-4 ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5" : ""}`}
                       style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
-                      <div className="flex items-start justify-between mb-1">
-                        <div className="font-cormorant font-semibold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
-                        <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border flex-shrink-0 ml-2 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
-                          {pipelineStages.find(s => s.key === lead.status)?.label ?? lead.status.replace(/_/g, " ").toUpperCase()}
+                      <div className="flex items-start gap-3">
+                        {/* Left: name + contact */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                            <div className="font-cormorant font-semibold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
+                            <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
+                              {pipelineStages.find(s => s.key === lead.status)?.label ?? lead.status.replace(/_/g, " ").toUpperCase()}
+                            </div>
+                          </div>
+                          <div className="font-dm text-xs text-ink/55 truncate">{lead.email}{lead.phone ? ` · ${lead.phone}` : ""}</div>
+                          <div className="font-dm text-xs text-ink/50 mt-0.5">
+                            {lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}
+                          </div>
                         </div>
-                      </div>
-                      <div className="font-dm text-xs text-ink/60 truncate">{lead.email}</div>
-                      <div className="font-dm text-xs text-ink/60 mt-0.5">
-                        {lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="font-dm text-xs text-ink/50">{new Date(lead.createdAt).toLocaleDateString("en-NZ")}</span>
-                        {lead.followUpDate && (() => {
-                          const d = new Date(lead.followUpDate);
-                          const overdue = d <= new Date() && !['booked','lost','cancelled'].includes(lead.status);
-                          const upcoming = d > new Date();
-                          if (overdue) return (
-                            <span className="font-bebas text-xs tracking-widest px-1.5 py-0.5 bg-red-100 text-red-700 flex-shrink-0">OVERDUE</span>
-                          );
-                          if (upcoming) return (
-                            <span className="font-bebas text-xs tracking-widest px-1.5 py-0.5 bg-gold/20 text-amber-700 flex-shrink-0">
-                              FOLLOW UP {d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}
-                            </span>
-                          );
-                          return null;
-                        })()}
+                        {/* Right: dates */}
+                        <div className="flex-shrink-0 text-right space-y-1 min-w-[110px]">
+                          {lead.eventDate ? (
+                            <div>
+                              <div className="font-bebas text-[9px] tracking-widest text-sage/60 uppercase">Event Date</div>
+                              <div className="font-dm text-xs font-semibold text-forest">
+                                {new Date(lead.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="font-bebas text-[9px] tracking-widest text-sage/40 uppercase">Event Date</div>
+                              <div className="font-dm text-xs text-ink/30 italic">not set</div>
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-bebas text-[9px] tracking-widest text-sage/60 uppercase">Enquiry</div>
+                            <div className="font-dm text-xs text-ink/50">
+                              {new Date(lead.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </div>
+                          </div>
+                          {lead.followUpDate && (() => {
+                            const d = new Date(lead.followUpDate);
+                            const overdue = d <= new Date() && !['booked','lost','cancelled'].includes(lead.status);
+                            if (overdue) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-red-100 text-red-700 block">OVERDUE</span>;
+                            if (d > new Date()) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-gold/20 text-amber-700 block">FOLLOW UP {d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>;
+                            return null;
+                          })()}
+                        </div>
                       </div>
                     </button>
                       </div>
