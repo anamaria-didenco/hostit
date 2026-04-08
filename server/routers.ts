@@ -371,12 +371,19 @@ export const appRouter = router({
               const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
               const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
               const clientName = [input.firstName, input.lastName].filter(Boolean).join(' ');
+              // Format event date as "Saturday 12 April 2026"
+              const formattedEventDate = input.eventDate
+                ? (() => {
+                    const d = new Date(input.eventDate + 'T00:00:00');
+                    return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                  })()
+                : null;
               const rows = [
                 input.email && `<tr><td style="padding:4px 0;color:#666;font-size:14px;width:130px">Email</td><td style="padding:4px 0;font-size:14px"><a href="mailto:${input.email}">${input.email}</a></td></tr>`,
                 input.phone && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Phone</td><td style="padding:4px 0;font-size:14px">${input.phone}</td></tr>`,
                 input.company && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Company</td><td style="padding:4px 0;font-size:14px">${input.company}</td></tr>`,
                 input.eventType && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event type</td><td style="padding:4px 0;font-size:14px">${input.eventType}</td></tr>`,
-                input.eventDate && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event date</td><td style="padding:4px 0;font-size:14px">${input.eventDate}</td></tr>`,
+                formattedEventDate && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event date</td><td style="padding:4px 0;font-size:14px;font-weight:bold;color:#2D4A3E">${formattedEventDate}</td></tr>`,
                 input.guestCount && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Guests</td><td style="padding:4px 0;font-size:14px">${input.guestCount}</td></tr>`,
                 input.budget && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px">$${input.budget} NZD</td></tr>`,
                 input.message && `<tr><td style="padding:4px 0;color:#666;font-size:14px;vertical-align:top">Message</td><td style="padding:4px 0;font-size:14px">${input.message}</td></tr>`,
@@ -400,7 +407,7 @@ export const appRouter = router({
                 to: vs.notificationEmail,
                 subject: `New Event Enquiry: ${clientName}`,
                 html,
-                text: `New Enquiry from ${clientName}\nEmail: ${input.email}\n${input.phone ? 'Phone: ' + input.phone + '\n' : ''}${input.eventType ? 'Event type: ' + input.eventType + '\n' : ''}${input.eventDate ? 'Event date: ' + input.eventDate + '\n' : ''}${input.guestCount ? 'Guests: ' + input.guestCount + '\n' : ''}${input.message ? 'Message: ' + input.message : ''}`,
+                text: `New Enquiry from ${clientName}\nEmail: ${input.email}\n${input.phone ? 'Phone: ' + input.phone + '\n' : ''}${input.eventType ? 'Event type: ' + input.eventType + '\n' : ''}${formattedEventDate ? 'Event date: ' + formattedEventDate + '\n' : ''}${input.guestCount ? 'Guests: ' + input.guestCount + '\n' : ''}${input.message ? 'Message: ' + input.message : ''}`,
               });
               console.log(`[LeadSubmit] Notification email sent to ${vs.notificationEmail}`);
             } else {

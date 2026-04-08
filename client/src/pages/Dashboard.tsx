@@ -631,7 +631,7 @@ export default function Dashboard() {
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
   const [leadSortBy, setLeadSortBy] = useState<"enquiry_date"|"event_date"|"status">("enquiry_date");
   const [leadSortDir, setLeadSortDir] = useState<"desc"|"asc">("desc");
-  const [leadDateFilter, setLeadDateFilter] = useState<"all"|"month"|"year"|"custom">("all");
+  const [leadDateFilter, setLeadDateFilter] = useState<"all"|"today"|"weekend"|"month"|"year"|"custom">("all");
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
   const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("list");
@@ -899,6 +899,7 @@ export default function Dashboard() {
     onSuccess: () => {
       utils.leads.list.invalidate();
       utils.leads.overdue.invalidate();
+      utils.dashboard.stats.invalidate();
       setSelectedLead(null);
       toast.success("Record deleted");
     },
@@ -1275,7 +1276,10 @@ export default function Dashboard() {
   const CONFIRMED_STATUSES = ['booked', 'confirmed'];
   const allEnquiries = (allLeads ?? []);
   const activeEnquiries = allEnquiries.filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
-  const newEnquiries = activeEnquiries.filter((l: any) => l.status === "new");
+  const newEnquiries = activeEnquiries
+    .filter((l: any) => l.status === "new")
+    .slice()
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const unreadCount = newEnquiries.filter((l: any) => !l.readAt).length;
   const repliedLeads = allEnquiries.filter((l: any) => l.status !== "new");
 
@@ -1292,6 +1296,18 @@ export default function Dashboard() {
     return list.filter((l: any) => {
       const d = l.eventDate ? new Date(l.eventDate) : null;
       if (!d) return false;
+      if (leadDateFilter === "today") {
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      }
+      if (leadDateFilter === "weekend") {
+        // Find the upcoming Saturday and Sunday
+        const dayOfWeek = now.getDay(); // 0=Sun,1=Mon,...,6=Sat
+        const daysToSat = dayOfWeek === 6 ? 0 : (6 - dayOfWeek);
+        const sat = new Date(now); sat.setDate(now.getDate() + daysToSat); sat.setHours(0,0,0,0);
+        const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
+        const dNorm = new Date(d); dNorm.setHours(0,0,0,0);
+        return dNorm.getTime() === sat.getTime() || dNorm.getTime() === sun.getTime();
+      }
       if (leadDateFilter === "month") {
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
       }
@@ -1837,6 +1853,8 @@ export default function Dashboard() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="font-inter text-xs">All Time</SelectItem>
+                      <SelectItem value="today" className="font-inter text-xs">Today</SelectItem>
+                      <SelectItem value="weekend" className="font-inter text-xs">This Weekend</SelectItem>
                       <SelectItem value="month" className="font-inter text-xs">This Month</SelectItem>
                       <SelectItem value="year" className="font-inter text-xs">This Year</SelectItem>
                       <SelectItem value="custom" className="font-inter text-xs">Custom Range</SelectItem>
