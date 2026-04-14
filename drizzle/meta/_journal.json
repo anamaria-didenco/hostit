@@ -133,6 +133,13 @@
       "when": 1776195461943,
       "tag": "0018_fantastic_sway",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1776202203152,
+      "tag": "0019_strange_meteorite",
+      "breakpoints": true
     }
   ]
 }

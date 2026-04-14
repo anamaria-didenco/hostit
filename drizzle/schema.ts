@@ -106,6 +106,7 @@ export const venueSettings = pgTable("venue_settings", {
   nbiApiKey: text("nbiApiKey"),
   nbiVenueId: varchar("nbiVenueId", { length: 100 }),
   nbiSyncEnabled: integer("nbiSyncEnabled").default(0),
+  emailSignature: text("emailSignature"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -860,3 +861,32 @@ export const waitlist = pgTable("waitlist", {
 });
 export type Waitlist = typeof waitlist.$inferSelect;
 export type InsertWaitlist = typeof waitlist.$inferInsert;
+
+// ─── Daily / Standalone Checklists ───────────────────────────────────────────
+export const dailyChecklists = pgTable("daily_checklists", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 50 }).default("general"),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type DailyChecklist = typeof dailyChecklists.$inferSelect;
+
+export const dailyChecklistItems = pgTable("daily_checklist_items", {
+  id: serial("id").primaryKey(),
+  checklistId: integer("checklist_id").notNull(),
+  ownerId: integer("owner_id").notNull(),
+  text: text("text").notNull(),
+  photoUrl: text("photo_url"),
+  note: text("note"),
+  sortOrder: integer("sort_order").default(0),
+  checked: integer("checked").default(0),
+  checkedAt: bigint("checked_at", { mode: "number" }),
+  checkedBy: varchar("checked_by", { length: 255 }),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type DailyChecklistItem = typeof dailyChecklistItems.$inferSelect;

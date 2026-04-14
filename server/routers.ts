@@ -105,6 +105,7 @@ export const appRouter = router({
         nbiApiKey: z.string().optional(),
         nbiVenueId: z.string().optional(),
         nbiSyncEnabled: z.number().optional(),
+        emailSignature: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -388,6 +389,65 @@ export const appRouter = router({
                     return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
                   })()
                 : null;
+
+              // Check for existing bookings/leads on the same event date
+              let existingOnDayHtml = '';
+              if (input.eventDate) {
+                try {
+                  const { bookings: bTable, leads: lTable } = await import('../drizzle/schema');
+                  const { and, gte, lt } = await import('drizzle-orm');
+                  const dayStart = new Date(input.eventDate + 'T00:00:00');
+                  const dayEnd = new Date(input.eventDate + 'T23:59:59');
+                  const [existingBookings, existingLeads] = await Promise.all([
+                    db.select().from(bTable).where(
+                      and(eq(bTable.ownerId, input.ownerId), gte(bTable.eventDate, dayStart), lt(bTable.eventDate, dayEnd))
+                    ),
+                    db.select().from(lTable).where(
+                      and(eq(lTable.ownerId, input.ownerId), gte(lTable.eventDate as any, dayStart), lt(lTable.eventDate as any, dayEnd))
+                    ),
+                  ]);
+                  const statusLabel = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                  const statusColor: Record<string, string> = {
+                    confirmed: '#16a34a', tentative: '#d97706', cancelled: '#dc2626',
+                    new: '#6b7280', contacted: '#3b82f6', booked: '#16a34a',
+                  };
+                  const bookingRows = existingBookings
+                    .filter(b => b.status !== 'cancelled')
+                    .map(b => `<tr style="border-bottom:1px solid #f3f4f6">
+                      <td style="padding:5px 8px;font-size:13px">${b.firstName} ${b.lastName ?? ''}</td>
+                      <td style="padding:5px 8px;font-size:13px">${b.eventType ?? '—'}</td>
+                      <td style="padding:5px 8px;font-size:13px">${b.guestCount ?? '—'} guests</td>
+                      <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[b.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${statusLabel(b.status)}</span></td>
+                    </tr>`);
+                  const leadRows = existingLeads
+                    .filter((l: any) => l.id !== lead.id && !['lost','cancelled'].includes(l.status))
+                    .map((l: any) => `<tr style="border-bottom:1px solid #f3f4f6">
+                      <td style="padding:5px 8px;font-size:13px">${l.firstName} ${l.lastName ?? ''}</td>
+                      <td style="padding:5px 8px;font-size:13px">${l.eventType ?? '—'}</td>
+                      <td style="padding:5px 8px;font-size:13px">${l.guestCount ?? '—'} guests</td>
+                      <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[l.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${statusLabel(l.status)} (enquiry)</span></td>
+                    </tr>`);
+                  const allRows = [...bookingRows, ...leadRows];
+                  if (allRows.length > 0) {
+                    existingOnDayHtml = `
+                    <div style="margin-top:16px;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:12px 14px">
+                      <div style="font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">⚠ You Already Have ${allRows.length} Event${allRows.length > 1 ? 's' : ''} on This Day</div>
+                      <table style="width:100%;border-collapse:collapse">
+                        <thead><tr style="background:#fde68a">
+                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Name</th>
+                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Type</th>
+                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Guests</th>
+                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Status</th>
+                        </tr></thead>
+                        <tbody>${allRows.join('')}</tbody>
+                      </table>
+                    </div>`;
+                  }
+                } catch (checkErr) {
+                  console.warn('[LeadSubmit] Could not check existing bookings:', checkErr);
+                }
+              }
+
               const rows = [
                 input.email && `<tr><td style="padding:4px 0;color:#666;font-size:14px;width:130px">Email</td><td style="padding:4px 0;font-size:14px"><a href="mailto:${input.email}">${input.email}</a></td></tr>`,
                 input.phone && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Phone</td><td style="padding:4px 0;font-size:14px">${input.phone}</td></tr>`,
@@ -406,6 +466,7 @@ export const appRouter = router({
   </div>
   <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
     <table style="width:100%;border-collapse:collapse">${rows}</table>
+    ${existingOnDayHtml}
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid #f3f4f6;font-size:12px;color:#9ca3af">
       This notification was sent by VenueFlowHQ · Log in to your dashboard to respond.
     </div>
@@ -1458,6 +1519,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         subject: z.string().min(1),
         body: z.string().min(1),
         leadId: z.number().optional(),
+        attachments: z.array(z.object({
+          filename: z.string(),
+          content: z.string(),
+          contentType: z.string(),
+        })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1483,12 +1549,27 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const fromName = settings.smtpFromName ?? settings.name ?? 'VenueFlowHQ';
         const fromEmail = settings.smtpFromEmail ?? settings.smtpUser;
 
+        // Build HTML: body + optional signature
+        const bodyHtml = input.body.replace(/\n/g, '<br>');
+        const signatureHtml = (settings as any).emailSignature
+          ? `<br><br><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">${(settings as any).emailSignature}`
+          : '';
+        const fullHtml = `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1a1209">${bodyHtml}${signatureHtml}</div>`;
+
+        // Process attachments (base64 encoded)
+        const attachments = (input.attachments ?? []).map(a => ({
+          filename: a.filename,
+          content: Buffer.from(a.content.split(',').pop() ?? a.content, 'base64'),
+          contentType: a.contentType,
+        }));
+
         await transporter.sendMail({
           from: `"${fromName}" <${fromEmail}>`,
           to: input.toName ? `"${input.toName}" <${input.to}>` : input.to,
           subject: input.subject,
-          html: input.body.replace(/\n/g, '<br>'),
+          html: fullHtml,
           text: input.body,
+          attachments,
         });
 
         // Log as lead activity if leadId provided
@@ -4026,6 +4107,217 @@ Return ONLY valid JSON. Example structure:
         if (!db) throw new Error('DB not available');
         await db.delete(furnitureInventory)
           .where(and(eq(furnitureInventory.id, input.id), eq(furnitureInventory.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Daily / Standalone Checklists ────────────────────────────────────────
+  dailyChecklists: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+      const { eq, asc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      const lists = await db.select().from(dailyChecklists)
+        .where(eq(dailyChecklists.ownerId, ctx.user.id))
+        .orderBy(asc(dailyChecklists.sortOrder), asc(dailyChecklists.createdAt));
+      const itemCounts = await db.select().from(dailyChecklistItems)
+        .where(eq(dailyChecklistItems.ownerId, ctx.user.id));
+      return lists.map(l => ({
+        ...l,
+        itemCount: itemCounts.filter(i => i.checklistId === l.id).length,
+        checkedCount: itemCounts.filter(i => i.checklistId === l.id && i.checked === 1).length,
+      }));
+    }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [checklist] = await db.select().from(dailyChecklists)
+          .where(and(eq(dailyChecklists.id, input.id), eq(dailyChecklists.ownerId, ctx.user.id))).limit(1);
+        if (!checklist) return null;
+        const items = await db.select().from(dailyChecklistItems)
+          .where(eq(dailyChecklistItems.checklistId, input.id))
+          .orderBy(asc(dailyChecklistItems.sortOrder));
+        return { ...checklist, items };
+      }),
+
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [checklist] = await db.select().from(dailyChecklists)
+          .where(eq(dailyChecklists.token, input.token)).limit(1);
+        if (!checklist) return null;
+        const items = await db.select().from(dailyChecklistItems)
+          .where(eq(dailyChecklistItems.checklistId, checklist.id))
+          .orderBy(asc(dailyChecklistItems.sortOrder));
+        return { ...checklist, items };
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        category: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists } = await import('../drizzle/schema');
+        const crypto = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const token = crypto.randomBytes(24).toString('hex');
+        const now = Date.now();
+        const [created] = await db.insert(dailyChecklists).values({
+          ownerId: ctx.user.id,
+          name: input.name,
+          description: input.description ?? null,
+          category: input.category ?? 'general',
+          token,
+          sortOrder: 0,
+          createdAt: now,
+          updatedAt: now,
+        }).returning();
+        return created;
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        category: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        await db.update(dailyChecklists).set({ ...rest, updatedAt: Date.now() })
+          .where(and(eq(dailyChecklists.id, id), eq(dailyChecklists.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(dailyChecklistItems).where(eq(dailyChecklistItems.checklistId, input.id));
+        await db.delete(dailyChecklists).where(and(eq(dailyChecklists.id, input.id), eq(dailyChecklists.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    addItem: protectedProcedure
+      .input(z.object({
+        checklistId: z.number(),
+        text: z.string().min(1),
+        note: z.string().optional(),
+        photoUrl: z.string().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklistItems } = await import('../drizzle/schema');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [item] = await db.insert(dailyChecklistItems).values({
+          checklistId: input.checklistId,
+          ownerId: ctx.user.id,
+          text: input.text,
+          note: input.note ?? null,
+          photoUrl: input.photoUrl ?? null,
+          sortOrder: input.sortOrder ?? 0,
+          checked: 0,
+          createdAt: Date.now(),
+        }).returning();
+        return item;
+      }),
+
+    updateItem: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        text: z.string().optional(),
+        note: z.string().optional(),
+        photoUrl: z.string().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...rest } = input;
+        await db.update(dailyChecklistItems).set(rest)
+          .where(and(eq(dailyChecklistItems.id, id), eq(dailyChecklistItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    deleteItem: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(dailyChecklistItems)
+          .where(and(eq(dailyChecklistItems.id, input.id), eq(dailyChecklistItems.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    toggleItemByToken: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        itemId: z.number(),
+        checked: z.boolean(),
+        checkedBy: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
+        if (!cl) throw new Error('Checklist not found');
+        await db.update(dailyChecklistItems).set({
+          checked: input.checked ? 1 : 0,
+          checkedAt: input.checked ? Date.now() : null,
+          checkedBy: input.checkedBy ?? null,
+        }).where(eq(dailyChecklistItems.id, input.itemId));
+        return { success: true };
+      }),
+
+    resetByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
+        if (!cl) throw new Error('Checklist not found');
+        await db.update(dailyChecklistItems).set({ checked: 0, checkedAt: null, checkedBy: null })
+          .where(eq(dailyChecklistItems.checklistId, cl.id));
         return { success: true };
       }),
   }),
