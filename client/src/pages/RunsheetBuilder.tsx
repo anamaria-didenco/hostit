@@ -164,6 +164,11 @@ export default function RunsheetBuilder() {
   const [saving, setSaving] = useState(false);
   const [sheetId, setSheetId] = useState<number | null>(runsheetId);
 
+  // Venue area & event times
+  const [venueArea, setVenueArea] = useState<"" | "bar" | "restaurant" | "full_venue">("");
+  const [eventStartTime, setEventStartTime] = useState("");
+  const [eventEndTime, setEventEndTime] = useState("");
+
   // Contact info
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
@@ -514,9 +519,10 @@ export default function RunsheetBuilder() {
   const [showTimeCol, setShowTimeCol] = useState(true);
   const [showStaffCol, setShowStaffCol] = useState(true);
   const [showPrepPlatingCol, setShowPrepPlatingCol] = useState(true);
+  const [showQtyCol, setShowQtyCol] = useState(true);
 
   // Derived: dynamic grid template for F&B table (header + rows)
-  const fnbGridCols = ['90px', '1fr', '60px', showDietaryCol ? '80px' : null, showTimeCol ? '80px' : null, showStaffCol ? '90px' : null, showPrepPlatingCol ? '1fr' : null, '64px'].filter(Boolean).join(' ');
+  const fnbGridCols = ['90px', '1fr', showQtyCol ? '50px' : null, showDietaryCol ? '80px' : null, showTimeCol ? '80px' : null, showStaffCol ? '90px' : null, showPrepPlatingCol ? '1fr' : null, '64px'].filter(Boolean).join(' ');
 
   // Custom item mode for F&B add form
   const [fnbCustomMode, setFnbCustomMode] = useState(false);
@@ -729,7 +735,11 @@ export default function RunsheetBuilder() {
         if (cols.serviceTime !== undefined) setShowTimeCol(cols.serviceTime);
         if (cols.staff !== undefined) setShowStaffCol(cols.staff);
         if (cols.notes !== undefined) setShowPrepPlatingCol(cols.notes);
+        if (cols.qty !== undefined) setShowQtyCol(cols.qty);
       }
+      setVenueArea((existing as any).venueArea ?? "");
+      setEventStartTime((existing as any).eventStartTime ?? "");
+      setEventEndTime((existing as any).eventEndTime ?? "");
     }
   }, [existing]);
 
@@ -898,9 +908,9 @@ export default function RunsheetBuilder() {
     if (!sheetId) return;
     silentUpdateMutation.mutate({
       id: sheetId,
-      fnbColumns: { dietary: showDietaryCol, serviceTime: showTimeCol, staff: showStaffCol, notes: showPrepPlatingCol },
+      fnbColumns: { dietary: showDietaryCol, serviceTime: showTimeCol, staff: showStaffCol, notes: showPrepPlatingCol, qty: showQtyCol },
     } as any);
-  }, [showDietaryCol, showTimeCol, showStaffCol, showPrepPlatingCol]);
+  }, [showDietaryCol, showTimeCol, showStaffCol, showPrepPlatingCol, showQtyCol]);
 
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
@@ -927,6 +937,9 @@ export default function RunsheetBuilder() {
           eventDate: eventDate || undefined,
           venueName: venueName || undefined,
           spaceName: spaceName || undefined,
+          venueArea: venueArea || undefined,
+          eventStartTime: eventStartTime || undefined,
+          eventEndTime: eventEndTime || undefined,
           guestCount: guestCount ? Number(guestCount) : undefined,
           eventType: eventType || undefined,
           notes: notes || undefined,
@@ -954,6 +967,9 @@ export default function RunsheetBuilder() {
           eventDate: eventDate || null,
           venueName: venueName || undefined,
           spaceName: spaceName || undefined,
+          venueArea: venueArea || undefined,
+          eventStartTime: eventStartTime || null,
+          eventEndTime: eventEndTime || null,
           guestCount: guestCount ? Number(guestCount) : undefined,
           eventType: eventType || undefined,
           notes: notes || undefined,
@@ -1395,6 +1411,51 @@ export default function RunsheetBuilder() {
                   className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{guestCount || "—"}</div>
+              </div>
+            </div>
+            {/* Event time & venue area row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 pt-3 border-t border-gold/20">
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">START TIME</label>
+                <Input
+                  type="time"
+                  value={eventStartTime}
+                  onChange={e => setEventStartTime(e.target.value)}
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                />
+                <div className="hidden print:block font-dm text-sm font-semibold">{eventStartTime || "—"}</div>
+              </div>
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">END TIME</label>
+                <Input
+                  type="time"
+                  value={eventEndTime}
+                  onChange={e => setEventEndTime(e.target.value)}
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                />
+                <div className="hidden print:block font-dm text-sm font-semibold">{eventEndTime || "—"}</div>
+              </div>
+              <div className="md:col-span-2">
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">VENUE AREA</label>
+                <div className="flex gap-1 no-print">
+                  {([
+                    { value: "bar", label: "Bar" },
+                    { value: "restaurant", label: "Restaurant" },
+                    { value: "full_venue", label: "Full Venue" },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setVenueArea(v => v === opt.value ? "" : opt.value)}
+                      className={`flex-1 font-bebas tracking-widest text-xs h-9 border transition-colors ${venueArea === opt.value ? "bg-forest text-cream border-forest" : "border-gold/40 text-ink/50 hover:border-forest/50 hover:text-ink"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="hidden print:block font-dm text-sm font-semibold">
+                  {venueArea === "bar" ? "Bar" : venueArea === "restaurant" ? "Restaurant" : venueArea === "full_venue" ? "Full Venue" : "—"}
+                </div>
               </div>
             </div>
 
@@ -1960,6 +2021,11 @@ export default function RunsheetBuilder() {
               <div className="flex items-center gap-2">
                 {/* Column visibility toggles */}
                 <button
+                  onClick={() => setShowQtyCol(v => !v)}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showQtyCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  title="Toggle Quantity column"
+                >QTY</button>
+                <button
                   onClick={() => setShowDietaryCol(v => !v)}
                   className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDietaryCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
                   title="Toggle Dietary column"
@@ -2289,7 +2355,7 @@ export default function RunsheetBuilder() {
                 <div className="grid gap-2 px-5 py-2.5 text-xs font-bebas tracking-widest text-white bg-gold" style={{ gridTemplateColumns: fnbGridCols }}>
                   <div>COURSE</div>
                   <div>DISH</div>
-                  <div>QTY</div>
+                  {showQtyCol && <div>QTY</div>}
                   {showDietaryCol && <div>DIETARY</div>}
                   {showTimeCol && <div>SERVICE TIME</div>}
                   {showStaffCol && <div>STAFF</div>}
@@ -2337,6 +2403,7 @@ export default function RunsheetBuilder() {
                                     />
                                     {item.description && <div className="text-xs text-ink/40">{item.description}</div>}
                                   </div>
+                                  {showQtyCol && (
                                   <div>
                                     {item.course !== 'Drinks' && item.qty > 1 && (
                                       <input
@@ -2356,6 +2423,7 @@ export default function RunsheetBuilder() {
                                       />
                                     )}
                                   </div>
+                                  )}
                                   {showDietaryCol && (
                                     <div>
                                       {item.dietary && (

@@ -2039,6 +2039,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         eventDate: z.string().optional(),
         venueName: z.string().optional(),
         spaceName: z.string().optional(),
+        venueArea: z.string().optional(),
+        eventStartTime: z.string().optional(),
+        eventEndTime: z.string().optional(),
         guestCount: z.number().optional(),
         eventType: z.string().optional(),
         notes: z.string().optional(),
@@ -2074,6 +2077,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           eventDate: input.eventDate ? new Date(input.eventDate) : null,
           venueName: input.venueName ?? null,
           spaceName: input.spaceName ?? null,
+          venueArea: input.venueArea ?? null,
+          eventStartTime: input.eventStartTime ?? null,
+          eventEndTime: input.eventEndTime ?? null,
           guestCount: input.guestCount ?? null,
           eventType: input.eventType ?? null,
           notes: input.notes ?? null,
@@ -2113,6 +2119,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         eventDate: z.string().optional().nullable(),
         venueName: z.string().optional(),
         spaceName: z.string().optional(),
+        venueArea: z.string().optional(),
+        eventStartTime: z.string().optional().nullable(),
+        eventEndTime: z.string().optional().nullable(),
         guestCount: z.number().optional(),
         eventType: z.string().optional(),
         notes: z.string().optional(),
@@ -2121,7 +2130,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         footerText: z.string().optional(),
         proposalId: z.number().nullable().optional(),
         floorPlanId: z.number().nullable().optional(),
-        fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional() }).optional(),
+        fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional(), qty: z.boolean().optional() }).optional(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -2135,6 +2144,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.title !== undefined) updateData.title = fields.title;
         if (fields.venueName !== undefined) updateData.venueName = fields.venueName;
         if (fields.spaceName !== undefined) updateData.spaceName = fields.spaceName;
+        if (fields.venueArea !== undefined) updateData.venueArea = fields.venueArea;
+        if (fields.eventStartTime !== undefined) updateData.eventStartTime = fields.eventStartTime;
+        if (fields.eventEndTime !== undefined) updateData.eventEndTime = fields.eventEndTime;
         if (fields.guestCount !== undefined) updateData.guestCount = fields.guestCount;
         if (fields.eventType !== undefined) updateData.eventType = fields.eventType;
         if (fields.notes !== undefined) updateData.notes = fields.notes;
