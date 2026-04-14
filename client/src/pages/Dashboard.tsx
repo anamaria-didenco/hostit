@@ -978,6 +978,16 @@ export default function Dashboard() {
     onSuccess: () => toast.success("Test email sent! Check your inbox."),
     onError: (err) => toast.error(err.message || "Failed to send test email"),
   });
+  const verifyNbiMutation = trpc.venue.verifyNbi.useMutation({
+    onSuccess: (data) => {
+      if (data.valid) {
+        toast.success(`Connected to NowBookIt${data.venueName ? ` — ${data.venueName}` : ''}!`);
+      } else {
+        toast.error(`NowBookIt connection failed: ${data.error ?? 'Unknown error'}`);
+      }
+    },
+    onError: (err) => toast.error(err.message || "Failed to verify NowBookIt credentials"),
+  });
   const createSpace = trpc.spaces.create.useMutation({
     onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
   });
@@ -4585,25 +4595,125 @@ export default function Dashboard() {
               )}
 
               {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
-              {settingsSubTab === "integrations" && (
-              <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Integrations</h1>
-              <div className="space-y-4">
-                {[{name:'Google Calendar',desc:'Sync bookings to your Google Calendar automatically.',icon:'📅'},{name:'Xero',desc:'Export invoices and payments to Xero accounting.',icon:'💼'},{name:'Mailchimp',desc:'Add new contacts to your Mailchimp mailing list.',icon:'📧'},{name:'Zapier',desc:'Connect VenueFlowHQ to 5,000+ apps via Zapier webhooks.',icon:'⚡'}].map(i => (
-                  <div key={i.name} className="dante-card p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{i.icon}</span>
-                      <div>
-                        <div className="font-cormorant font-semibold text-base text-ink">{i.name}</div>
-                        <div className="font-dm text-xs text-ink/60">{i.desc}</div>
+              {settingsSubTab === "integrations" && (() => {
+                const nbiConnected = !!(venueSettings as any)?.nbiApiKey && !!(venueSettings as any)?.nbiVenueId;
+                const nbiEnabled = (venueSettings as any)?.nbiSyncEnabled === 1;
+                return (
+                <div className="max-w-3xl mx-auto">
+                <h1 className="font-cormorant text-3xl font-semibold text-ink mb-2">Integrations</h1>
+                <p className="font-dm text-sm text-ink/50 mb-6">Connect VenueFlowHQ with your other tools. When a booking is confirmed, synced integrations update automatically.</p>
+                <div className="space-y-4">
+
+                  {/* ── NowBookIt ── */}
+                  <div className="dante-card overflow-hidden">
+                    <div className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded bg-[#e8f0fb] flex items-center justify-center flex-shrink-0">
+                          <span className="font-bebas text-[#6b98e7] text-sm tracking-wider">NBI</span>
+                        </div>
+                        <div>
+                          <div className="font-cormorant font-semibold text-base text-ink flex items-center gap-2">
+                            NowBookIt
+                            {nbiConnected && nbiEnabled && (
+                              <span className="inline-flex items-center gap-1 font-dm text-[10px] font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />CONNECTED
+                              </span>
+                            )}
+                            {nbiConnected && !nbiEnabled && (
+                              <span className="inline-flex items-center gap-1 font-dm text-[10px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">PAUSED</span>
+                            )}
+                          </div>
+                          <div className="font-dm text-xs text-ink/60">When a booking is confirmed, it's automatically created in your NowBookIt diary so tables can't be double-booked.</div>
+                        </div>
                       </div>
                     </div>
-                    <button onClick={() => toast.info('Integration coming soon')} className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink hover:bg-gold/10">CONNECT</button>
+                    <div className="border-t border-gold/20 bg-cream/40 p-5 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">API KEY</label>
+                          <input
+                            type="password"
+                            id="nbi-api-key"
+                            defaultValue={(venueSettings as any)?.nbiApiKey ?? ''}
+                            placeholder="paste your NowBookIt API key"
+                            className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE ID</label>
+                          <input
+                            type="text"
+                            id="nbi-venue-id"
+                            defaultValue={(venueSettings as any)?.nbiVenueId ?? ''}
+                            placeholder="e.g. 12345"
+                            className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-3 cursor-pointer select-none">
+                          <div
+                            className={`relative w-10 h-5 rounded-full transition-colors ${nbiEnabled ? 'bg-forest' : 'bg-stone-300'}`}
+                            onClick={() => {
+                              const apiKey = (document.getElementById('nbi-api-key') as HTMLInputElement)?.value || (venueSettings as any)?.nbiApiKey || '';
+                              const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value || (venueSettings as any)?.nbiVenueId || '';
+                              if (!apiKey || !venueId) { toast.error('Enter your API Key and Venue ID first'); return; }
+                              updateSettings.mutate({ nbiApiKey: apiKey, nbiVenueId: venueId, nbiSyncEnabled: nbiEnabled ? 0 : 1 });
+                            }}
+                          >
+                            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${nbiEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                          </div>
+                          <span className="font-dm text-sm text-ink">{nbiEnabled ? 'Sync enabled — confirmed bookings push to NowBookIt' : 'Sync disabled'}</span>
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              const apiKey = (document.getElementById('nbi-api-key') as HTMLInputElement)?.value;
+                              const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value;
+                              if (!apiKey || !venueId) { toast.error('Enter your API Key and Venue ID first'); return; }
+                              verifyNbiMutation.mutate({ apiKey, venueId });
+                            }}
+                            disabled={verifyNbiMutation.isPending}
+                            className="font-bebas tracking-widest text-xs px-4 py-2 border border-[#6b98e7] text-[#6b98e7] hover:bg-[#6b98e7]/10 rounded disabled:opacity-50"
+                          >
+                            {verifyNbiMutation.isPending ? 'TESTING…' : 'TEST CONNECTION'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              const apiKey = (document.getElementById('nbi-api-key') as HTMLInputElement)?.value;
+                              const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value;
+                              updateSettings.mutate({ nbiApiKey: apiKey || undefined, nbiVenueId: venueId || undefined });
+                            }}
+                            disabled={updateSettings.isPending}
+                            className="font-bebas tracking-widest text-xs px-4 py-2 bg-forest text-cream hover:bg-forest/90 rounded disabled:opacity-50"
+                          >
+                            {updateSettings.isPending ? 'SAVING…' : 'SAVE'}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200/50 rounded p-3 text-xs font-dm text-ink/60 leading-relaxed">
+                        <strong className="text-ink/80">Where to find these:</strong> Log in to NowBookIt → Settings → API Access. Copy your API Key and Venue ID from there. Once connected, every booking you mark as <em>Confirmed</em> in VenueFlow will appear automatically in your NowBookIt diary.
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
-              </div>
-              )}
+
+                  {/* ── Placeholder integrations ── */}
+                  {[{name:'Google Calendar',desc:'Sync bookings to your Google Calendar automatically.',icon:'📅'},{name:'Xero',desc:'Export invoices and payments to Xero accounting.',icon:'💼'},{name:'Mailchimp',desc:'Add new contacts to your Mailchimp mailing list.',icon:'📧'},{name:'Zapier',desc:'Connect VenueFlowHQ to 5,000+ apps via Zapier webhooks.',icon:'⚡'}].map(i => (
+                    <div key={i.name} className="dante-card p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{i.icon}</span>
+                        <div>
+                          <div className="font-cormorant font-semibold text-base text-ink">{i.name}</div>
+                          <div className="font-dm text-xs text-ink/60">{i.desc}</div>
+                        </div>
+                      </div>
+                      <button onClick={() => toast.info('Integration coming soon')} className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink hover:bg-gold/10">COMING SOON</button>
+                    </div>
+                  ))}
+                </div>
+                </div>
+                );
+              })()}
 
               {/* ── TAXES & FEES SUB-TAB ───────────────────────── */}
               {settingsSubTab === "taxes" && (

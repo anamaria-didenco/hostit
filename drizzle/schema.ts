@@ -103,6 +103,9 @@ export const venueSettings = pgTable("venue_settings", {
   formCardBg: varchar("formCardBg", { length: 20 }).default("#ffffff"),
   formButtonColor: varchar("formButtonColor", { length: 20 }),
   formSuccessMessage: text("formSuccessMessage"),
+  nbiApiKey: text("nbiApiKey"),
+  nbiVenueId: varchar("nbiVenueId", { length: 100 }),
+  nbiSyncEnabled: integer("nbiSyncEnabled").default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -226,6 +229,7 @@ export const bookings = pgTable("bookings", {
   depositPaid: boolean("depositPaid").default(false).notNull(),
   status: bookingStatusEnum("status").default("confirmed").notNull(),
   notes: text("notes"),
+  nbiBookingId: varchar("nbiBookingId", { length: 100 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

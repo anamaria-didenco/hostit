@@ -102,6 +102,9 @@ export const appRouter = router({
         formCardBg: z.string().optional(),
         formButtonColor: z.string().optional(),
         formSuccessMessage: z.string().optional(),
+        nbiApiKey: z.string().optional(),
+        nbiVenueId: z.string().optional(),
+        nbiSyncEnabled: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -190,6 +193,13 @@ export const appRouter = router({
           text: 'Your VenueFlowHQ email notifications are working correctly.',
         });
         return { success: true };
+      }),
+
+    verifyNbi: protectedProcedure
+      .input(z.object({ apiKey: z.string(), venueId: z.string() }))
+      .mutation(async ({ input }) => {
+        const { verifyNbiCredentials } = await import('./nowbookit');
+        return verifyNbiCredentials({ apiKey: input.apiKey, venueId: input.venueId });
       }),
   }),
 
@@ -1145,6 +1155,50 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.status !== undefined) updates.status = rest.status;
         if (rest.notes !== undefined) updates.notes = rest.notes;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        // ── NowBookIt sync ──────────────────────────────────────────────────
+        if (rest.status === 'confirmed') {
+          try {
+            const [updatedBooking] = await db.select().from(bookings)
+              .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+            if (updatedBooking && !updatedBooking.nbiBookingId) {
+              const { venueSettings: vs } = await import('../drizzle/schema');
+              const [venue] = await db.select().from(vs)
+                .where(eq(vs.ownerId, ctx.user.id)).limit(1);
+              if (venue?.nbiApiKey && venue?.nbiVenueId && (venue?.nbiSyncEnabled ?? 0) === 1) {
+                const { createNbiBooking } = await import('./nowbookit');
+                const eventDate = updatedBooking.eventDate ?? new Date();
+                const dateStr = new Date(eventDate).toISOString().slice(0, 10);
+                const timeStr = new Date(eventDate).toTimeString().slice(0, 5);
+                const nbiResult = await createNbiBooking(
+                  { apiKey: venue.nbiApiKey, venueId: venue.nbiVenueId },
+                  {
+                    firstName: updatedBooking.firstName,
+                    lastName: updatedBooking.lastName ?? '',
+                    email: updatedBooking.email ?? '',
+                    phone: (updatedBooking as any).phone ?? '',
+                    date: dateStr,
+                    time: timeStr,
+                    covers: updatedBooking.guestCount ?? 2,
+                    duration: 120,
+                    notes: [updatedBooking.eventType, updatedBooking.spaceName, updatedBooking.notes]
+                      .filter(Boolean).join(' · '),
+                    reference: `VF-${updatedBooking.id}`,
+                  }
+                );
+                if (nbiResult.success && nbiResult.nbiBookingId) {
+                  await db.update(bookings)
+                    .set({ nbiBookingId: nbiResult.nbiBookingId })
+                    .where(eq(bookings.id, id));
+                  console.log(`[NBI] Booking ${id} synced → NBI #${nbiResult.nbiBookingId}`);
+                } else {
+                  console.warn(`[NBI] Sync failed for booking ${id}:`, nbiResult.error);
+                }
+              }
+            }
+          } catch (nbiErr) {
+            console.error('[NBI] Unexpected error during sync:', nbiErr);
+          }
+        }
         return { success: true };
       }),
     byMonth: protectedProcedure
