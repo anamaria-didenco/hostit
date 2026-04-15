@@ -24,6 +24,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getLoginUrl } from "@/const";
+import EventSpendSection from "@/components/EventSpendSection";
 
 function SortableSection({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -531,6 +532,7 @@ export default function RunsheetBuilder() {
   const [fnbCustomMode, setFnbCustomMode] = useState(false);
   const [fnbCustomName, setFnbCustomName] = useState('');
   const [fnbCustomCourse, setFnbCustomCourse] = useState('Other');
+  const [fnbCustomDrinkCat, setFnbCustomDrinkCat] = useState('');
 
   // F&B mutations
   const saveFnbMutation = trpc.fnb.save.useMutation({
@@ -577,9 +579,10 @@ export default function RunsheetBuilder() {
   function addFnbItem() {
     const name = fnbCustomMode ? fnbCustomName.trim() : newFnbItem.dishName?.trim();
     if (!name) { toast.error('Enter a dish name'); return; }
+    const course = fnbCustomMode ? fnbCustomCourse : newFnbItem.course;
     const item: FnbItem = {
       section: 'foh',
-      course: fnbCustomMode ? fnbCustomCourse : newFnbItem.course,
+      course,
       dishName: name,
       qty: newFnbItem.qty ?? 1,
       dietary: newFnbItem.dietary,
@@ -587,10 +590,12 @@ export default function RunsheetBuilder() {
       staffAssigned: newFnbItem.staffAssigned,
       sortOrder: fnbItems.length,
       _tempId: String(Date.now()),
+      ...(course === 'Drinks' && fnbCustomDrinkCat ? { drinkCategory: fnbCustomDrinkCat } : {}),
     };
     setFnbItems(prev => [...prev, item]);
     setNewFnbItem({ section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '' });
     setFnbCustomName('');
+    setFnbCustomDrinkCat('');
     if (fnbCustomMode) setFnbCustomMode(false);
   }
 
@@ -608,6 +613,11 @@ export default function RunsheetBuilder() {
     setFnbItems(prev => prev.map(item =>
       (item.course ?? 'Other') === oldCourse ? { ...item, course: newCourse } : item
     ));
+  }
+
+  function deleteCourse(course: string) {
+    if (!confirm(`Remove all items in "${course}"? This cannot be undone.`)) return;
+    setFnbItems(prev => prev.filter(item => (item.course ?? 'Other') !== course));
   }
 
   // Queries
@@ -656,6 +666,9 @@ export default function RunsheetBuilder() {
       navigate(`/runsheet?${qs}`);
     }
   }, [leadRunsheets, sheetId]);
+
+  // Effective booking ID — from URL param, or from the loaded runsheet record
+  const effectiveBookingId: number | undefined = bookingId ?? (existing as any)?.bookingId ?? undefined;
   // Floor plans
   const { data: floorPlansList } = trpc.floorPlans.list.useQuery(
     {},
@@ -2255,12 +2268,25 @@ export default function RunsheetBuilder() {
                       <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
                       <select
                         value={fnbCustomCourse}
-                        onChange={e => setFnbCustomCourse(e.target.value)}
+                        onChange={e => { setFnbCustomCourse(e.target.value); setFnbCustomDrinkCat(''); }}
                         className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
                       >
                         {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
+                    {fnbCustomCourse === 'Drinks' && (
+                      <div>
+                        <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DRINK CATEGORY</label>
+                        <select
+                          value={fnbCustomDrinkCat}
+                          onChange={e => setFnbCustomDrinkCat(e.target.value)}
+                          className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                        >
+                          <option value="">— select —</option>
+                          {DRINK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DISH NAME *</label>
                       <Input
@@ -2373,9 +2399,114 @@ export default function RunsheetBuilder() {
                   })
                   .map(course => {
                     const isDrinks = course === 'Drinks';
+                    const courseItems = fnbItems
+                      .map((item, originalIdx) => ({ item, originalIdx }))
+                      .filter(({ item }) => (item.course ?? 'Other') === course);
+                    const drinkSubGroups = isDrinks
+                      ? [...new Set(courseItems.map(({ item }) => item.drinkCategory || 'Uncategorised'))]
+                      : null;
+                    const renderRows = (items: typeof courseItems) => items.map(({ item, originalIdx }) => {
+                      const isExpanded = expandedFnbIdx === originalIdx;
+                      return (
+                        <div key={item._tempId ?? originalIdx}>
+                          <div
+                            className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/30 text-sm font-dm group transition-colors ${isDrinks ? 'border-l-4 border-l-blue-300 hover:bg-blue-50/50' : 'border-l-4 border-l-amber-300 hover:bg-amber-50/40'} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : 'bg-amber-50/40') : ''}`}
+                            style={{ gridTemplateColumns: fnbGridCols }}
+                          >
+                            <div className={`text-xs font-bebas tracking-widest ${isDrinks ? 'text-blue-500' : 'text-amber-600'}`}>{isDrinks ? (item.drinkCategory || 'Drink') : item.course}</div>
+                            <div>
+                              <input value={item.dishName} onChange={e => updateFnbItem(originalIdx, 'dishName', e.target.value)} className="w-full font-dm text-sm text-ink bg-transparent border-0 focus:outline-none font-semibold" />
+                              {item.description && <div className="text-xs text-ink/40">{item.description}</div>}
+                            </div>
+                            {showQtyCol && (
+                              <div>
+                                {item.course !== 'Drinks' && item.qty > 1 && (
+                                  <input type="number" min={1} value={item.qty} onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))} className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center" />
+                                )}
+                                {item.course !== 'Drinks' && item.qty <= 1 && (
+                                  <input type="number" min={1} value={item.qty} onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))} className="w-12 font-dm text-sm text-ink/20 bg-transparent border-0 focus:outline-none text-center opacity-0 group-hover:opacity-100 transition-opacity" title="Qty (default 1)" />
+                                )}
+                              </div>
+                            )}
+                            {showDietaryCol && (
+                              <div>{item.dietary && <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>}</div>
+                            )}
+                            {showTimeCol && (
+                              <div>
+                                <input type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none w-full no-print" />
+                                {item.serviceTime && <div className="hidden print:block text-xs text-ink/50 font-dm">{formatTime12(item.serviceTime)}</div>}
+                              </div>
+                            )}
+                            {showStaffCol && (
+                              <div><input value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff..." className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none" /></div>
+                            )}
+                            {showPrepPlatingCol && (
+                              <div className="space-y-0.5">
+                                <input value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Prep..." className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none" />
+                                <input value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating..." className="w-full font-dm text-xs text-ink/50 bg-transparent border-0 focus:outline-none" />
+                              </div>
+                            )}
+                            <div className="no-print opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                              <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="text-ink/30 hover:text-forest transition-colors" title="Expand details">
+                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </button>
+                              <button onClick={() => removeFnbItem(originalIdx)} className="text-ink/30 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                            </div>
+                          </div>
+                          {isExpanded && (
+                            <div className={`px-5 py-4 border-b border-gold/30 grid grid-cols-2 md:grid-cols-4 gap-3 no-print ${isDrinks ? 'bg-blue-50/40' : 'bg-amber-50/30'}`}>
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
+                                <select value={item.course ?? 'Other'} onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)} className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
+                                  {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                  {!COURSES.includes(item.course ?? 'Other') && <option value={item.course ?? 'Other'}>{item.course ?? 'Other'}</option>}
+                                </select>
+                              </div>
+                              {isDrinks && (
+                                <div>
+                                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DRINK CATEGORY</label>
+                                  <select value={item.drinkCategory || ''} onChange={e => updateFnbItem(originalIdx, 'drinkCategory', e.target.value)} className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
+                                    <option value="">— No category —</option>
+                                    {DRINK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                  </select>
+                                </div>
+                              )}
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
+                                <input type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                              </div>
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
+                                <input type="number" min={1} value={item.qty ?? 1} onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))} className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                              </div>
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY / ALLERGEN</label>
+                                <input value={item.dietary ?? ''} onChange={e => updateFnbItem(originalIdx, 'dietary', e.target.value)} placeholder="e.g. GF, VG, Nut-free..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                              </div>
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">STAFF ASSIGNED</label>
+                                <input value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff member..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                              </div>
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PREP NOTES</label>
+                                <input value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Preparation notes..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                              </div>
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PLATING NOTES</label>
+                                <input value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating / presentation..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                              </div>
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DESCRIPTION</label>
+                                <input value={item.description ?? ''} onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)} placeholder="Dish description..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
                     return (
                       <div key={course}>
-                        {/* Editable course header */}
+                        {/* Editable course header with rename + delete */}
                         <div className={`px-5 py-1.5 flex items-center gap-2 border-b ${isDrinks ? 'bg-blue-50 border-blue-200/60' : 'bg-amber-50 border-amber-200/60'}`}>
                           <input
                             value={course}
@@ -2383,192 +2514,27 @@ export default function RunsheetBuilder() {
                             className={`bg-transparent border-0 focus:outline-none font-bebas tracking-widest text-xs w-full min-w-0 ${isDrinks ? 'text-blue-700' : 'text-amber-700'}`}
                             title="Click to rename this course"
                           />
-                          <span className="text-[10px] text-ink/25 flex-shrink-0 font-dm italic">rename</span>
+                          <span className="text-[10px] text-ink/25 flex-shrink-0 font-dm italic no-print">rename</span>
+                          <button onClick={() => deleteCourse(course)} className="no-print flex-shrink-0 text-ink/20 hover:text-red-400 transition-colors p-0.5" title={`Delete all ${course} items`}>
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
-                        {fnbItems
-                          .map((item, originalIdx) => ({ item, originalIdx }))
-                          .filter(({ item }) => (item.course ?? 'Other') === course)
-                          .map(({ item, originalIdx }) => {
-                            const isExpanded = expandedFnbIdx === originalIdx;
+                        {/* Drinks: render by sub-group; food: render directly */}
+                        {isDrinks && drinkSubGroups && drinkSubGroups.length > 1 ? (
+                          drinkSubGroups.map(subGroup => {
+                            const subItems = courseItems.filter(({ item }) => (item.drinkCategory || 'Uncategorised') === subGroup);
                             return (
-                              <div key={item._tempId ?? originalIdx}>
-                                {/* Main row */}
-                                <div
-                                  className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/30 text-sm font-dm group transition-colors ${isDrinks ? 'border-l-4 border-l-blue-300 hover:bg-blue-50/50' : 'border-l-4 border-l-amber-300 hover:bg-amber-50/40'} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : 'bg-amber-50/40') : ''}`}
-                                  style={{ gridTemplateColumns: fnbGridCols }}
-                                >
-                                  <div className={`text-xs font-bebas tracking-widest ${isDrinks ? 'text-blue-500' : 'text-amber-600'}`}>{item.course}</div>
-                                  <div>
-                                    <input
-                                      value={item.dishName}
-                                      onChange={e => updateFnbItem(originalIdx, 'dishName', e.target.value)}
-                                      className="w-full font-dm text-sm text-ink bg-transparent border-0 focus:outline-none font-semibold"
-                                    />
-                                    {item.description && <div className="text-xs text-ink/40">{item.description}</div>}
-                                  </div>
-                                  {showQtyCol && (
-                                  <div>
-                                    {item.course !== 'Drinks' && item.qty > 1 && (
-                                      <input
-                                        type="number" min={1}
-                                        value={item.qty}
-                                        onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
-                                        className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center"
-                                      />
-                                    )}
-                                    {item.course !== 'Drinks' && item.qty <= 1 && (
-                                      <input
-                                        type="number" min={1}
-                                        value={item.qty}
-                                        onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
-                                        className="w-12 font-dm text-sm text-ink/20 bg-transparent border-0 focus:outline-none text-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                        title="Qty (default 1)"
-                                      />
-                                    )}
-                                  </div>
-                                  )}
-                                  {showDietaryCol && (
-                                    <div>
-                                      {item.dietary && (
-                                        <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>
-                                      )}
-                                    </div>
-                                  )}
-                                  {showTimeCol && (
-                                    <div>
-                                      <input
-                                        type="time"
-                                        value={item.serviceTime ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)}
-                                        className="font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none w-full no-print"
-                                      />
-                                      {item.serviceTime && <div className="hidden print:block text-xs text-ink/50 font-dm">{formatTime12(item.serviceTime)}</div>}
-                                    </div>
-                                  )}
-                                  {showStaffCol && (
-                                    <div>
-                                      <input
-                                        value={item.staffAssigned ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)}
-                                        placeholder="Staff..."
-                                        className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
-                                      />
-                                    </div>
-                                  )}
-                                  {showPrepPlatingCol && (
-                                    <div className="space-y-0.5">
-                                      <input
-                                        value={item.prepNotes ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)}
-                                        placeholder="Prep..."
-                                        className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none"
-                                      />
-                                      <input
-                                        value={item.platingNotes ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)}
-                                        placeholder="Plating..."
-                                        className="w-full font-dm text-xs text-ink/50 bg-transparent border-0 focus:outline-none"
-                                      />
-                                    </div>
-                                  )}
-                                  <div className="no-print opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                                    <button
-                                      onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)}
-                                      className="text-ink/30 hover:text-forest transition-colors"
-                                      title="Expand details"
-                                    >
-                                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                    </button>
-                                    <button
-                                      onClick={() => removeFnbItem(originalIdx)}
-                                      className="text-ink/30 hover:text-red-500 transition-colors"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
+                              <div key={subGroup}>
+                                <div className="px-5 py-0.5 bg-blue-50/60 border-b border-blue-100/80 flex items-center gap-2">
+                                  <span className="font-bebas text-[10px] tracking-widest text-blue-500/80">{subGroup}</span>
                                 </div>
-                                {/* Expanded detail panel */}
-                                {isExpanded && (
-                                  <div className={`px-5 py-4 border-b border-gold/30 grid grid-cols-2 md:grid-cols-4 gap-3 no-print ${isDrinks ? 'bg-blue-50/40' : 'bg-amber-50/30'}`}>
-                                    <div>
-                                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
-                                      <select
-                                        value={item.course ?? 'Other'}
-                                        onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)}
-                                        className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
-                                      >
-                                        {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                        {!COURSES.includes(item.course ?? 'Other') && <option value={item.course ?? 'Other'}>{item.course ?? 'Other'}</option>}
-                                      </select>
-                                    </div>
-                                    <div>
-                                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
-                                      <input
-                                        type="time"
-                                        value={item.serviceTime ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)}
-                                        className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
-                                      <input
-                                        type="number" min={1}
-                                        value={item.qty ?? 1}
-                                        onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))}
-                                        className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY / ALLERGEN</label>
-                                      <input
-                                        value={item.dietary ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'dietary', e.target.value)}
-                                        placeholder="e.g. GF, VG, Nut-free..."
-                                        className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">STAFF ASSIGNED</label>
-                                      <input
-                                        value={item.staffAssigned ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)}
-                                        placeholder="Staff member..."
-                                        className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PREP NOTES</label>
-                                      <input
-                                        value={item.prepNotes ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)}
-                                        placeholder="Preparation notes..."
-                                        className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PLATING NOTES</label>
-                                      <input
-                                        value={item.platingNotes ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)}
-                                        placeholder="Plating / presentation..."
-                                        className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DESCRIPTION</label>
-                                      <input
-                                        value={item.description ?? ''}
-                                        onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)}
-                                        placeholder="Dish description..."
-                                        className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
-                                      />
-                                    </div>
-                                  </div>
-                                )}
+                                {renderRows(subItems)}
                               </div>
                             );
-                          })}
+                          })
+                        ) : (
+                          renderRows(courseItems)
+                        )}
                       </div>
                     );
                   })}
@@ -2587,6 +2553,12 @@ export default function RunsheetBuilder() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+            {/* ── EVENT SPEND / BUDGET ───────────────────────────────────────── */}
+            {effectiveBookingId && (
+              <div className="px-5 py-5 border-t border-gold/30 no-print">
+                <EventSpendSection bookingId={effectiveBookingId} />
               </div>
             )}
           </div>

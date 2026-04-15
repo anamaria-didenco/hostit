@@ -11,7 +11,7 @@ import {
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
-  SlidersHorizontal, GripVertical, Bell
+  SlidersHorizontal, GripVertical, Bell, Paperclip
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -574,6 +574,14 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
               {item.label}
             </button>
           ))}
+          <div className="my-2 border-t border-border" />
+          <a
+            href="/daily-checklists"
+            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
+          >
+            Daily Checklists
+            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+          </a>
         </div>
       </aside>
     </>
@@ -1007,6 +1015,7 @@ export default function Dashboard() {
   // Email compose state
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailForm, setEmailForm] = useState({ subject: "", body: "" });
+  const [emailAttachments, setEmailAttachments] = useState<Array<{ filename: string; content: string; contentType: string }>>([]);
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
   // Email Templates
   const { data: emailTemplates, refetch: refetchTemplates } = trpc.templates.list.useQuery(undefined, { enabled: isAuthenticated });
@@ -1018,6 +1027,7 @@ export default function Dashboard() {
     onSuccess: (_, vars) => {
       setShowEmailModal(false);
       setEmailForm({ subject: "", body: "" });
+      setEmailAttachments([]);
       // If lead was "new", it's now "contacted" — update local state and notify
       if (selectedLead?.status === 'new') {
         const followUp = new Date();
@@ -1263,6 +1273,7 @@ export default function Dashboard() {
           { day: "Friday", enabled: true, start: "08:00", end: "22:00" },
           { day: "Saturday", enabled: true, start: "08:00", end: "22:00" },
         ]),
+        emailSignature: vs?.emailSignature ?? "",
       });
     }
    }, [venueSettings]);
@@ -2666,8 +2677,44 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
+                  {/* Attachments */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bebas text-xs tracking-widest text-sage">ATTACHMENTS</label>
+                      <label className="font-bebas tracking-widest text-[10px] text-forest cursor-pointer hover:text-gold transition-colors flex items-center gap-1">
+                        <Paperclip className="w-3 h-3" /> ATTACH FILE
+                        <input
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={async e => {
+                            const files = Array.from(e.target.files ?? []);
+                            const loaded = await Promise.all(files.map(f => new Promise<{ filename: string; content: string; contentType: string }>(resolve => {
+                              const reader = new FileReader();
+                              reader.onload = () => resolve({ filename: f.name, content: reader.result as string, contentType: f.type || 'application/octet-stream' });
+                              reader.readAsDataURL(f);
+                            })));
+                            setEmailAttachments(prev => [...prev, ...loaded]);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+                    {emailAttachments.length > 0 && (
+                      <div className="space-y-1">
+                        {emailAttachments.map((att, i) => (
+                          <div key={i} className="flex items-center justify-between bg-linen border border-gold/20 px-3 py-1.5 text-xs font-dm">
+                            <span className="truncate text-ink/70">{att.filename}</span>
+                            <button onClick={() => setEmailAttachments(prev => prev.filter((_, j) => j !== i))} className="text-sage hover:text-tomato ml-2 flex-shrink-0 transition-colors">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex gap-3 justify-end pt-2">
-                    <button onClick={() => setShowEmailModal(false)}
+                    <button onClick={() => { setShowEmailModal(false); setEmailAttachments([]); }}
                       className="border border-border font-bebas tracking-widest text-xs px-5 py-2 text-ink/60 hover:text-ink transition-colors">
                       CANCEL
                     </button>
@@ -2678,11 +2725,12 @@ export default function Dashboard() {
                         subject: emailForm.subject,
                         body: emailForm.body,
                         leadId: selectedLead.id,
+                        attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
                       })}
                       disabled={sendEmail.isPending || !emailForm.subject || !emailForm.body}
                       className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream flex items-center gap-2 disabled:opacity-50">
                       <Send className="w-3 h-3" />
-                      {sendEmail.isPending ? 'SENDING...' : 'SEND EMAIL'}
+                      {sendEmail.isPending ? 'SENDING...' : `SEND EMAIL${emailAttachments.length > 0 ? ` (+${emailAttachments.length})` : ''}`}
                     </button>
                   </div>
                 </div>
@@ -2824,6 +2872,16 @@ export default function Dashboard() {
                                   {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
                                   {b.startTime && <div className="opacity-70">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
                                   {b.guestCount && <div className="opacity-70">{b.guestCount} guests</div>}
+                                  <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{
+                                    b.status === 'confirmed' ? 'CONFIRMED' :
+                                    b.status === 'booked' ? 'BOOKED' :
+                                    b.status === 'tentative' ? 'TENTATIVE' :
+                                    b.status === 'proposal_sent' ? 'PROPOSAL SENT' :
+                                    b.status === 'negotiating' ? 'NEGOTIATING' :
+                                    b.status === 'cancelled' ? 'CANCELLED' :
+                                    b.status === 'lost' ? 'LOST' :
+                                    (b.status ?? '').replace(/_/g,' ').toUpperCase()
+                                  }</div>
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); if (confirm(`Delete ${b.eventType || 'event'} for ${b.firstName}?`)) deleteBooking.mutate({ id: b.id }); }}
@@ -2842,6 +2900,15 @@ export default function Dashboard() {
                                 <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                                 {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
                                 {l.guestCount && <div className="opacity-70">{l.guestCount} guests</div>}
+                                <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{
+                                  l.status === 'new' ? 'NEW ENQUIRY' :
+                                  l.status === 'contacted' ? 'CONTACTED' :
+                                  l.status === 'proposal_sent' ? 'PROPOSAL SENT' :
+                                  l.status === 'negotiating' ? 'NEGOTIATING' :
+                                  l.status === 'booked' ? 'BOOKED' :
+                                  l.status === 'lost' ? 'LOST' :
+                                  (l.status ?? '').replace(/_/g,' ').toUpperCase()
+                                }</div>
                               </button>
                             ))}
                             {/* Edit icon for adding event on this day */}
@@ -3947,6 +4014,35 @@ export default function Dashboard() {
                     <p className="font-dm text-xs text-sage/60 w-full md:w-auto">Save first, then send a test to confirm delivery.</p>
                   </div>
                 </form>
+              </div>
+
+              {/* ── Email Signature ─────────────────────────────────────── */}
+              <div className="mt-8">
+                <h2 className="font-cormorant text-xl font-semibold text-ink mb-1">Email Signature</h2>
+                <p className="font-dm text-xs text-sage mb-4">Automatically appended to every outbound email sent from VenueFlow. Plain text only.</p>
+                <div className="space-y-3">
+                  <Textarea
+                    value={settingsForm?.emailSignature ?? ""}
+                    onChange={e => setSettingsForm((f: any) => ({ ...f, emailSignature: e.target.value }))}
+                    rows={6}
+                    placeholder={`e.g.\n\nKind regards,\nAna Maria\nBar Franco Events\nph: 03 123 4567 | www.barfranco.nz`}
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none"
+                  />
+                  {settingsForm?.emailSignature && (
+                    <div className="bg-stone-50 border border-stone-200 p-3">
+                      <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">PREVIEW</p>
+                      <pre className="font-dm text-xs text-ink/70 whitespace-pre-wrap leading-relaxed">{settingsForm.emailSignature}</pre>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => updateSettings.mutate({ emailSignature: settingsForm?.emailSignature ?? "" })}
+                    disabled={updateSettings.isPending}
+                    className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50"
+                  >
+                    {updateSettings.isPending ? "SAVING..." : "SAVE SIGNATURE"}
+                  </button>
+                </div>
               </div>
 
               {/* Email Templates */}

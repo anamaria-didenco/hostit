@@ -1,8 +1,24 @@
-# HOSTit - New Zealand's Venue Management Platform
+# VenueFlow — NZ Venue Management Platform (VenueFlowHQ)
 
 ## Overview
 
-HOSTit is a full-stack venue management web application for New Zealand venues. It helps venue managers handle event enquiries, proposals, bookings, runsheets, menus, floor plans, and more.
+VenueFlow (branded "VenueFlow") is a full-stack CRM and event management platform for New Zealand venues. Features include: enquiry pipeline, booking management, runsheet builder, F&B/menu management, floor plan editor, PDF generation, proposals, client portal, staff portal, daily checklists with public live link, email composer with attachments/signature, event spend tracking, and reporting.
+
+## Key Pages & Routes
+
+| Route | Component | Description |
+|---|---|---|
+| `/dashboard` | Dashboard.tsx | Main app — enquiries, calendar, settings |
+| `/runsheet` | RunsheetBuilder.tsx | Runsheet + F&B + checklist builder |
+| `/daily-checklists` | DailyChecklists.tsx | Manage daily venue checklists |
+| `/daily/:token` | DailyChecklistLive.tsx | Public staff live checklist view |
+| `/floor-plan` | FloorPlanBuilder.tsx | Floor plan editor |
+| `/event/:id` | EventDetail.tsx | Full booking detail page |
+| `/staff/:token` | StaffPortal.tsx | Staff portal (event day view) |
+| `/staff-checklist/:token` | StaffChecklist.tsx | Staff checklist live page |
+| `/portal/:token` | ClientPortal.tsx | Client portal |
+| `/proposal/:token` | ProposalView.tsx | Public proposal view |
+| `/enquire/:slug` | LeadForm.tsx | Contact/enquiry form embed |
 
 ## Architecture
 

@@ -21,6 +21,8 @@ import EventDetail from "./pages/EventDetail";
 import ClientPortal from "./pages/ClientPortal";
 import StaffPortal from "./pages/StaffPortal";
 import StaffChecklist from "./pages/StaffChecklist";
+import DailyChecklists from "./pages/DailyChecklists";
+import DailyChecklistLive from "./pages/DailyChecklistLive";
 
 function Router() {
   return (
@@ -46,6 +48,8 @@ function Router() {
       <Route path="/portal/:token" component={ClientPortal} />
       <Route path="/staff/:token" component={StaffPortal} />
       <Route path="/staff-checklist/:token" component={StaffChecklist} />
+      <Route path="/daily-checklists" component={DailyChecklists} />
+      <Route path="/daily/:token" component={DailyChecklistLive} />
       <Route path="/menu"><Redirect to="/dashboard?tab=settings&sub=menu" /></Route>
 
       <Route path="/404" component={NotFound} />
