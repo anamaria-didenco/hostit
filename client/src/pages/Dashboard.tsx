@@ -1799,156 +1799,118 @@ export default function Dashboard() {
 
           {/* ── ENQUIRIES INBOX ──────────────────────────────────────────────────── */}
           {tab === "enquiries" && (
-            <div className="flex h-full">
-              {/* Lead List / Table / Kanban */}
-              <div className={`
-                ${leadViewMode === "kanban" ? "hidden" : ""}
-                ${leadViewMode === "table" ? `flex flex-col ${selectedLead ? "w-[55%] border-r border-gold/15" : "flex-1"} bg-warm-white overflow-hidden` : ""}
-                ${leadViewMode === "list" ? `${selectedLead ? "hidden md:flex md:w-80 lg:w-96 flex-shrink-0" : "flex w-full"} flex-col border-r border-gold/15 bg-warm-white` : ""}
-              `}>
-                <div className="p-4 border-b border-gold/15">
-                  {/* Sub-tab toggle */}
-                  {/* Sub-tab toggle: only show New Enquiries tab when there are some */}
+            <div className="flex flex-col h-full overflow-hidden">
+
+              {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
+              <div className="flex-shrink-0 bg-white border-b border-gold/15">
+                {/* Row 1: Sub-tabs + view modes + actions */}
+                <div className="flex items-center gap-2 px-4 py-3 flex-wrap gap-y-2">
+                  {/* Sub-tabs or heading */}
                   {newEnquiries.length > 0 ? (
-                    <div className="flex mb-3 bg-muted rounded-xl p-1 gap-1">
-                      <button
-                        onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
-                        className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
-                          leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
-                        }`}>
-                        New Enquiries
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                          leadsSubTab === "new" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"
-                        }`}>{newEnquiries.length}</span>
+                    <div className="flex bg-muted rounded-xl p-0.5 gap-0.5">
+                      <button onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
+                        className={`font-inter text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors ${leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"}`}>
+                        New
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
                       </button>
-                      <button
-                        onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
-                        className={`flex-1 font-inter text-xs font-medium py-1.5 flex items-center justify-center gap-1.5 transition-colors rounded-lg ${
-                          leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"
-                        }`}>
+                      <button onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
+                        className={`font-inter text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors ${leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"}`}>
                         All Events
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                          leadsSubTab === "all" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"
-                        }`}>{repliedLeads.length}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "all" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
                       </button>
                     </div>
                   ) : (
-                    <div className="mb-3 flex items-center gap-2">
-                      <h3 className="font-inter text-xs font-semibold text-gray-500 uppercase tracking-wider">All Events</h3>
-                      <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-gray-100 text-gray-500">{repliedLeads.length}</span>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-cormorant text-xl font-semibold text-ink">
+                        {leadViewMode === "kanban" ? "Pipeline" : "All Events"}
+                      </h2>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-gray-100 text-gray-500">{filteredLeads.length}</span>
                     </div>
                   )}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <h2 className="font-cormorant text-2xl font-semibold text-ink">
-                        {leadViewMode === "kanban" ? "Pipeline" : leadsSubTab === "new" ? "New Enquiries" : "Events"}
-                      </h2>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {/* View mode toggle */}
-                      <div className="flex border border-gold/30 rounded-lg overflow-hidden">
-                        {([
-                          { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
-                          { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
-                          { mode: "kanban" as const, icon: <Columns className="w-3.5 h-3.5" />, title: "Kanban view" },
-                        ]).map(({ mode, icon, title }) => (
-                          <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
-                            title={title}
-                            className={`px-2 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/50 hover:bg-linen hover:text-ink"}`}>
-                            {icon}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
-                        className={`font-bebas text-xs tracking-widest px-2.5 py-1 border transition-colors ${
-                          bulkSelectMode ? 'bg-forest text-cream border-forest' : 'border-gold/40 text-ink/60 hover:border-gold hover:text-ink'
-                        }`}>
-                        {bulkSelectMode ? 'CANCEL' : 'SELECT'}
+
+                  {/* View mode toggle */}
+                  <div className="flex border border-gold/30 rounded-lg overflow-hidden">
+                    {([
+                      { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
+                      { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
+                      { mode: "kanban" as const, icon: <Columns className="w-3.5 h-3.5" />, title: "Kanban view" },
+                    ]).map(({ mode, icon, title }) => (
+                      <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
+                        title={title}
+                        className={`px-2.5 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/50 hover:bg-linen hover:text-ink"}`}>
+                        {icon}
                       </button>
-                    </div>
+                    ))}
                   </div>
-                  {/* Add Enquiry / Import buttons */}
-                  <div className="flex gap-2 mb-2">
-                    <button
-                      onClick={() => setShowAddLead(true)}
-                      className="flex-1 bg-sage-green text-white font-inter font-medium text-sm py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-sage-dark transition-colors"
-                    >
+
+                  {/* Actions */}
+                  <div className="ml-auto flex items-center gap-2">
+                    <button onClick={() => setShowAddLead(true)}
+                      className="flex items-center gap-1.5 bg-sage-green text-white font-inter font-medium text-xs px-3 py-2 rounded-lg hover:bg-sage-dark transition-colors">
                       <Plus className="w-3.5 h-3.5" /> Add New
                     </button>
-                    <button
-                      onClick={() => setShowCsvImport(true)}
-                      title="Import from CSV"
-                      className="px-3 py-2 rounded-xl border border-gold/40 text-ink/60 hover:border-gold hover:text-ink hover:bg-white/60 transition-colors text-xs font-inter font-medium flex items-center gap-1.5"
-                    >
+                    <button onClick={() => setShowCsvImport(true)} title="Import from CSV"
+                      className="px-3 py-2 rounded-lg border border-gold/40 text-ink/60 hover:border-gold hover:text-ink hover:bg-white/60 transition-colors text-xs font-inter font-medium flex items-center gap-1.5">
                       <Upload className="w-3.5 h-3.5" /> CSV
                     </button>
+                    {leadViewMode !== "kanban" && (
+                      <button onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
+                        className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border rounded-lg transition-colors ${bulkSelectMode ? 'bg-forest text-cream border-forest' : 'border-gold/40 text-ink/60 hover:border-gold hover:text-ink'}`}>
+                        {bulkSelectMode ? 'CANCEL' : 'SELECT'}
+                      </button>
+                    )}
+                    {leadViewMode === "kanban" && (
+                      <button onClick={() => setKanbanSettingsOpen(true)}
+                        className="flex items-center gap-1.5 font-inter text-xs font-medium px-3 py-1.5 border border-gold/30 text-ink/60 rounded-lg hover:bg-linen transition-colors">
+                        <SlidersHorizontal className="w-3.5 h-3.5" /> Customise
+                      </button>
+                    )}
                   </div>
-                  <div className="relative mb-2">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/60" />
-                    <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
-                      placeholder="Search enquiries..." className="pl-9 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold text-sm" />
-                  </div>
-                  <Select value={leadStatusFilter} onValueChange={(v) => {
-                    setLeadStatusFilter(v);
-                    // When filtering by a specific status, switch to "all" sub-tab so results aren't hidden
-                    if (v !== "all") setLeadsSubTab("all");
-                  }}>
-                    <SelectTrigger className={`rounded-xl border text-xs font-inter font-medium focus:ring-1 focus:ring-sage-green/40 transition-colors ${
-                      leadStatusFilter !== "all"
-                        ? "border-sage-green bg-sage-green/10 text-sage-dark"
-                        : "border-gray-200 bg-white text-ink"
-                    }`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" className="font-inter text-xs">All Statuses</SelectItem>
-                      {pipelineStages.map(s => (
-                        <SelectItem key={s.key} value={s.key} className="font-inter text-xs">{s.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {/* Date range filter */}
-                  <Select value={leadDateFilter} onValueChange={(v: any) => { setLeadDateFilter(v); if (v !== "custom") { setCustomDateFrom(""); setCustomDateTo(""); } }}>
-                    <SelectTrigger className={`mt-2 rounded-xl border text-xs font-inter font-medium focus:ring-1 focus:ring-sage-green/40 transition-colors ${
-                      leadDateFilter !== "all"
-                        ? "border-sage-green bg-sage-green/10 text-sage-dark"
-                        : "border-gray-200 bg-white text-ink"
-                    }`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" className="font-inter text-xs">All Time</SelectItem>
-                      <SelectItem value="future" className="font-inter text-xs">Future Events Only</SelectItem>
-                      <SelectItem value="today" className="font-inter text-xs">Today</SelectItem>
-                      <SelectItem value="weekend" className="font-inter text-xs">This Weekend</SelectItem>
-                      <SelectItem value="month" className="font-inter text-xs">This Month</SelectItem>
-                      <SelectItem value="year" className="font-inter text-xs">This Year</SelectItem>
-                      <SelectItem value="custom" className="font-inter text-xs">Custom Range</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {leadDateFilter === "custom" && (
-                    <div className="flex gap-1.5 mt-1.5">
-                      <input
-                        type="date"
-                        value={customDateFrom}
-                        onChange={e => setCustomDateFrom(e.target.value)}
-                        className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink focus:outline-none focus:border-sage-green"
-                        placeholder="From"
-                      />
-                      <input
-                        type="date"
-                        value={customDateTo}
-                        onChange={e => setCustomDateTo(e.target.value)}
-                        className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink focus:outline-none focus:border-sage-green"
-                        placeholder="To"
-                      />
+                </div>
+
+                {/* Row 2: Search + Filters (hidden in kanban) */}
+                {leadViewMode !== "kanban" && (
+                  <div className="flex items-center gap-2 px-4 pb-3 flex-wrap gap-y-2">
+                    <div className="relative flex-1 min-w-[160px] max-w-xs">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
+                      <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
+                        placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
                     </div>
-                  )}
-                  {/* Sort controls */}
-                  <div className="flex items-center gap-1.5 mt-2">
+                    <Select value={leadStatusFilter} onValueChange={(v) => { setLeadStatusFilter(v); if (v !== "all") setLeadsSubTab("all"); }}>
+                      <SelectTrigger className={`h-8 w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadStatusFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all" className="font-inter text-xs">All Statuses</SelectItem>
+                        {pipelineStages.map(s => (
+                          <SelectItem key={s.key} value={s.key} className="font-inter text-xs">{s.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={leadDateFilter} onValueChange={(v: any) => { setLeadDateFilter(v); if (v !== "custom") { setCustomDateFrom(""); setCustomDateTo(""); } }}>
+                      <SelectTrigger className={`h-8 w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadDateFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all" className="font-inter text-xs">All Dates</SelectItem>
+                        <SelectItem value="today" className="font-inter text-xs">Today</SelectItem>
+                        <SelectItem value="weekend" className="font-inter text-xs">This Weekend</SelectItem>
+                        <SelectItem value="month" className="font-inter text-xs">This Month</SelectItem>
+                        <SelectItem value="year" className="font-inter text-xs">This Year</SelectItem>
+                        <SelectItem value="future" className="font-inter text-xs">Upcoming</SelectItem>
+                        <SelectItem value="custom" className="font-inter text-xs">Custom Range</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {leadDateFilter === "custom" && (
+                      <>
+                        <input type="date" value={customDateFrom} onChange={e => setCustomDateFrom(e.target.value)}
+                          className="h-8 text-xs border border-gray-200 rounded-lg px-2 bg-white text-ink focus:outline-none focus:border-sage-green" placeholder="From" />
+                        <input type="date" value={customDateTo} onChange={e => setCustomDateTo(e.target.value)}
+                          className="h-8 text-xs border border-gray-200 rounded-lg px-2 bg-white text-ink focus:outline-none focus:border-sage-green" placeholder="To" />
+                      </>
+                    )}
                     <Select value={leadSortBy} onValueChange={(v: any) => setLeadSortBy(v)}>
-                      <SelectTrigger className="flex-1 rounded-xl border border-gray-200 bg-white text-xs font-inter font-medium focus:ring-1 focus:ring-sage-green/40 h-8">
+                      <SelectTrigger className="h-8 w-36 text-xs font-inter rounded-lg border border-gray-200 bg-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1957,18 +1919,17 @@ export default function Dashboard() {
                         <SelectItem value="status" className="font-inter text-xs">Status</SelectItem>
                       </SelectContent>
                     </Select>
-                    <button
-                      onClick={() => setLeadSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-                      className="flex-shrink-0 h-8 w-8 flex items-center justify-center border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition-colors"
-                      title={leadSortDir === 'asc' ? 'Ascending' : 'Descending'}
-                    >
+                    <button onClick={() => setLeadSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                      className="h-8 w-8 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+                      title={leadSortDir === 'asc' ? 'Ascending' : 'Descending'}>
                       <ArrowUpDown className="w-3.5 h-3.5 text-ink/60" />
                     </button>
+                    <span className="font-dm text-xs text-ink/40 ml-auto">{filteredLeads.length} record{filteredLeads.length !== 1 ? 's' : ''}</span>
                   </div>
-                </div>
-                {/* Select All bar — only visible in bulk mode */}
+                )}
+                {/* Bulk select all bar */}
                 {bulkSelectMode && filteredLeads.length > 0 && (
-                  <div className="flex items-center justify-between px-4 py-2 bg-linen border-b border-gold/15">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox"
                         checked={selectedLeadIds.size === filteredLeads.length}
@@ -1980,30 +1941,35 @@ export default function Dashboard() {
                     </label>
                   </div>
                 )}
+              </div>
+
+              {/* ── CONTENT AREA ──────────────────────────────────────────────── */}
+              <div className="flex flex-1 overflow-hidden">
+
                 {/* ── TABLE VIEW ─────────────────────────────────────── */}
                 {leadViewMode === "table" && (
-                  <div className="flex-1 overflow-auto">
+                  <div className={`${selectedLead ? "w-[55%] border-r border-gold/15" : "flex-1"} overflow-auto`}>
                     {filteredLeads.length === 0 ? (
-                      <div className="p-8 text-center">
-                        <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
+                      <div className="p-12 text-center">
+                        <MessageSquare className="w-10 h-10 text-sage/30 mx-auto mb-3" />
                         <p className="font-dm text-sage text-sm">No records found</p>
                       </div>
                     ) : (
                       <table className="w-full text-sm border-collapse min-w-[700px]">
                         <thead className="sticky top-0 bg-cream z-10 border-b border-gold/20">
                           <tr>
-                            {bulkSelectMode && <th className="w-10 px-3 py-2"><input type="checkbox" checked={selectedLeadIds.size === filteredLeads.length} onChange={e => setSelectedLeadIds(e.target.checked ? new Set(filteredLeads.map((l: any) => l.id)) : new Set())} className="w-3.5 h-3.5 accent-forest" /></th>}
+                            {bulkSelectMode && <th className="w-10 px-3 py-2.5"><input type="checkbox" checked={selectedLeadIds.size === filteredLeads.length} onChange={e => setSelectedLeadIds(e.target.checked ? new Set(filteredLeads.map((l: any) => l.id)) : new Set())} className="w-3.5 h-3.5 accent-forest" /></th>}
                             {[
                               { key: "name", label: "Name" },
-                              { key: "event", label: "Event" },
-                              { key: "event_date", label: "Date" },
+                              { key: "event", label: "Event Type" },
+                              { key: "event_date", label: "Event Date" },
                               { key: "guests", label: "Guests" },
                               { key: "status", label: "Status" },
                               { key: "enquiry_date", label: "Enquiry" },
                             ].map(col => (
                               <th key={col.key}
                                 onClick={() => { if (["event_date","status","enquiry_date"].includes(col.key)) { setLeadSortBy(col.key === "enquiry_date" ? "enquiry_date" : col.key as any); setLeadSortDir(d => d === "asc" ? "desc" : "asc"); } }}
-                                className={`px-3 py-2.5 text-left font-bebas tracking-widest text-xs text-ink/60 whitespace-nowrap ${["event_date","status","enquiry_date"].includes(col.key) ? "cursor-pointer hover:text-ink select-none" : ""}`}>
+                                className={`px-4 py-2.5 text-left font-bebas tracking-widest text-xs text-ink/60 whitespace-nowrap bg-cream ${["event_date","status","enquiry_date"].includes(col.key) ? "cursor-pointer hover:text-ink select-none" : ""}`}>
                                 {col.label}
                                 {(col.key === "event_date" && leadSortBy === "event_date") || (col.key === "enquiry_date" && leadSortBy === "enquiry_date") || (col.key === "status" && leadSortBy === "status")
                                   ? <span className="ml-1 opacity-60">{leadSortDir === "asc" ? "↑" : "↓"}</span> : null}
@@ -2017,25 +1983,25 @@ export default function Dashboard() {
                             return (
                               <tr key={lead.id}
                                 onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                                className={`hover:bg-linen transition-colors cursor-pointer border-l-4 ${selectedLead?.id === lead.id ? "bg-forest/5" : ""} ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}
-                                style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
+                                className={`hover:bg-linen/60 transition-colors cursor-pointer ${selectedLead?.id === lead.id ? "bg-forest/5" : ""} ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}
+                                style={{ borderLeft: `3px solid ${statusStage?.swatch ?? '#d4c5a9'}` }}>
                                 {bulkSelectMode && (
-                                  <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                                     <input type="checkbox" checked={selectedLeadIds.has(lead.id)}
                                       onChange={e => { setSelectedLeadIds(prev => { const n = new Set(prev); e.target.checked ? n.add(lead.id) : n.delete(lead.id); return n; }); }}
                                       className="w-3.5 h-3.5 accent-forest cursor-pointer" />
                                   </td>
                                 )}
-                                <td className="px-3 py-2.5 font-cormorant font-semibold text-ink whitespace-nowrap">{lead.firstName} {lead.lastName}</td>
-                                <td className="px-3 py-2.5 font-dm text-xs text-ink/70 max-w-[200px] truncate">{lead.eventType || lead.message?.split(" | ")?.[0]?.replace("Event: ","") || "—"}</td>
-                                <td className="px-3 py-2.5 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" }) : "—"}</td>
-                                <td className="px-3 py-2.5 font-dm text-xs text-ink/60 text-right">{lead.guestCount ?? "—"}</td>
-                                <td className="px-3 py-2.5">
-                                  <span className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 border ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}>
+                                <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink whitespace-nowrap">{lead.firstName} {lead.lastName}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/70 max-w-[160px] truncate">{lead.eventType || "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" }) : "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`font-bebas text-[10px] tracking-widest px-2 py-0.5 border ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}>
                                     {statusStage?.label ?? lead.status.replace(/_/g, " ")}
                                   </span>
                                 </td>
-                                <td className="px-3 py-2.5 font-dm text-xs text-ink/50 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/50 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
                               </tr>
                             );
                           })}
@@ -2044,8 +2010,8 @@ export default function Dashboard() {
                     )}
                   </div>
                 )}
-                {/* ── LIST VIEW ──────────────────────────────────────── */}
-                {leadViewMode === "list" && !collapsedInboxSections.has(leadsSubTab) && <div className="flex-1 overflow-auto divide-y divide-border/40">
+                {/* ── LIST VIEW sidebar ─────────────────────────────── */}
+                {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:flex md:w-80 lg:w-96 flex-shrink-0" : "flex w-full"} flex-col border-r border-gold/15 bg-warm-white overflow-auto divide-y divide-border/40`}>
                   {filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
@@ -2120,43 +2086,10 @@ export default function Dashboard() {
                       </div>
                   ))}
                 </div>}
-              </div>
-              {/* ── KANBAN VIEW ──────────────────────────────────────────── */}
-              {leadViewMode === "kanban" && (
-                <div className="flex-1 flex flex-col overflow-hidden bg-background">
-                  {/* Kanban toolbar */}
-                  <div className="px-5 py-3 border-b border-border bg-white flex-shrink-0 flex items-center gap-3">
-                    <div className="flex border border-border rounded-lg overflow-hidden">
-                      {([
-                        { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
-                        { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
-                        { mode: "kanban" as const, icon: <Columns className="w-3.5 h-3.5" />, title: "Kanban view" },
-                      ]).map(({ mode, icon, title }) => (
-                        <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
-                          title={title}
-                          className={`px-2.5 py-1.5 transition-colors ${leadViewMode === mode ? "bg-sage-green text-white" : "text-gray-400 hover:bg-sage-tint hover:text-gray-700"}`}>
-                          {icon}
-                        </button>
-                      ))}
-                    </div>
-                    <h2 className="font-inter font-semibold text-base text-gray-900">Pipeline</h2>
-                    <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{filteredLeads.length} records</span>
-                    <div className="ml-auto flex items-center gap-2">
-                      <button
-                        onClick={() => setKanbanSettingsOpen(true)}
-                        title="Customise columns"
-                        className="flex items-center gap-1.5 font-inter text-xs font-medium px-3 py-1.5 border border-border text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
-                        <SlidersHorizontal className="w-3.5 h-3.5" /> Customise
-                      </button>
-                      <button
-                        onClick={() => setShowAddLead(true)}
-                        className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
-                        <Plus className="w-3.5 h-3.5" /> Add New
-                      </button>
-                    </div>
-                  </div>
-                  {/* Kanban columns */}
-                  <div className="flex-1 overflow-x-auto p-5">
+
+                {/* ── KANBAN VIEW ──────────────────────────────────────── */}
+                {leadViewMode === "kanban" && (
+                  <div className="flex-1 overflow-x-auto p-5 bg-background">
                     <div className="flex gap-3 min-w-max h-full">
                       {kanbanStages.map(stage => {
                         const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
@@ -2219,48 +2152,11 @@ export default function Dashboard() {
                       })}
                     </div>
                   </div>
-                </div>
-              )}
-              {/* Floating Bulk Action Toolbar */}
-              {bulkSelectMode && selectedLeadIds.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
-                  <span className="font-bebas tracking-widest text-sm text-gold">{selectedLeadIds.size} LEAD{selectedLeadIds.size !== 1 ? 'S' : ''}</span>
-                  <span className="text-cream/30">|</span>
-                  <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
-                  <div className="flex items-center gap-1.5">
-                    {pipelineStages.map(s => (
-                      <button key={s.key}
-                        onClick={() => bulkUpdateStatus.mutate({ ids: Array.from(selectedLeadIds), status: s.key as any })}
-                        disabled={bulkUpdateStatus.isPending}
-                        className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border transition-colors hover:bg-gold hover:text-ink hover:border-gold disabled:opacity-50 ${
-                          s.key === 'new' ? 'border-cream/30 text-cream/80' :
-                          s.key === 'contacted' ? 'border-blue-400/50 text-blue-300' :
-                          s.key === 'proposal_sent' ? 'border-purple-400/50 text-purple-300' :
-                          s.key === 'negotiating' ? 'border-amber-400/50 text-amber-300' :
-                          s.key === 'booked' ? 'border-blue-400/50 text-blue-300' :
-                          s.key === 'lost' ? 'border-red-400/50 text-red-300' :
-                          'border-cream/20 text-cream/50'
-                        }`}>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={() => { setSelectedLeadIds(new Set()); setBulkSelectMode(false); }}
-                    className="ml-2 text-cream/50 hover:text-cream font-bebas text-xs tracking-widest">
-                    CLEAR
-                  </button>
-                  <span className="text-cream/30">|</span>
-                  <button
-                    onClick={() => setShowBulkDeleteConfirm(true)}
-                    className="font-bebas text-xs tracking-widest px-2.5 py-1.5 border border-red-400/50 text-red-400 hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors"
-                  >
-                    DELETE
-                  </button>
-                </div>
-              )}
-              {/* Lead Detail — hidden in kanban mode (shown as modal instead) */}
-              {leadViewMode !== "kanban" && (selectedLead ? (
-                <div className="flex-1 overflow-auto p-4 md:p-6">
+                )}
+
+                {/* Lead Detail — shared between list + table modes */}
+                {leadViewMode !== "kanban" && (selectedLead ? (
+                  <div className="flex-1 overflow-auto p-4 md:p-6">
                   <div className="flex items-center gap-3 mb-4 md:mb-6">
                     <button onClick={() => setSelectedLead(null)} className="md:hidden font-inter font-medium text-sm text-sage-dark flex items-center gap-1 py-1 pr-2">
                       <ChevronLeft className="w-4 h-4" /> Back
@@ -2536,6 +2432,38 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
+              </div>{/* ── End content area ────────────────────────────────────── */}
+
+              {/* Floating Bulk Action Toolbar */}
+              {bulkSelectMode && selectedLeadIds.size > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-ink text-cream px-5 py-3 shadow-2xl border border-gold/30">
+                  <span className="font-bebas tracking-widest text-sm text-gold">{selectedLeadIds.size} LEAD{selectedLeadIds.size !== 1 ? 'S' : ''}</span>
+                  <span className="text-cream/30">|</span>
+                  <span className="font-bebas tracking-widest text-xs text-cream/70">SET STATUS:</span>
+                  <div className="flex items-center gap-1.5">
+                    {pipelineStages.map(s => (
+                      <button key={s.key}
+                        onClick={() => bulkUpdateStatus.mutate({ ids: Array.from(selectedLeadIds), status: s.key as any })}
+                        disabled={bulkUpdateStatus.isPending}
+                        className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border transition-colors hover:bg-gold hover:text-ink hover:border-gold disabled:opacity-50`}
+                        style={{ borderColor: s.swatch ?? '#d4c5a9', color: s.swatch ?? '#d4c5a9' }}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => { setSelectedLeadIds(new Set()); setBulkSelectMode(false); }}
+                    className="ml-2 text-cream/50 hover:text-cream font-bebas text-xs tracking-widest">
+                    CLEAR
+                  </button>
+                  <span className="text-cream/30">|</span>
+                  <button
+                    onClick={() => setShowBulkDeleteConfirm(true)}
+                    className="font-bebas text-xs tracking-widest px-2.5 py-1.5 border border-red-400/50 text-red-400 hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors">
+                    DELETE
+                  </button>
+                </div>
+              )}
+
               {/* Kanban Stage Customisation Dialog */}
               {kanbanSettingsOpen && (
                 <KanbanSettingsDialog
