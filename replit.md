@@ -2,7 +2,15 @@
 
 ## Overview
 
-VenueFlow (branded "VenueFlow") is a full-stack CRM and event management platform for New Zealand venues. Features include: enquiry pipeline, booking management, runsheet builder, F&B/menu management, floor plan editor, PDF generation, proposals, client portal, staff portal, daily checklists with public live link, email composer with attachments/signature, event spend tracking, and reporting.
+VenueFlow (branded "VenueFlow") is a full-stack CRM and event management platform for New Zealand venues. Features include: enquiry pipeline, booking management, runsheet builder with AI smart paste, F&B/menu management with drink sub-grouping, floor plan editor, PDF generation, proposals, client portal, staff portal, daily checklists with public live link (token-based, optimistic toggling, 15s polling), email composer with attachments/signature, event spend tracking (EventSpendSection), and reporting with pipeline funnel analytics.
+
+## Calendar Views
+
+The dashboard calendar supports four views:
+- **Month** — standard month grid with booking/lead cards and status labels
+- **Week** — 7-column week grid, Mon–Sun start; day headers click to open Day view; adjacent month data loaded to handle month boundaries
+- **Day** — single-day detail view with event cards; navigate day-by-day
+- **List** — sortable/filterable list of all events in the month
 
 ## Key Pages & Routes
 

@@ -11,7 +11,7 @@ import {
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
-  SlidersHorizontal, GripVertical, Bell, Paperclip
+  SlidersHorizontal, GripVertical, Bell, Paperclip, Download
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -770,6 +770,25 @@ export default function Dashboard() {
   const { data: monthLeadEvents, refetch: refetchMonthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
+  );
+  // Adjacent month data for week/day view (handles month boundaries)
+  const adjNextMonthDate = new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1);
+  const adjPrevMonthDate = new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1);
+  const { data: adjMonthBookings } = trpc.bookings.byMonth.useQuery(
+    { year: adjNextMonthDate.getFullYear(), month: adjNextMonthDate.getMonth() + 1 },
+    { enabled: !!user?.id && (calendarView === 'week' || calendarView === 'day') }
+  );
+  const { data: adjMonthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
+    { year: adjNextMonthDate.getFullYear(), month: adjNextMonthDate.getMonth() + 1 },
+    { enabled: !!user?.id && (calendarView === 'week' || calendarView === 'day') }
+  );
+  const { data: adjPrevMonthBookings } = trpc.bookings.byMonth.useQuery(
+    { year: adjPrevMonthDate.getFullYear(), month: adjPrevMonthDate.getMonth() + 1 },
+    { enabled: !!user?.id && calendarView === 'week' }
+  );
+  const { data: adjPrevMonthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
+    { year: adjPrevMonthDate.getFullYear(), month: adjPrevMonthDate.getMonth() + 1 },
+    { enabled: !!user?.id && calendarView === 'week' }
   );
 
 
@@ -2779,10 +2798,31 @@ export default function Dashboard() {
             <div className="flex flex-col h-full overflow-hidden">
               {/* Calendar Toolbar */}
               <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-gold/15 bg-cream flex-shrink-0">
-                <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-                <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
+                <button
+                  onClick={() => {
+                    if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() - 7); setCalDate(d); }
+                    else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() - 1); setCalDate(d); }
+                    else setCalDate(new Date(year, month - 1, 1));
+                  }}
+                  className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+                <button
+                  onClick={() => {
+                    if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() + 7); setCalDate(d); }
+                    else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() + 1); setCalDate(d); }
+                    else setCalDate(new Date(year, month + 1, 1));
+                  }}
+                  className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
                 <button onClick={() => setCalDate(new Date())} className="hidden sm:block font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
-                <h2 className="font-cormorant text-base md:text-xl font-semibold text-ink flex-1">{MONTHS[month]} {year}</h2>
+                <h2 className="font-cormorant text-base md:text-xl font-semibold text-ink flex-1">
+                  {calendarView === 'week' ? (() => {
+                    const dow = (calDate.getDay() + 6) % 7;
+                    const ws = new Date(calDate); ws.setDate(calDate.getDate() - dow);
+                    const we = new Date(ws); we.setDate(ws.getDate() + 6);
+                    return `${ws.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+                  })() : calendarView === 'day'
+                    ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                    : `${MONTHS[month]} ${year}`}
+                </h2>
                 {/* View switcher — hidden on mobile */}
                 <div className="hidden sm:flex border border-gold/30">
                   {(["month","week","day","list"] as const).map(v => (
@@ -2950,6 +2990,42 @@ export default function Dashboard() {
                     >
                       <ArrowUpDown className="w-3.5 h-3.5 text-gray-500" />
                     </button>
+                    <button
+                      onClick={() => {
+                        const rows = [
+                          ...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })),
+                          ...(monthLeadEvents ?? []).map((l: any) => ({ ...l, _type: 'lead' })),
+                        ].sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
+                        const header = ['Type','First Name','Last Name','Email','Phone','Event Type','Event Date','Guests','Status','Company','Space','Notes','Created'];
+                        const csvRows = [header, ...rows.map((r: any) => [
+                          r._type === 'booking' ? 'Booking' : 'Enquiry',
+                          r.firstName ?? '',
+                          r.lastName ?? '',
+                          r.email ?? '',
+                          r.phone ?? '',
+                          r.eventType ?? '',
+                          r.eventDate ? new Date(r.eventDate).toLocaleDateString('en-NZ') : '',
+                          r.guestCount ?? '',
+                          r.status ?? '',
+                          r.company ?? '',
+                          r.space ?? '',
+                          (r.notes ?? r.message ?? '').replace(/[\r\n,]/g, ' '),
+                          r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-NZ') : '',
+                        ])];
+                        const csv = csvRows.map(row => row.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+                        const blob = new Blob([csv], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `VenueFlow-Events-${MONTHS[month]}-${year}.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="h-8 w-8 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+                      title="Export to CSV"
+                    >
+                      <Download className="w-3.5 h-3.5 text-gray-500" />
+                    </button>
                     <button onClick={() => setShowAddLead(true)} className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
                       <Plus className="w-3.5 h-3.5" /> Add Event
                     </button>
@@ -3032,19 +3108,289 @@ export default function Dashboard() {
               </div>
               )}
 
-              {/* Week View (simplified) */}
-              {calendarView === "week" && (
-              <div className="flex-1 overflow-auto p-6">
-                <p className="font-dm text-sm text-ink/60 text-center mt-8">Week view — switch to Month or List for full details.</p>
-              </div>
-              )}
+              {/* ── WEEK VIEW ───────────────────────────────────────────────────── */}
+              {calendarView === "week" && (() => {
+                // Monday of current week
+                const dow = (calDate.getDay() + 6) % 7;
+                const weekStart = new Date(calDate);
+                weekStart.setDate(calDate.getDate() - dow);
+                weekStart.setHours(0,0,0,0);
+                const days = Array.from({ length: 7 }, (_, i) => {
+                  const d = new Date(weekStart);
+                  d.setDate(weekStart.getDate() + i);
+                  return d;
+                });
+                const todayStr = new Date().toDateString();
+                const statusCard = (status: string) => {
+                  switch(status) {
+                    case 'confirmed': return 'bg-forest text-white';
+                    case 'tentative': return 'bg-sky-400 text-white';
+                    case 'proposal_sent': return 'bg-violet-400 text-white';
+                    case 'negotiating': return 'bg-rose-400 text-white';
+                    case 'new': case 'contacted': return 'bg-amber-300 text-amber-900';
+                    case 'booked': return 'bg-forest-dark text-white';
+                    case 'lost': case 'cancelled': return 'bg-stone-300 text-stone-700';
+                    default: return 'bg-gold/30 text-ink';
+                  }
+                };
+                const statusLabel = (s: string, isLead: boolean) => {
+                  if (isLead) {
+                    return s === 'new' ? 'NEW ENQUIRY' : s === 'contacted' ? 'CONTACTED' :
+                           s === 'proposal_sent' ? 'PROPOSAL SENT' : s === 'negotiating' ? 'NEGOTIATING' :
+                           s === 'booked' ? 'BOOKED' : s === 'lost' ? 'LOST' : (s??'').replace(/_/g,' ').toUpperCase();
+                  }
+                  return s === 'confirmed' ? 'CONFIRMED' : s === 'tentative' ? 'TENTATIVE' :
+                         s === 'booked' ? 'BOOKED' : s === 'proposal_sent' ? 'PROPOSAL SENT' :
+                         s === 'negotiating' ? 'NEGOTIATING' : s === 'cancelled' ? 'CANCELLED' :
+                         s === 'lost' ? 'LOST' : (s??'').replace(/_/g,' ').toUpperCase();
+                };
+                // Combine prev + current + next month for full week boundary support
+                const allBookings: any[] = [...(adjPrevMonthBookings ?? []), ...(monthBookings ?? []), ...(adjMonthBookings ?? [])];
+                const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []), ...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])];
+                return (
+                <div className="flex-1 overflow-auto">
+                  {/* Day column headers */}
+                  <div className="grid grid-cols-7 border-b border-gold/15 sticky top-0 bg-cream z-10">
+                    {days.map((d, i) => {
+                      const isToday = d.toDateString() === todayStr;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => { setCalDate(d); setCalendarView('day'); }}
+                          className={`text-center py-2 border-r border-gold/10 last:border-r-0 hover:bg-linen/60 transition-colors w-full ${isToday ? 'bg-gold/10' : ''}`}
+                          title={d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}>
+                          <div className="font-bebas tracking-widest text-[10px] text-ink/50">
+                            {['MON','TUE','WED','THU','FRI','SAT','SUN'][i]}
+                          </div>
+                          <div className={`font-cormorant text-lg font-semibold leading-tight ${
+                            isToday ? 'text-white bg-forest rounded-full w-7 h-7 flex items-center justify-center mx-auto' : 'text-ink hover:text-forest'
+                          }`}>
+                            {d.getDate()}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Event cells */}
+                  <div className="grid grid-cols-7 min-h-[calc(100vh-16rem)]">
+                    {days.map((d, i) => {
+                      const isToday = d.toDateString() === todayStr;
+                      const isWeekend = i >= 5;
+                      const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                      const dayBookings = allBookings.filter((b: any) => {
+                        if (!b.eventDate) return false;
+                        const bd = new Date(b.eventDate);
+                        return bd.getFullYear() === d.getFullYear() && bd.getMonth() === d.getMonth() && bd.getDate() === d.getDate();
+                      });
+                      const dayLeads = allLeads.filter((l: any) => {
+                        if (!l.eventDate) return false;
+                        const ld = new Date(l.eventDate);
+                        return ld.getFullYear() === d.getFullYear() && ld.getMonth() === d.getMonth() && ld.getDate() === d.getDate();
+                      });
+                      return (
+                        <div key={i} className={`border-r border-gold/10 last:border-r-0 p-1.5 flex flex-col gap-1 min-h-[140px] ${
+                          isWeekend ? 'bg-linen/20' : 'bg-white'
+                        } ${isToday ? 'ring-2 ring-inset ring-gold/40' : ''}`}>
+                          {dayBookings.map((b: any) => (
+                            <button key={b.id}
+                              onClick={() => setSelectedBooking(b)}
+                              className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity`}>
+                              <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
+                              {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
+                              {b.startTime && <div className="opacity-75">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
+                              {b.guestCount && <div className="opacity-70">{b.guestCount} pax</div>}
+                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(b.status, false)}</div>
+                            </button>
+                          ))}
+                          {dayLeads.map((l: any) => (
+                            <button key={l.id}
+                              onClick={() => setSelectedBooking({ ...l, _isLead: true })}
+                              className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}>
+                              <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                              {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
+                              {l.guestCount && <div className="opacity-70">{l.guestCount} pax</div>}
+                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(l.status, true)}</div>
+                            </button>
+                          ))}
+                          {dayBookings.length === 0 && dayLeads.length === 0 && (
+                            <button
+                              onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
+                              className="text-ink/20 hover:text-ink/50 transition-colors self-start mt-1 p-0.5"
+                              title="Add event">
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                );
+              })()}
 
-              {/* Day View (simplified) */}
-              {calendarView === "day" && (
-              <div className="flex-1 overflow-auto p-6">
-                <p className="font-dm text-sm text-ink/60 text-center mt-8">Day view — switch to Month or List for full details.</p>
-              </div>
-              )}
+              {/* ── DAY VIEW ────────────────────────────────────────────────────── */}
+              {calendarView === "day" && (() => {
+                const todayStr = new Date().toDateString();
+                const isToday = calDate.toDateString() === todayStr;
+                const statusCard = (status: string) => {
+                  switch(status) {
+                    case 'confirmed': return 'border-l-4 border-forest bg-forest/5';
+                    case 'tentative': return 'border-l-4 border-sky-400 bg-sky-50';
+                    case 'proposal_sent': return 'border-l-4 border-violet-400 bg-violet-50';
+                    case 'negotiating': return 'border-l-4 border-rose-400 bg-rose-50';
+                    case 'new': case 'contacted': return 'border-l-4 border-amber-400 bg-amber-50';
+                    case 'booked': return 'border-l-4 border-forest-dark bg-forest/10';
+                    case 'cancelled': case 'lost': return 'border-l-4 border-stone-300 bg-stone-50';
+                    default: return 'border-l-4 border-gold/60 bg-gold/5';
+                  }
+                };
+                const statusDot = (s: string) => {
+                  switch(s) {
+                    case 'confirmed': return 'bg-forest';
+                    case 'tentative': return 'bg-sky-400';
+                    case 'proposal_sent': return 'bg-violet-400';
+                    case 'negotiating': return 'bg-rose-400';
+                    case 'new': case 'contacted': return 'bg-amber-400';
+                    case 'booked': return 'bg-forest-dark';
+                    default: return 'bg-gold';
+                  }
+                };
+                const allBookings: any[] = [...(monthBookings ?? []), ...(adjMonthBookings ?? [])];
+                const allLeads: any[] = [...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])];
+                const dayBookings = allBookings.filter((b: any) => {
+                  if (!b.eventDate) return false;
+                  const bd = new Date(b.eventDate);
+                  return bd.getFullYear() === calDate.getFullYear() && bd.getMonth() === calDate.getMonth() && bd.getDate() === calDate.getDate();
+                });
+                const dayLeads = allLeads.filter((l: any) => {
+                  if (!l.eventDate) return false;
+                  const ld = new Date(l.eventDate);
+                  return ld.getFullYear() === calDate.getFullYear() && ld.getMonth() === calDate.getMonth() && ld.getDate() === calDate.getDate();
+                });
+                const ds = `${calDate.getFullYear()}-${String(calDate.getMonth()+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`;
+                const totalEvents = dayBookings.length + dayLeads.length;
+                return (
+                <div className="flex-1 overflow-auto p-4 md:p-6">
+                  <div className="max-w-3xl mx-auto">
+                    {/* Day header */}
+                    <div className={`flex items-center gap-3 mb-6 pb-4 border-b ${isToday ? 'border-gold/40' : 'border-gold/15'}`}>
+                      <div className={`text-5xl font-cormorant font-light ${isToday ? 'text-forest' : 'text-ink/70'}`}>
+                        {calDate.getDate()}
+                      </div>
+                      <div>
+                        <div className="font-bebas tracking-widest text-sm text-ink/50">
+                          {calDate.toLocaleDateString('en-NZ', { weekday: 'long' }).toUpperCase()}
+                        </div>
+                        <div className="font-cormorant text-xl text-ink">
+                          {calDate.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })}
+                        </div>
+                        {isToday && <div className="font-bebas tracking-widest text-[10px] text-forest mt-0.5">TODAY</div>}
+                      </div>
+                      <div className="ml-auto flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="font-bebas tracking-widest text-2xl text-ink/80">{totalEvents}</div>
+                          <div className="font-dm text-[10px] text-ink/40 leading-none">EVENT{totalEvents !== 1 ? 'S' : ''}</div>
+                        </div>
+                        <button
+                          onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
+                          className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1">
+                          <Plus className="w-3.5 h-3.5" /> ADD EVENT
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Events */}
+                    {totalEvents === 0 ? (
+                      <div className="text-center py-16">
+                        <div className="font-cormorant text-3xl text-ink/20 mb-2">No events</div>
+                        <p className="font-dm text-sm text-ink/40">Nothing scheduled for this day.</p>
+                        <button
+                          onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
+                          className="mt-4 font-bebas tracking-widest text-xs text-forest border border-forest/30 px-4 py-2 hover:bg-forest/5 transition-colors">
+                          + ADD AN EVENT
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {dayBookings.map((b: any) => (
+                          <button key={b.id}
+                            onClick={() => setSelectedBooking(b)}
+                            className={`w-full text-left p-4 ${statusCard(b.status)} hover:opacity-90 transition-opacity`}>
+                            <div className="flex items-start gap-3">
+                              <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${statusDot(b.status)}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-cormorant text-lg font-semibold text-ink">
+                                    {b.firstName} {b.lastName}
+                                  </span>
+                                  {b.eventType && (
+                                    <span className="font-bebas tracking-widest text-[10px] text-gold bg-gold/15 px-1.5 py-0.5">
+                                      {b.eventType}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 mt-1 text-xs font-dm text-ink/60 flex-wrap">
+                                  {b.startTime && (
+                                    <span className="flex items-center gap-1">
+                                      <span className="font-semibold">{b.startTime}</span>
+                                      {b.endTime && <span>– {b.endTime}</span>}
+                                    </span>
+                                  )}
+                                  {b.guestCount && <span>{b.guestCount} guests</span>}
+                                  {b.spaceName && <span>{b.spaceName}</span>}
+                                </div>
+                              </div>
+                              <div className="font-bebas tracking-widest text-[10px] text-ink/50 flex-shrink-0">
+                                {b.status === 'confirmed' ? 'CONFIRMED' :
+                                 b.status === 'tentative' ? 'TENTATIVE' :
+                                 b.status === 'booked' ? 'BOOKED' :
+                                 b.status === 'proposal_sent' ? 'PROPOSAL SENT' :
+                                 b.status === 'negotiating' ? 'NEGOTIATING' :
+                                 (b.status??'').replace(/_/g,' ').toUpperCase()}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                        {dayLeads.map((l: any) => (
+                          <button key={l.id}
+                            onClick={() => setSelectedBooking({ ...l, _isLead: true })}
+                            className={`w-full text-left p-4 ${statusCard(l.status)} hover:opacity-90 transition-opacity`}>
+                            <div className="flex items-start gap-3">
+                              <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${statusDot(l.status)}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-cormorant text-lg font-semibold text-ink">
+                                    {l.firstName} {l.lastName}
+                                  </span>
+                                  {l.eventType && (
+                                    <span className="font-bebas tracking-widest text-[10px] text-gold bg-gold/15 px-1.5 py-0.5">
+                                      {l.eventType}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 mt-1 text-xs font-dm text-ink/60 flex-wrap">
+                                  {l.guestCount && <span>{l.guestCount} guests</span>}
+                                  {l.spaceName && <span>{l.spaceName}</span>}
+                                </div>
+                              </div>
+                              <div className="font-bebas tracking-widest text-[10px] text-ink/50 flex-shrink-0">
+                                {l.status === 'new' ? 'NEW ENQUIRY' :
+                                 l.status === 'contacted' ? 'CONTACTED' :
+                                 l.status === 'proposal_sent' ? 'PROPOSAL SENT' :
+                                 l.status === 'negotiating' ? 'NEGOTIATING' :
+                                 l.status === 'booked' ? 'BOOKED' :
+                                 l.status === 'lost' ? 'LOST' :
+                                 (l.status??'').replace(/_/g,' ').toUpperCase()}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                );
+              })()}
 
               <div className="dante-card p-6 max-w-2xl hidden">
                 <div className="flex items-center justify-between mb-4">

@@ -4224,6 +4224,52 @@ Return ONLY valid JSON. Example structure:
         return { success: true };
       }),
 
+    duplicate: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const crypto = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [original] = await db.select().from(dailyChecklists)
+          .where(and(eq(dailyChecklists.id, input.id), eq(dailyChecklists.ownerId, ctx.user.id))).limit(1);
+        if (!original) throw new Error('Checklist not found');
+        const items = await db.select().from(dailyChecklistItems)
+          .where(eq(dailyChecklistItems.checklistId, original.id))
+          .orderBy(asc(dailyChecklistItems.sortOrder));
+        const token = crypto.randomBytes(24).toString('hex');
+        const now = Date.now();
+        const [newCl] = await db.insert(dailyChecklists).values({
+          ownerId: ctx.user.id,
+          name: `${original.name} (Copy)`,
+          description: original.description,
+          category: original.category,
+          token,
+          sortOrder: 0,
+          createdAt: now,
+          updatedAt: now,
+        }).returning();
+        if (items.length > 0) {
+          await db.insert(dailyChecklistItems).values(
+            items.map(it => ({
+              checklistId: newCl.id,
+              text: it.text,
+              note: it.note,
+              photoUrl: it.photoUrl,
+              sortOrder: it.sortOrder,
+              checked: 0,
+              checkedBy: null,
+              checkedAt: null,
+              createdAt: now,
+              updatedAt: now,
+            }))
+          );
+        }
+        return newCl;
+      }),
+
     addItem: protectedProcedure
       .input(z.object({
         checklistId: z.number(),

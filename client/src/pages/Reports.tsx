@@ -6,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend
 } from "recharts";
-import { FileText, TrendingUp, DollarSign, Users, Calendar, ArrowUpRight, Settings } from "lucide-react";
+import { FileText, TrendingUp, DollarSign, Users, Calendar, ArrowUpRight, Settings, Download } from "lucide-react";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -16,7 +16,7 @@ const TABS = [
   { key: "proposals", label: "Proposals" },
 ];
 
-const BRAND_COLORS = ["#6B1A2A", "#B8C8D8", "#8A7E74", "#4A0F1C", "#8AAABB"];
+const BRAND_COLORS = ["#6b98e7", "#4a7dd4", "#8ab2ee", "#2d5fa8", "#b8ccf4"];
 
 export default function Reports() {
   const [tab, setTab] = useState("overview");
@@ -166,7 +166,7 @@ export default function Reports() {
                     <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
-                    <Bar dataKey="revenue" fill="#6B1A2A" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="revenue" fill="#6b98e7" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -357,7 +357,7 @@ export default function Reports() {
                   <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
                   <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="enquiries" stroke="#6B1A2A" strokeWidth={2} dot={{ fill: "#6B1A2A", r: 3 }} />
+                  <Line type="monotone" dataKey="enquiries" stroke="#6b98e7" strokeWidth={2} dot={{ fill: "#6b98e7", r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -436,7 +436,7 @@ export default function Reports() {
                   <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
-                  <Bar dataKey="revenue" fill="#6B1A2A" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="revenue" fill="#6b98e7" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -444,8 +444,30 @@ export default function Reports() {
             )}
           </div>
           <div className="dante-card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <h2 className="font-cormorant text-lg font-semibold text-ink">Revenue by Booking</h2>
+              <button
+                onClick={() => {
+                  const rows = (allBookings ?? []).filter((b: any) => b.totalValue).sort((a: any, b: any) => (b.totalValue || 0) - (a.totalValue || 0));
+                  const header = ['Event','Date','Guests','Value','Status'];
+                  const csvRows = [header, ...rows.map((b: any) => [
+                    b.eventName ?? '',
+                    b.eventDate ? new Date(b.eventDate).toLocaleDateString('en-NZ') : '',
+                    b.guestCount ?? '',
+                    b.totalValue ?? '',
+                    b.status ?? '',
+                  ])];
+                  const csv = csvRows.map(r => r.map((c: any) => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a'); a.href = url; a.download = 'VenueFlow-Revenue.csv'; a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex items-center gap-1.5 text-xs font-inter text-sage-green border border-sage-green/30 px-3 py-1.5 rounded-lg hover:bg-sage-tint transition-colors"
+                title="Export to CSV"
+              >
+                <Download className="w-3.5 h-3.5" /> Export CSV
+              </button>
             </div>
             <table className="w-full">
               <thead>
@@ -476,13 +498,30 @@ export default function Reports() {
       )}
 
       {/* ── PROPOSALS ── */}
-      {tab === "proposals" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {tab === "proposals" && (() => {
+        const lost = (allLeads ?? []).filter((l: any) => l.status === "lost").length;
+        const inNegotiation = (allLeads ?? []).filter((l: any) => l.status === "negotiating").length;
+        const proposalLeads = (allLeads ?? []).filter((l: any) =>
+          ["proposal_sent", "negotiating", "booked", "lost"].includes(l.status)
+        ).sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        // Pipeline funnel data
+        const funnelData = [
+          { stage: "New Enquiry", count: (allLeads ?? []).filter((l: any) => l.status === "new").length, color: "#94a3b8" },
+          { stage: "Contacted", count: (allLeads ?? []).filter((l: any) => l.status === "contacted").length, color: "#6b98e7" },
+          { stage: "Proposal Sent", count: (allLeads ?? []).filter((l: any) => l.status === "proposal_sent").length, color: "#8b5cf6" },
+          { stage: "Negotiating", count: inNegotiation, color: "#f59e0b" },
+          { stage: "Booked", count: booked, color: "#10b981" },
+          { stage: "Lost", count: lost, color: "#ef4444" },
+        ];
+        const maxCount = Math.max(...funnelData.map(f => f.count), 1);
+        return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: "Proposals Sent", value: proposalsSent, sub: "total" },
-              { label: "Accepted (Booked)", value: booked, sub: "converted to booking" },
-              { label: "Acceptance Rate", value: `${proposalsSent > 0 ? Math.round((booked / proposalsSent) * 100) : 0}%`, sub: "proposals to bookings" },
+              { label: "In Negotiation", value: inNegotiation, sub: "active" },
+              { label: "Accepted (Booked)", value: booked, sub: "converted" },
+              { label: "Acceptance Rate", value: `${proposalsSent > 0 ? Math.round((booked / proposalsSent) * 100) : 0}%`, sub: "proposal to booking" },
             ].map(s => (
               <div key={s.label} className="dante-card p-5">
                 <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
@@ -491,16 +530,73 @@ export default function Reports() {
               </div>
             ))}
           </div>
+          {/* Pipeline funnel */}
           <div className="dante-card p-5">
-            <p className="font-dm text-sm text-sage text-center py-8">
-              Detailed proposal analytics coming soon. View individual proposals in the{" "}
-              <Link href="/dashboard">
-                <span className="text-burgundy hover:underline cursor-pointer">Inbox</span>
-              </Link>.
-            </p>
+            <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Enquiry Pipeline Funnel</h2>
+            <div className="space-y-2">
+              {funnelData.map(f => (
+                <div key={f.stage} className="flex items-center gap-3">
+                  <span className="font-bebas text-xs tracking-widest text-sage w-32 flex-shrink-0">{f.stage}</span>
+                  <div className="flex-1 h-5 bg-linen overflow-hidden">
+                    <div className="h-5 transition-all" style={{ width: `${(f.count / maxCount) * 100}%`, backgroundColor: f.color }} />
+                  </div>
+                  <span className="font-dm text-xs font-semibold text-ink w-6 text-right">{f.count}</span>
+                </div>
+              ))}
+            </div>
           </div>
+          {/* Recent proposals table */}
+          {proposalLeads.length > 0 && (
+            <div className="dante-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border">
+                <h2 className="font-cormorant text-lg font-semibold text-ink">Recent Proposals</h2>
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-linen">
+                    {["Client", "Event Type", "Event Date", "Guests", "Stage"].map(h => (
+                      <th key={h} className="font-bebas text-xs tracking-widest text-sage text-left px-4 py-3">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {proposalLeads.slice(0, 20).map((l: any) => (
+                    <tr key={l.id} className="hover:bg-linen/50 transition-colors">
+                      <td className="px-4 py-3 font-dm text-sm text-ink">{l.firstName} {l.lastName}</td>
+                      <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventType || "—"}</td>
+                      <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventDate ? new Date(l.eventDate).toLocaleDateString("en-NZ") : "—"}</td>
+                      <td className="px-4 py-3 font-dm text-xs text-sage">{l.guestCount || "—"}</td>
+                      <td className="px-4 py-3">
+                        <span className={`font-bebas text-[10px] tracking-widest px-2 py-0.5 border ${
+                          l.status === "booked" ? "border-emerald-400 bg-emerald-50 text-emerald-700" :
+                          l.status === "proposal_sent" ? "border-violet-400 bg-violet-50 text-violet-700" :
+                          l.status === "negotiating" ? "border-amber-400 bg-amber-50 text-amber-700" :
+                          "border-stone-300 bg-stone-50 text-stone-500"
+                        }`}>
+                          {l.status === "proposal_sent" ? "PROPOSAL SENT" :
+                           l.status === "negotiating" ? "NEGOTIATING" :
+                           l.status === "booked" ? "BOOKED" :
+                           (l.status ?? "").replace(/_/g, " ").toUpperCase()}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {proposalLeads.length === 0 && (
+            <div className="dante-card p-5">
+              <p className="font-dm text-sm text-sage text-center py-8">No proposals sent yet. Start by converting an enquiry to a proposal in the{" "}
+                <Link href="/dashboard">
+                  <span className="text-burgundy hover:underline cursor-pointer">Inbox</span>
+                </Link>.
+              </p>
+            </div>
+          )}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

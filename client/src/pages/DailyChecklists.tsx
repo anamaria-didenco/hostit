@@ -6,7 +6,7 @@
 import { useState, useRef } from "react";
 import { trpc } from "../lib/trpc";
 import { toast } from "sonner";
-import { Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronRight, Camera, X, GripVertical, Edit2, Check, RotateCcw } from "lucide-react";
+import { Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronRight, Camera, X, GripVertical, Edit2, Check, RotateCcw, CopyPlus } from "lucide-react";
 
 const CATEGORIES = [
   { value: "general", label: "General", color: "bg-gray-100 text-gray-700" },
@@ -55,6 +55,10 @@ export default function DailyChecklists() {
   });
   const deleteItemMut = trpc.dailyChecklists.deleteItem.useMutation({
     onSuccess: () => refetchExpanded(),
+  });
+  const duplicateMut = trpc.dailyChecklists.duplicate.useMutation({
+    onSuccess: () => { refetch(); toast.success("Checklist duplicated!"); },
+    onError: () => toast.error("Failed to duplicate checklist"),
   });
 
   function getLiveLink(token: string) {
@@ -221,6 +225,14 @@ export default function DailyChecklists() {
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
+                      <button
+                        onClick={e => { e.stopPropagation(); duplicateMut.mutate({ id: cl.id }); }}
+                        disabled={duplicateMut.isPending}
+                        className="p-1.5 text-[#8a7a60] hover:bg-[#8a7a60]/10 rounded transition-colors disabled:opacity-50"
+                        title="Duplicate checklist"
+                      >
+                        <CopyPlus className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cl.name}"?`)) deleteMut.mutate({ id: cl.id }); }}
                         className="p-1.5 text-red-400 hover:bg-red-50 rounded transition-colors"
