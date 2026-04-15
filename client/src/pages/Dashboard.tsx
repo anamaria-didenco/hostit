@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
 import CsvImportModal from "@/components/CsvImportModal";
-import StatusManager, { parseCustomStatuses, getStatusClasses, COLOR_PRESETS, type StatusDef } from "@/components/StatusManager";
+import StatusManager, { parseCustomStatuses, getStatusClasses, getStatusCalClasses, getStatusBarClasses, getStatusDayClasses, COLOR_PRESETS, type StatusDef } from "@/components/StatusManager";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
@@ -739,9 +739,31 @@ export default function Dashboard() {
     const defs = parseCustomStatuses((venueSettings as any)?.customStatuses);
     return defs.map(d => {
       const preset = COLOR_PRESETS.find(c => c.id === d.colorId) ?? COLOR_PRESETS[0];
-      return { key: d.key, label: d.label, color: preset.classes, swatch: preset.swatch };
+      return {
+        key: d.key,
+        label: d.label,
+        color: preset.classes,
+        swatch: preset.swatch,
+        calClasses: preset.calClasses,
+        barClasses: preset.barClasses,
+        dayClasses: preset.dayClasses,
+      };
     });
   }, [venueSettings]);
+
+  const getStatusInfo = React.useCallback((key: string) => {
+    const s = pipelineStages.find(p => p.key === key);
+    if (s) return s;
+    return {
+      key,
+      label: (key ?? '').replace(/_/g, ' ').toUpperCase(),
+      color: "border-gray-400 bg-gray-100 text-gray-700",
+      swatch: "#9ca3af",
+      calClasses: "bg-gray-300 text-gray-800",
+      barClasses: "bg-gray-300",
+      dayClasses: "border-l-4 border-gray-400 bg-gray-50",
+    };
+  }, [pipelineStages]);
 
   const saveKanbanPrefs = React.useCallback((prefs: { visible: string[]; order: string[] }) => {
     const key = `kanban_stage_prefs_${user?.id ?? "default"}`;
@@ -2879,21 +2901,7 @@ export default function Dashboard() {
                         const isWeekend = di >= 5; // Sat=5, Sun=6
                         const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
                         const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
-                        // Colour helper per status
-                        const statusCard = (status: string) => {
-                          switch(status) {
-                            case 'confirmed': return 'bg-forest text-white';
-                            case 'tentative': return 'bg-sky-400 text-white';
-                            case 'proposal_sent': return 'bg-violet-400 text-white';
-                            case 'negotiating': return 'bg-rose-400 text-white';
-                            case 'new': return 'bg-amber-300 text-amber-900';
-                            case 'contacted': return 'bg-amber-400 text-amber-900';
-                            case 'booked': return 'bg-forest-dark text-white';
-                            case 'lost': return 'bg-stone-300 text-stone-700';
-                            case 'cancelled': return 'bg-stone-200 text-stone-500';
-                            default: return 'bg-gold/30 text-ink';
-                          }
-                        };
+                        const statusCard = (status: string) => getStatusInfo(status).calClasses;
                         return (
                           <div key={di} className={`border-r border-gold/10 last:border-r-0 p-1 flex flex-col gap-0.5 ${
                             isWeekend ? 'bg-linen/20' : 'bg-white'
@@ -2912,16 +2920,7 @@ export default function Dashboard() {
                                   {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
                                   {b.startTime && <div className="opacity-70">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
                                   {b.guestCount && <div className="opacity-70">{b.guestCount} guests</div>}
-                                  <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{
-                                    b.status === 'confirmed' ? 'CONFIRMED' :
-                                    b.status === 'booked' ? 'BOOKED' :
-                                    b.status === 'tentative' ? 'TENTATIVE' :
-                                    b.status === 'proposal_sent' ? 'PROPOSAL SENT' :
-                                    b.status === 'negotiating' ? 'NEGOTIATING' :
-                                    b.status === 'cancelled' ? 'CANCELLED' :
-                                    b.status === 'lost' ? 'LOST' :
-                                    (b.status ?? '').replace(/_/g,' ').toUpperCase()
-                                  }</div>
+                                  <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); if (confirm(`Delete ${b.eventType || 'event'} for ${b.firstName}?`)) deleteBooking.mutate({ id: b.id }); }}
@@ -2940,15 +2939,7 @@ export default function Dashboard() {
                                 <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                                 {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
                                 {l.guestCount && <div className="opacity-70">{l.guestCount} guests</div>}
-                                <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{
-                                  l.status === 'new' ? 'NEW ENQUIRY' :
-                                  l.status === 'contacted' ? 'CONTACTED' :
-                                  l.status === 'proposal_sent' ? 'PROPOSAL SENT' :
-                                  l.status === 'negotiating' ? 'NEGOTIATING' :
-                                  l.status === 'booked' ? 'BOOKED' :
-                                  l.status === 'lost' ? 'LOST' :
-                                  (l.status ?? '').replace(/_/g,' ').toUpperCase()
-                                }</div>
+                                <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                               </button>
                             ))}
                             {/* Edit icon for adding event on this day */}
@@ -3053,24 +3044,10 @@ export default function Dashboard() {
                         return eventSortDir === 'asc' ? cmp : -cmp;
                       })
                       .map((item: any) => {
-                        const isConfirmed = item.status === 'confirmed' || item.status === 'booked';
-                        const statusConfig: Record<string, { bar: string; badge: string; label: string }> = {
-                          confirmed: { bar: 'bg-sage-green', badge: 'bg-sage-tint text-sage-dark', label: 'CONFIRMED' },
-                          booked:    { bar: 'bg-sage-green', badge: 'bg-sage-tint text-sage-dark', label: 'CONFIRMED' },
-                          tentative: { bar: 'bg-amber-400', badge: 'bg-amber-100 text-amber-700', label: 'TENTATIVE' },
-                          proposal_sent: { bar: 'bg-violet-400', badge: 'bg-violet-100 text-violet-700', label: 'PROPOSAL' },
-                          negotiating: { bar: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700', label: 'NEGOTIATING' },
-                          new:       { bar: 'bg-rose-400', badge: 'bg-rose-100 text-rose-700', label: 'NEW ENQUIRY' },
-                          contacted: { bar: 'bg-rose-300', badge: 'bg-rose-50 text-rose-600', label: 'CONTACTED' },
-                          lost:      { bar: 'bg-gray-300', badge: 'bg-gray-100 text-gray-500', label: 'LOST' },
-                          cancelled: { bar: 'bg-gray-200', badge: 'bg-gray-100 text-gray-400', label: 'CANCELLED' },
-                        };
-                        const sc = statusConfig[item.status] ?? { bar: 'bg-gray-200', badge: 'bg-gray-100 text-gray-500', label: item.status?.toUpperCase() };
+                        const si = getStatusInfo(item.status);
                         return (
-                          <div key={item.id} className={`flex items-stretch rounded-xl border overflow-hidden transition-all hover:shadow-sm ${
-                            isConfirmed ? 'border-sage-green/30 bg-white' : 'border-gray-100 bg-white'
-                          }`}>
-                            <div className={`w-1 flex-shrink-0 ${sc.bar}`} />
+                          <div key={item.id} className="flex items-stretch rounded-xl border border-gray-100 overflow-hidden transition-all hover:shadow-sm bg-white">
+                            <div className={`w-1 flex-shrink-0 ${si.barClasses}`} />
                             <div className="flex-1 p-3 flex items-center justify-between gap-3">
                               <div className="flex-1 min-w-0">
                                 <div className="font-inter font-semibold text-sm text-gray-900">{item.firstName} {item.lastName}</div>
@@ -3082,8 +3059,8 @@ export default function Dashboard() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-                                <span className={`font-inter text-[10px] font-bold px-2 py-0.5 rounded-full ${sc.badge}`}>
-                                  {sc.label}
+                                <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 rounded ${si.calClasses}`}>
+                                  {si.label.toUpperCase()}
                                 </span>
                                 {item._type === 'booking' ? (
                                   <button onClick={() => setLocation(`/event/${item.id}`)} className="font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">Open</button>
@@ -3121,29 +3098,8 @@ export default function Dashboard() {
                   return d;
                 });
                 const todayStr = new Date().toDateString();
-                const statusCard = (status: string) => {
-                  switch(status) {
-                    case 'confirmed': return 'bg-forest text-white';
-                    case 'tentative': return 'bg-sky-400 text-white';
-                    case 'proposal_sent': return 'bg-violet-400 text-white';
-                    case 'negotiating': return 'bg-rose-400 text-white';
-                    case 'new': case 'contacted': return 'bg-amber-300 text-amber-900';
-                    case 'booked': return 'bg-forest-dark text-white';
-                    case 'lost': case 'cancelled': return 'bg-stone-300 text-stone-700';
-                    default: return 'bg-gold/30 text-ink';
-                  }
-                };
-                const statusLabel = (s: string, isLead: boolean) => {
-                  if (isLead) {
-                    return s === 'new' ? 'NEW ENQUIRY' : s === 'contacted' ? 'CONTACTED' :
-                           s === 'proposal_sent' ? 'PROPOSAL SENT' : s === 'negotiating' ? 'NEGOTIATING' :
-                           s === 'booked' ? 'BOOKED' : s === 'lost' ? 'LOST' : (s??'').replace(/_/g,' ').toUpperCase();
-                  }
-                  return s === 'confirmed' ? 'CONFIRMED' : s === 'tentative' ? 'TENTATIVE' :
-                         s === 'booked' ? 'BOOKED' : s === 'proposal_sent' ? 'PROPOSAL SENT' :
-                         s === 'negotiating' ? 'NEGOTIATING' : s === 'cancelled' ? 'CANCELLED' :
-                         s === 'lost' ? 'LOST' : (s??'').replace(/_/g,' ').toUpperCase();
-                };
+                const statusCard = (status: string) => getStatusInfo(status).calClasses;
+                const statusLabel = (s: string) => getStatusInfo(s).label.toUpperCase();
                 // Combine prev + current + next month for full week boundary support
                 const allBookings: any[] = [...(adjPrevMonthBookings ?? []), ...(monthBookings ?? []), ...(adjMonthBookings ?? [])];
                 const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []), ...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])];
@@ -3199,7 +3155,7 @@ export default function Dashboard() {
                               {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
                               {b.startTime && <div className="opacity-75">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
                               {b.guestCount && <div className="opacity-70">{b.guestCount} pax</div>}
-                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(b.status, false)}</div>
+                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(b.status)}</div>
                             </button>
                           ))}
                           {dayLeads.map((l: any) => (
@@ -3209,7 +3165,7 @@ export default function Dashboard() {
                               <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                               {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
                               {l.guestCount && <div className="opacity-70">{l.guestCount} pax</div>}
-                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(l.status, true)}</div>
+                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(l.status)}</div>
                             </button>
                           ))}
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
@@ -3232,28 +3188,9 @@ export default function Dashboard() {
               {calendarView === "day" && (() => {
                 const todayStr = new Date().toDateString();
                 const isToday = calDate.toDateString() === todayStr;
-                const statusCard = (status: string) => {
-                  switch(status) {
-                    case 'confirmed': return 'border-l-4 border-forest bg-forest/5';
-                    case 'tentative': return 'border-l-4 border-sky-400 bg-sky-50';
-                    case 'proposal_sent': return 'border-l-4 border-violet-400 bg-violet-50';
-                    case 'negotiating': return 'border-l-4 border-rose-400 bg-rose-50';
-                    case 'new': case 'contacted': return 'border-l-4 border-amber-400 bg-amber-50';
-                    case 'booked': return 'border-l-4 border-forest-dark bg-forest/10';
-                    case 'cancelled': case 'lost': return 'border-l-4 border-stone-300 bg-stone-50';
-                    default: return 'border-l-4 border-gold/60 bg-gold/5';
-                  }
-                };
+                const statusCard = (status: string) => getStatusInfo(status).dayClasses;
                 const statusDot = (s: string) => {
-                  switch(s) {
-                    case 'confirmed': return 'bg-forest';
-                    case 'tentative': return 'bg-sky-400';
-                    case 'proposal_sent': return 'bg-violet-400';
-                    case 'negotiating': return 'bg-rose-400';
-                    case 'new': case 'contacted': return 'bg-amber-400';
-                    case 'booked': return 'bg-forest-dark';
-                    default: return 'bg-gold';
-                  }
+                  return getStatusInfo(s).barClasses;
                 };
                 const allBookings: any[] = [...(monthBookings ?? []), ...(adjMonthBookings ?? [])];
                 const allLeads: any[] = [...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])];
@@ -3340,13 +3277,8 @@ export default function Dashboard() {
                                   {b.spaceName && <span>{b.spaceName}</span>}
                                 </div>
                               </div>
-                              <div className="font-bebas tracking-widest text-[10px] text-ink/50 flex-shrink-0">
-                                {b.status === 'confirmed' ? 'CONFIRMED' :
-                                 b.status === 'tentative' ? 'TENTATIVE' :
-                                 b.status === 'booked' ? 'BOOKED' :
-                                 b.status === 'proposal_sent' ? 'PROPOSAL SENT' :
-                                 b.status === 'negotiating' ? 'NEGOTIATING' :
-                                 (b.status??'').replace(/_/g,' ').toUpperCase()}
+                              <div className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(b.status).calClasses}`}>
+                                {getStatusInfo(b.status).label.toUpperCase()}
                               </div>
                             </div>
                           </button>
@@ -3373,14 +3305,8 @@ export default function Dashboard() {
                                   {l.spaceName && <span>{l.spaceName}</span>}
                                 </div>
                               </div>
-                              <div className="font-bebas tracking-widest text-[10px] text-ink/50 flex-shrink-0">
-                                {l.status === 'new' ? 'NEW ENQUIRY' :
-                                 l.status === 'contacted' ? 'CONTACTED' :
-                                 l.status === 'proposal_sent' ? 'PROPOSAL SENT' :
-                                 l.status === 'negotiating' ? 'NEGOTIATING' :
-                                 l.status === 'booked' ? 'BOOKED' :
-                                 l.status === 'lost' ? 'LOST' :
-                                 (l.status??'').replace(/_/g,' ').toUpperCase()}
+                              <div className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(l.status).calClasses}`}>
+                                {getStatusInfo(l.status).label.toUpperCase()}
                               </div>
                             </div>
                           </button>
@@ -3582,8 +3508,8 @@ export default function Dashboard() {
                             <div className="font-dm text-xs text-ink/60">{lead.eventType || 'Enquiry'} · {lead.guestCount ? `${lead.guestCount} guests · ` : ''}{lead.email}</div>
                           </div>
                           <div className="text-right">
-                            <div className={`font-bebas text-xs tracking-widest ${statusColors[lead.status] ?? 'text-ink'}`}>
-                              {lead.status === 'booked' ? 'CONFIRMED' : lead.status?.replace('_', ' ').toUpperCase()}
+                            <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 rounded ${getStatusInfo(lead.status).calClasses}`}>
+                              {getStatusInfo(lead.status).label.toUpperCase()}
                             </div>
                             <div className="font-dm text-xs text-ink/50">
                               {eventDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}

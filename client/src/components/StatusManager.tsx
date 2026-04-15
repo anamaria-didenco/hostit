@@ -10,18 +10,18 @@ export type StatusDef = {
 };
 
 export const COLOR_PRESETS = [
-  { id: "amber",   label: "Gold",    classes: "border-amber-400 bg-amber-100 text-amber-900",     swatch: "#f59e0b" },
-  { id: "sky",     label: "Sky",     classes: "border-sky-400 bg-sky-100 text-sky-800",           swatch: "#38bdf8" },
-  { id: "forest",  label: "Forest",  classes: "border-emerald-600 bg-emerald-100 text-emerald-900", swatch: "#047857" },
-  { id: "orange",  label: "Orange",  classes: "border-orange-400 bg-orange-100 text-orange-800",  swatch: "#fb923c" },
-  { id: "emerald", label: "Emerald", classes: "border-emerald-500 bg-emerald-100 text-emerald-800", swatch: "#10b981" },
-  { id: "stone",   label: "Stone",   classes: "border-stone-400 bg-stone-200 text-stone-700",    swatch: "#a8a29e" },
-  { id: "purple",  label: "Purple",  classes: "border-purple-400 bg-purple-100 text-purple-800",  swatch: "#c084fc" },
-  { id: "pink",    label: "Pink",    classes: "border-pink-400 bg-pink-100 text-pink-800",        swatch: "#f472b6" },
-  { id: "indigo",  label: "Indigo",  classes: "border-indigo-400 bg-indigo-100 text-indigo-800",  swatch: "#818cf8" },
-  { id: "teal",    label: "Teal",    classes: "border-teal-400 bg-teal-100 text-teal-800",        swatch: "#2dd4bf" },
-  { id: "red",     label: "Red",     classes: "border-red-400 bg-red-100 text-red-800",           swatch: "#f87171" },
-  { id: "gray",    label: "Gray",    classes: "border-gray-400 bg-gray-100 text-gray-700",        swatch: "#9ca3af" },
+  { id: "amber",   label: "Gold",    classes: "border-amber-400 bg-amber-100 text-amber-900",          swatch: "#f59e0b",  calClasses: "bg-amber-400 text-amber-950",      barClasses: "bg-amber-400",    dayClasses: "border-l-4 border-amber-400 bg-amber-50"    },
+  { id: "sky",     label: "Sky",     classes: "border-sky-400 bg-sky-100 text-sky-800",                swatch: "#38bdf8",  calClasses: "bg-sky-400 text-white",            barClasses: "bg-sky-400",      dayClasses: "border-l-4 border-sky-400 bg-sky-50"        },
+  { id: "forest",  label: "Forest",  classes: "border-emerald-600 bg-emerald-100 text-emerald-900",    swatch: "#047857",  calClasses: "bg-emerald-700 text-white",        barClasses: "bg-emerald-700",  dayClasses: "border-l-4 border-emerald-700 bg-emerald-50" },
+  { id: "orange",  label: "Orange",  classes: "border-orange-400 bg-orange-100 text-orange-800",       swatch: "#fb923c",  calClasses: "bg-orange-400 text-white",         barClasses: "bg-orange-400",   dayClasses: "border-l-4 border-orange-400 bg-orange-50"  },
+  { id: "emerald", label: "Emerald", classes: "border-emerald-500 bg-emerald-100 text-emerald-800",    swatch: "#10b981",  calClasses: "bg-emerald-500 text-white",        barClasses: "bg-emerald-500",  dayClasses: "border-l-4 border-emerald-500 bg-emerald-50" },
+  { id: "stone",   label: "Stone",   classes: "border-stone-400 bg-stone-200 text-stone-700",          swatch: "#a8a29e",  calClasses: "bg-stone-300 text-stone-900",      barClasses: "bg-stone-300",    dayClasses: "border-l-4 border-stone-400 bg-stone-50"    },
+  { id: "purple",  label: "Purple",  classes: "border-purple-400 bg-purple-100 text-purple-800",       swatch: "#c084fc",  calClasses: "bg-purple-400 text-white",         barClasses: "bg-purple-400",   dayClasses: "border-l-4 border-purple-400 bg-purple-50"  },
+  { id: "pink",    label: "Pink",    classes: "border-pink-400 bg-pink-100 text-pink-800",             swatch: "#f472b6",  calClasses: "bg-pink-400 text-white",           barClasses: "bg-pink-400",     dayClasses: "border-l-4 border-pink-400 bg-pink-50"      },
+  { id: "indigo",  label: "Indigo",  classes: "border-indigo-400 bg-indigo-100 text-indigo-800",       swatch: "#818cf8",  calClasses: "bg-indigo-400 text-white",         barClasses: "bg-indigo-400",   dayClasses: "border-l-4 border-indigo-400 bg-indigo-50"  },
+  { id: "teal",    label: "Teal",    classes: "border-teal-400 bg-teal-100 text-teal-800",             swatch: "#2dd4bf",  calClasses: "bg-teal-400 text-white",           barClasses: "bg-teal-400",     dayClasses: "border-l-4 border-teal-400 bg-teal-50"      },
+  { id: "red",     label: "Red",     classes: "border-red-400 bg-red-100 text-red-800",                swatch: "#f87171",  calClasses: "bg-red-400 text-white",            barClasses: "bg-red-400",      dayClasses: "border-l-4 border-red-400 bg-red-50"        },
+  { id: "gray",    label: "Gray",    classes: "border-gray-400 bg-gray-100 text-gray-700",             swatch: "#9ca3af",  calClasses: "bg-gray-300 text-gray-800",        barClasses: "bg-gray-300",     dayClasses: "border-l-4 border-gray-400 bg-gray-50"      },
 ];
 
 export const DEFAULT_STATUSES: StatusDef[] = [
@@ -35,6 +35,18 @@ export const DEFAULT_STATUSES: StatusDef[] = [
 
 export function getStatusClasses(colorId: string): string {
   return COLOR_PRESETS.find(c => c.id === colorId)?.classes ?? COLOR_PRESETS[0].classes;
+}
+
+export function getStatusCalClasses(colorId: string): string {
+  return COLOR_PRESETS.find(c => c.id === colorId)?.calClasses ?? "bg-gray-300 text-gray-800";
+}
+
+export function getStatusBarClasses(colorId: string): string {
+  return COLOR_PRESETS.find(c => c.id === colorId)?.barClasses ?? "bg-gray-300";
+}
+
+export function getStatusDayClasses(colorId: string): string {
+  return COLOR_PRESETS.find(c => c.id === colorId)?.dayClasses ?? "border-l-4 border-gray-400 bg-gray-50";
 }
 
 export function parseCustomStatuses(raw: string | null | undefined): StatusDef[] {
@@ -139,13 +151,13 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
       <div>
         <h3 className="font-dm text-base font-semibold text-ink mb-1">Enquiry Statuses</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Customise the stages an enquiry moves through. Changes take effect immediately across your dashboard.
+          Customise the name and colour of each status. Changes apply immediately across the calendar, pipeline, and reports.
         </p>
 
         <div className="border border-gray-200 rounded-xl overflow-hidden">
           {statuses.map((s, idx) => {
             const colorClasses = getStatusClasses(s.colorId);
-            const swatchColor = COLOR_PRESETS.find(c => c.id === s.colorId)?.swatch ?? "#9ca3af";
+            const calPreview = getStatusCalClasses(s.colorId);
             const isEditing = editingKey === s.key;
             return (
               <div key={s.key} className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 group">
@@ -161,9 +173,14 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
                   </button>
                 </div>
 
-                {/* Badge preview */}
+                {/* Badge preview (pipeline style) */}
                 <span className={`text-xs font-bebas tracking-widest px-2 py-0.5 border shrink-0 ${colorClasses}`}>
                   {s.label}
+                </span>
+
+                {/* Calendar card preview */}
+                <span className={`text-[10px] font-bebas tracking-widest px-2 py-0.5 rounded shrink-0 ${calPreview}`}>
+                  CAL
                 </span>
 
                 {/* Edit form inline */}
@@ -176,13 +193,13 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
                       onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingKey(null); }}
                       className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#8D957E]/40"
                     />
-                    <div className="flex gap-1 flex-wrap">
+                    <div className="flex gap-1.5 flex-wrap">
                       {COLOR_PRESETS.map(cp => (
                         <button
                           key={cp.id}
                           title={cp.label}
                           onClick={() => setEditColorId(cp.id)}
-                          className={`w-5 h-5 rounded-full border-2 transition ${editColorId === cp.id ? "border-gray-800 scale-110" : "border-transparent hover:scale-105"}`}
+                          className={`w-6 h-6 rounded-full border-2 transition ${editColorId === cp.id ? "border-gray-800 scale-125 shadow" : "border-transparent hover:scale-110"}`}
                           style={{ backgroundColor: cp.swatch }}
                         />
                       ))}
@@ -192,7 +209,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
                   </div>
                 ) : (
                   <>
-                    <span className="flex-1 text-sm text-gray-600 font-mono text-xs">{s.key}</span>
+                    <span className="flex-1 text-xs text-gray-400 font-mono">{s.key}</span>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => startEdit(s)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
                         <Pencil className="w-3.5 h-3.5" />
@@ -230,12 +247,17 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
                   key={cp.id}
                   title={cp.label}
                   onClick={() => setAddColorId(cp.id)}
-                  className={`w-6 h-6 rounded-full border-2 transition ${addColorId === cp.id ? "border-gray-800 scale-110" : "border-transparent hover:scale-105"}`}
+                  className={`w-6 h-6 rounded-full border-2 transition ${addColorId === cp.id ? "border-gray-800 scale-125 shadow" : "border-transparent hover:scale-110"}`}
                   style={{ backgroundColor: cp.swatch }}
                 />
               ))}
-              <span className={`ml-2 text-xs font-bebas tracking-widest px-2 py-0.5 border ${getStatusClasses(addColorId)}`}>
-                {addLabel || "Preview"}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-bebas tracking-widest px-2 py-0.5 border ${getStatusClasses(addColorId)}`}>
+                {addLabel || "Preview"} — Pipeline
+              </span>
+              <span className={`text-[10px] font-bebas tracking-widest px-2 py-0.5 rounded ${getStatusCalClasses(addColorId)}`}>
+                {addLabel || "Preview"} — Calendar
               </span>
             </div>
             <div className="flex gap-2">
