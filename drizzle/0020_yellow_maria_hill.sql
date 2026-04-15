@@ -1,0 +1,1 @@
+ALTER TABLE "daily_checklists" ADD COLUMN "assigned_date" varchar(10);

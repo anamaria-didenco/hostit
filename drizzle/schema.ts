@@ -870,6 +870,7 @@ export const dailyChecklists = pgTable("daily_checklists", {
   description: text("description"),
   category: varchar("category", { length: 50 }).default("general"),
   token: varchar("token", { length: 64 }).notNull().unique(),
+  assignedDate: varchar("assigned_date", { length: 10 }),
   sortOrder: integer("sort_order").default(0),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Plus, Trash2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 const CATEGORIES = ["food", "drinks", "staffing", "av", "décor", "other"];
 
@@ -26,13 +27,28 @@ export default function EventSpendSection({ bookingId }: Props) {
   );
 
   const createItem = trpc.budgets.create.useMutation({
-    onSuccess: () => utils.budgets.list.invalidate({ bookingId }),
+    onSuccess: () => {
+      utils.budgets.list.invalidate({ bookingId });
+      toast.success("Spend item added");
+      setNewName("");
+      setNewCat("other");
+      setNewType("expense");
+      setNewEst("");
+      setNewActual("");
+      setShowAdd(false);
+    },
+    onError: (err) => toast.error(err.message || "Failed to add spend item"),
   });
   const updateItem = trpc.budgets.update.useMutation({
     onSuccess: () => utils.budgets.list.invalidate({ bookingId }),
+    onError: (err) => toast.error(err.message || "Failed to update item"),
   });
   const deleteItem = trpc.budgets.delete.useMutation({
-    onSuccess: () => utils.budgets.list.invalidate({ bookingId }),
+    onSuccess: () => {
+      utils.budgets.list.invalidate({ bookingId });
+      toast.success("Item removed");
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete item"),
   });
 
   const [showAdd, setShowAdd] = useState(false);
@@ -63,21 +79,15 @@ export default function EventSpendSection({ bookingId }: Props) {
       name: newName.trim(),
       category: newCat,
       type: newType,
-      estimatedAmount: parseFloat(newEst) || 0,
-      actualAmount: parseFloat(newActual) || 0,
+      estimatedAmount: Math.round(parseFloat(newEst) || 0),
+      actualAmount: Math.round(parseFloat(newActual) || 0),
     });
-    setNewName("");
-    setNewCat("other");
-    setNewType("expense");
-    setNewEst("");
-    setNewActual("");
-    setShowAdd(false);
   }
 
   function commitActual(id: number) {
     const raw = editingActual[id];
     if (raw === undefined) return;
-    updateItem.mutate({ id, actualAmount: parseFloat(raw) || 0 });
+    updateItem.mutate({ id, actualAmount: Math.round(parseFloat(raw) || 0) });
     setEditingActual((prev) => {
       const next = { ...prev };
       delete next[id];

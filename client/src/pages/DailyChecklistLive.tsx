@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { CheckSquare, Square, Loader2, RefreshCw, CheckCircle2 } from "lucide-react";
+import { CheckSquare, Square, Loader2, RefreshCw, CheckCircle2, Pencil } from "lucide-react";
+
+const LS_KEY = "vf_staff_name";
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
   opening:   { bg: "bg-amber-50",  text: "text-amber-700",  dot: "bg-amber-400" },
@@ -36,35 +38,40 @@ export default function DailyChecklistLive() {
   });
 
   const [optimistic, setOptimistic] = useState<Record<number, boolean>>({});
-  const [nameInput, setNameInput] = useState("");
-  const [showNamePrompt, setShowNamePrompt] = useState(false);
-  const [pendingItemId, setPendingItemId] = useState<number | null>(null);
-  const [pendingChecked, setPendingChecked] = useState<boolean>(false);
+
+  const [staffName, setStaffName] = useState<string>(() => {
+    try { return localStorage.getItem(LS_KEY) ?? ""; } catch { return ""; }
+  });
+  const [editingName, setEditingName] = useState(!staffName);
+  const [nameInput, setNameInput] = useState(staffName);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setOptimistic({});
   }, [checklist]);
 
-  function handleToggle(itemId: number, currentChecked: boolean) {
-    const newChecked = !currentChecked;
-    if (newChecked) {
-      setPendingItemId(itemId);
-      setPendingChecked(true);
-      setShowNamePrompt(true);
-    } else {
-      setOptimistic(prev => ({ ...prev, [itemId]: false }));
-      toggleMutation.mutate({ token, itemId, checked: false });
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus();
     }
+  }, [editingName]);
+
+  function saveName() {
+    const trimmed = nameInput.trim();
+    if (!trimmed) return;
+    try { localStorage.setItem(LS_KEY, trimmed); } catch {}
+    setStaffName(trimmed);
+    setEditingName(false);
   }
 
-  function confirmToggle() {
-    if (pendingItemId === null) return;
-    const name = nameInput.trim() || undefined;
-    setOptimistic(prev => ({ ...prev, [pendingItemId]: true }));
-    toggleMutation.mutate({ token, itemId: pendingItemId, checked: true, checkedBy: name });
-    setShowNamePrompt(false);
-    setNameInput("");
-    setPendingItemId(null);
+  function handleToggle(itemId: number, currentChecked: boolean) {
+    const newChecked = !currentChecked;
+    setOptimistic(prev => ({ ...prev, [itemId]: newChecked }));
+    if (newChecked) {
+      toggleMutation.mutate({ token, itemId, checked: true, checkedBy: staffName || undefined });
+    } else {
+      toggleMutation.mutate({ token, itemId, checked: false });
+    }
   }
 
   function handleReset() {
@@ -100,10 +107,13 @@ export default function DailyChecklistLive() {
   const total = items.length;
   const allDone = checkedCount === total && total > 0;
   const style = categoryStyle(checklist.category);
-  const today = new Date().toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  const assignedDateDisplay = checklist.assignedDate
+    ? new Date(checklist.assignedDate + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : new Date().toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   return (
-    <div className="min-h-screen bg-linen">
+    <div className="min-h-screen bg-linen pb-24">
       {/* Header */}
       <div className="bg-white border-b border-stone-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-start justify-between gap-3">
@@ -118,7 +128,7 @@ export default function DailyChecklistLive() {
             {checklist.description && (
               <p className="font-dm text-xs text-ink/50 mt-1 leading-tight">{checklist.description}</p>
             )}
-            <p className="font-dm text-[10px] text-ink/30 mt-1">{today}</p>
+            <p className="font-dm text-[10px] text-ink/30 mt-1">{assignedDateDisplay}</p>
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
             <div className="font-bebas tracking-widest text-lg text-forest leading-none">
@@ -162,7 +172,7 @@ export default function DailyChecklistLive() {
             <button
               key={item.id}
               onClick={() => handleToggle(item.id, isChecked)}
-              disabled={toggleMutation.isPending}
+              disabled={toggleMutation.isPending && !staffName && !editingName}
               className={`w-full text-left flex items-start gap-3 p-4 border transition-all duration-150 ${
                 isChecked
                   ? "bg-forest/5 border-forest/20"
@@ -201,38 +211,47 @@ export default function DailyChecklistLive() {
         })}
       </div>
 
-      {/* Name prompt modal */}
-      {showNamePrompt && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center sm:items-center">
-          <div className="bg-white w-full max-w-md p-6 shadow-xl">
-            <h3 className="font-bebas tracking-widest text-lg text-ink mb-1">YOUR NAME (OPTIONAL)</h3>
-            <p className="font-dm text-xs text-ink/50 mb-4">Add your name to record who checked this item.</p>
-            <input
-              type="text"
-              value={nameInput}
-              onChange={e => setNameInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && confirmToggle()}
-              placeholder="e.g. Sarah"
-              autoFocus
-              className="w-full border border-stone-300 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest mb-4"
-            />
-            <div className="flex gap-3">
+      {/* Staff name footer — always visible */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg">
+        <div className="max-w-2xl mx-auto px-4 py-3">
+          {editingName ? (
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1">YOUR NAME (so we know who ticked what)</p>
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  value={nameInput}
+                  onChange={e => setNameInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveName(); }}
+                  placeholder="e.g. Sarah"
+                  className="w-full border border-stone-300 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest"
+                />
+              </div>
               <button
-                onClick={confirmToggle}
-                className="flex-1 bg-forest text-white font-bebas tracking-widest text-sm py-2.5 hover:bg-forest/90 transition-colors"
+                onClick={saveName}
+                disabled={!nameInput.trim()}
+                className="bg-forest text-white font-bebas tracking-widest text-sm px-5 py-2 hover:bg-forest/90 disabled:opacity-40 transition-colors self-end"
               >
-                MARK COMPLETE
-              </button>
-              <button
-                onClick={() => { setShowNamePrompt(false); setNameInput(""); setPendingItemId(null); }}
-                className="px-4 border border-stone-200 font-bebas tracking-widest text-sm text-ink/60 hover:bg-stone-50 transition-colors"
-              >
-                CANCEL
+                SAVE
               </button>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/40">CHECKING IN AS</p>
+                <p className="font-dm text-sm text-ink font-medium">{staffName || "Anonymous"}</p>
+              </div>
+              <button
+                onClick={() => { setNameInput(staffName); setEditingName(true); }}
+                className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-ink/40 hover:text-forest transition-colors"
+              >
+                <Pencil className="w-3 h-3" /> CHANGE
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

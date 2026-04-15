@@ -140,6 +140,13 @@
       "when": 1776202203152,
       "tag": "0019_strange_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1776290833665,
+      "tag": "0020_yellow_maria_hill",
+      "breakpoints": true
     }
   ]
 }

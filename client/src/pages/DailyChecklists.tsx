@@ -26,7 +26,7 @@ export default function DailyChecklists() {
   const { data: checklists, refetch } = trpc.dailyChecklists.list.useQuery();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: "", description: "", category: "general" });
+  const [createForm, setCreateForm] = useState({ name: "", description: "", category: "general", assignedDate: "" });
   const [newItemText, setNewItemText] = useState<Record<number, string>>({});
   const [newItemNote, setNewItemNote] = useState<Record<number, string>>({});
   const [editingItem, setEditingItem] = useState<number | null>(null);
@@ -42,7 +42,7 @@ export default function DailyChecklists() {
   );
 
   const createMut = trpc.dailyChecklists.create.useMutation({
-    onSuccess: () => { refetch(); setShowCreate(false); setCreateForm({ name: "", description: "", category: "general" }); toast.success("Checklist created!"); },
+    onSuccess: () => { refetch(); setShowCreate(false); setCreateForm({ name: "", description: "", category: "general", assignedDate: "" }); toast.success("Checklist created!"); },
   });
   const deleteMut = trpc.dailyChecklists.delete.useMutation({
     onSuccess: () => { refetch(); if (expandedId !== null) setExpandedId(null); toast.success("Checklist deleted"); },
@@ -143,6 +143,15 @@ export default function DailyChecklists() {
                 </select>
               </div>
               <div>
+                <label className="font-bebas text-xs tracking-widest text-[#8a7a60] block mb-1">DATE (optional)</label>
+                <input
+                  type="date"
+                  value={createForm.assignedDate}
+                  onChange={e => setCreateForm(f => ({ ...f, assignedDate: e.target.value }))}
+                  className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] bg-white"
+                />
+              </div>
+              <div className="col-span-2">
                 <label className="font-bebas text-xs tracking-widest text-[#8a7a60] block mb-1">DESCRIPTION (optional)</label>
                 <input
                   value={createForm.description}
@@ -195,6 +204,11 @@ export default function DailyChecklists() {
                       <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 rounded flex-shrink-0 ${cat.color}`}>{cat.label}</span>
                       <div className="min-w-0">
                         <div className="font-bebas text-lg tracking-wider text-[#1a1209] truncate">{cl.name}</div>
+                        {cl.assignedDate && (
+                          <div className="font-dm text-xs text-[#6b98e7] font-medium truncate">
+                            {new Date(cl.assignedDate + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                          </div>
+                        )}
                         {cl.description && <div className="font-dm text-xs text-[#8a7a60] truncate">{cl.description}</div>}
                       </div>
                     </div>

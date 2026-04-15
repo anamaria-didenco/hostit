@@ -4170,6 +4170,7 @@ Return ONLY valid JSON. Example structure:
         name: z.string().min(1),
         description: z.string().optional(),
         category: z.string().optional(),
+        assignedDate: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
@@ -4184,6 +4185,7 @@ Return ONLY valid JSON. Example structure:
           name: input.name,
           description: input.description ?? null,
           category: input.category ?? 'general',
+          assignedDate: input.assignedDate ?? null,
           token,
           sortOrder: 0,
           createdAt: now,
@@ -4198,6 +4200,7 @@ Return ONLY valid JSON. Example structure:
         name: z.string().optional(),
         description: z.string().optional(),
         category: z.string().optional(),
+        assignedDate: z.string().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
@@ -4246,6 +4249,7 @@ Return ONLY valid JSON. Example structure:
           name: `${original.name} (Copy)`,
           description: original.description,
           category: original.category,
+          assignedDate: original.assignedDate,
           token,
           sortOrder: 0,
           createdAt: now,
