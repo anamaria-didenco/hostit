@@ -108,10 +108,13 @@ type Item = {
 };
 
 type Dietary = { name: string; count: number; notes?: string };
+const DRINK_CATEGORIES = ['Cocktails', 'Wine', 'Beer & Cider', 'Spirits', 'Bubbles / Champagne', 'Soft Drinks & Mocktails', 'Other'];
+
 type FnbItem = {
   id?: number;
   section: 'foh' | 'kitchen';
   course?: string;
+  drinkCategory?: string;
   dishName: string;
   description?: string;
   qty: number;

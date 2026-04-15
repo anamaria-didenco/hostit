@@ -2817,7 +2817,7 @@ export default function Dashboard() {
                             {dayBookings.map((b: any) => (
                               <div key={b.id} className="relative group/card w-full">
                                 <button
-                                  onClick={() => setLocation(`/event/${b.id}`)}
+                                  onClick={() => setSelectedBooking(b)}
                                   className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity`}
                                   title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests`}>
                                   <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
@@ -2833,10 +2833,10 @@ export default function Dashboard() {
                                 </button>
                               </div>
                             ))}
-                            {/* Lead/enquiry cards */}
+                            {/* Lead/enquiry cards — also open slide-out panel */}
                             {dayLeads.map((l: any) => (
                               <button key={l.id}
-                                onClick={() => { selectLead(l); setTab('enquiries'); }}
+                                onClick={() => setSelectedBooking({ ...l, _isLead: true })}
                                 className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}
                                 title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
                                 <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
@@ -3206,10 +3206,11 @@ export default function Dashboard() {
                   {/* Status + Type */}
                   <div className="flex items-center gap-2">
                     <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${
-                      selectedBooking.status === 'confirmed' ? 'text-forest bg-blue-50 border-blue-200'
+                      selectedBooking.status === 'confirmed' || selectedBooking.status === 'booked' ? 'text-forest bg-blue-50 border-blue-200'
                       : selectedBooking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
+                      : selectedBooking.status === 'new' ? 'text-amber-700 bg-amber-50 border-amber-200'
                       : 'text-stone-500 bg-stone-50 border-stone-200'
-                    }`}>{selectedBooking.status?.toUpperCase()}</span>
+                    }`}>{selectedBooking._isLead ? 'ENQUIRY' : (selectedBooking.status?.toUpperCase() ?? 'EVENT')}</span>
                     {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60">{selectedBooking.eventType}</span>}
                   </div>
                   {/* Key Details */}
@@ -3254,7 +3255,8 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  {/* Financials */}
+                  {/* Financials — bookings only */}
+                  {!selectedBooking._isLead && (
                   <div className="bg-forest-dark/5 border border-gold/20 p-4">
                     <div className="font-bebas text-xs tracking-widest text-ink/40 mb-3">FINANCIALS</div>
                     <div className="grid grid-cols-2 gap-3">
@@ -3271,39 +3273,51 @@ export default function Dashboard() {
                       selectedBooking.depositPaid ? 'text-forest' : 'text-amber-600'
                     }`}>{selectedBooking.depositPaid ? '✓ DEPOSIT PAID' : '⚠ DEPOSIT PENDING'}</div>
                   </div>
+                  )}
                   {/* Quick Actions */}
                   <div>
                     <div className="font-bebas text-xs tracking-widest text-ink/40 mb-2">QUICK ACTIONS</div>
                     <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                        <FileText className="w-3 h-3 text-gold" /> OPEN EVENT
-                      </button>
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                        <Clock className="w-3 h-3 text-gold" /> RUNSHEET
-                      </button>
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                        <LayoutGrid className="w-3 h-3" /> FLOOR PLAN
-                      </button>
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/checklist?bookingId=${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                        <CheckCircle className="w-3 h-3" /> CHECKLIST
-                      </button>
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/payments?bookingId=${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs col-span-2">
-                        <DollarSign className="w-3 h-3" /> PAYMENTS
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
-                            deleteBooking.mutate({ id: selectedBooking.id });
-                          }
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
-                        <Trash2 className="w-3 h-3" /> DELETE EVENT
-                      </button>
+                      {selectedBooking._isLead ? (
+                        <>
+                          <button onClick={() => { const lead = selectedBooking; setSelectedBooking(null); selectLead(lead); setTab('enquiries'); }}
+                            className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs col-span-2">
+                            <FileText className="w-3 h-3 text-gold" /> OPEN ENQUIRY
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}`); }}
+                            className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                            <FileText className="w-3 h-3 text-gold" /> OPEN EVENT
+                          </button>
+                          <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
+                            className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                            <Clock className="w-3 h-3 text-gold" /> RUNSHEET
+                          </button>
+                          <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
+                            className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                            <LayoutGrid className="w-3 h-3" /> FLOOR PLAN
+                          </button>
+                          <button onClick={() => { setSelectedBooking(null); setLocation(`/checklist?bookingId=${selectedBooking.id}`); }}
+                            className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                            <CheckCircle className="w-3 h-3" /> CHECKLIST
+                          </button>
+                          <button onClick={() => { setSelectedBooking(null); setLocation(`/payments?bookingId=${selectedBooking.id}`); }}
+                            className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs col-span-2">
+                            <DollarSign className="w-3 h-3" /> PAYMENTS
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
+                                deleteBooking.mutate({ id: selectedBooking.id });
+                              }
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
+                            <Trash2 className="w-3 h-3" /> DELETE EVENT
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   {selectedBooking.notes && (
@@ -3312,8 +3326,8 @@ export default function Dashboard() {
                       <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap bg-cream border border-gold/20 p-3">{selectedBooking.notes}</div>
                     </div>
                   )}
-                  {/* Event Spend */}
-                  <EventSpendSection bookingId={selectedBooking.id} />
+                  {/* Event Spend — bookings only */}
+                  {!selectedBooking._isLead && <EventSpendSection bookingId={selectedBooking.id} />}
                 </div>
               </div>
             </div>
