@@ -8,12 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { RichTextarea } from "@/components/ui/RichTextarea";
 import {
-  Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp,
+  Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
   Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine, Package,
-  Eye, EyeOff, DollarSign, Download,
+  Eye, EyeOff, DollarSign, Download, ClipboardList, Calendar,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -154,6 +154,7 @@ export default function RunsheetBuilder() {
   const leadId = params.get("leadId") ? Number(params.get("leadId")) : undefined;
   const bookingId = params.get("bookingId") ? Number(params.get("bookingId")) : undefined;
   const proposalIdParam = params.get("proposalId") ? Number(params.get("proposalId")) : undefined;
+  const isNewMode = params.get("new") === "1";
 
   // Core state
   const [title, setTitle] = useState("Event Runsheet");
@@ -667,6 +668,12 @@ export default function RunsheetBuilder() {
     }
   }, [leadRunsheets, sheetId]);
 
+  // All runsheets (for home screen when no specific runsheet is selected)
+  const { data: allRunsheets } = trpc.runsheets.list.useQuery(
+    {},
+    { enabled: !sheetId && !leadId && !bookingId && !isNewMode }
+  );
+
   // Effective booking ID — from URL param, or from the loaded runsheet record
   const effectiveBookingId: number | undefined = bookingId ?? (existing as any)?.bookingId ?? undefined;
   // Floor plans
@@ -1168,6 +1175,103 @@ export default function RunsheetBuilder() {
     return null;
   }
 
+  // ── Home screen: no runsheet selected ────────────────────────────────────────
+  if (!sheetId && !leadId && !bookingId && !isNewMode) {
+    return (
+      <div className="min-h-screen bg-linen">
+        <div className="bg-forest border-b border-white/10 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate("/")} className="text-white/50 hover:text-white transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <span className="font-bebas tracking-widest text-gold text-sm">RUNSHEET BUILDER</span>
+          </div>
+          <button
+            onClick={() => navigate("/runsheet?new=1")}
+            className="font-bebas tracking-widest text-xs bg-gold text-ink px-4 py-2 flex items-center gap-1.5 hover:bg-gold/90 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> NEW RUNSHEET
+          </button>
+        </div>
+
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="font-bebas tracking-widest text-2xl text-ink">MY RUNSHEETS</h1>
+            <span className="font-dm text-sm text-ink/40">{(allRunsheets ?? []).length} total</span>
+          </div>
+
+          {!allRunsheets ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-6 h-6 border-2 border-forest border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : allRunsheets.length === 0 ? (
+            <div className="text-center py-20 bg-white border border-gold/20">
+              <ClipboardList className="w-12 h-12 text-ink/20 mx-auto mb-4" />
+              <div className="font-bebas tracking-widest text-xl text-ink/30 mb-2">NO RUNSHEETS YET</div>
+              <p className="font-dm text-sm text-ink/40 mb-6">Create your first runsheet to get started.</p>
+              <button
+                onClick={() => navigate("/runsheet?new=1")}
+                className="font-bebas tracking-widest text-sm bg-forest text-cream px-6 py-2.5 hover:bg-forest/90 transition-colors inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> CREATE RUNSHEET
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {[...allRunsheets].sort((a, b) => {
+                // Sort by eventDate desc, then createdAt desc
+                const da = a.eventDate ? new Date(a.eventDate).getTime() : 0;
+                const db_ = b.eventDate ? new Date(b.eventDate).getTime() : 0;
+                return db_ - da || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+              }).map(rs => (
+                <button
+                  key={rs.id}
+                  onClick={() => navigate(`/runsheet?id=${rs.id}`)}
+                  className="w-full text-left bg-white border border-gold/20 hover:border-forest/40 hover:shadow-sm transition-all px-5 py-4 flex items-center gap-4 group"
+                >
+                  <div className="w-1 self-stretch bg-forest/20 group-hover:bg-forest transition-colors flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-cormorant font-semibold text-lg text-ink leading-tight truncate">
+                      {rs.title || "Untitled Runsheet"}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      {rs.eventDate && (
+                        <span className="font-dm text-xs text-ink/55 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(rs.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      )}
+                      {rs.eventType && (
+                        <span className="font-bebas text-[10px] tracking-widest text-ink/40 border border-ink/15 px-1.5 py-0.5">
+                          {rs.eventType}
+                        </span>
+                      )}
+                      {rs.guestCount && (
+                        <span className="font-dm text-xs text-ink/40">
+                          {rs.guestCount} guests
+                        </span>
+                      )}
+                      {rs.spaceName && (
+                        <span className="font-dm text-xs text-ink/40">{rs.spaceName}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 text-right">
+                    <div className="font-bebas text-[10px] tracking-widest text-ink/30 mb-1">#{rs.id}</div>
+                    <div className="font-dm text-[10px] text-ink/30">
+                      {new Date(rs.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-ink/20 group-hover:text-forest flex-shrink-0 transition-colors" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const checkedCount = checklistItems.filter(i => i.checked).length;
 
   return (
@@ -1178,7 +1282,8 @@ export default function RunsheetBuilder() {
           <button
             onClick={() => {
               if (bookingId) navigate(`/event/${bookingId}`);
-              else navigate("/");
+              else if (leadId) navigate("/");
+              else navigate("/runsheet");
             }}
             className="text-white/50 hover:text-white transition-colors"
           >
