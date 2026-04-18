@@ -505,7 +505,8 @@ const MODULE_TABS = [
 ];
 
 function EventModuleTabs({ bookingId, booking }: { bookingId: number; booking: any }) {
-  const [activeTab, setActiveTab] = useState('comms');
+  const initialTab = new URLSearchParams(window.location.search).get('tab') ?? 'comms';
+  const [activeTab, setActiveTab] = useState(initialTab);
   return (
     <div className="max-w-6xl mx-auto px-4 pb-12">
       <div className="flex border-b border-gold/20 mb-6 overflow-x-auto">

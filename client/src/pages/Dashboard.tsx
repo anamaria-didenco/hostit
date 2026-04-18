@@ -3547,6 +3547,10 @@ export default function Dashboard() {
                             className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                             <FileText className="w-3 h-3 text-gold" /> OPEN EVENT
                           </button>
+                          <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}?tab=budget`); }}
+                            className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                            <TrendingUp className="w-3 h-3 text-gold" /> SPEND
+                          </button>
                           <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
                             className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                             <Clock className="w-3 h-3 text-gold" /> RUNSHEET
