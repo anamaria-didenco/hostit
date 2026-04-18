@@ -1654,18 +1654,6 @@ export default function Dashboard() {
                             const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
                             const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
                             const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                            const statusColor = (status: string) => {
-                              switch(status) {
-                                case 'confirmed': case 'booked': return 'bg-forest text-cream';
-                                case 'tentative': return 'bg-amber-400 text-white';
-                                case 'proposal_sent': return 'bg-violet-400 text-white';
-                                case 'negotiating': return 'bg-orange-400 text-white';
-                                case 'new': return 'bg-rose-400 text-white';
-                                case 'contacted': return 'bg-rose-300 text-white';
-                                case 'cancelled': case 'lost': return 'bg-gray-300 text-gray-600';
-                                default: return 'bg-gray-200 text-gray-600';
-                              }
-                            };
                             return (
                               <div key={di}
                                 className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
@@ -1686,17 +1674,19 @@ export default function Dashboard() {
                                 {dayBookings.slice(0, 2).map((b: any) => (
                                   <button key={b.id}
                                     onClick={() => { setSelectedBooking(b); setTab('calendar'); }}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${statusColor(b.status)} hover:opacity-80 transition-opacity`}
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}`}>
                                     <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
+                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                   </button>
                                 ))}
                                 {dayLeads.slice(0, 1).map((l: any) => (
                                   <button key={l.id}
                                     onClick={() => { selectLead(l); setTab('enquiries'); }}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${statusColor(l.status)} hover:opacity-80 transition-opacity`}
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}`}>
                                     <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                   </button>
                                 ))}
                                 {(dayBookings.length + dayLeads.length) > 3 && (
