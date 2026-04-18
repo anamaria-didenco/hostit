@@ -684,7 +684,7 @@ export default function Dashboard() {
   const { data: stats } = trpc.dashboard.stats.useQuery(undefined, { enabled: !!user?.id });
   const { data: overdueLeads, refetch: refetchOverdue } = trpc.leads.overdue.useQuery(undefined, { enabled: !!user?.id });
   const { data: allLeads, refetch: refetchLeads } = trpc.leads.list.useQuery(
-    { status: leadStatusFilter === "all" ? undefined : leadStatusFilter },
+    { status: (leadStatusFilter === "all" || leadStatusFilter === "overdue_followup") ? undefined : leadStatusFilter },
     { enabled: !!user?.id, refetchInterval: 30_000 }
   );
 
@@ -1315,6 +1315,7 @@ export default function Dashboard() {
           { day: "Saturday", enabled: true, start: "08:00", end: "22:00" },
         ]),
         emailSignature: vs?.emailSignature ?? "",
+        customCourses: vs?.customCourses ?? "",
       });
     }
    }, [venueSettings]);
@@ -1391,7 +1392,9 @@ export default function Dashboard() {
     });
   }
 
-  const leadsToShow = leadStatusFilter !== "all"
+  const leadsToShow = leadStatusFilter === "overdue_followup"
+    ? applyDateFilter(allEnquiries).filter((l: any) => l.followUpDate && new Date(l.followUpDate) < new Date())
+    : leadStatusFilter !== "all"
     ? applyDateFilter(allEnquiries)
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const filteredLeads = leadsToShow
@@ -1775,7 +1778,7 @@ export default function Dashboard() {
                       <div className="border-t border-red-200 bg-red-50/50 px-4 py-2 flex items-center gap-2">
                         <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
                         <span className="font-bebas text-xs tracking-widest text-red-700">{(overdueLeads ?? []).length} OVERDUE FOLLOW-UP{(overdueLeads ?? []).length > 1 ? 'S' : ''}</span>
-                        <button onClick={() => { setTab('enquiries'); setLeadsSubTab('all'); if (overdueLeads?.[0]) selectLead(overdueLeads[0]); }} className="ml-auto font-dm text-xs text-red-600 hover:text-red-800 transition-colors">View →</button>
+                        <button onClick={() => { setTab('enquiries'); setLeadsSubTab('all'); setLeadStatusFilter('overdue_followup'); setSelectedLead(null); }} className="ml-auto font-dm text-xs text-red-600 hover:text-red-800 transition-colors">View →</button>
                       </div>
                     )}
                   </div>
@@ -1870,6 +1873,7 @@ export default function Dashboard() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all" className="font-inter text-xs">All Statuses</SelectItem>
+                        <SelectItem value="overdue_followup" className="font-inter text-xs text-red-600">⚠ Overdue Follow-ups</SelectItem>
                         {pipelineStages.map(s => (
                           <SelectItem key={s.key} value={s.key} className="font-inter text-xs">{s.label}</SelectItem>
                         ))}
@@ -3849,6 +3853,32 @@ export default function Dashboard() {
                       ))}
                     </div>
                   </div>
+                  {/* ── Runsheet Courses ── */}
+                  <div className="dante-card p-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-1">RUNSHEET F&amp;B COURSES</h2>
+                    <p className="font-dm text-xs text-ink/50 mb-3">Customise the F&amp;B course categories used in your runsheets (one per line). Leave blank to use defaults.</p>
+                    <textarea
+                      rows={6}
+                      value={(() => {
+                        if (settingsForm.customCourses) {
+                          try {
+                            const arr = JSON.parse(settingsForm.customCourses);
+                            if (Array.isArray(arr)) return arr.join('\n');
+                          } catch {}
+                          return settingsForm.customCourses;
+                        }
+                        return ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'].join('\n');
+                      })()}
+                      onChange={e => {
+                        const lines = e.target.value.split('\n').map((s: string) => s.trim()).filter(Boolean);
+                        setSettingsForm((f: any) => ({ ...f, customCourses: JSON.stringify(lines) }));
+                      }}
+                      placeholder={'Canapes\nEntree\nMain\nDessert\nCheese\nDrinks\nOther'}
+                      className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-y"
+                    />
+                    <p className="font-dm text-[10px] text-ink/30 mt-1">Changes save with the button below.</p>
+                  </div>
+
                   <button type="submit" disabled={updateSettings.isPending}
                     className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
                     {updateSettings.isPending ? "SAVING..." : "SAVE VENUE DETAILS"}

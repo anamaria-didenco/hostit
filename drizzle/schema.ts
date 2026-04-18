@@ -107,6 +107,7 @@ export const venueSettings = pgTable("venue_settings", {
   nbiVenueId: varchar("nbiVenueId", { length: 100 }),
   nbiSyncEnabled: integer("nbiSyncEnabled").default(0),
   emailSignature: text("emailSignature"),
+  customCourses: text("customCourses"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

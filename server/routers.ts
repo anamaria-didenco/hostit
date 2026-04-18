@@ -106,6 +106,7 @@ export const appRouter = router({
         nbiVenueId: z.string().optional(),
         nbiSyncEnabled: z.number().optional(),
         emailSignature: z.string().optional(),
+        customCourses: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };

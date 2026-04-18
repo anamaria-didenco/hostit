@@ -179,7 +179,7 @@ type FnbItem = {
   sortOrder: number;
   _tempId?: string;
 };
-const COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'];
+const DEFAULT_COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'];
 
 type ParsedRunsheetData = {
   eventDetails?: {
@@ -564,6 +564,17 @@ export default function RunsheetBuilder() {
     return VENUE_SETUP_TEMPLATES;
   })();
 
+  // Parsed F&B courses from venue settings (with fallback)
+  const courses: string[] = (() => {
+    if ((venueSettings as any)?.customCourses) {
+      try {
+        const parsed = JSON.parse((venueSettings as any).customCourses);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return DEFAULT_COURSES;
+  })();
+
   // State for managing dietary options
   const [showDietaryManager, setShowDietaryManager] = useState(false);
   const [editingDietaries, setEditingDietaries] = useState<string[]>([]);
@@ -702,6 +713,7 @@ export default function RunsheetBuilder() {
     { leadId: leadId! },
     { enabled: !!leadId }
   );
+  const { data: allProposals } = trpc.proposals.list.useQuery(undefined, { enabled: !leadId });
   const { data: linkedProposal } = trpc.proposals.get.useQuery(
     { id: linkedProposalId! },
     { enabled: !!linkedProposalId }
@@ -2422,7 +2434,7 @@ export default function RunsheetBuilder() {
             {!linkedProposalId && (
               <div className="mx-5 my-3 p-3 bg-linen border border-gold/30 text-xs font-dm text-ink/50 flex items-center gap-2">
                 <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                Link a proposal in the sidebar to automatically pull in food & beverage selections.
+                Use the <strong className="text-forest/70">LINKED PROPOSAL</strong> section below to connect a proposal and auto-import F&amp;B selections.
               </div>
             )}
 
@@ -2459,7 +2471,7 @@ export default function RunsheetBuilder() {
                         onChange={e => { setFnbCustomCourse(e.target.value); setFnbCustomDrinkCat(''); }}
                         className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
                       >
-                        {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                        {courses.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                     {fnbCustomCourse === 'Drinks' && (
@@ -2582,7 +2594,7 @@ export default function RunsheetBuilder() {
                 {/* Group by course — derived from actual items so renamed courses still render */}
                 {[...new Set(fnbItems.map(i => i.course ?? 'Other'))]
                   .sort((a, b) => {
-                    const ai = COURSES.indexOf(a); const bi = COURSES.indexOf(b);
+                    const ai = courses.indexOf(a); const bi = courses.indexOf(b);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   })
                   .map(course => {
@@ -2646,8 +2658,8 @@ export default function RunsheetBuilder() {
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
                                 <select value={item.course ?? 'Other'} onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)} className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
-                                  {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                  {!COURSES.includes(item.course ?? 'Other') && <option value={item.course ?? 'Other'}>{item.course ?? 'Other'}</option>}
+                                  {courses.map(c => <option key={c} value={c}>{c}</option>)}
+                                  {!courses.includes(item.course ?? 'Other') && <option value={item.course ?? 'Other'}>{item.course ?? 'Other'}</option>}
                                 </select>
                               </div>
                               {isDrinks && (
@@ -3134,8 +3146,10 @@ export default function RunsheetBuilder() {
             )}
           </div>
         )}
-        {/* ── Linked Proposal (collapsible, at bottom) ──────────────────── */}
-        {leadProposals && leadProposals.length > 0 && (
+        {/* ── Linked Proposal (collapsible, at bottom — always shown) ───── */}
+        {(() => {
+          const proposalList = (leadProposals ?? allProposals ?? []) as any[];
+          return (
           <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
             <button
               onClick={() => setProposalSectionOpen(v => !v)}
@@ -3158,7 +3172,7 @@ export default function RunsheetBuilder() {
                     className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
                   >
                     <option value="">— No linked proposal —</option>
-                    {leadProposals.map(p => (
+                    {proposalList.map((p: any) => (
                       <option key={p.id} value={p.id}>{p.title} ({p.status})</option>
                     ))}
                   </select>
@@ -3230,7 +3244,8 @@ export default function RunsheetBuilder() {
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── Floor Plan Link section ──────────────────────────────────── */}
         <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
