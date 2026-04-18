@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -13,6 +13,7 @@ import {
   ClipboardList, LayoutGrid, ChefHat, MessageSquare, Package, Layers,
   Link2, PenLine, Plus, Trash2
 } from "lucide-react";
+import { COLOR_PRESETS, parseCustomStatuses } from "@/components/StatusManager";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
@@ -46,6 +47,20 @@ export default function EventDetail() {
     { enabled: !!user?.id && bookingId > 0 }
   );
   const existingRunsheet = existingRunsheets?.[0] ?? null;
+
+  const { data: venueSettings } = trpc.venue.get.useQuery(undefined, { enabled: !!user?.id });
+  const pipelineStages = useMemo(() => {
+    const defs = parseCustomStatuses((venueSettings as any)?.customStatuses);
+    return defs.map(d => {
+      const preset = COLOR_PRESETS.find(c => c.id === d.colorId) ?? COLOR_PRESETS[0];
+      return { key: d.key, label: d.label, color: preset.classes, swatch: preset.swatch };
+    });
+  }, [venueSettings]);
+  const getStatusInfo = (key: string) => {
+    return pipelineStages.find(p => p.key === key) ?? {
+      key, label: (key ?? '').replace(/_/g, ' '), color: 'border-gray-400 bg-gray-100 text-gray-700', swatch: '#9ca3af',
+    };
+  };
 
   const updateBooking = trpc.bookings.update.useMutation({
     onSuccess: () => {
@@ -115,9 +130,7 @@ export default function EventDetail() {
     });
   };
 
-  const statusColor = booking.status === 'confirmed' ? 'text-forest bg-blue-50 border-blue-200'
-    : booking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
-    : 'text-stone-500 bg-stone-50 border-stone-200';
+  const statusColor = getStatusInfo(booking.status).color;
 
   return (
     <div className="min-h-screen bg-cream">
@@ -165,7 +178,7 @@ export default function EventDetail() {
                 <div className="font-dm text-sm text-ink/60 mt-1">{booking.email}</div>
               </div>
               <span className={`font-bebas text-xs tracking-widest px-3 py-1 border ${statusColor}`}>
-                {booking.status?.toUpperCase()}
+                {getStatusInfo(booking.status).label.toUpperCase()}
               </span>
             </div>
 

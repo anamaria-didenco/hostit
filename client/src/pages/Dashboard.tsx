@@ -1728,9 +1728,7 @@ export default function Dashboard() {
                               <button key={e.id}
                                 onClick={() => e._type === 'booking' ? setLocation(`/event/${e.id}`) : (setSelectedLead(e), setTab('enquiries'))}
                                 className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
-                                <div className={`w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5 ${
-                                  isConfirmed ? 'bg-forest' : e.status === 'tentative' ? 'bg-amber-400' : e.status === 'proposal_sent' ? 'bg-violet-400' : 'bg-rose-400'
-                                }`} />
+                                <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} />
                                 <div className="flex-1 min-w-0">
                                   <div className="font-dm text-xs font-semibold text-ink truncate">{e.firstName} {e.lastName}</div>
                                   <div className="font-dm text-xs text-sage">{new Date(e.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
@@ -1764,7 +1762,7 @@ export default function Dashboard() {
                         {newEnquiries.slice(0, 6).map((lead: any) => (
                           <button key={lead.id} onClick={() => { selectLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
-                            <div className="w-1.5 h-1.5 rounded-full bg-rose-400 flex-shrink-0" />
+                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} />
                             <div className="flex-1 min-w-0">
                               <div className="font-dm text-xs font-semibold text-ink truncate">{lead.firstName} {lead.lastName}</div>
                               <div className="font-dm text-xs text-sage truncate">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : ''}</div>
@@ -2781,11 +2779,12 @@ export default function Dashboard() {
 
               {/* Legend */}
               <div className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto">
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-forest rounded-sm" /><span>Confirmed</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-sky-400 rounded-sm" /><span>Tentative</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-300 rounded-sm" /><span>Enquiry / Lead</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-violet-400 rounded-sm" /><span>Proposal Sent</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-rose-400 rounded-sm" /><span>Negotiating</span></div>
+                {pipelineStages.map(s => (
+                  <div key={s.key} className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: s.swatch }} />
+                    <span>{s.label}</span>
+                  </div>
+                ))}
               </div>
 
               {/* Month View */}
