@@ -314,6 +314,7 @@ export const runsheets = pgTable("runsheets", {
   floorPlanId: integer("floorPlanId"),
   costItems: json("costItems").$type<{ _id: string; label: string; qty: number; unitPrice: number; category?: string }[]>(),
   fnbColumns: json("fnbColumns").$type<{ dietary?: boolean; serviceTime?: boolean; staff?: boolean; notes?: boolean; qty?: boolean }>(),
+  drinksData: json("drinksData").$type<{ barOption: string; tabAmount?: number; selectedDrinks: string[]; customDrinks: { name: string; description?: string; price?: number }[] }>(),
   venueArea: varchar("venueArea", { length: 50 }),
   eventStartTime: varchar("eventStartTime", { length: 10 }),
   eventEndTime: varchar("eventEndTime", { length: 10 }),

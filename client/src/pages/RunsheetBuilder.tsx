@@ -74,6 +74,58 @@ const VENUE_SETUP_TEMPLATES = [
   { label: "Cabaret", value: "Half-round tables facing stage. Chairs on one side only. Dance floor at front. Bar at rear. Stage with AV at front." },
 ];
 
+const DRINKS_MENU = [
+  { category: "Aperitivo", items: [
+    { key: "aperol_spritz", name: "Aperol Spritz", description: "Aperol, Prosecco, Soda", price: 20 },
+    { key: "campari_spritz", name: "Campari Spritz", description: "Campari, Prosecco, Soda", price: 20 },
+    { key: "limoncello_spritz", name: "Limoncello Spritz", description: "Limoncello, Prosecco, Soda", price: 20 },
+    { key: "hugo_spritz", name: "Hugo Spritz", description: "Elderflower, Prosecco, Soda", price: 20 },
+    { key: "classic_negroni", name: "Classic Negroni", description: "Campari, Rosso Vermouth, Gin", price: 24 },
+    { key: "negroni_sbagliato", name: "Negroni Sbagliato", description: "Campari, Rosso Vermouth, Prosecco", price: 23 },
+    { key: "cherry_negroni", name: "Cherry Negroni", description: "Campari, Amaro, Rosso Vermouth, Gin", price: 25 },
+    { key: "americano", name: "Americano", description: "Campari, Rosso Vermouth, Soda", price: 23 },
+  ]},
+  { category: "Vino Spumante", items: [
+    { key: "tallero_prosecco", name: "Tallero Prosecco Extra Dry", description: "Veneto", priceGlass: 17, priceBottle: 85 },
+    { key: "lambrusco", name: "Paltrinieri Lambrusco Di Soraba Radice", description: "Emiglia Romagna", priceBottle: 105 },
+  ]},
+  { category: "Vino Bianco", items: [
+    { key: "sauvignon_blanc", name: "Mezzacorona Castel Firmian Sauvignon Blanc", description: "Trentino", priceGlass: 17, priceBottle: 85 },
+    { key: "malvasia_chardonnay", name: "Fantini Primo Malvasia Chardonnay", description: "Abruzzo", priceGlass: 16, priceBottle: 80 },
+    { key: "pinot_grigio", name: "Vigneti Romio Pinot Grigio Rubione IGT", description: "Friuli", priceGlass: 16, priceBottle: 80 },
+    { key: "grillo", name: "Parthenium Grillo", description: "Sicilia", priceBottle: 85 },
+    { key: "pipoli_bianco", name: "Pipoli Bianco Basilicata IGT", description: "Basilicata", priceBottle: 90 },
+  ]},
+  { category: "Vino Rosato", items: [
+    { key: "rosato", name: "Fattoria Di Basciano Rosato", description: "Toscana", priceGlass: 17, priceBottle: 85 },
+  ]},
+  { category: "Vino Rosso", items: [
+    { key: "sangiovese_merlot", name: "Primo Sangiovese Merlot", description: "Puglia", priceGlass: 16, priceBottle: 80 },
+    { key: "chianti", name: "Renzo Masi Chianti Cornioletta", description: "Toscana", priceGlass: 17, priceBottle: 85 },
+    { key: "montepulciano", name: "Fantini Montepulciano", description: "Abruzzo", priceGlass: 17, priceBottle: 85 },
+    { key: "nebbiolo", name: "Ascheri Langhe Nebbiolo San Giacomo", description: "Piemonte", priceBottle: 110 },
+    { key: "barbaresco", name: "Fontanabianca Barbaresco DOCG", description: "Piemonte", priceBottle: 165 },
+  ]},
+  { category: "Birra", items: [
+    { key: "peroni_tap", name: "Peroni Tap", description: "Italia", price: 14 },
+    { key: "peroni_330", name: "Peroni 330ml", description: "Italia", price: 12 },
+    { key: "peroni_0", name: "Peroni 0%", description: "Italia", price: 12 },
+  ]},
+  { category: "Non Alcolico", items: [
+    { key: "ginger_ale", name: "Fever Tree Ginger Ale", price: 8 },
+    { key: "cola", name: "Fever Tree Cola", price: 8 },
+    { key: "blood_orange", name: "Fever Tree Italian Blood Orange", price: 8 },
+    { key: "lemonade", name: "Fever Tree Italian Lemonade", price: 8 },
+  ]},
+] as const;
+
+const BAR_OPTIONS = [
+  { key: "bar_tab" as const, label: "Bar Tab", description: "Set a fixed dollar amount" },
+  { key: "cash_bar" as const, label: "Cash Bar", description: "Guests pay for their own drinks" },
+  { key: "bar_tab_then_cash" as const, label: "Bar Tab then Cash Bar", description: "Tab runs until set amount, then guests pay" },
+  { key: "unlimited" as const, label: "Unlimited Bar Tab", description: "Unlimited drinks for the event" },
+];
+
 function catStyle(cat: string) {
   return CATEGORIES.find(c => c.value === cat)?.color ?? "bg-cream text-ink/70";
 }
@@ -188,8 +240,30 @@ export default function RunsheetBuilder() {
   type CostItem = { _id: string; label: string; qty: number; unitPrice: number; category: string };
   const [costItems, setCostItems] = useState<CostItem[]>([]);
 
+  // Drinks (runsheet-level selection)
+  const [rsBarOption, setRsBarOption] = useState<"bar_tab" | "cash_bar" | "bar_tab_then_cash" | "unlimited">("cash_bar");
+  const [rsTabAmount, setRsTabAmount] = useState("");
+  const [rsSelectedDrinks, setRsSelectedDrinks] = useState<string[]>([]);
+  const [rsCustomDrinks, setRsCustomDrinks] = useState<{ name: string; description?: string; price?: number }[]>([]);
+  const [rsNewCustomDrink, setRsNewCustomDrink] = useState({ name: "", description: "", price: "" });
+  const [drinksSaving, setDrinksSaving] = useState(false);
+
+  function toggleRsDrink(key: string) {
+    setRsSelectedDrinks(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  }
+  function addRsCustomDrink() {
+    if (!rsNewCustomDrink.name.trim()) return;
+    setRsCustomDrinks(prev => [...prev, {
+      name: rsNewCustomDrink.name.trim(),
+      description: rsNewCustomDrink.description.trim() || undefined,
+      price: rsNewCustomDrink.price ? parseFloat(rsNewCustomDrink.price) : undefined,
+    }]);
+    setRsNewCustomDrink({ name: "", description: "", price: "" });
+  }
+  function removeRsCustomDrink(i: number) { setRsCustomDrinks(prev => prev.filter((_, idx) => idx !== i)); }
+
   // F&B
-  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'checklist' | 'tableplan' | 'equipment' | 'costs'>('timeline');
+  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'drinks' | 'checklist' | 'tableplan' | 'equipment' | 'costs'>('timeline');
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
   const [fnbSaving, setFnbSaving] = useState(false);
   const [expandedFnbIdx, setExpandedFnbIdx] = useState<number | null>(null);
@@ -763,6 +837,13 @@ export default function RunsheetBuilder() {
       setVenueArea((existing as any).venueArea ?? "");
       setEventStartTime((existing as any).eventStartTime ?? "");
       setEventEndTime((existing as any).eventEndTime ?? "");
+      const dd = (existing as any).drinksData;
+      if (dd) {
+        if (dd.barOption) setRsBarOption(dd.barOption);
+        if (dd.tabAmount) setRsTabAmount(String(dd.tabAmount));
+        if (dd.selectedDrinks) setRsSelectedDrinks(dd.selectedDrinks);
+        if (dd.customDrinks) setRsCustomDrinks(dd.customDrinks);
+      }
     }
   }, [existing]);
 
@@ -1002,7 +1083,8 @@ export default function RunsheetBuilder() {
           proposalId: linkedProposalId,
           floorPlanId: linkedFloorPlanId ?? null,
           costItems: costItems.length ? costItems : null,
-        });
+          drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks },
+        } as any);
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
           if (!item.id) {
@@ -1859,6 +1941,7 @@ export default function RunsheetBuilder() {
           {[
             { id: 'timeline', label: 'TIMELINE', icon: <Clock className="w-4 h-4" />, count: items.length },
             { id: 'fnb', label: 'F&B SHEET', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
+            { id: 'drinks', label: 'DRINKS', icon: <Wine className="w-4 h-4" />, count: (rsSelectedDrinks.length + rsCustomDrinks.length) || undefined },
             { id: 'checklist', label: 'CHECKLIST', icon: <CheckSquare className="w-4 h-4" />, count: `${checkedCount}/${checklistItems.length}` },
             { id: 'tableplan', label: 'TABLE PLAN', icon: <LayoutGrid className="w-4 h-4" /> },
             { id: 'costs', label: 'COSTS', icon: <DollarSign className="w-4 h-4" />, count: costItems.length || undefined },
@@ -2668,6 +2751,181 @@ export default function RunsheetBuilder() {
             )}
           </div>
         </div>
+
+        {/* ── DRINKS TAB ───────────────────────────────────────────────────── */}
+        {activeMainTab === 'drinks' && (
+          <div className="bg-white border border-gold/30 border-t-0 shadow-sm">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
+              <div className="flex items-center gap-2">
+                <Wine className="w-4 h-4 text-gold" />
+                <span className="font-bebas tracking-widest text-sm text-ink">DRINKS SELECTION</span>
+                {rsSelectedDrinks.length + rsCustomDrinks.length > 0 && (
+                  <span className="bg-forest text-white font-bebas text-xs px-2 py-0.5 tracking-widest">
+                    {rsSelectedDrinks.length + rsCustomDrinks.length} SELECTED
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={async () => {
+                  if (!sheetId) { toast.error("Save the runsheet first"); return; }
+                  setDrinksSaving(true);
+                  try {
+                    await silentUpdateMutation.mutateAsync({
+                      id: sheetId,
+                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks },
+                    } as any);
+                    toast.success("Drinks selection saved!");
+                  } catch { toast.error("Failed to save drinks"); }
+                  setDrinksSaving(false);
+                }}
+                disabled={drinksSaving}
+                className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs px-4 py-2 flex items-center gap-1.5 transition-colors"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {drinksSaving ? 'SAVING...' : 'SAVE DRINKS'}
+              </button>
+            </div>
+
+            <div className="px-5 py-5 space-y-6">
+              {/* Bar Arrangement */}
+              <div>
+                <div className="font-bebas tracking-widest text-xs text-ink/40 mb-3">BAR ARRANGEMENT</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {BAR_OPTIONS.map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setRsBarOption(opt.key)}
+                      className={`p-3 border-2 text-left transition-colors ${
+                        rsBarOption === opt.key ? 'border-forest bg-forest/5' : 'border-gold/30 hover:border-forest/40'
+                      }`}
+                    >
+                      <div className="font-bebas text-xs tracking-widest text-ink">{opt.label}</div>
+                      <div className="font-dm text-xs text-ink/50 mt-0.5">{opt.description}</div>
+                    </button>
+                  ))}
+                </div>
+                {(rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash') && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <label className="font-bebas text-xs tracking-widest text-ink/40">TAB AMOUNT (NZD)</label>
+                    <Input
+                      type="number"
+                      value={rsTabAmount}
+                      onChange={e => setRsTabAmount(e.target.value)}
+                      placeholder="e.g. 1500"
+                      className="rounded-none border-2 border-gold/30 focus-visible:border-forest focus-visible:ring-0 text-sm w-36"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Drinks Menu */}
+              <div className="space-y-5">
+                {DRINKS_MENU.map(cat => (
+                  <div key={cat.category}>
+                    <div className="font-cormorant italic text-sm text-forest mb-2 border-b border-forest/20 pb-1">{cat.category}</div>
+                    <div className="space-y-1.5">
+                      {cat.items.map((item: any) => (
+                        <label
+                          key={item.key}
+                          className={`flex items-start gap-3 p-2 cursor-pointer transition-colors ${
+                            rsSelectedDrinks.includes(item.key) ? 'bg-forest/5 border border-forest/20' : 'hover:bg-linen border border-transparent'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={rsSelectedDrinks.includes(item.key)}
+                            onChange={() => toggleRsDrink(item.key)}
+                            className="mt-0.5 accent-forest"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-dm text-sm text-ink">{item.name}</div>
+                            {item.description && <div className="font-dm text-xs text-ink/50">{item.description}</div>}
+                          </div>
+                          <div className="font-dm text-xs text-ink/40 shrink-0 text-right">
+                            {item.price ? `$${item.price}` : ''}
+                            {item.priceGlass ? `$${item.priceGlass}/glass` : ''}
+                            {item.priceBottle ? ` · $${item.priceBottle}/btl` : ''}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Custom Drinks */}
+              <div>
+                <div className="font-bebas tracking-widest text-xs text-ink/40 mb-2">CUSTOM DRINKS</div>
+                {rsCustomDrinks.map((d, i) => (
+                  <div key={i} className="flex items-center gap-2 mb-2 p-2 bg-linen border border-gold/30">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-dm text-sm text-ink">{d.name}</span>
+                      {d.description && <span className="font-dm text-xs text-ink/50 ml-2">{d.description}</span>}
+                      {d.price && <span className="font-dm text-xs text-forest ml-2">${d.price}</span>}
+                    </div>
+                    <button onClick={() => removeRsCustomDrink(i)} className="text-ink/30 hover:text-red-500 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  <Input
+                    value={rsNewCustomDrink.name}
+                    onChange={e => setRsNewCustomDrink(p => ({ ...p, name: e.target.value }))}
+                    placeholder="Drink name"
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                  />
+                  <Input
+                    value={rsNewCustomDrink.description}
+                    onChange={e => setRsNewCustomDrink(p => ({ ...p, description: e.target.value }))}
+                    placeholder="Description (optional)"
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      value={rsNewCustomDrink.price}
+                      onChange={e => setRsNewCustomDrink(p => ({ ...p, price: e.target.value }))}
+                      placeholder="Price"
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm flex-1"
+                    />
+                    <button
+                      onClick={addRsCustomDrink}
+                      className="bg-forest text-white font-bebas tracking-widest text-xs px-3 hover:bg-forest/80 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary of selected */}
+              {(rsSelectedDrinks.length > 0 || rsCustomDrinks.length > 0) && (
+                <div className="border border-gold/30 bg-linen/50 p-4">
+                  <div className="font-bebas tracking-widest text-xs text-ink/40 mb-2">SELECTED FOR EVENT</div>
+                  <div className="text-xs font-dm text-ink/70 mb-2">
+                    <span className="font-semibold capitalize">{rsBarOption.replace(/_/g, ' ')}</span>
+                    {rsTabAmount && (rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash') ? ` — Bar tab: $${Number(rsTabAmount).toLocaleString('en-NZ')}` : ''}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {rsSelectedDrinks.map(k => {
+                      const found = DRINKS_MENU.flatMap(c => c.items).find((i: any) => i.key === k);
+                      return (
+                        <span key={k} className="bg-forest/10 text-forest text-[10px] px-2 py-0.5 font-dm border border-forest/20">
+                          {found ? found.name : k.replace(/_/g, ' ')}
+                        </span>
+                      );
+                    })}
+                    {rsCustomDrinks.map((d, i) => (
+                      <span key={i} className="bg-gold/10 text-ink text-[10px] px-2 py-0.5 font-dm border border-gold/30">{d.name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── CHECKLIST TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'checklist' && (

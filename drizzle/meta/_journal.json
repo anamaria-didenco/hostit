@@ -147,6 +147,13 @@
       "when": 1776290833665,
       "tag": "0020_yellow_maria_hill",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1776474701661,
+      "tag": "0021_faithful_kronos",
+      "breakpoints": true
     }
   ]
 }

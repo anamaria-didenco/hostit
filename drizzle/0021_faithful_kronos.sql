@@ -1,0 +1,1 @@
+ALTER TABLE "runsheets" ADD COLUMN "drinksData" json;

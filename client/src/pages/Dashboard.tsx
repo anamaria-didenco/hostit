@@ -1462,7 +1462,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-background font-inter flex flex-col">
+    <div className="h-screen bg-background font-inter flex flex-col overflow-hidden">
       {/* ── TOP NAVIGATION BAR ──────────────────────────────────────────────── */}
       <nav className="bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
