@@ -229,7 +229,8 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
             const day = i + 1;
             const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
             const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
+            const _bookedLeadIds = new Set((monthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
+            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !_bookedLeadIds.has(l.id));
             const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
             const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
             const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
@@ -1425,6 +1426,8 @@ export default function Dashboard() {
   const bookingDays = new Set((monthBookings ?? []).map((b: any) => new Date(b.eventDate).getDate()));
   const followUpDays = new Set((monthFollowUps ?? []).map((l: any) => new Date(l.followUpDate).getDate()));
   const leadEventDays = new Set((monthLeadEvents ?? []).map((l: any) => new Date(l.eventDate).getDate()));
+  // Deduplicate: leads that already have a booking record should not show as separate lead cards
+  const bookedLeadIds = new Set((monthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
 
   const leadFormUrl = venueSettings?.slug
     ? `${window.location.origin}/enquire/${venueSettings.slug}`
@@ -1655,7 +1658,7 @@ export default function Dashboard() {
                             const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
                             const isWeekend = di >= 5;
                             const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
+                            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id));
                             const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                             return (
                               <div key={di}
@@ -1713,7 +1716,7 @@ export default function Dashboard() {
                       <button onClick={() => setTab('calendar')} className="font-dm text-xs text-forest hover:text-forest-dark transition-colors">View all</button>
                     </div>
                     {(() => {
-                      const upcoming = [...(monthBookings ?? []), ...(monthLeadEvents ?? []).filter((l: any) => l.status === 'booked' || l.status === 'confirmed')]
+                      const upcoming = [...(monthBookings ?? []), ...(monthLeadEvents ?? []).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id))]
                         .filter((e: any) => new Date(e.eventDate) >= new Date())
                         .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
                         .slice(0, 8);
@@ -2033,8 +2036,8 @@ export default function Dashboard() {
                       <div className="flex items-start gap-3">
                         {/* Left: name + contact */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <div className="font-cormorant font-semibold text-base text-ink truncate">{lead.firstName} {lead.lastName}</div>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <div className="font-cormorant font-semibold text-base text-ink truncate min-w-0 flex-1">{lead.firstName} {lead.lastName}</div>
                             <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
                               {pipelineStages.find(s => s.key === lead.status)?.label ?? lead.status.replace(/_/g, " ").toUpperCase()}
                             </div>
@@ -2821,7 +2824,7 @@ export default function Dashboard() {
                         const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
                         const isWeekend = di >= 5; // Sat=5, Sun=6
                         const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                        const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
+                        const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id));
                         const statusCard = (status: string) => getStatusInfo(status).calClasses;
                         return (
                           <div key={di} className={`border-r border-gold/10 last:border-r-0 p-1 flex flex-col gap-0.5 ${
@@ -2906,7 +2909,7 @@ export default function Dashboard() {
                       onClick={() => {
                         const rows = [
                           ...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })),
-                          ...(monthLeadEvents ?? []).map((l: any) => ({ ...l, _type: 'lead' })),
+                          ...(monthLeadEvents ?? []).filter((l: any) => !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' })),
                         ].sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
                         const header = ['Type','First Name','Last Name','Email','Phone','Event Type','Event Date','Guests','Status','Company','Space','Notes','Created'];
                         const csvRows = [header, ...rows.map((r: any) => [
@@ -2951,7 +2954,7 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {[...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).map((l: any) => ({ ...l, _type: 'lead' }))]
+                    {[...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter((l: any) => !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
                       .sort((a: any, b: any) => {
                         let cmp = 0;
                         if (eventSortBy === 'event_date') {
@@ -3023,7 +3026,8 @@ export default function Dashboard() {
                 const statusLabel = (s: string) => getStatusInfo(s).label.toUpperCase();
                 // Combine prev + current + next month for full week boundary support
                 const allBookings: any[] = [...(adjPrevMonthBookings ?? []), ...(monthBookings ?? []), ...(adjMonthBookings ?? [])];
-                const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []), ...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])];
+                const allBookedLeadIds = new Set(allBookings.map((b: any) => b.leadId).filter(Boolean));
+                const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []), ...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])].filter((l: any) => !allBookedLeadIds.has(l.id));
                 return (
                 <div className="flex-1 overflow-auto">
                   {/* Day column headers */}
