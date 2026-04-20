@@ -2006,7 +2006,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 {/* ── LIST VIEW sidebar ─────────────────────────────── */}
-                {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:flex md:w-80 lg:w-96 flex-shrink-0" : "flex w-full"} flex-col border-r border-gold/15 bg-warm-white overflow-auto divide-y divide-border/40`}>
+                {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:flex md:w-80 lg:w-96 flex-shrink-0" : "flex-1 min-h-0 flex flex-col"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
                   {filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
