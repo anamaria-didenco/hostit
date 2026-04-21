@@ -230,7 +230,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
             const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
             const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
             const _bookedLeadIds = new Set((monthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
-            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !_bookedLeadIds.has(l.id));
+            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !_bookedLeadIds.has(l.id) && l.status !== 'lost');
             const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
             const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
             const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
@@ -753,7 +753,9 @@ export default function Dashboard() {
   }, [venueSettings]);
 
   const getStatusInfo = React.useCallback((key: string) => {
-    const s = pipelineStages.find(p => p.key === key);
+    // 'confirmed' (booking status enum) should display identically to 'booked' (lead status)
+    const lookupKey = key === 'confirmed' ? 'booked' : key;
+    const s = pipelineStages.find(p => p.key === lookupKey);
     if (s) return s;
     return {
       key,
@@ -1658,7 +1660,7 @@ export default function Dashboard() {
                             const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
                             const isWeekend = di >= 5;
                             const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id));
+                            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                             const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                             return (
                               <div key={di}
@@ -2006,7 +2008,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 {/* ── LIST VIEW sidebar ─────────────────────────────── */}
-                {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:flex md:w-80 lg:w-96 flex-shrink-0" : "flex-1 min-h-0 flex flex-col"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
+                {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:block md:w-80 lg:w-96 flex-shrink-0" : "flex-1"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
                   {filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
@@ -2824,7 +2826,7 @@ export default function Dashboard() {
                         const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
                         const isWeekend = di >= 5; // Sat=5, Sun=6
                         const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                        const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id));
+                        const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                         const statusCard = (status: string) => getStatusInfo(status).calClasses;
                         return (
                           <div key={di} className={`border-r border-gold/10 last:border-r-0 p-1 flex flex-col gap-0.5 ${
@@ -2954,7 +2956,7 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {[...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter((l: any) => !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
+                    {[...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter((l: any) => !bookedLeadIds.has(l.id) && l.status !== 'lost').map((l: any) => ({ ...l, _type: 'lead' }))]
                       .sort((a: any, b: any) => {
                         let cmp = 0;
                         if (eventSortBy === 'event_date') {
@@ -3027,7 +3029,7 @@ export default function Dashboard() {
                 // Combine prev + current + next month for full week boundary support
                 const allBookings: any[] = [...(adjPrevMonthBookings ?? []), ...(monthBookings ?? []), ...(adjMonthBookings ?? [])];
                 const allBookedLeadIds = new Set(allBookings.map((b: any) => b.leadId).filter(Boolean));
-                const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []), ...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])].filter((l: any) => !allBookedLeadIds.has(l.id));
+                const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []), ...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])].filter((l: any) => !allBookedLeadIds.has(l.id) && l.status !== 'lost');
                 return (
                 <div className="flex-1 overflow-auto">
                   {/* Day column headers */}
@@ -3268,7 +3270,7 @@ export default function Dashboard() {
                     const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
                     // Find bookings and lead events for this day
                     const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                    const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day);
+                    const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                     const bgClass = hasBooking
                       ? "bg-forest/10 border-forest"
                       : hasLeadEvent

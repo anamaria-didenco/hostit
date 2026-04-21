@@ -27,7 +27,7 @@ export const COLOR_PRESETS = [
 export const DEFAULT_STATUSES: StatusDef[] = [
   { key: "new",           label: "New Enquiry",   colorId: "amber"   },
   { key: "contacted",     label: "Contacted",     colorId: "sky"     },
-  { key: "proposal_sent", label: "Proposal Sent", colorId: "forest"  },
+  { key: "proposal_sent", label: "Proposal Sent", colorId: "amber"   },
   { key: "negotiating",   label: "Negotiating",   colorId: "orange"  },
   { key: "booked",        label: "Confirmed",     colorId: "emerald" },
   { key: "lost",          label: "Lost",          colorId: "stone"   },
