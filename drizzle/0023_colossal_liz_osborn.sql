@@ -1,0 +1,1 @@
+ALTER TABLE "venue_settings" ADD COLUMN "emailSignatureLogo" text;

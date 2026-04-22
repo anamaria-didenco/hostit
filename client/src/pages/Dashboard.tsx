@@ -1318,6 +1318,7 @@ export default function Dashboard() {
           { day: "Saturday", enabled: true, start: "08:00", end: "22:00" },
         ]),
         emailSignature: vs?.emailSignature ?? "",
+        emailSignatureLogo: (vs as any)?.emailSignatureLogo ?? "",
         customCourses: vs?.customCourses ?? "",
       });
     }
@@ -2632,10 +2633,15 @@ export default function Dashboard() {
                       placeholder="Write your message here..."
                     />
                     {/* Signature preview */}
-                    {venueSettings?.emailSignature && (
+                    {(venueSettings?.emailSignature || (venueSettings as any)?.emailSignatureLogo) && (
                       <div className="mt-1 border-t border-dashed border-gold/30 pt-2">
                         <p className="font-bebas text-[9px] tracking-widest text-sage/60 mb-1">SIGNATURE (auto-appended)</p>
-                        <pre className="font-dm text-xs text-ink/40 whitespace-pre-wrap leading-relaxed">{venueSettings.emailSignature}</pre>
+                        {(venueSettings as any)?.emailSignatureLogo && (
+                          <img src={(venueSettings as any).emailSignatureLogo} alt="Logo" className="h-8 w-auto object-contain mb-1 opacity-60" />
+                        )}
+                        {venueSettings?.emailSignature && (
+                          <pre className="font-dm text-xs text-ink/40 whitespace-pre-wrap leading-relaxed">{venueSettings.emailSignature}</pre>
+                        )}
                       </div>
                     )}
                     {/* Inline variable hint — shows which {{vars}} are still unreplaced */}
@@ -4255,24 +4261,63 @@ export default function Dashboard() {
               {/* ── Email Signature ─────────────────────────────────────── */}
               <div className="mt-8">
                 <h2 className="font-cormorant text-xl font-semibold text-ink mb-1">Email Signature</h2>
-                <p className="font-dm text-xs text-sage mb-4">Automatically appended to every outbound email sent from VenueFlow. Plain text only.</p>
+                <p className="font-dm text-xs text-sage mb-4">Automatically appended to every outbound email sent from VenueFlow.</p>
                 <div className="space-y-3">
+                  {/* Logo upload */}
+                  <div>
+                    <p className="font-bebas tracking-widest text-[10px] text-sage mb-2">LOGO / PHOTO</p>
+                    <div className="flex items-start gap-3">
+                      {settingsForm?.emailSignatureLogo && (
+                        <div className="relative flex-shrink-0">
+                          <img src={settingsForm.emailSignatureLogo} alt="Signature logo" className="h-14 w-auto object-contain border border-gold/20 bg-white p-1" />
+                          <button
+                            type="button"
+                            onClick={() => setSettingsForm((f: any) => ({ ...f, emailSignatureLogo: "" }))}
+                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center leading-none hover:bg-red-600"
+                          >✕</button>
+                        </div>
+                      )}
+                      <label className="border border-dashed border-gold/40 px-4 py-2.5 cursor-pointer hover:bg-gold/5 transition-colors flex items-center gap-2">
+                        <span className="font-bebas tracking-widest text-xs text-sage">{settingsForm?.emailSignatureLogo ? "CHANGE IMAGE" : "UPLOAD LOGO / PHOTO"}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => setSettingsForm((f: any) => ({ ...f, emailSignatureLogo: reader.result as string }));
+                            reader.readAsDataURL(file);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
                   <Textarea
                     value={settingsForm?.emailSignature ?? ""}
                     onChange={e => setSettingsForm((f: any) => ({ ...f, emailSignature: e.target.value }))}
-                    rows={6}
+                    rows={5}
                     placeholder={`e.g.\n\nKind regards,\nAna Maria\nBar Franco Events\nph: 03 123 4567 | www.barfranco.nz`}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none"
                   />
-                  {settingsForm?.emailSignature && (
+                  {(settingsForm?.emailSignature || settingsForm?.emailSignatureLogo) && (
                     <div className="bg-stone-50 border border-stone-200 p-3">
-                      <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">PREVIEW</p>
-                      <pre className="font-dm text-xs text-ink/70 whitespace-pre-wrap leading-relaxed">{settingsForm.emailSignature}</pre>
+                      <p className="font-bebas tracking-widest text-[10px] text-sage mb-2">PREVIEW</p>
+                      <div className="border-t border-stone-200 pt-2">
+                        {settingsForm?.emailSignatureLogo && (
+                          <img src={settingsForm.emailSignatureLogo} alt="Logo" className="h-10 w-auto object-contain mb-2" />
+                        )}
+                        {settingsForm?.emailSignature && (
+                          <pre className="font-dm text-xs text-ink/70 whitespace-pre-wrap leading-relaxed">{settingsForm.emailSignature}</pre>
+                        )}
+                      </div>
                     </div>
                   )}
                   <button
                     type="button"
-                    onClick={() => updateSettings.mutate({ emailSignature: settingsForm?.emailSignature ?? "" })}
+                    onClick={() => updateSettings.mutate({ emailSignature: settingsForm?.emailSignature ?? "", emailSignatureLogo: settingsForm?.emailSignatureLogo ?? "" })}
                     disabled={updateSettings.isPending}
                     className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50"
                   >

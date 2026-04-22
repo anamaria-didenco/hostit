@@ -106,6 +106,7 @@ export const appRouter = router({
         nbiVenueId: z.string().optional(),
         nbiSyncEnabled: z.number().optional(),
         emailSignature: z.string().optional(),
+        emailSignatureLogo: z.string().optional(),
         customCourses: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -1562,10 +1563,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const fromName = settings.smtpFromName ?? settings.name ?? 'VenueFlowHQ';
         const fromEmail = settings.smtpFromEmail ?? settings.smtpUser;
 
-        // Build HTML: body + optional signature
+        // Build HTML: body + optional signature (logo + text)
         const bodyHtml = input.body.replace(/\n/g, '<br>');
-        const signatureHtml = (settings as any).emailSignature
-          ? `<br><br><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">${(settings as any).emailSignature}`
+        const sigLogo = (settings as any).emailSignatureLogo ?? '';
+        const sigText = (settings as any).emailSignature ?? '';
+        const signatureHtml = (sigLogo || sigText)
+          ? `<br><br><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">${sigLogo ? `<img src="${sigLogo}" alt="" style="max-height:60px;width:auto;display:block;margin-bottom:8px">` : ''}${sigText ? `<span style="white-space:pre-wrap">${sigText}</span>` : ''}`
           : '';
         const fullHtml = `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1a1209">${bodyHtml}${signatureHtml}</div>`;
 
