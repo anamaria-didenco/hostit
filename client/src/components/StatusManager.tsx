@@ -11,6 +11,7 @@ export type StatusDef = {
 
 export const COLOR_PRESETS = [
   { id: "amber",   label: "Gold",    classes: "border-amber-400 bg-amber-100 text-amber-900",          swatch: "#f59e0b",  calClasses: "bg-amber-400 text-amber-950",      barClasses: "bg-amber-400",    dayClasses: "border-l-4 border-amber-400 bg-amber-50"    },
+  { id: "yellow",  label: "Yellow",  classes: "border-yellow-400 bg-yellow-100 text-yellow-900",       swatch: "#facc15",  calClasses: "bg-yellow-400 text-yellow-950",    barClasses: "bg-yellow-400",   dayClasses: "border-l-4 border-yellow-400 bg-yellow-50"  },
   { id: "sky",     label: "Sky",     classes: "border-sky-400 bg-sky-100 text-sky-800",                swatch: "#38bdf8",  calClasses: "bg-sky-400 text-white",            barClasses: "bg-sky-400",      dayClasses: "border-l-4 border-sky-400 bg-sky-50"        },
   { id: "forest",  label: "Forest",  classes: "border-emerald-600 bg-emerald-100 text-emerald-900",    swatch: "#047857",  calClasses: "bg-emerald-700 text-white",        barClasses: "bg-emerald-700",  dayClasses: "border-l-4 border-emerald-700 bg-emerald-50" },
   { id: "orange",  label: "Orange",  classes: "border-orange-400 bg-orange-100 text-orange-800",       swatch: "#fb923c",  calClasses: "bg-orange-400 text-white",         barClasses: "bg-orange-400",   dayClasses: "border-l-4 border-orange-400 bg-orange-50"  },

@@ -2631,6 +2631,13 @@ export default function Dashboard() {
                       className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest resize-none"
                       placeholder="Write your message here..."
                     />
+                    {/* Signature preview */}
+                    {venueSettings?.emailSignature && (
+                      <div className="mt-1 border-t border-dashed border-gold/30 pt-2">
+                        <p className="font-bebas text-[9px] tracking-widest text-sage/60 mb-1">SIGNATURE (auto-appended)</p>
+                        <pre className="font-dm text-xs text-ink/40 whitespace-pre-wrap leading-relaxed">{venueSettings.emailSignature}</pre>
+                      </div>
+                    )}
                     {/* Inline variable hint — shows which {{vars}} are still unreplaced */}
                     {emailForm.body && /\{\{\w+\}\}/.test(emailForm.body) && (
                       <div className="mt-1 px-2 py-1 bg-gold/10 border border-gold/30 font-dm text-xs text-amber-800 flex items-start gap-1.5">

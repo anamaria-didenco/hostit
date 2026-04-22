@@ -407,16 +407,26 @@ export const appRouter = router({
                       and(eq(lTable.ownerId, input.ownerId), gte(lTable.eventDate as any, dayStart), lt(lTable.eventDate as any, dayEnd))
                     ),
                   ]);
-                  const statusLabel = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                  // Build a lookup from status key → custom label using venue's stored customStatuses
+                  const customStatusLabels: Record<string, string> = {};
+                  try {
+                    const rawStatuses = vs.customStatuses ? JSON.parse(vs.customStatuses as string) : [];
+                    for (const s of rawStatuses) customStatusLabels[s.key] = s.label;
+                  } catch { /* ignore */ }
+                  const statusLabel = (s: string) => customStatusLabels[s] ?? s.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
                   const statusColor: Record<string, string> = {
-                    confirmed: '#16a34a', tentative: '#d97706', cancelled: '#dc2626',
-                    new: '#6b7280', contacted: '#3b82f6', booked: '#16a34a',
+                    confirmed: '#16a34a', booked: '#16a34a',
+                    negotiating: '#d97706', tentative: '#d97706',
+                    proposal_sent: '#f59e0b', function_pack_sent: '#facc15',
+                    new: '#6b7280', contacted: '#3b82f6',
+                    cancelled: '#dc2626', lost: '#6b7280',
                   };
                   const bookingRows = existingBookings
                     .filter(b => b.status !== 'cancelled')
                     .map(b => `<tr style="border-bottom:1px solid #f3f4f6">
                       <td style="padding:5px 8px;font-size:13px">${b.firstName} ${b.lastName ?? ''}</td>
                       <td style="padding:5px 8px;font-size:13px">${b.eventType ?? '—'}</td>
+                      <td style="padding:5px 8px;font-size:13px">${b.spaceName ? `<span style="color:#6b7280">${b.spaceName}</span>` : '—'}</td>
                       <td style="padding:5px 8px;font-size:13px">${b.guestCount ?? '—'} guests</td>
                       <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[b.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${statusLabel(b.status)}</span></td>
                     </tr>`);
@@ -425,6 +435,7 @@ export const appRouter = router({
                     .map((l: any) => `<tr style="border-bottom:1px solid #f3f4f6">
                       <td style="padding:5px 8px;font-size:13px">${l.firstName} ${l.lastName ?? ''}</td>
                       <td style="padding:5px 8px;font-size:13px">${l.eventType ?? '—'}</td>
+                      <td style="padding:5px 8px;font-size:13px">${(l as any).spaceName ? `<span style="color:#6b7280">${(l as any).spaceName}</span>` : '—'}</td>
                       <td style="padding:5px 8px;font-size:13px">${l.guestCount ?? '—'} guests</td>
                       <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[l.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${statusLabel(l.status)} (enquiry)</span></td>
                     </tr>`);
@@ -437,6 +448,7 @@ export const appRouter = router({
                         <thead><tr style="background:#fde68a">
                           <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Name</th>
                           <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Type</th>
+                          <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Space / Room</th>
                           <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Guests</th>
                           <th style="padding:4px 8px;font-size:11px;text-align:left;color:#78350f">Status</th>
                         </tr></thead>
