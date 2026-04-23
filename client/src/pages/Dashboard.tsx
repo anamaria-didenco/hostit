@@ -3463,168 +3463,6 @@ export default function Dashboard() {
               )}
             </div>
           )}
-          {/* ── BOOKING SLIDE-OUT PANEL ─────────────────────────────────────── */}
-          {selectedBooking && (
-            <div className="fixed inset-0 z-[9999] flex">
-              {/* Backdrop — hidden on mobile (full-screen drawer) */}
-              <div className="hidden md:flex flex-1 bg-black/40" onClick={() => setSelectedBooking(null)} />
-              {/* Drawer — full screen on mobile, side panel on desktop */}
-              <div className="w-full md:max-w-md bg-cream md:border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl">
-                {/* Header */}
-                <div className="bg-forest-dark px-5 py-4 flex items-center justify-between">
-                  <div>
-                    <div className="font-bebas tracking-widest text-xs text-gold mb-0.5">EVENT DETAILS</div>
-                    <div className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</div>
-                  </div>
-                  <button onClick={() => setSelectedBooking(null)} className="text-cream/60 hover:text-cream">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                {/* Body */}
-                <div className="p-5 space-y-5 flex-1">
-                  {/* Status + Type */}
-                  <div className="flex items-center gap-2">
-                    <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${
-                      selectedBooking.status === 'confirmed' || selectedBooking.status === 'booked' ? 'text-forest bg-blue-50 border-blue-200'
-                      : selectedBooking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
-                      : selectedBooking.status === 'new' ? 'text-amber-700 bg-amber-50 border-amber-200'
-                      : 'text-stone-500 bg-stone-50 border-stone-200'
-                    }`}>{selectedBooking._isLead ? 'ENQUIRY' : (selectedBooking.status?.toUpperCase() ?? 'EVENT')}</span>
-                    {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60">{selectedBooking.eventType}</span>}
-                  </div>
-                  {/* Key Details */}
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3">
-                      <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                      <div>
-                        <div className="font-bebas text-xs tracking-widest text-ink/40">DATE</div>
-                        <div className="font-dm text-sm text-ink">
-                          {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
-                        </div>
-                        {selectedBooking.eventEndDate && (
-                          <div className="font-dm text-xs text-ink/50">
-                            until {new Date(selectedBooking.eventEndDate).toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {selectedBooking.guestCount && (
-                      <div className="flex items-start gap-3">
-                        <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                        <div>
-                          <div className="font-bebas text-xs tracking-widest text-ink/40">GUESTS</div>
-                          <div className="font-dm text-sm text-ink">{selectedBooking.guestCount}</div>
-                        </div>
-                      </div>
-                    )}
-                    {selectedBooking.spaceName && (
-                      <div className="flex items-start gap-3">
-                        <MapPin className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                        <div>
-                          <div className="font-bebas text-xs tracking-widest text-ink/40">SPACE</div>
-                          <div className="font-dm text-sm text-ink">{selectedBooking.spaceName}</div>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex items-start gap-3">
-                      <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                      <div>
-                        <div className="font-bebas text-xs tracking-widest text-ink/40">EMAIL</div>
-                        <div className="font-dm text-sm text-ink">{selectedBooking.email}</div>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Financials — bookings only */}
-                  {!selectedBooking._isLead && (
-                  <div className="bg-forest-dark/5 border border-gold/20 p-4">
-                    <div className="font-bebas text-xs tracking-widest text-ink/40 mb-3">FINANCIALS</div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="font-bebas text-xs tracking-widest text-ink/40">TOTAL</div>
-                        <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
-                      </div>
-                      <div>
-                        <div className="font-bebas text-xs tracking-widest text-ink/40">DEPOSIT</div>
-                        <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.depositNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
-                      </div>
-                    </div>
-                    <div className={`mt-2 font-bebas text-xs tracking-widest ${
-                      selectedBooking.depositPaid ? 'text-forest' : 'text-amber-600'
-                    }`}>{selectedBooking.depositPaid ? '✓ DEPOSIT PAID' : '⚠ DEPOSIT PENDING'}</div>
-                  </div>
-                  )}
-                  {/* Quick Actions */}
-                  <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/40 mb-2">QUICK ACTIONS</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {selectedBooking._isLead ? (
-                        <>
-                          <button onClick={() => { const lead = selectedBooking; setSelectedBooking(null); selectLead(lead); setTab('enquiries'); }}
-                            className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs col-span-2">
-                            <FileText className="w-3 h-3 text-gold" /> OPEN ENQUIRY
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}`); }}
-                            className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                            <FileText className="w-3 h-3 text-gold" /> OPEN EVENT
-                          </button>
-                          <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}?tab=budget`); }}
-                            className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                            <TrendingUp className="w-3 h-3 text-gold" /> SPEND
-                          </button>
-                          <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
-                            className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                            <Clock className="w-3 h-3 text-gold" /> RUNSHEET
-                          </button>
-                          <button onClick={() => {
-                              const a = document.createElement('a');
-                              a.href = `/api/beo/${selectedBooking.id}`;
-                              a.download = `BEO-${selectedBooking.firstName}-${selectedBooking.lastName ?? ''}.pdf`;
-                              document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                              toast.success('Generating BEO PDF...');
-                            }}
-                            className="flex items-center gap-2 px-3 py-2 bg-amber-700 text-white hover:bg-amber-800 transition-colors font-bebas tracking-widest text-xs">
-                            <Printer className="w-3 h-3" /> BEO PDF
-                          </button>
-                          <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
-                            className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                            <LayoutGrid className="w-3 h-3" /> FLOOR PLAN
-                          </button>
-                          <button onClick={() => { setSelectedBooking(null); setLocation(`/checklist?bookingId=${selectedBooking.id}`); }}
-                            className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                            <CheckCircle className="w-3 h-3" /> CHECKLIST
-                          </button>
-                          <button onClick={() => { setSelectedBooking(null); setLocation(`/payments?bookingId=${selectedBooking.id}`); }}
-                            className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs col-span-2">
-                            <DollarSign className="w-3 h-3" /> PAYMENTS
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
-                                deleteBooking.mutate({ id: selectedBooking.id });
-                              }
-                            }}
-                            className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
-                            <Trash2 className="w-3 h-3" /> DELETE EVENT
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  {selectedBooking.notes && (
-                    <div>
-                      <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">NOTES</div>
-                      <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap bg-cream border border-gold/20 p-3">{selectedBooking.notes}</div>
-                    </div>
-                  )}
-                  {/* Event Spend — bookings only */}
-                  {!selectedBooking._isLead && <EventSpendSection bookingId={selectedBooking.id} />}
-                </div>
-              </div>
-            </div>
-          )}
           {/* ── CONTACTS ─────────────────────────────────────────────────────── */}
           {tab === "contacts" && (
             <div className="p-6">
@@ -6230,6 +6068,169 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {/* ── BOOKING SLIDE-OUT PANEL ─────────────────────────────────────── */}
+      {selectedBooking && (
+        <div className="fixed inset-0 z-[9999] flex">
+          {/* Backdrop */}
+          <div className="hidden md:flex flex-1 bg-black/40" onClick={() => setSelectedBooking(null)} />
+          {/* Drawer */}
+          <div className="w-full md:max-w-md bg-cream md:border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="bg-forest-dark px-5 py-4 flex items-center justify-between">
+              <div>
+                <div className="font-bebas tracking-widest text-xs text-gold mb-0.5">EVENT DETAILS</div>
+                <div className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</div>
+              </div>
+              <button onClick={() => setSelectedBooking(null)} className="text-cream/60 hover:text-cream">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="p-5 space-y-5 flex-1">
+              {/* Status + Type */}
+              <div className="flex items-center gap-2">
+                <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${
+                  selectedBooking.status === 'confirmed' || selectedBooking.status === 'booked' ? 'text-forest bg-blue-50 border-blue-200'
+                  : selectedBooking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
+                  : selectedBooking.status === 'new' ? 'text-amber-700 bg-amber-50 border-amber-200'
+                  : 'text-stone-500 bg-stone-50 border-stone-200'
+                }`}>{selectedBooking._isLead ? 'ENQUIRY' : (selectedBooking.status?.toUpperCase() ?? 'EVENT')}</span>
+                {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60">{selectedBooking.eventType}</span>}
+              </div>
+              {/* Key Details */}
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-bebas text-xs tracking-widest text-ink/40">DATE</div>
+                    <div className="font-dm text-sm text-ink">
+                      {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
+                    </div>
+                    {selectedBooking.eventEndDate && (
+                      <div className="font-dm text-xs text-ink/50">
+                        until {new Date(selectedBooking.eventEndDate).toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {selectedBooking.guestCount && (
+                  <div className="flex items-start gap-3">
+                    <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                    <div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/40">GUESTS</div>
+                      <div className="font-dm text-sm text-ink">{selectedBooking.guestCount}</div>
+                    </div>
+                  </div>
+                )}
+                {selectedBooking.spaceName && (
+                  <div className="flex items-start gap-3">
+                    <MapPin className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                    <div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/40">SPACE</div>
+                      <div className="font-dm text-sm text-ink">{selectedBooking.spaceName}</div>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-start gap-3">
+                  <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-bebas text-xs tracking-widest text-ink/40">EMAIL</div>
+                    <div className="font-dm text-sm text-ink">{selectedBooking.email}</div>
+                  </div>
+                </div>
+              </div>
+              {/* Financials — bookings only */}
+              {!selectedBooking._isLead && (
+                <div className="bg-forest-dark/5 border border-gold/20 p-4">
+                  <div className="font-bebas text-xs tracking-widest text-ink/40 mb-3">FINANCIALS</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/40">TOTAL</div>
+                      <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                    </div>
+                    <div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/40">DEPOSIT</div>
+                      <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.depositNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                    </div>
+                  </div>
+                  <div className={`mt-2 font-bebas text-xs tracking-widest ${
+                    selectedBooking.depositPaid ? 'text-forest' : 'text-amber-600'
+                  }`}>{selectedBooking.depositPaid ? '✓ DEPOSIT PAID' : '⚠ DEPOSIT PENDING'}</div>
+                </div>
+              )}
+              {/* Quick Actions */}
+              <div>
+                <div className="font-bebas text-xs tracking-widest text-ink/40 mb-2">QUICK ACTIONS</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {selectedBooking._isLead ? (
+                    <>
+                      <button onClick={() => { const lead = selectedBooking; setSelectedBooking(null); selectLead(lead); setTab('enquiries'); }}
+                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs col-span-2">
+                        <FileText className="w-3 h-3 text-gold" /> OPEN ENQUIRY
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                        <FileText className="w-3 h-3 text-gold" /> OPEN EVENT
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}?tab=budget`); }}
+                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                        <TrendingUp className="w-3 h-3 text-gold" /> SPEND
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                        <Clock className="w-3 h-3 text-gold" /> RUNSHEET
+                      </button>
+                      <button onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = `/api/beo/${selectedBooking.id}`;
+                          a.download = `BEO-${selectedBooking.firstName}-${selectedBooking.lastName ?? ''}.pdf`;
+                          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                          toast.success('Generating BEO PDF...');
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 bg-amber-700 text-white hover:bg-amber-800 transition-colors font-bebas tracking-widest text-xs">
+                        <Printer className="w-3 h-3" /> BEO PDF
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <LayoutGrid className="w-3 h-3" /> FLOOR PLAN
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/checklist?bookingId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <CheckCircle className="w-3 h-3" /> CHECKLIST
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/payments?bookingId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs col-span-2">
+                        <DollarSign className="w-3 h-3" /> PAYMENTS
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
+                            deleteBooking.mutate({ id: selectedBooking.id });
+                          }
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
+                        <Trash2 className="w-3 h-3" /> DELETE EVENT
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              {selectedBooking.notes && (
+                <div>
+                  <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">NOTES</div>
+                  <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap bg-cream border border-gold/20 p-3">{selectedBooking.notes}</div>
+                </div>
+              )}
+              {/* Event Spend — bookings only */}
+              {!selectedBooking._isLead && <EventSpendSection bookingId={selectedBooking.id} />}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Task Rule Modal */}
       <Dialog open={showAddTaskRule} onOpenChange={setShowAddTaskRule}>
