@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, createPortal } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6070,7 +6070,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── BOOKING SLIDE-OUT PANEL ─────────────────────────────────────── */}
-      {selectedBooking && (
+      {selectedBooking && createPortal(
         <div className="fixed inset-0 z-[9999] flex">
           {/* Backdrop */}
           <div className="hidden md:flex flex-1 bg-black/40" onClick={() => setSelectedBooking(null)} />
@@ -6230,7 +6230,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* Add Task Rule Modal */}
       <Dialog open={showAddTaskRule} onOpenChange={setShowAddTaskRule}>
