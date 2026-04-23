@@ -239,6 +239,8 @@ export default function RunsheetBuilder() {
   // Costs
   type CostItem = { _id: string; label: string; qty: number; unitPrice: number; category: string };
   const [costItems, setCostItems] = useState<CostItem[]>([]);
+  const [gstInclusive, setGstInclusive] = useState(false);
+  const [paymentNotes, setPaymentNotes] = useState("");
 
   // Drinks (runsheet-level selection)
   const [rsBarOption, setRsBarOption] = useState<"bar_tab" | "cash_bar" | "bar_tab_then_cash" | "unlimited">("cash_bar");
@@ -838,6 +840,8 @@ export default function RunsheetBuilder() {
       setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
       setItems((existing.items ?? []).map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
       if ((existing as any).costItems) setCostItems((existing as any).costItems as CostItem[]);
+      setGstInclusive((existing as any).gstInclusive ?? false);
+      setPaymentNotes((existing as any).paymentNotes ?? "");
       const cols = (existing as any).fnbColumns;
       if (cols) {
         if (cols.dietary !== undefined) setShowDietaryCol(cols.dietary);
@@ -1062,6 +1066,8 @@ export default function RunsheetBuilder() {
           dietaries: dietaries.length ? dietaries : undefined,
           venueSetup: venueSetup || undefined,
           footerText: footerText || undefined,
+          gstInclusive,
+          paymentNotes: paymentNotes || undefined,
           items: items.map((item, i) => ({
             time: item.time,
             duration: item.duration,
@@ -1096,6 +1102,8 @@ export default function RunsheetBuilder() {
           floorPlanId: linkedFloorPlanId ?? null,
           costItems: costItems.length ? costItems : null,
           drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks },
+          gstInclusive,
+          paymentNotes: paymentNotes || undefined,
         } as any);
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
@@ -3541,11 +3549,42 @@ export default function RunsheetBuilder() {
               </button>
             </div>
 
+            {/* GST toggle + payment notes */}
+            <div className="px-5 py-3 border-t border-gold/20 bg-linen/20 flex flex-col gap-3">
+              {/* GST toggle */}
+              <div className="flex items-center gap-3">
+                <span className="font-bebas tracking-widest text-[10px] text-ink/40">PRICES ARE</span>
+                <div className="flex rounded overflow-hidden border border-gold/30">
+                  <button
+                    onClick={() => setGstInclusive(false)}
+                    className={`font-bebas tracking-widest text-[10px] px-3 py-1.5 transition-colors ${!gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/50 hover:bg-linen'}`}
+                  >GST EXCLUSIVE</button>
+                  <button
+                    onClick={() => setGstInclusive(true)}
+                    className={`font-bebas tracking-widest text-[10px] px-3 py-1.5 transition-colors ${gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/50 hover:bg-linen'}`}
+                  >GST INCLUSIVE</button>
+                </div>
+                <span className="font-dm text-[10px] text-ink/35">{gstInclusive ? 'Prices already include 15% GST' : 'GST (15%) will be added on top'}</span>
+              </div>
+              {/* Payment notes */}
+              <div>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PAYMENT NOTES</label>
+                <textarea
+                  value={paymentNotes}
+                  onChange={e => setPaymentNotes(e.target.value)}
+                  placeholder="e.g. Final payment of $2,400 due on the day. Deposit of $800 received 12 Apr. Balance outstanding. Payment by bank transfer to 12-3456-7890123-00."
+                  className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-none"
+                  rows={3}
+                />
+              </div>
+            </div>
+
             {/* Totals */}
             {costItems.length > 0 && (() => {
-              const subtotal = costItems.reduce((sum, ci) => sum + ci.qty * ci.unitPrice, 0);
-              const gst = subtotal * 0.15;
-              const total = subtotal + gst;
+              const entered = costItems.reduce((sum, ci) => sum + ci.qty * ci.unitPrice, 0);
+              const subtotal = gstInclusive ? entered / 1.15 : entered;
+              const gstAmt = gstInclusive ? entered - subtotal : entered * 0.15;
+              const total = gstInclusive ? entered : entered + gstAmt;
               const byCategory = costItems.reduce((acc, ci) => {
                 acc[ci.category] = (acc[ci.category] ?? 0) + ci.qty * ci.unitPrice;
                 return acc;
@@ -3558,24 +3597,30 @@ export default function RunsheetBuilder() {
                     {Object.entries(byCategory).map(([cat, amt]) => (
                       <div key={cat} className="flex items-center gap-6 text-xs font-dm">
                         <span className="text-ink/60 w-36">{cat}</span>
-                        <span className="text-ink font-semibold">${amt.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                        <span className="text-ink font-semibold">${(gstInclusive ? amt / 1.15 : amt).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}<span className="font-normal text-ink/40 text-[10px] ml-1">ex GST</span></span>
                       </div>
                     ))}
                   </div>
                   {/* Summary */}
-                  <div className="min-w-[220px] space-y-1">
+                  <div className="min-w-[240px] space-y-1">
                     <div className="flex justify-between text-xs font-dm text-ink/70">
                       <span>Subtotal (excl. GST)</span>
                       <span className="font-semibold">${subtotal.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="flex justify-between text-xs font-dm text-ink/50">
                       <span>GST (15%)</span>
-                      <span>${gst.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                      <span>${gstAmt.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="flex justify-between text-sm font-dm font-bold text-ink border-t border-gold/40 pt-1.5 mt-1.5">
                       <span>Total (incl. GST)</span>
                       <span>${total.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
                     </div>
+                    {paymentNotes && (
+                      <div className="mt-3 pt-3 border-t border-gold/20">
+                        <div className="font-bebas text-[9px] tracking-widest text-ink/35 mb-1">PAYMENT NOTES</div>
+                        <div className="font-dm text-xs text-ink/60 whitespace-pre-wrap">{paymentNotes}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

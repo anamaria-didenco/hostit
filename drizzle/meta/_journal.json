@@ -168,6 +168,13 @@
       "when": 1776826977413,
       "tag": "0023_colossal_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1776934665889,
+      "tag": "0024_silent_nightshade",
+      "breakpoints": true
     }
   ]
 }

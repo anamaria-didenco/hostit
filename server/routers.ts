@@ -2199,6 +2199,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
         venueSetup: z.string().optional(),
         footerText: z.string().optional(),
+        gstInclusive: z.boolean().optional(),
+        paymentNotes: z.string().optional(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).optional(),
         items: z.array(z.object({
           time: z.string(),
@@ -2237,6 +2239,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           dietaries: input.dietaries ?? null,
           venueSetup: input.venueSetup ?? null,
           footerText: input.footerText ?? null,
+          gstInclusive: input.gstInclusive ?? false,
+          paymentNotes: input.paymentNotes ?? null,
           costItems: input.costItems ?? null,
           proposalId: input.proposalId ?? null,
           publicToken: token,
@@ -2284,6 +2288,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional(), qty: z.boolean().optional() }).optional(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).nullable().optional(),
         drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })) }).nullable().optional(),
+        gstInclusive: z.boolean().optional(),
+        paymentNotes: z.string().optional().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -2311,6 +2317,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.fnbColumns !== undefined) updateData.fnbColumns = fields.fnbColumns;
         if (fields.costItems !== undefined) updateData.costItems = fields.costItems;
         if (fields.drinksData !== undefined) updateData.drinksData = fields.drinksData;
+        if (fields.gstInclusive !== undefined) updateData.gstInclusive = fields.gstInclusive;
+        if (fields.paymentNotes !== undefined) updateData.paymentNotes = fields.paymentNotes;
         updateData.updatedAt = new Date();
         await db.update(runsheets).set(updateData)
           .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)));
