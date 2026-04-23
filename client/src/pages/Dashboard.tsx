@@ -1682,7 +1682,7 @@ export default function Dashboard() {
                                 </div>
                                 {dayBookings.slice(0, 2).map((b: any) => (
                                   <button key={b.id}
-                                    onClick={() => { setSelectedBooking(b); setTab('calendar'); }}
+                                    onClick={() => { setSelectedBooking(b); }}
                                     className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}`}>
                                     <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
