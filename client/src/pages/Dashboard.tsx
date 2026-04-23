@@ -11,7 +11,7 @@ import {
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
-  SlidersHorizontal, GripVertical, Bell, Paperclip, Download
+  SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -3465,7 +3465,7 @@ export default function Dashboard() {
           )}
           {/* ── BOOKING SLIDE-OUT PANEL ─────────────────────────────────────── */}
           {selectedBooking && (
-            <div className="fixed inset-0 z-50 flex">
+            <div className="fixed inset-0 z-[9999] flex">
               {/* Backdrop — hidden on mobile (full-screen drawer) */}
               <div className="hidden md:flex flex-1 bg-black/40" onClick={() => setSelectedBooking(null)} />
               {/* Drawer — full screen on mobile, side panel on desktop */}
@@ -3499,7 +3499,7 @@ export default function Dashboard() {
                       <div>
                         <div className="font-bebas text-xs tracking-widest text-ink/40">DATE</div>
                         <div className="font-dm text-sm text-ink">
-                          {new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                          {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
                         </div>
                         {selectedBooking.eventEndDate && (
                           <div className="font-dm text-xs text-ink/50">
@@ -3577,6 +3577,16 @@ export default function Dashboard() {
                           <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
                             className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                             <Clock className="w-3 h-3 text-gold" /> RUNSHEET
+                          </button>
+                          <button onClick={() => {
+                              const a = document.createElement('a');
+                              a.href = `/api/beo/${selectedBooking.id}`;
+                              a.download = `BEO-${selectedBooking.firstName}-${selectedBooking.lastName ?? ''}.pdf`;
+                              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                              toast.success('Generating BEO PDF...');
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 bg-amber-700 text-white hover:bg-amber-800 transition-colors font-bebas tracking-widest text-xs">
+                            <Printer className="w-3 h-3" /> BEO PDF
                           </button>
                           <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
                             className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
