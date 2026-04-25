@@ -20,6 +20,19 @@ import { ENV } from "./env";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { handleGithubWebhook } from "../githubWebhook";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+
+async function runMigrations() {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const db = drizzle(process.env.DATABASE_URL);
+    await migrate(db, { migrationsFolder: "drizzle" });
+    console.log("[DB] Migrations applied successfully");
+  } catch (err) {
+    console.error("[DB] Migration error (non-fatal):", err);
+  }
+}
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,6 +54,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  await runMigrations();
   const app = express();
   const server = createServer(app);
   // GitHub webhook — must capture raw body BEFORE json middleware for HMAC verification
