@@ -40,6 +40,7 @@ const EMPTY_SHIFT = {
   specialNotes: "",
   marketFish: "",
   thingsToPush: "",
+  linkedChecklistIds: [] as number[],
 };
 
 export default function DailyChecklists() {
@@ -134,6 +135,7 @@ export default function DailyChecklists() {
       specialNotes: f.specialNotes || undefined,
       marketFish: f.marketFish || undefined,
       thingsToPush: f.thingsToPush || undefined,
+      linkedChecklistIds: f.linkedChecklistIds.length > 0 ? f.linkedChecklistIds : undefined,
     };
   }
 
@@ -154,6 +156,7 @@ export default function DailyChecklists() {
       specialNotes: sr.specialNotes ?? "",
       marketFish: sr.marketFish ?? "",
       thingsToPush: sr.thingsToPush ?? "",
+      linkedChecklistIds: (sr.linkedChecklistIds as number[] | null) ?? [],
     });
     setEditingShiftId(sr.id);
   }
@@ -353,6 +356,7 @@ export default function DailyChecklists() {
                 onCancel={() => { setShowShiftCreate(false); setShiftForm(EMPTY_SHIFT); }}
                 saving={createShiftMut.isPending}
                 title="New Shift Runsheet"
+                availableChecklists={checklists ?? []}
               />
             )}
 
@@ -379,6 +383,7 @@ export default function DailyChecklists() {
                         saving={updateShiftMut.isPending}
                         title="Edit Shift Runsheet"
                         inline
+                        availableChecklists={checklists ?? []}
                       />
                     ) : (
                       <ShiftCard
@@ -387,6 +392,7 @@ export default function DailyChecklists() {
                         onCopyLink={() => copyShiftLink(sr.token)}
                         onEdit={() => startEditShift(sr)}
                         onDelete={() => { if (confirm('Delete this shift runsheet?')) deleteShiftMut.mutate({ id: sr.id }); }}
+                        availableChecklists={checklists ?? []}
                       />
                     )}
                   </div>
@@ -402,7 +408,7 @@ export default function DailyChecklists() {
 
 /* ── Shift Form ─────────────────────────────────────────────────────────── */
 function ShiftForm({
-  form, setForm, onSave, onCancel, saving, title, inline,
+  form, setForm, onSave, onCancel, saving, title, inline, availableChecklists,
 }: {
   form: typeof EMPTY_SHIFT;
   setForm: React.Dispatch<React.SetStateAction<typeof EMPTY_SHIFT>>;
@@ -411,6 +417,7 @@ function ShiftForm({
   saving: boolean;
   title: string;
   inline?: boolean;
+  availableChecklists?: { id: number; name: string; category?: string | null }[];
 }) {
   const base = inline ? "p-5" : "bg-white border border-[#c9a84c]/30 rounded mb-6 p-5 shadow-sm";
   return (
@@ -481,6 +488,38 @@ function ShiftForm({
         </div>
       </div>
 
+      {/* Attach checklists */}
+      {availableChecklists && availableChecklists.length > 0 && (
+        <div className="mb-4">
+          <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-2">ATTACH CHECKLISTS</label>
+          <div className="flex flex-wrap gap-2">
+            {availableChecklists.map(cl => {
+              const selected = form.linkedChecklistIds.includes(cl.id);
+              return (
+                <button
+                  key={cl.id}
+                  type="button"
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    linkedChecklistIds: selected
+                      ? f.linkedChecklistIds.filter(id => id !== cl.id)
+                      : [...f.linkedChecklistIds, cl.id],
+                  }))}
+                  className={`flex items-center gap-1.5 font-dm text-xs px-3 py-1.5 rounded border transition-colors ${
+                    selected
+                      ? 'bg-[#6b98e7] border-[#6b98e7] text-white'
+                      : 'bg-white border-[#c9a84c]/30 text-[#8a7a60] hover:border-[#6b98e7] hover:text-[#6b98e7]'
+                  }`}
+                >
+                  {selected && <Check className="w-3 h-3" />}
+                  {cl.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-2">
         <button onClick={onSave} disabled={saving}
           className="font-bebas tracking-widest text-sm px-6 py-2 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6] disabled:opacity-50 flex items-center gap-2">
@@ -493,12 +532,13 @@ function ShiftForm({
 }
 
 /* ── Shift Card ─────────────────────────────────────────────────────────── */
-function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete }: {
+function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableChecklists }: {
   sr: any;
   shiftLink: string;
   onCopyLink: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  availableChecklists?: { id: number; name: string }[];
 }) {
   const sections = (sr.sections ?? {}) as Record<string, string>;
   const hasSections = SECTIONS.some(s => sections[s.key]);
@@ -540,6 +580,24 @@ function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete }: {
         {sr.specialNotes && <PreviewField label="SPECIAL NOTES / VIP" value={sr.specialNotes} />}
         {sr.marketFish && <PreviewField label="MARKET FISH" value={sr.marketFish} />}
         {sr.thingsToPush && <div className="col-span-2"><PreviewField label="THINGS TO PUSH / OUT OF STOCK" value={sr.thingsToPush} /></div>}
+        {(() => {
+          const ids = (sr.linkedChecklistIds as number[] | null) ?? [];
+          if (!ids.length || !availableChecklists?.length) return null;
+          const names = ids.map(id => availableChecklists?.find(c => c.id === id)?.name).filter(Boolean);
+          if (!names.length) return null;
+          return (
+            <div className="col-span-2 pt-1">
+              <div className="font-bebas text-[10px] tracking-widest text-[#8a7a60] mb-1.5">ATTACHED CHECKLISTS</div>
+              <div className="flex flex-wrap gap-1.5">
+                {names.map((name, i) => (
+                  <span key={i} className="font-dm text-[11px] bg-[#6b98e7]/10 text-[#6b98e7] border border-[#6b98e7]/20 px-2 py-0.5 rounded">
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Staff link banner */}

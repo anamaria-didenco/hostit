@@ -4427,12 +4427,26 @@ Return ONLY valid JSON. Example structure:
       .input(z.object({ token: z.string() }))
       .query(async ({ input }) => {
         const { getDb } = await import('./db');
-        const { shiftRunsheets } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
+        const { shiftRunsheets, dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, inArray } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return null;
         const [sr] = await db.select().from(shiftRunsheets).where(eq(shiftRunsheets.token, input.token)).limit(1);
-        return sr ?? null;
+        if (!sr) return null;
+        const ids = (sr.linkedChecklistIds as number[] | null) ?? [];
+        let checklists: { id: number; name: string; token: string; items: any[] }[] = [];
+        if (ids.length > 0) {
+          const cls = await db.select().from(dailyChecklists).where(inArray(dailyChecklists.id, ids));
+          const items = await db.select().from(dailyChecklistItems).where(inArray(dailyChecklistItems.checklistId, ids));
+          checklists = ids
+            .map(id => {
+              const cl = cls.find(c => c.id === id);
+              if (!cl) return null;
+              return { id: cl.id, name: cl.name, token: cl.token, items: items.filter(it => it.checklistId === id).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)) };
+            })
+            .filter(Boolean) as any[];
+        }
+        return { ...sr, checklists };
       }),
 
     create: protectedProcedure
@@ -4451,6 +4465,7 @@ Return ONLY valid JSON. Example structure:
         specialNotes: z.string().optional(),
         marketFish: z.string().optional(),
         thingsToPush: z.string().optional(),
+        linkedChecklistIds: z.array(z.number()).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
@@ -4470,6 +4485,7 @@ Return ONLY valid JSON. Example structure:
           specialNotes: input.specialNotes ?? null,
           marketFish: input.marketFish ?? null,
           thingsToPush: input.thingsToPush ?? null,
+          linkedChecklistIds: input.linkedChecklistIds ?? null,
           token,
           createdAt: now,
           updatedAt: now,
@@ -4494,6 +4510,7 @@ Return ONLY valid JSON. Example structure:
         specialNotes: z.string().optional().nullable(),
         marketFish: z.string().optional().nullable(),
         thingsToPush: z.string().optional().nullable(),
+        linkedChecklistIds: z.array(z.number()).optional().nullable(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');

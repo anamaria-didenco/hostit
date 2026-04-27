@@ -893,6 +893,7 @@ export const shiftRunsheets = pgTable("shift_runsheets", {
   specialNotes: text("special_notes"),
   marketFish: text("market_fish"),
   thingsToPush: text("things_to_push"),
+  linkedChecklistIds: json("linked_checklist_ids"),
   token: varchar("token", { length: 64 }).notNull().unique(),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),

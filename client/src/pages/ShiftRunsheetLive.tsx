@@ -1,6 +1,7 @@
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckSquare, Square, RefreshCw, CheckCircle2, Pencil } from "lucide-react";
 
 const SECTION_LABELS: Record<string, string> = {
   bar: "Bar",
@@ -10,10 +11,12 @@ const SECTION_LABELS: Record<string, string> = {
   bigTable: "Big Table",
 };
 
+const LS_KEY = "vf_staff_name";
+
 function Field({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
-    <div className="border-b border-stone-100 py-3">
+    <div className="border-b border-stone-100 py-3 last:border-0">
       <div className="font-bebas tracking-widest text-[10px] text-stone-400 mb-1">{label}</div>
       <div className="font-dm text-sm text-stone-800 whitespace-pre-wrap leading-relaxed">{value}</div>
     </div>
@@ -24,10 +27,38 @@ export default function ShiftRunsheetLive() {
   const params = useParams<{ token: string }>();
   const token = params.token;
 
-  const { data: sr, isLoading } = trpc.shiftRunsheets.getByToken.useQuery(
+  const { data: sr, isLoading, refetch } = trpc.shiftRunsheets.getByToken.useQuery(
     { token },
-    { enabled: !!token }
+    { enabled: !!token, refetchInterval: 30000 }
   );
+
+  const toggleMut = trpc.dailyChecklists.toggleItemByToken.useMutation({ onSuccess: () => refetch() });
+  const resetMut = trpc.dailyChecklists.resetByToken.useMutation({ onSuccess: () => refetch() });
+
+  const [optimistic, setOptimistic] = useState<Record<number, boolean>>({});
+  const [staffName, setStaffName] = useState<string>(() => {
+    try { return localStorage.getItem(LS_KEY) ?? ""; } catch { return ""; }
+  });
+  const [editingName, setEditingName] = useState(!staffName);
+  const [nameInput, setNameInput] = useState(staffName);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setOptimistic({}); }, [sr]);
+  useEffect(() => { if (editingName && nameInputRef.current) nameInputRef.current.focus(); }, [editingName]);
+
+  function saveName() {
+    const t = nameInput.trim();
+    if (!t) return;
+    try { localStorage.setItem(LS_KEY, t); } catch {}
+    setStaffName(t);
+    setEditingName(false);
+  }
+
+  function handleToggle(clToken: string, itemId: number, currentChecked: boolean) {
+    const next = !currentChecked;
+    setOptimistic(p => ({ ...p, [itemId]: next }));
+    toggleMut.mutate({ token: clToken, itemId, checked: next, checkedBy: next ? (staffName || undefined) : undefined });
+  }
 
   if (isLoading) {
     return (
@@ -49,12 +80,15 @@ export default function ShiftRunsheetLive() {
   }
 
   const sections = sr.sections as Record<string, string> | null;
+  const checklists = (sr as any).checklists as { id: number; name: string; token: string; items: any[] }[] | undefined ?? [];
   const dateDisplay = sr.date
     ? new Date(sr.date + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
     : null;
 
+  const hasContent = sections || sr.specials || sr.budget || sr.specialNotes || sr.marketFish || sr.thingsToPush;
+
   return (
-    <div className="min-h-screen bg-[#f9f5ef] pb-12">
+    <div className="min-h-screen bg-[#f9f5ef] pb-24">
       {/* Header */}
       <div className="bg-[#6b98e7] text-white px-5 py-5">
         <div className="max-w-lg mx-auto">
@@ -104,12 +138,108 @@ export default function ShiftRunsheetLive() {
           </div>
         )}
 
-        {!sections && !sr.specials && !sr.budget && !sr.specialNotes && !sr.marketFish && !sr.thingsToPush && (
+        {/* Linked checklists */}
+        {checklists.map(cl => {
+          const items = cl.items ?? [];
+          const checkedCount = items.filter((it: any) => {
+            const opt = optimistic[it.id];
+            return opt !== undefined ? opt : (it.checked === 1);
+          }).length;
+          const allDone = checkedCount === items.length && items.length > 0;
+
+          return (
+            <div key={cl.id} className="bg-white border border-[#c9a84c]/30 rounded overflow-hidden">
+              {/* Checklist header */}
+              <div className="bg-[#f9f5ef] px-4 py-2.5 border-b border-[#c9a84c]/20 flex items-center justify-between">
+                <span className="font-bebas tracking-widest text-sm text-stone-700">{cl.name}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-dm text-xs text-stone-500">{checkedCount}/{items.length}</span>
+                  <button
+                    onClick={() => { if (confirm('Reset all items?')) { setOptimistic(p => { const n = {...p}; items.forEach((it: any) => delete n[it.id]); return n; }); resetMut.mutate({ token: cl.token }); } }}
+                    className="font-bebas tracking-widest text-[10px] text-stone-400 hover:text-red-500 flex items-center gap-1 transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" /> RESET
+                  </button>
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div className="h-1 bg-stone-100">
+                <div className="h-1 bg-[#6b98e7] transition-all duration-500" style={{ width: items.length > 0 ? `${(checkedCount / items.length) * 100}%` : "0%" }} />
+              </div>
+              {allDone && (
+                <div className="bg-green-50 border-b border-green-100 px-4 py-2 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <p className="font-bebas tracking-widest text-xs text-green-700">ALL DONE — GREAT WORK!</p>
+                </div>
+              )}
+              {items.length === 0 && (
+                <p className="font-dm text-sm text-stone-400 text-center py-6">No items on this checklist.</p>
+              )}
+              {items.map((item: any) => {
+                const isChecked = optimistic[item.id] !== undefined ? optimistic[item.id] : (item.checked === 1);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleToggle(cl.token, item.id, isChecked)}
+                    className={`w-full text-left flex items-start gap-3 px-4 py-3 border-b border-stone-100 last:border-0 transition-colors ${isChecked ? 'bg-green-50/60' : 'bg-white hover:bg-stone-50'}`}
+                  >
+                    <div className="mt-0.5 flex-shrink-0">
+                      {isChecked
+                        ? <CheckSquare className="w-5 h-5 text-green-600" />
+                        : <Square className="w-5 h-5 text-stone-300" />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-dm text-sm leading-snug ${isChecked ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.text}</p>
+                      {item.note && <p className="font-dm text-xs text-stone-400 mt-0.5 leading-snug">{item.note}</p>}
+                      {isChecked && item.checkedBy && (
+                        <p className="font-dm text-[10px] text-green-600/70 mt-1">
+                          ✓ {item.checkedBy}{item.checkedAt ? ` · ${new Date(item.checkedAt).toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" })}` : ""}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+
+        {!hasContent && checklists.length === 0 && (
           <div className="text-center py-10">
             <p className="font-dm text-sm text-stone-400">No details have been added to this shift runsheet yet.</p>
           </div>
         )}
+      </div>
 
+      {/* Staff name footer */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg">
+        <div className="max-w-lg mx-auto px-4 py-3">
+          {editingName ? (
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <p className="font-bebas tracking-widest text-[10px] text-stone-400 mb-1">YOUR NAME</p>
+                <input ref={nameInputRef} type="text" value={nameInput} onChange={e => setNameInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveName(); }}
+                  placeholder="e.g. Sarah"
+                  className="w-full border border-stone-300 px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7]" />
+              </div>
+              <button onClick={saveName} disabled={!nameInput.trim()}
+                className="bg-[#6b98e7] text-white font-bebas tracking-widest text-sm px-5 py-2 hover:bg-[#5a87d6] disabled:opacity-40 self-end">SAVE</button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-bebas tracking-widest text-[10px] text-stone-400">CHECKING IN AS</p>
+                <p className="font-dm text-sm text-stone-800 font-medium">{staffName || "Anonymous"}</p>
+              </div>
+              <button onClick={() => { setNameInput(staffName); setEditingName(true); }}
+                className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-stone-400 hover:text-[#6b98e7] transition-colors">
+                <Pencil className="w-3 h-3" /> CHANGE
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
