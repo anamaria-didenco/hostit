@@ -802,11 +802,11 @@ export default function Dashboard() {
   const adjPrevMonthDate = new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1);
   const { data: adjMonthBookings } = trpc.bookings.byMonth.useQuery(
     { year: adjNextMonthDate.getFullYear(), month: adjNextMonthDate.getMonth() + 1 },
-    { enabled: !!user?.id && (calendarView === 'week' || calendarView === 'day') }
+    { enabled: !!user?.id }
   );
   const { data: adjMonthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
     { year: adjNextMonthDate.getFullYear(), month: adjNextMonthDate.getMonth() + 1 },
-    { enabled: !!user?.id && (calendarView === 'week' || calendarView === 'day') }
+    { enabled: !!user?.id }
   );
   const { data: adjPrevMonthBookings } = trpc.bookings.byMonth.useQuery(
     { year: adjPrevMonthDate.getFullYear(), month: adjPrevMonthDate.getMonth() + 1 },
@@ -1648,38 +1648,52 @@ export default function Dashboard() {
                       const firstDayOfMonth = new Date(year, month, 1).getDay();
                       const mondayOffset = (firstDayOfMonth + 6) % 7;
                       const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
+                      const nxtYear = adjNextMonthDate.getFullYear();
+                      const nxtMonth = adjNextMonthDate.getMonth();
+                      const adjBLIds = new Set((adjMonthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
                       const cells = Array.from({ length: totalCells }, (_, i) => {
                         const dayNum = i - mondayOffset + 1;
-                        return dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null;
+                        if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
+                        if (dayNum > daysInMonth) return { day: dayNum - daysInMonth, isOverflow: true };
+                        return null;
                       });
                       const weeks = [];
                       for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
                       const numWeeks = weeks.length;
                       return weeks.map((week, wi) => (
                         <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(340 / numWeeks)}px` }}>
-                          {week.map((day, di) => {
-                            if (!day) return <div key={di} className="border-r border-border last:border-r-0 bg-linen/20" />;
-                            const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
+                          {week.map((cell, di) => {
+                            if (!cell) return <div key={di} className="border-r border-border last:border-r-0 bg-linen/20" />;
+                            const { day, isOverflow } = cell;
+                            const cellYear = isOverflow ? nxtYear : year;
+                            const cellMonth = isOverflow ? nxtMonth : month;
+                            const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
                             const isWeekend = di >= 5;
-                            const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
-                            const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                            const dayBookings = isOverflow
+                              ? (adjMonthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day)
+                              : (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
+                            const dayLeads = isOverflow
+                              ? (adjMonthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
+                              : (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                            const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                             return (
                               <div key={di}
                                 className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
-                                  isWeekend ? 'bg-linen/20' : 'bg-white'
-                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} hover:bg-linen/30 transition-colors`}
+                                  isOverflow ? 'bg-linen/40 opacity-60' : isWeekend ? 'bg-linen/20' : 'bg-white'
+                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${!isOverflow ? 'hover:bg-linen/30 transition-colors' : ''}`}
                               >
                                 <div className="flex items-center justify-between mb-0.5">
                                   <span className={`font-dm text-xs font-semibold leading-none ${
-                                    isToday ? 'w-5 h-5 bg-forest text-cream rounded-full flex items-center justify-center text-[10px]' : isWeekend ? 'text-forest' : 'text-ink/60'
+                                    isToday ? 'w-5 h-5 bg-forest text-cream rounded-full flex items-center justify-center text-[10px]' : isOverflow ? 'text-ink/30' : isWeekend ? 'text-forest' : 'text-ink/60'
                                   }`}>{day}</span>
-                                  <button
-                                    onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' }); }}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
-                                    title="Add event">
-                                    <Plus className="w-3 h-3 text-forest" />
-                                  </button>
+                                  {!isOverflow && (
+                                    <button
+                                      onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' }); }}
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
+                                      title="Add event">
+                                      <Plus className="w-3 h-3 text-forest" />
+                                    </button>
+                                  )}
                                 </div>
                                 {dayBookings.slice(0, 2).map((b: any) => (
                                   <button key={b.id}
@@ -2827,27 +2841,41 @@ export default function Dashboard() {
                   const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0=Sun
                   const mondayOffset = (firstDayOfMonth + 6) % 7; // offset from Monday
                   const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
+                  const nextYear = adjNextMonthDate.getFullYear();
+                  const nextMonth = adjNextMonthDate.getMonth();
+                  const adjBookedLeadIds = new Set((adjMonthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
+                  // Each cell: { day, isOverflow } — overflow = belongs to next month
                   const cells = Array.from({ length: totalCells }, (_, i) => {
                     const dayNum = i - mondayOffset + 1;
-                    return dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null;
+                    if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
+                    if (dayNum > daysInMonth) return { day: dayNum - daysInMonth, isOverflow: true };
+                    return null; // leading blank (prev month)
                   });
                   const weeks = [];
                   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+                  const statusCard = (status: string) => getStatusInfo(status).calClasses;
                   return weeks.map((week, wi) => (
                     <div key={wi} className="grid grid-cols-7 border-b border-gold/10 last:border-b-0" style={{ minHeight: '120px' }}>
-                      {week.map((day, di) => {
-                        if (!day) return <div key={di} className="border-r border-gold/10 last:border-r-0 bg-linen/20" />;
-                        const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
-                        const isWeekend = di >= 5; // Sat=5, Sun=6
-                        const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                        const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
-                        const statusCard = (status: string) => getStatusInfo(status).calClasses;
+                      {week.map((cell, di) => {
+                        if (!cell) return <div key={di} className="border-r border-gold/10 last:border-r-0 bg-linen/20" />;
+                        const { day, isOverflow } = cell;
+                        const cellYear = isOverflow ? nextYear : year;
+                        const cellMonth = isOverflow ? nextMonth : month;
+                        const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
+                        const isWeekend = di >= 5;
+                        const dayBookings = isOverflow
+                          ? (adjMonthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day)
+                          : (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
+                        const dayLeads = isOverflow
+                          ? (adjMonthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBookedLeadIds.has(l.id) && l.status !== 'lost')
+                          : (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                        const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                         return (
                           <div key={di} className={`border-r border-gold/10 last:border-r-0 p-1 flex flex-col gap-0.5 ${
-                            isWeekend ? 'bg-linen/20' : 'bg-white'
+                            isOverflow ? 'bg-linen/40 opacity-60' : isWeekend ? 'bg-linen/20' : 'bg-white'
                           } ${isToday ? 'ring-2 ring-inset ring-gold' : ''}`}>
                             <span className={`text-xs font-dm leading-none mb-0.5 self-start px-1 rounded ${
-                              isToday ? 'bg-forest-dark text-cream font-bold px-1.5 py-0.5' : isWeekend ? 'text-forest/70 font-semibold' : 'text-ink/70'
+                              isToday ? 'bg-forest-dark text-cream font-bold px-1.5 py-0.5' : isOverflow ? 'text-ink/30' : isWeekend ? 'text-forest/70 font-semibold' : 'text-ink/70'
                             }`}>{day}</span>
                             {/* Booking cards */}
                             {dayBookings.map((b: any) => (
@@ -2862,15 +2890,17 @@ export default function Dashboard() {
                                   {b.guestCount && <div className="opacity-70">{b.guestCount} guests</div>}
                                   <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                 </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); if (confirm(`Delete ${b.eventType || 'event'} for ${b.firstName}?`)) deleteBooking.mutate({ id: b.id }); }}
-                                  className="absolute top-0.5 right-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center"
-                                  title="Delete event">
-                                  <X className="w-2 h-2" />
-                                </button>
+                                {!isOverflow && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); if (confirm(`Delete ${b.eventType || 'event'} for ${b.firstName}?`)) deleteBooking.mutate({ id: b.id }); }}
+                                    className="absolute top-0.5 right-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center"
+                                    title="Delete event">
+                                    <X className="w-2 h-2" />
+                                  </button>
+                                )}
                               </div>
                             ))}
-                            {/* Lead/enquiry cards — also open slide-out panel */}
+                            {/* Lead/enquiry cards */}
                             {dayLeads.map((l: any) => (
                               <button key={l.id}
                                 onClick={() => setSelectedBooking({ ...l, _isLead: true })}
@@ -2882,13 +2912,15 @@ export default function Dashboard() {
                                 <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                               </button>
                             ))}
-                            {/* Edit icon for adding event on this day */}
-                            <button
-                              onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` })); setShowAddLead(true); }}
-                              className="self-start mt-auto text-ink/20 hover:text-ink/50 transition-colors p-0.5"
-                              title="Add event on this day">
-                              <Edit2 className="w-2.5 h-2.5" />
-                            </button>
+                            {/* Add event button */}
+                            {!isOverflow && (
+                              <button
+                                onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: dateStr })); setShowAddLead(true); }}
+                                className="self-start mt-auto text-ink/20 hover:text-ink/50 transition-colors p-0.5"
+                                title="Add event on this day">
+                                <Edit2 className="w-2.5 h-2.5" />
+                              </button>
+                            )}
                           </div>
                         );
                       })}
