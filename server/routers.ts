@@ -4397,5 +4397,128 @@ Return ONLY valid JSON. Example structure:
         return { success: true };
       }),
   }),
+
+  shiftRunsheets: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { shiftRunsheets } = await import('../drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(shiftRunsheets)
+        .where(eq(shiftRunsheets.ownerId, ctx.user.id))
+        .orderBy(desc(shiftRunsheets.date), desc(shiftRunsheets.createdAt));
+    }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { shiftRunsheets } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [sr] = await db.select().from(shiftRunsheets)
+          .where(and(eq(shiftRunsheets.id, input.id), eq(shiftRunsheets.ownerId, ctx.user.id))).limit(1);
+        return sr ?? null;
+      }),
+
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { shiftRunsheets } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [sr] = await db.select().from(shiftRunsheets).where(eq(shiftRunsheets.token, input.token)).limit(1);
+        return sr ?? null;
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        date: z.string().optional(),
+        dutyManager: z.string().optional(),
+        sections: z.object({
+          bar: z.string().optional(),
+          barFloor: z.string().optional(),
+          front: z.string().optional(),
+          back: z.string().optional(),
+          bigTable: z.string().optional(),
+        }).optional(),
+        specials: z.string().optional(),
+        budget: z.string().optional(),
+        specialNotes: z.string().optional(),
+        marketFish: z.string().optional(),
+        thingsToPush: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { shiftRunsheets } = await import('../drizzle/schema');
+        const cryptoMod = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const token = cryptoMod.randomBytes(24).toString('hex');
+        const now = Date.now();
+        const [created] = await db.insert(shiftRunsheets).values({
+          ownerId: ctx.user.id,
+          date: input.date ?? null,
+          dutyManager: input.dutyManager ?? null,
+          sections: input.sections ?? null,
+          specials: input.specials ?? null,
+          budget: input.budget ?? null,
+          specialNotes: input.specialNotes ?? null,
+          marketFish: input.marketFish ?? null,
+          thingsToPush: input.thingsToPush ?? null,
+          token,
+          createdAt: now,
+          updatedAt: now,
+        }).returning();
+        return created;
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        date: z.string().optional().nullable(),
+        dutyManager: z.string().optional().nullable(),
+        sections: z.object({
+          bar: z.string().optional(),
+          barFloor: z.string().optional(),
+          front: z.string().optional(),
+          back: z.string().optional(),
+          bigTable: z.string().optional(),
+        }).optional().nullable(),
+        specials: z.string().optional().nullable(),
+        budget: z.string().optional().nullable(),
+        specialNotes: z.string().optional().nullable(),
+        marketFish: z.string().optional().nullable(),
+        thingsToPush: z.string().optional().nullable(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { shiftRunsheets } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const { id, ...fields } = input;
+        await db.update(shiftRunsheets).set({ ...fields, updatedAt: Date.now() })
+          .where(and(eq(shiftRunsheets.id, id), eq(shiftRunsheets.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { shiftRunsheets } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(shiftRunsheets)
+          .where(and(eq(shiftRunsheets.id, input.id), eq(shiftRunsheets.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;

@@ -1,6 +1,6 @@
 import {
   integer, pgEnum, pgTable, text, timestamp,
-  varchar, decimal, boolean, bigint, json, serial
+  varchar, decimal, boolean, bigint, json, jsonb, serial
 } from "drizzle-orm/pg-core";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -881,6 +881,23 @@ export const dailyChecklists = pgTable("daily_checklists", {
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 });
 export type DailyChecklist = typeof dailyChecklists.$inferSelect;
+
+export const shiftRunsheets = pgTable("shift_runsheets", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(),
+  date: varchar("date", { length: 10 }),
+  dutyManager: text("duty_manager"),
+  sections: jsonb("sections"),
+  specials: text("specials"),
+  budget: text("budget"),
+  specialNotes: text("special_notes"),
+  marketFish: text("market_fish"),
+  thingsToPush: text("things_to_push"),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+export type ShiftRunsheet = typeof shiftRunsheets.$inferSelect;
 
 export const dailyChecklistItems = pgTable("daily_checklist_items", {
   id: serial("id").primaryKey(),
