@@ -109,6 +109,7 @@ export const venueSettings = pgTable("venue_settings", {
   emailSignature: text("emailSignature"),
   emailSignatureLogo: text("emailSignatureLogo"),
   customCourses: text("customCourses"),
+  shiftSections: text("shiftSections"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

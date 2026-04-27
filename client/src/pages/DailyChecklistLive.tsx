@@ -112,8 +112,17 @@ export default function DailyChecklistLive() {
     ? new Date(checklist.assignedDate + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
     : new Date().toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
+  const venueLogoUrl = (checklist as any).venueLogoUrl as string | null | undefined;
+  const venueName = (checklist as any).venueName as string | null | undefined;
+
   return (
     <div className="min-h-screen bg-linen pb-24">
+      {/* Logo banner */}
+      {venueLogoUrl && (
+        <div className="bg-white border-b border-stone-100 px-4 py-3 flex items-center justify-center">
+          <img src={venueLogoUrl} alt={venueName ?? "Venue logo"} className="h-10 w-auto max-w-[160px] object-contain" />
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white border-b border-stone-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-start justify-between gap-3">

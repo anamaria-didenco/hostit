@@ -182,6 +182,13 @@
       "when": 1777277055425,
       "tag": "0025_premium_nehzno",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1777278016290,
+      "tag": "0026_mysterious_prodigy",
+      "breakpoints": true
     }
   ]
 }

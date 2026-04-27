@@ -3,13 +3,18 @@ import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Loader2, CheckSquare, Square, RefreshCw, CheckCircle2, Pencil } from "lucide-react";
 
-const SECTION_LABELS: Record<string, string> = {
-  bar: "Bar",
-  barFloor: "Bar Floor",
-  front: "Front",
-  back: "Back",
-  bigTable: "Big Table",
-};
+const DEFAULT_SECTION_LABELS: { key: string; label: string }[] = [
+  { key: "bar", label: "Bar" },
+  { key: "barFloor", label: "Bar Floor" },
+  { key: "front", label: "Front" },
+  { key: "back", label: "Back" },
+  { key: "bigTable", label: "Big Table" },
+];
+
+function parseSectionDefs(raw: string | null | undefined): { key: string; label: string }[] {
+  if (!raw) return DEFAULT_SECTION_LABELS;
+  try { const p = JSON.parse(raw); return Array.isArray(p) && p.length > 0 ? p : DEFAULT_SECTION_LABELS; } catch { return DEFAULT_SECTION_LABELS; }
+}
 
 const LS_KEY = "vf_staff_name";
 
@@ -81,6 +86,9 @@ export default function ShiftRunsheetLive() {
 
   const sections = sr.sections as Record<string, string> | null;
   const checklists = (sr as any).checklists as { id: number; name: string; token: string; items: any[] }[] | undefined ?? [];
+  const sectionDefs = parseSectionDefs((sr as any).shiftSections);
+  const venueLogoUrl = (sr as any).venueLogoUrl as string | null | undefined;
+  const venueName = (sr as any).venueName as string | null | undefined;
   const dateDisplay = sr.date
     ? new Date(sr.date + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
     : null;
@@ -89,6 +97,13 @@ export default function ShiftRunsheetLive() {
 
   return (
     <div className="min-h-screen bg-[#f9f5ef] pb-24">
+      {/* Logo banner */}
+      {venueLogoUrl && (
+        <div className="bg-white border-b border-stone-100 px-4 py-3 flex items-center justify-center">
+          <img src={venueLogoUrl} alt={venueName ?? "Venue logo"} className="h-10 w-auto max-w-[160px] object-contain" />
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-[#6b98e7] text-white px-5 py-5">
         <div className="max-w-lg mx-auto">
@@ -107,13 +122,13 @@ export default function ShiftRunsheetLive() {
       <div className="max-w-lg mx-auto px-5 py-6 space-y-5">
 
         {/* Sections */}
-        {sections && Object.entries(SECTION_LABELS).some(([k]) => sections[k]) && (
+        {sections && sectionDefs.some(s => sections[s.key]) && (
           <div className="bg-white border border-[#c9a84c]/30 rounded overflow-hidden">
             <div className="bg-[#f9f5ef] px-4 py-2 border-b border-[#c9a84c]/20">
               <span className="font-bebas tracking-widest text-xs text-stone-500">SECTIONS</span>
             </div>
             <div className="divide-y divide-stone-100">
-              {Object.entries(SECTION_LABELS).map(([key, label]) => {
+              {sectionDefs.map(({ key, label }) => {
                 const val = sections[key];
                 if (!val) return null;
                 return (

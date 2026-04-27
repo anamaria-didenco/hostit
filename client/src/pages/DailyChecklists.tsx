@@ -2,10 +2,10 @@
  * DailyChecklists — two tabs: Checklists + Shift Runsheets
  * Route: /daily-checklists
  */
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "../lib/trpc";
 import { toast } from "sonner";
-import { Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronRight, Camera, X, Edit2, Check, RotateCcw, CopyPlus, Save, Pencil } from "lucide-react";
+import { Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronRight, Camera, X, Edit2, Check, RotateCcw, CopyPlus, Save, Pencil, Settings, ArrowUp, ArrowDown, Image } from "lucide-react";
 
 const CATEGORIES = [
   { value: "general", label: "General", color: "bg-gray-100 text-gray-700" },
@@ -21,7 +21,7 @@ function catInfo(cat: string) {
   return CATEGORIES.find(c => c.value === cat) ?? CATEGORIES[0];
 }
 
-const SECTIONS = [
+const DEFAULT_SECTIONS: { key: string; label: string }[] = [
   { key: "bar", label: "Bar" },
   { key: "barFloor", label: "Bar Floor" },
   { key: "front", label: "Front" },
@@ -29,22 +29,38 @@ const SECTIONS = [
   { key: "bigTable", label: "Big Table" },
 ];
 
-type SectionMap = { bar?: string; barFloor?: string; front?: string; back?: string; bigTable?: string };
+function parseSections(raw: string | null | undefined): { key: string; label: string }[] {
+  if (!raw) return DEFAULT_SECTIONS;
+  try { const p = JSON.parse(raw); return Array.isArray(p) && p.length > 0 ? p : DEFAULT_SECTIONS; } catch { return DEFAULT_SECTIONS; }
+}
 
-const EMPTY_SHIFT = {
-  date: "",
-  dutyManager: "",
-  sections: { bar: "", barFloor: "", front: "", back: "", bigTable: "" } as SectionMap,
-  specials: "",
-  budget: "",
-  specialNotes: "",
-  marketFish: "",
-  thingsToPush: "",
-  linkedChecklistIds: [] as number[],
+function makeEmptyShift(sections: { key: string }[]): ShiftFormState {
+  const sectionMap: Record<string, string> = {};
+  sections.forEach(s => { sectionMap[s.key] = ""; });
+  return {
+    date: "", dutyManager: "", sections: sectionMap,
+    specials: "", budget: "", specialNotes: "", marketFish: "", thingsToPush: "",
+    linkedChecklistIds: [],
+  };
+}
+
+type ShiftFormState = {
+  date: string; dutyManager: string; sections: Record<string, string>;
+  specials: string; budget: string; specialNotes: string; marketFish: string; thingsToPush: string;
+  linkedChecklistIds: number[];
 };
+
+const EMPTY_SHIFT: ShiftFormState = makeEmptyShift(DEFAULT_SECTIONS);
 
 export default function DailyChecklists() {
   const [activeTab, setActiveTab] = useState<"checklists" | "shifts">("checklists");
+
+  // ─── Venue settings (logo + sections) ────────────────────────────────────
+  const { data: venueSettings, refetch: refetchVenue } = trpc.venue.get.useQuery({});
+  const updateVenueMut = trpc.venue.update.useMutation({ onSuccess: () => { refetchVenue(); toast.success("Settings saved!"); } });
+
+  const effectiveSections = parseSections(venueSettings?.shiftSections);
+  const [showSettings, setShowSettings] = useState(false);
 
   // ─── Checklists state ─────────────────────────────────────────────────────
   const { data: checklists, refetch } = trpc.dailyChecklists.list.useQuery();
@@ -99,12 +115,12 @@ export default function DailyChecklists() {
   // ─── Shift Runsheets state ────────────────────────────────────────────────
   const { data: shifts, refetch: refetchShifts } = trpc.shiftRunsheets.list.useQuery();
   const [showShiftCreate, setShowShiftCreate] = useState(false);
-  const [shiftForm, setShiftForm] = useState(EMPTY_SHIFT);
+  const [shiftForm, setShiftForm] = useState<ShiftFormState>(EMPTY_SHIFT);
   const [editingShiftId, setEditingShiftId] = useState<number | null>(null);
-  const [editShiftForm, setEditShiftForm] = useState(EMPTY_SHIFT);
+  const [editShiftForm, setEditShiftForm] = useState<ShiftFormState>(EMPTY_SHIFT);
 
   const createShiftMut = trpc.shiftRunsheets.create.useMutation({
-    onSuccess: () => { refetchShifts(); setShowShiftCreate(false); setShiftForm(EMPTY_SHIFT); toast.success("Shift runsheet created!"); },
+    onSuccess: () => { refetchShifts(); setShowShiftCreate(false); setShiftForm(makeEmptyShift(effectiveSections)); toast.success("Shift runsheet created!"); },
     onError: () => toast.error("Failed to create shift runsheet"),
   });
   const updateShiftMut = trpc.shiftRunsheets.update.useMutation({
@@ -119,17 +135,13 @@ export default function DailyChecklists() {
   function getShiftLink(token: string) { return `${window.location.origin}/shift/${token}`; }
   function copyShiftLink(token: string) { navigator.clipboard.writeText(getShiftLink(token)); toast.success("Link copied!"); }
 
-  function shiftFormToInput(f: typeof EMPTY_SHIFT) {
+  function shiftFormToInput(f: ShiftFormState) {
+    const sections: Record<string, string> = {};
+    Object.entries(f.sections).forEach(([k, v]) => { if (v) sections[k] = v; });
     return {
       date: f.date || undefined,
       dutyManager: f.dutyManager || undefined,
-      sections: {
-        bar: f.sections.bar || undefined,
-        barFloor: f.sections.barFloor || undefined,
-        front: f.sections.front || undefined,
-        back: f.sections.back || undefined,
-        bigTable: f.sections.bigTable || undefined,
-      },
+      sections: Object.keys(sections).length > 0 ? sections : undefined,
       specials: f.specials || undefined,
       budget: f.budget || undefined,
       specialNotes: f.specialNotes || undefined,
@@ -140,17 +152,13 @@ export default function DailyChecklists() {
   }
 
   function startEditShift(sr: any) {
-    const sec = (sr.sections ?? {}) as SectionMap;
+    const sec = (sr.sections ?? {}) as Record<string, string>;
+    const sectionMap: Record<string, string> = {};
+    effectiveSections.forEach(s => { sectionMap[s.key] = sec[s.key] ?? ""; });
     setEditShiftForm({
       date: sr.date ?? "",
       dutyManager: sr.dutyManager ?? "",
-      sections: {
-        bar: sec.bar ?? "",
-        barFloor: sec.barFloor ?? "",
-        front: sec.front ?? "",
-        back: sec.back ?? "",
-        bigTable: sec.bigTable ?? "",
-      },
+      sections: sectionMap,
       specials: sr.specials ?? "",
       budget: sr.budget ?? "",
       specialNotes: sr.specialNotes ?? "",
@@ -176,14 +184,33 @@ export default function DailyChecklists() {
             <h1 className="font-bebas text-3xl tracking-wider">Daily Operations</h1>
             <p className="font-dm text-sm text-white/70 mt-1">Checklists and shift runsheets for your team.</p>
           </div>
-          <button
-            onClick={() => activeTab === "checklists" ? setShowCreate(true) : setShowShiftCreate(true)}
-            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 transition-colors text-white font-bebas tracking-wider text-sm px-5 py-2.5 rounded"
-          >
-            <Plus className="w-4 h-4" /> {activeTab === "checklists" ? "NEW CHECKLIST" : "NEW SHIFT RUNSHEET"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 transition-colors text-white font-bebas tracking-wider text-sm px-3 py-2.5 rounded"
+              title="Customise sections & logo"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => activeTab === "checklists" ? setShowCreate(true) : setShowShiftCreate(true)}
+              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 transition-colors text-white font-bebas tracking-wider text-sm px-5 py-2.5 rounded"
+            >
+              <Plus className="w-4 h-4" /> {activeTab === "checklists" ? "NEW CHECKLIST" : "NEW SHIFT RUNSHEET"}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* ── Settings panel ─────────────────────────────────────────────────── */}
+      {showSettings && (
+        <SettingsPanel
+          venueSettings={venueSettings}
+          onSave={(shiftSections) => updateVenueMut.mutate({ shiftSections })}
+          saving={updateVenueMut.isPending}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
 
       {/* Tabs */}
       <div className="bg-white border-b border-[#c9a84c]/20">
@@ -353,10 +380,11 @@ export default function DailyChecklists() {
                 form={shiftForm}
                 setForm={setShiftForm}
                 onSave={() => createShiftMut.mutate(shiftFormToInput(shiftForm))}
-                onCancel={() => { setShowShiftCreate(false); setShiftForm(EMPTY_SHIFT); }}
+                onCancel={() => { setShowShiftCreate(false); setShiftForm(makeEmptyShift(effectiveSections)); }}
                 saving={createShiftMut.isPending}
                 title="New Shift Runsheet"
                 availableChecklists={checklists ?? []}
+                sections={effectiveSections}
               />
             )}
 
@@ -384,6 +412,7 @@ export default function DailyChecklists() {
                         title="Edit Shift Runsheet"
                         inline
                         availableChecklists={checklists ?? []}
+                        sections={effectiveSections}
                       />
                     ) : (
                       <ShiftCard
@@ -393,6 +422,7 @@ export default function DailyChecklists() {
                         onEdit={() => startEditShift(sr)}
                         onDelete={() => { if (confirm('Delete this shift runsheet?')) deleteShiftMut.mutate({ id: sr.id }); }}
                         availableChecklists={checklists ?? []}
+                        sections={effectiveSections}
                       />
                     )}
                   </div>
@@ -408,17 +438,19 @@ export default function DailyChecklists() {
 
 /* ── Shift Form ─────────────────────────────────────────────────────────── */
 function ShiftForm({
-  form, setForm, onSave, onCancel, saving, title, inline, availableChecklists,
+  form, setForm, onSave, onCancel, saving, title, inline, availableChecklists, sections,
 }: {
-  form: typeof EMPTY_SHIFT;
-  setForm: React.Dispatch<React.SetStateAction<typeof EMPTY_SHIFT>>;
+  form: ShiftFormState;
+  setForm: React.Dispatch<React.SetStateAction<ShiftFormState>>;
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
   title: string;
   inline?: boolean;
   availableChecklists?: { id: number; name: string; category?: string | null }[];
+  sections?: { key: string; label: string }[];
 }) {
+  const effectiveSections = sections ?? DEFAULT_SECTIONS;
   const base = inline ? "p-5" : "bg-white border border-[#c9a84c]/30 rounded mb-6 p-5 shadow-sm";
   return (
     <div className={base}>
@@ -438,22 +470,24 @@ function ShiftForm({
       </div>
 
       {/* Sections */}
-      <div className="mb-4">
-        <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-2">SECTIONS — WHO IS ON WHERE</label>
-        <div className="border border-[#c9a84c]/30 rounded overflow-hidden">
-          {SECTIONS.map((s, i) => (
-            <div key={s.key} className={`flex items-center gap-0 ${i < SECTIONS.length - 1 ? 'border-b border-[#c9a84c]/20' : ''}`}>
-              <span className="font-bebas tracking-widest text-xs text-[#8a7a60] w-24 flex-shrink-0 px-3 py-2 bg-[#f9f5ef]">{s.label}</span>
-              <input
-                value={(form.sections as any)[s.key] ?? ""}
-                onChange={e => setForm(f => ({ ...f, sections: { ...f.sections, [s.key]: e.target.value } }))}
-                placeholder={`Staff on ${s.label.toLowerCase()}...`}
-                className="flex-1 px-3 py-2 font-dm text-sm focus:outline-none focus:bg-[#f9f5ef]/50 border-l border-[#c9a84c]/20 bg-white"
-              />
-            </div>
-          ))}
+      {effectiveSections.length > 0 && (
+        <div className="mb-4">
+          <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-2">SECTIONS — WHO IS ON WHERE</label>
+          <div className="border border-[#c9a84c]/30 rounded overflow-hidden">
+            {effectiveSections.map((s, i) => (
+              <div key={s.key} className={`flex items-center gap-0 ${i < effectiveSections.length - 1 ? 'border-b border-[#c9a84c]/20' : ''}`}>
+                <span className="font-bebas tracking-widest text-xs text-[#8a7a60] w-28 flex-shrink-0 px-3 py-2 bg-[#f9f5ef]">{s.label}</span>
+                <input
+                  value={form.sections[s.key] ?? ""}
+                  onChange={e => setForm(f => ({ ...f, sections: { ...f.sections, [s.key]: e.target.value } }))}
+                  placeholder={`Staff on ${s.label.toLowerCase()}...`}
+                  className="flex-1 px-3 py-2 font-dm text-sm focus:outline-none focus:bg-[#f9f5ef]/50 border-l border-[#c9a84c]/20 bg-white"
+                />
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div>
@@ -532,16 +566,18 @@ function ShiftForm({
 }
 
 /* ── Shift Card ─────────────────────────────────────────────────────────── */
-function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableChecklists }: {
+function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableChecklists, sections: sectionDefs }: {
   sr: any;
   shiftLink: string;
   onCopyLink: () => void;
   onEdit: () => void;
   onDelete: () => void;
   availableChecklists?: { id: number; name: string }[];
+  sections?: { key: string; label: string }[];
 }) {
+  const effectiveSections = sectionDefs ?? DEFAULT_SECTIONS;
   const sections = (sr.sections ?? {}) as Record<string, string>;
-  const hasSections = SECTIONS.some(s => sections[s.key]);
+  const hasSections = effectiveSections.some(s => sections[s.key]);
 
   return (
     <div>
@@ -567,7 +603,7 @@ function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableCheck
           <div className="col-span-2 mb-1">
             <div className="font-bebas text-[10px] tracking-widest text-[#8a7a60] mb-1.5">SECTIONS</div>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
-              {SECTIONS.filter(s => sections[s.key]).map(s => (
+              {effectiveSections.filter(s => sections[s.key]).map(s => (
                 <div key={s.key} className="font-dm text-xs text-[#1a1209]">
                   <span className="text-[#6b98e7] font-medium">{s.label}:</span> {sections[s.key]}
                 </div>
@@ -618,6 +654,157 @@ function PreviewField({ label, value }: { label: string; value: string }) {
     <div>
       <div className="font-bebas text-[10px] tracking-widest text-[#8a7a60] mb-0.5">{label}</div>
       <div className="font-dm text-xs text-[#1a1209] line-clamp-2 leading-relaxed">{value}</div>
+    </div>
+  );
+}
+
+/* ── Settings Panel ──────────────────────────────────────────────────────── */
+function slugify(label: string) {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || `section_${Date.now()}`;
+}
+
+function SettingsPanel({
+  venueSettings, onSave, saving, onClose,
+}: {
+  venueSettings: any;
+  onSave: (shiftSections: string) => void;
+  saving: boolean;
+  onClose: () => void;
+}) {
+  const [sections, setSections] = useState<{ key: string; label: string }[]>(() =>
+    parseSections(venueSettings?.shiftSections)
+  );
+  const [newLabel, setNewLabel] = useState("");
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+
+  useEffect(() => { setSections(parseSections(venueSettings?.shiftSections)); }, [venueSettings?.shiftSections]);
+
+  function moveUp(i: number) { if (i === 0) return; setSections(s => { const a = [...s]; [a[i - 1], a[i]] = [a[i], a[i - 1]]; return a; }); }
+  function moveDown(i: number) { if (i === sections.length - 1) return; setSections(s => { const a = [...s]; [a[i], a[i + 1]] = [a[i + 1], a[i]]; return a; }); }
+  function deleteSection(i: number) { setSections(s => s.filter((_, j) => j !== i)); }
+  function addSection() {
+    const label = newLabel.trim();
+    if (!label) return;
+    const key = slugify(label);
+    setSections(s => [...s, { key: sections.some(x => x.key === key) ? `${key}_${Date.now()}` : key, label }]);
+    setNewLabel("");
+  }
+  function saveEdit(i: number) {
+    const label = editLabel.trim();
+    if (!label) return;
+    setSections(s => s.map((sec, j) => j === i ? { ...sec, label } : sec));
+    setEditingIdx(null);
+  }
+
+  const logo = venueSettings?.logoUrl;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-start justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30" />
+      <div className="relative z-10 bg-white w-full max-w-md h-full overflow-y-auto shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="bg-[#6b98e7] px-5 py-4 flex items-center justify-between flex-shrink-0">
+          <h2 className="font-bebas text-xl tracking-wider text-white">Daily Operations Settings</h2>
+          <button onClick={onClose} className="text-white/80 hover:text-white"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="flex-1 p-5 space-y-6">
+          {/* Logo section */}
+          <div>
+            <div className="font-bebas tracking-widest text-sm text-[#1a1209] mb-1">COMPANY LOGO</div>
+            <p className="font-dm text-xs text-[#8a7a60] mb-3">Your logo appears at the top of staff runsheets and checklists.</p>
+            {logo ? (
+              <div className="flex items-center gap-3 p-3 border border-[#c9a84c]/30 rounded bg-[#f9f5ef]">
+                <img src={logo} alt="Logo" className="h-12 w-auto max-w-[140px] object-contain rounded" />
+                <div>
+                  <p className="font-dm text-xs text-[#1a1209] font-medium">Logo set</p>
+                  <a href="/dashboard#settings" className="font-dm text-xs text-[#6b98e7] hover:underline">Change in Venue Settings →</a>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 p-3 border border-dashed border-[#c9a84c]/40 rounded bg-[#f9f5ef]">
+                <Image className="w-8 h-8 text-[#c9a84c]/50" />
+                <div>
+                  <p className="font-dm text-xs text-[#8a7a60]">No logo uploaded yet.</p>
+                  <a href="/dashboard#settings" className="font-dm text-xs text-[#6b98e7] hover:underline">Upload logo in Venue Settings →</a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sections editor */}
+          <div>
+            <div className="font-bebas tracking-widest text-sm text-[#1a1209] mb-1">RUNSHEET SECTIONS</div>
+            <p className="font-dm text-xs text-[#8a7a60] mb-3">These are the staffing sections on your shift runsheets (e.g. Bar, Front, Kitchen). Rename, reorder or add your own.</p>
+
+            <div className="space-y-1.5 mb-3">
+              {sections.map((sec, i) => (
+                <div key={sec.key} className="flex items-center gap-2 p-2 border border-[#c9a84c]/30 rounded bg-white group">
+                  {/* Reorder */}
+                  <div className="flex flex-col gap-0.5">
+                    <button onClick={() => moveUp(i)} disabled={i === 0} className="text-[#8a7a60] hover:text-[#1a1209] disabled:opacity-20 transition-colors">
+                      <ArrowUp className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => moveDown(i)} disabled={i === sections.length - 1} className="text-[#8a7a60] hover:text-[#1a1209] disabled:opacity-20 transition-colors">
+                      <ArrowDown className="w-3 h-3" />
+                    </button>
+                  </div>
+                  {/* Label */}
+                  {editingIdx === i ? (
+                    <input
+                      autoFocus
+                      value={editLabel}
+                      onChange={e => setEditLabel(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(i); if (e.key === 'Escape') setEditingIdx(null); }}
+                      className="flex-1 font-dm text-sm border-b border-[#6b98e7] px-1 py-0.5 focus:outline-none"
+                    />
+                  ) : (
+                    <span className="flex-1 font-dm text-sm text-[#1a1209]">{sec.label}</span>
+                  )}
+                  {/* Actions */}
+                  {editingIdx === i ? (
+                    <button onClick={() => saveEdit(i)} className="text-[#6b98e7] hover:text-[#5a87d6]"><Check className="w-3.5 h-3.5" /></button>
+                  ) : (
+                    <button onClick={() => { setEditingIdx(i); setEditLabel(sec.label); }} className="opacity-0 group-hover:opacity-100 text-[#8a7a60] hover:text-[#1a1209] transition-opacity">
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  )}
+                  <button onClick={() => deleteSection(i)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add new section */}
+            <div className="flex items-center gap-2">
+              <input
+                value={newLabel}
+                onChange={e => setNewLabel(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addSection(); }}
+                placeholder="New section name..."
+                className="flex-1 border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7]"
+              />
+              <button onClick={addSection} disabled={!newLabel.trim()} className="font-bebas tracking-widest text-xs px-4 py-2 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6] disabled:opacity-40 flex items-center gap-1">
+                <Plus className="w-3.5 h-3.5" /> ADD
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 border-t border-[#c9a84c]/20 px-5 py-4 flex items-center justify-between gap-3">
+          <button onClick={onClose} className="font-bebas tracking-widest text-sm px-5 py-2 border border-[#c9a84c]/30 text-[#8a7a60] rounded hover:bg-[#f9f5ef]">CANCEL</button>
+          <button
+            onClick={() => { onSave(JSON.stringify(sections)); }}
+            disabled={saving}
+            className="font-bebas tracking-widest text-sm px-6 py-2 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6] disabled:opacity-50 flex items-center gap-2"
+          >
+            <Save className="w-3.5 h-3.5" /> {saving ? "SAVING..." : "SAVE CHANGES"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -108,6 +108,7 @@ export const appRouter = router({
         emailSignature: z.string().optional(),
         emailSignatureLogo: z.string().optional(),
         customCourses: z.string().optional(),
+        shiftSections: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -4178,7 +4179,7 @@ Return ONLY valid JSON. Example structure:
       .input(z.object({ token: z.string() }))
       .query(async ({ input }) => {
         const { getDb } = await import('./db');
-        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { dailyChecklists, dailyChecklistItems, venueSettings } = await import('../drizzle/schema');
         const { eq, asc } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return null;
@@ -4188,7 +4189,9 @@ Return ONLY valid JSON. Example structure:
         const items = await db.select().from(dailyChecklistItems)
           .where(eq(dailyChecklistItems.checklistId, checklist.id))
           .orderBy(asc(dailyChecklistItems.sortOrder));
-        return { ...checklist, items };
+        const [venue] = await db.select({ logoUrl: venueSettings.logoUrl, name: venueSettings.name })
+          .from(venueSettings).where(eq(venueSettings.ownerId, checklist.ownerId)).limit(1);
+        return { ...checklist, items, venueLogoUrl: venue?.logoUrl ?? null, venueName: venue?.name ?? null };
       }),
 
     create: protectedProcedure
@@ -4427,12 +4430,15 @@ Return ONLY valid JSON. Example structure:
       .input(z.object({ token: z.string() }))
       .query(async ({ input }) => {
         const { getDb } = await import('./db');
-        const { shiftRunsheets, dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { shiftRunsheets, dailyChecklists, dailyChecklistItems, venueSettings } = await import('../drizzle/schema');
         const { eq, inArray } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return null;
         const [sr] = await db.select().from(shiftRunsheets).where(eq(shiftRunsheets.token, input.token)).limit(1);
         if (!sr) return null;
+        // Fetch venue logo/name for header display
+        const [venue] = await db.select({ logoUrl: venueSettings.logoUrl, name: venueSettings.name, shiftSections: venueSettings.shiftSections })
+          .from(venueSettings).where(eq(venueSettings.ownerId, sr.ownerId)).limit(1);
         const ids = (sr.linkedChecklistIds as number[] | null) ?? [];
         let checklists: { id: number; name: string; token: string; items: any[] }[] = [];
         if (ids.length > 0) {
@@ -4446,20 +4452,14 @@ Return ONLY valid JSON. Example structure:
             })
             .filter(Boolean) as any[];
         }
-        return { ...sr, checklists };
+        return { ...sr, checklists, venueLogoUrl: venue?.logoUrl ?? null, venueName: venue?.name ?? null, shiftSections: venue?.shiftSections ?? null };
       }),
 
     create: protectedProcedure
       .input(z.object({
         date: z.string().optional(),
         dutyManager: z.string().optional(),
-        sections: z.object({
-          bar: z.string().optional(),
-          barFloor: z.string().optional(),
-          front: z.string().optional(),
-          back: z.string().optional(),
-          bigTable: z.string().optional(),
-        }).optional(),
+        sections: z.record(z.string(), z.string().optional()).optional(),
         specials: z.string().optional(),
         budget: z.string().optional(),
         specialNotes: z.string().optional(),
@@ -4498,13 +4498,7 @@ Return ONLY valid JSON. Example structure:
         id: z.number(),
         date: z.string().optional().nullable(),
         dutyManager: z.string().optional().nullable(),
-        sections: z.object({
-          bar: z.string().optional(),
-          barFloor: z.string().optional(),
-          front: z.string().optional(),
-          back: z.string().optional(),
-          bigTable: z.string().optional(),
-        }).optional().nullable(),
+        sections: z.record(z.string(), z.string().optional()).optional().nullable(),
         specials: z.string().optional().nullable(),
         budget: z.string().optional().nullable(),
         specialNotes: z.string().optional().nullable(),
