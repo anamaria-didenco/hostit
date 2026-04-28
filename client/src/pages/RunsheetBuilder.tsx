@@ -418,8 +418,10 @@ export default function RunsheetBuilder() {
 
   function addCatalogItemsToFnb() {
     if (!catalogItems || catalogSelectedItems.size === 0) return;
-    const toAdd: FnbItem[] = catalogItems
-      .filter((ci: any) => catalogSelectedItems.has(ci.id))
+    const existingNames = new Set(fnbItems.map(i => i.dishName.toLowerCase().trim()));
+    const eligible = catalogItems.filter((ci: any) => catalogSelectedItems.has(ci.id));
+    const toAdd: FnbItem[] = eligible
+      .filter((ci: any) => !existingNames.has(ci.name.toLowerCase().trim()))
       .map((ci: any, i: number) => ({
         section: 'foh' as const,
         course: catalogSelectorType === 'food' ? (catalogCategories?.find((c: any) => c.id === catalogSelectorCategoryId)?.name ?? 'Other') : 'Drinks',
@@ -432,10 +434,12 @@ export default function RunsheetBuilder() {
         sortOrder: fnbItems.length + i,
         _tempId: `cat-${Date.now()}-${i}`,
       }));
+    const skipped = eligible.length - toAdd.length;
     setFnbItems(prev => [...prev, ...toAdd]);
     setCatalogSelectedItems(new Map());
     setShowCatalogSelector(false);
-    toast.success(`Added ${toAdd.length} item${toAdd.length > 1 ? 's' : ''} to F&B sheet`);
+    if (toAdd.length > 0) toast.success(`Added ${toAdd.length} item${toAdd.length > 1 ? 's' : ''} to F&B sheet${skipped > 0 ? ` (${skipped} already present, skipped)` : ''}`);
+    else toast(`All selected items already in F&B sheet — nothing added.`);
   }
 
   function applyParsedData() {
@@ -470,7 +474,9 @@ export default function RunsheetBuilder() {
     }
 
     if (includeFnb && parsedData.fnbItems && parsedData.fnbItems.length > 0) {
-      const newFnb: FnbItem[] = parsedData.fnbItems.map((fi, i) => ({
+      const existingNames = new Set(fnbItems.map(i => i.dishName.toLowerCase().trim()));
+      const deduped = parsedData.fnbItems.filter(fi => !existingNames.has(fi.dishName.toLowerCase().trim()));
+      const newFnb: FnbItem[] = deduped.map((fi, i) => ({
         section: 'foh' as const,
         course: fi.course ?? 'Other',
         dishName: fi.dishName,
@@ -482,7 +488,8 @@ export default function RunsheetBuilder() {
         _tempId: `paste-fnb-${Date.now()}-${i}`,
       }));
       setFnbItems(prev => [...prev, ...newFnb]);
-      applied.push(`${parsedData.fnbItems.length} F&B item${parsedData.fnbItems.length !== 1 ? 's' : ''}`);
+      const skippedCount = parsedData.fnbItems.length - deduped.length;
+      applied.push(`${newFnb.length} F&B item${newFnb.length !== 1 ? 's' : ''}${skippedCount > 0 ? ` (${skippedCount} duplicate${skippedCount > 1 ? 's' : ''} skipped)` : ''}`);
     }
 
     if (includeTimeline && editedParsedTimeline.length > 0) {

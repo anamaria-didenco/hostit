@@ -23,7 +23,7 @@ import { eq, and } from "drizzle-orm";
 const VENUE_AREA_LABELS: Record<string, string> = {
   bar: "Bar",
   restaurant: "Restaurant",
-  full_venue: "Full Venue",
+  full_venue: "Both",
 };
 
 const BAR_LABELS: Record<string, string> = {
