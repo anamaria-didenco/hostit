@@ -229,9 +229,9 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
           {[...Array(daysInMonth)].map((_, i) => {
             const day = i + 1;
             const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
-            const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
+            const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
             const _bookedLeadIds = new Set((monthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
-            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !_bookedLeadIds.has(l.id) && l.status !== 'lost');
+            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !_bookedLeadIds.has(l.id) && l.status !== 'lost');
             const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
             const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
             const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
@@ -1427,9 +1427,9 @@ export default function Dashboard() {
   const month = calDate.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
-  const bookingDays = new Set((monthBookings ?? []).map((b: any) => new Date(b.eventDate).getDate()));
-  const followUpDays = new Set((monthFollowUps ?? []).map((l: any) => new Date(l.followUpDate).getDate()));
-  const leadEventDays = new Set((monthLeadEvents ?? []).map((l: any) => new Date(l.eventDate).getDate()));
+  const bookingDays = new Set((monthBookings ?? []).map((b: any) => new Date(b.eventDate).getUTCDate()));
+  const followUpDays = new Set((monthFollowUps ?? []).map((l: any) => new Date(l.followUpDate).getUTCDate()));
+  const leadEventDays = new Set((monthLeadEvents ?? []).map((l: any) => new Date(l.eventDate).getUTCDate()));
   // Deduplicate: leads that already have a booking record should not show as separate lead cards
   const bookedLeadIds = new Set((monthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
 
@@ -1670,11 +1670,11 @@ export default function Dashboard() {
                             const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
                             const isWeekend = di >= 5;
                             const dayBookings = isOverflow
-                              ? (adjMonthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day)
-                              : (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
+                              ? (adjMonthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day)
+                              : (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
                             const dayLeads = isOverflow
-                              ? (adjMonthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
-                              : (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                              ? (adjMonthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
+                              : (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                             const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                             return (
                               <div key={di}
@@ -1755,7 +1755,7 @@ export default function Dashboard() {
                                 <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} />
                                 <div className="flex-1 min-w-0">
                                   <div className="font-dm text-xs font-semibold text-ink truncate">{e.firstName} {e.lastName}</div>
-                                  <div className="font-dm text-xs text-sage">{new Date(e.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
+                                  <div className="font-dm text-xs text-sage">{new Date(e.eventDate).toLocaleDateString('en-NZ', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
                                 </div>
                               </button>
                             );

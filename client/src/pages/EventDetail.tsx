@@ -78,8 +78,8 @@ export default function EventDetail() {
         lastName: booking.lastName ?? "",
         email: booking.email ?? "",
         eventType: booking.eventType ?? "",
-        eventDate: booking.eventDate ? new Date(booking.eventDate).toISOString().slice(0, 16) : "",
-        eventEndDate: booking.eventEndDate ? new Date(booking.eventEndDate).toISOString().slice(0, 16) : "",
+        eventDate: booking.eventDate ? new Date(booking.eventDate).toISOString().slice(0, 10) : "",
+        eventEndDate: booking.eventEndDate ? new Date(booking.eventEndDate).toISOString().slice(0, 10) : "",
         guestCount: booking.guestCount ?? "",
         spaceName: booking.spaceName ?? "",
         totalNzd: booking.totalNzd ?? "",
@@ -118,8 +118,8 @@ export default function EventDetail() {
       lastName: form.lastName,
       email: form.email,
       eventType: form.eventType || undefined,
-      eventDate: form.eventDate || undefined,
-      eventEndDate: form.eventEndDate || null,
+      eventDate: form.eventDate ? form.eventDate + 'T00:00:00.000Z' : undefined,
+      eventEndDate: form.eventEndDate ? form.eventEndDate + 'T00:00:00.000Z' : null,
       guestCount: form.guestCount ? parseInt(form.guestCount) : null,
       spaceName: form.spaceName || null,
       totalNzd: form.totalNzd ? parseFloat(form.totalNzd) : null,
@@ -204,12 +204,12 @@ export default function EventDetail() {
                   </Select>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">EVENT DATE & TIME</label>
-                  <Input type="datetime-local" value={form.eventDate} onChange={e => setForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="font-dm text-sm" />
+                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">EVENT DATE</label>
+                  <Input type="date" value={form.eventDate} onChange={e => setForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">END DATE & TIME</label>
-                  <Input type="datetime-local" value={form.eventEndDate} onChange={e => setForm((p: any) => ({ ...p, eventEndDate: e.target.value }))} className="font-dm text-sm" />
+                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">END DATE</label>
+                  <Input type="date" value={form.eventEndDate} onChange={e => setForm((p: any) => ({ ...p, eventEndDate: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
                   <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">GUEST COUNT</label>
