@@ -105,6 +105,32 @@ async function startServer() {
     }
   });
 
+  // Team member login via access token
+  app.get("/api/team-login/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { getDb } = await import('../db');
+      const { teamMembers, users } = await import('../../drizzle/schema');
+      const { eq, and } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) { res.status(500).json({ error: 'DB unavailable' }); return; }
+      const [member] = await db.select().from(teamMembers)
+        .where(and(eq(teamMembers.accessToken, token), eq(teamMembers.isActive, true)))
+        .limit(1);
+      if (!member) { res.status(404).send('<h2>Invalid or revoked link</h2><p>Ask your venue manager for a new link.</p>'); return; }
+      const [owner] = await db.select().from(users).where(eq(users.id, member.ownerId)).limit(1);
+      if (!owner) { res.status(404).send('<h2>Account not found</h2>'); return; }
+      await db.update(teamMembers).set({ lastAccessedAt: Date.now() }).where(eq(teamMembers.id, member.id));
+      const sessionToken = await sdk.createSessionToken(owner.openId, { name: member.name });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 30 * 24 * 60 * 60 * 1000 });
+      res.redirect('/dashboard');
+    } catch (e: any) {
+      console.error('[TeamLogin] Error:', e);
+      res.status(500).json({ error: 'Login failed' });
+    }
+  });
+
   // Proposal PDF download (public — uses publicToken for auth)
   app.get("/api/proposal-pdf/:token", handleProposalPdf);
 

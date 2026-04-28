@@ -915,3 +915,18 @@ export const dailyChecklistItems = pgTable("daily_checklist_items", {
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
 export type DailyChecklistItem = typeof dailyChecklistItems.$inferSelect;
+
+// ─── Team Members ─────────────────────────────────────────────────────────────
+export const teamMembers = pgTable("team_members", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }),
+  role: varchar("role", { length: 50 }).notNull().default("staff"),
+  accessToken: varchar("access_token", { length: 128 }).notNull().unique(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  lastAccessedAt: bigint("last_accessed_at", { mode: "number" }),
+});
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = typeof teamMembers.$inferInsert;

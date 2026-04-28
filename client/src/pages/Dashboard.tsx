@@ -1152,6 +1152,13 @@ export default function Dashboard() {
   const [showAddTaskRule, setShowAddTaskRule] = useState(false);
   const [taskRuleForm, setTaskRuleForm] = useState({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium' });
 
+  // Team members
+  const [showTeamForm, setShowTeamForm] = useState(false);
+  const [teamForm, setTeamForm] = useState({ name: '', email: '', role: 'staff' });
+  const { data: teamList, refetch: refetchTeam } = trpc.team.list.useQuery(undefined, { enabled: !!user?.id });
+  const createTeamMember = trpc.team.create.useMutation({ onSuccess: () => { refetchTeam(); setTeamForm({ name: '', email: '', role: 'staff' }); setShowTeamForm(false); toast.success('Team member added!'); } });
+  const deleteTeamMember = trpc.team.delete.useMutation({ onSuccess: () => { refetchTeam(); toast.success('Team member removed'); } });
+
   const createCatalogCategory = trpc.menuCatalog.createCategory.useMutation({
     onSuccess: () => { refetchCatalogCategories(); setShowCatalogCategoryForm(false); setCatalogCategoryForm({ name: '', type: 'food', description: '' }); toast.success('Category created!'); }
   });
@@ -5014,20 +5021,87 @@ export default function Dashboard() {
               )}
 
               {/* ── TEAM SUB-TAB ───────────────────────────────── */}
-              {settingsSubTab === "team" && (
-              <div className="max-w-3xl mx-auto">
-              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Team</h1>
-              <div className="dante-card p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="font-dm text-sm text-ink/70">Manage team members who can access your VenueFlowHQ account.</p>
-                  <button onClick={() => toast.info('Team invites coming soon')} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1"><Plus className="w-3 h-3" /> INVITE</button>
+              {settingsSubTab === "team" && (() => {
+                const ROLES = [{ value: 'staff', label: 'Staff' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
+                const getAccessLink = (token: string) => `${window.location.origin}/api/team-login/${token}`;
+                return (
+                <div className="max-w-3xl mx-auto">
+                  <div className="flex items-center justify-between mb-6">
+                    <h1 className="font-cormorant text-3xl font-semibold text-ink">Team</h1>
+                    <button onClick={() => setShowTeamForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
+                      <Plus className="w-3 h-3" /> ADD MEMBER
+                    </button>
+                  </div>
+                  <div className="dante-card p-5 mb-4">
+                    <p className="font-dm text-sm text-ink/60">Each team member gets a unique login link. When they click it, they're signed in to your venue dashboard. You can revoke access at any time by removing them.</p>
+                  </div>
+                  {showTeamForm && (
+                    <div className="dante-card p-5 mb-4">
+                      <h2 className="font-bebas tracking-widest text-base text-ink mb-4">ADD TEAM MEMBER</h2>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">NAME *</label>
+                          <input value={teamForm.name} onChange={e => setTeamForm(p => ({ ...p, name: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
+                        </div>
+                        <div>
+                          <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">EMAIL (OPTIONAL)</label>
+                          <input value={teamForm.email} onChange={e => setTeamForm(p => ({ ...p, email: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz" />
+                        </div>
+                        <div>
+                          <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">ROLE</label>
+                          <select value={teamForm.role} onChange={e => setTeamForm(p => ({ ...p, role: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white">
+                            {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={() => { if (teamForm.name.trim()) createTeamMember.mutate({ name: teamForm.name.trim(), email: teamForm.email || undefined, role: teamForm.role }); }} disabled={!teamForm.name.trim() || createTeamMember.isPending} className="btn-forest text-cream font-bebas tracking-widest text-xs px-5 py-2 disabled:opacity-50">
+                            {createTeamMember.isPending ? 'ADDING...' : 'ADD MEMBER'}
+                          </button>
+                          <button onClick={() => setShowTeamForm(false)} className="font-bebas tracking-widest text-xs px-5 py-2 border border-gold/30 text-ink/60 hover:bg-linen transition-colors">CANCEL</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!teamList || teamList.length === 0 ? (
+                    <div className="dante-card p-8 text-center">
+                      <p className="font-dm text-sage text-sm">No team members yet. Add staff so they can access the dashboard with their own login link.</p>
+                    </div>
+                  ) : (
+                    <div className="dante-card divide-y divide-gold/20">
+                      {teamList.map((member: any) => {
+                        const link = getAccessLink(member.accessToken);
+                        return (
+                          <div key={member.id} className="p-4 flex items-center justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-dm text-sm font-semibold text-ink">{member.name}</div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 bg-linen text-ink/60">{member.role.toUpperCase()}</span>
+                                {member.email && <span className="font-dm text-xs text-ink/40 truncate">{member.email}</span>}
+                                {member.lastAccessedAt && <span className="font-dm text-xs text-ink/30">Last login: {new Date(member.lastAccessedAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={() => { navigator.clipboard.writeText(link); toast.success('Login link copied!'); }}
+                                className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors flex items-center gap-1"
+                              >
+                                COPY LINK
+                              </button>
+                              <button
+                                onClick={() => { if (confirm(`Remove ${member.name}? Their login link will stop working.`)) deleteTeamMember.mutate({ id: member.id }); }}
+                                className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-red-200 text-red-400 hover:bg-red-50 transition-colors"
+                              >
+                                REMOVE
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                <div className="border border-dashed border-gold/20 p-6 text-center">
-                  <p className="font-dm text-sage text-sm">No team members yet. Invite staff to collaborate on events.</p>
-                </div>
-              </div>
-              </div>
-              )}
+                );
+              })()}
 
 
 

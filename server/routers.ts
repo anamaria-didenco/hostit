@@ -4531,5 +4531,66 @@ Return ONLY valid JSON. Example structure:
         return { success: true };
       }),
   }),
+
+  team: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { teamMembers } = await import('../drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(teamMembers).where(eq(teamMembers.ownerId, ctx.user.id)).orderBy(desc(teamMembers.createdAt));
+    }),
+
+    create: protectedProcedure
+      .input(z.object({ name: z.string().min(1), email: z.string().optional(), role: z.string().default('staff') }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { teamMembers } = await import('../drizzle/schema');
+        const crypto = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const accessToken = crypto.randomBytes(32).toString('hex');
+        const [member] = await db.insert(teamMembers).values({
+          ownerId: ctx.user.id,
+          name: input.name,
+          email: input.email ?? null,
+          role: input.role,
+          accessToken,
+          isActive: true,
+          createdAt: Date.now(),
+        }).returning();
+        return member;
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { teamMembers } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(teamMembers).where(and(eq(teamMembers.id, input.id), eq(teamMembers.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { teamMembers, users } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [member] = await db.select().from(teamMembers)
+          .where(and(eq(teamMembers.accessToken, input.token), eq(teamMembers.isActive, true)))
+          .limit(1);
+        if (!member) return null;
+        const [owner] = await db.select().from(users).where(eq(users.id, member.ownerId)).limit(1);
+        if (!owner) return null;
+        return { member, ownerOpenId: owner.openId, ownerName: owner.name };
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;

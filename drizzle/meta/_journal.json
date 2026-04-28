@@ -189,6 +189,13 @@
       "when": 1777278016290,
       "tag": "0026_mysterious_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1777351512927,
+      "tag": "0027_absurd_lightspeed",
+      "breakpoints": true
     }
   ]
 }
