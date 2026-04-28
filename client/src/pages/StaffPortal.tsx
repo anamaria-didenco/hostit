@@ -223,13 +223,31 @@ export default function StaffPortal() {
               </div>
               <div>
                 <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">VENUE / SPACE</p>
-                <p className="font-dm text-sm font-semibold text-ink">{runsheet.spaceName || "—"}</p>
+                <p className="font-dm text-sm font-semibold text-ink">
+                  {(runsheet as any).venueArea === "bar" ? "Bar" : (runsheet as any).venueArea === "restaurant" ? "Restaurant" : (runsheet as any).venueArea === "full_venue" ? "Both" : runsheet.spaceName || "—"}
+                </p>
               </div>
               <div>
                 <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">GUESTS</p>
                 <p className="font-dm text-sm font-semibold text-ink">{runsheet.guestCount ?? "TBC"}</p>
               </div>
             </div>
+            {((runsheet as any).eventStartTime || (runsheet as any).eventEndTime) && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 pt-3 border-t border-gold/20">
+                {(runsheet as any).eventStartTime && (
+                  <div>
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">START TIME</p>
+                    <p className="font-dm text-sm font-semibold text-ink">{formatTime12((runsheet as any).eventStartTime)}</p>
+                  </div>
+                )}
+                {(runsheet as any).eventEndTime && (
+                  <div>
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">END TIME</p>
+                    <p className="font-dm text-sm font-semibold text-ink">{formatTime12((runsheet as any).eventEndTime)}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Contact info */}
             {(contactName || contactEmail || contactPhone) && (

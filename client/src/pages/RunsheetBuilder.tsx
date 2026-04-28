@@ -1664,7 +1664,7 @@ export default function RunsheetBuilder() {
                   {([
                     { value: "bar", label: "Bar" },
                     { value: "restaurant", label: "Restaurant" },
-                    { value: "full_venue", label: "Full Venue" },
+                    { value: "full_venue", label: "Both" },
                   ] as const).map(opt => (
                     <button
                       key={opt.value}
@@ -1677,7 +1677,7 @@ export default function RunsheetBuilder() {
                   ))}
                 </div>
                 <div className="hidden print:block font-dm text-sm font-semibold">
-                  {venueArea === "bar" ? "Bar" : venueArea === "restaurant" ? "Restaurant" : venueArea === "full_venue" ? "Full Venue" : "—"}
+                  {venueArea === "bar" ? "Bar" : venueArea === "restaurant" ? "Restaurant" : venueArea === "full_venue" ? "Both" : "—"}
                 </div>
               </div>
             </div>

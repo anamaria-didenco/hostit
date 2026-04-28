@@ -81,8 +81,12 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
       : "";
     const venueName: string = rs.venueName || "";
     const spaceName: string = rs.spaceName || "";
+    const venueAreaRaw: string = rs.venueArea || "";
+    const venueAreaLabel = venueAreaRaw === "bar" ? "Bar" : venueAreaRaw === "restaurant" ? "Restaurant" : venueAreaRaw === "full_venue" ? "Both" : spaceName;
     const guestCount: string = rs.guestCount ? String(rs.guestCount) : "";
     const eventType: string = rs.eventType || "";
+    const eventStartTime: string = rs.eventStartTime || "";
+    const eventEndTime: string = rs.eventEndTime || "";
     const title: string = rs.title || "Event Runsheet";
     const notes: string = rs.notes || "";
     const venueSetup: string = rs.venueSetup || "";
@@ -112,7 +116,9 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
       eventDate ? `<div class="detail-item"><div class="detail-label">DATE</div><div class="detail-value">${eventDate}</div></div>` : "",
       eventType ? `<div class="detail-item"><div class="detail-label">EVENT TYPE</div><div class="detail-value">${eventType}</div></div>` : "",
       guestCount ? `<div class="detail-item"><div class="detail-label">GUESTS</div><div class="detail-value">${guestCount}</div></div>` : "",
-      spaceName ? `<div class="detail-item"><div class="detail-label">VENUE / SPACE</div><div class="detail-value">${spaceName}</div></div>` : "",
+      venueAreaLabel ? `<div class="detail-item"><div class="detail-label">VENUE / SPACE</div><div class="detail-value">${venueAreaLabel}</div></div>` : "",
+      eventStartTime ? `<div class="detail-item"><div class="detail-label">START TIME</div><div class="detail-value">${formatTime12(eventStartTime)}</div></div>` : "",
+      eventEndTime ? `<div class="detail-item"><div class="detail-label">END TIME</div><div class="detail-value">${formatTime12(eventEndTime)}</div></div>` : "",
       contactName ? `<div class="detail-item"><div class="detail-label">CLIENT</div><div class="detail-value">${contactName}</div></div>` : "",
       contactPhone ? `<div class="detail-item"><div class="detail-label">PHONE</div><div class="detail-value">${contactPhone}</div></div>` : "",
       contactEmail ? `<div class="detail-item"><div class="detail-label">EMAIL</div><div class="detail-value">${contactEmail}</div></div>` : "",
