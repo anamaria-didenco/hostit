@@ -317,18 +317,6 @@ export default function StaffPortal() {
           </div>
         )}
 
-        {/* ── Notes ── */}
-        {runsheet.notes && (
-          <div className="bg-white border border-gold/30 shadow-sm">
-            <div className="px-5 py-3 border-b border-gold/30">
-              <span className="font-bebas tracking-widest text-sm text-ink/60">GENERAL NOTES</span>
-            </div>
-            <div className="px-5 py-4">
-              <div className="font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.notes }} />
-            </div>
-          </div>
-        )}
-
         {/* ── Timeline ── */}
         {sortedItems.length > 0 && (
           <div className="bg-white border border-gold/30 shadow-sm">
@@ -503,6 +491,18 @@ export default function StaffPortal() {
                 </span>
                 <span></span>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Notes ── */}
+        {runsheet.notes && (
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="px-5 py-3 border-b border-gold/30">
+              <span className="font-bebas tracking-widest text-sm text-ink/60">GENERAL NOTES</span>
+            </div>
+            <div className="px-5 py-4">
+              <div className="font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.notes }} />
             </div>
           </div>
         )}

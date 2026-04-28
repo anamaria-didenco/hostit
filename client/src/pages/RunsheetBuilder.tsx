@@ -435,11 +435,16 @@ export default function RunsheetBuilder() {
         _tempId: `cat-${Date.now()}-${i}`,
       }));
     const skipped = eligible.length - toAdd.length;
-    setFnbItems(prev => [...prev, ...toAdd]);
     setCatalogSelectedItems(new Map());
     setShowCatalogSelector(false);
-    if (toAdd.length > 0) toast.success(`Added ${toAdd.length} item${toAdd.length > 1 ? 's' : ''} to F&B sheet${skipped > 0 ? ` (${skipped} already present, skipped)` : ''}`);
-    else toast(`All selected items already in F&B sheet — nothing added.`);
+    if (toAdd.length > 0) {
+      const newItems = [...fnbItems, ...toAdd];
+      setFnbItems(newItems);
+      saveFnb(undefined, newItems);
+      toast.success(`Added ${toAdd.length} item${toAdd.length > 1 ? 's' : ''} to F&B sheet${skipped > 0 ? ` (${skipped} already present, skipped)` : ''}`);
+    } else {
+      toast.warning(`All selected items already in the F&B sheet — nothing added.`);
+    }
   }
 
   function applyParsedData() {
@@ -644,14 +649,15 @@ export default function RunsheetBuilder() {
     }
   }, [existingFnb]);
 
-  async function saveFnb(overrideId?: number) {
+  async function saveFnb(overrideId?: number, itemsOverride?: FnbItem[]) {
     const id = overrideId ?? sheetId;
     if (!id) return;
     setFnbSaving(true);
+    const itemsToSave = itemsOverride ?? fnbItems;
     try {
       await saveFnbMutation.mutateAsync({
         runsheetId: id,
-        items: fnbItems.map((item, i) => ({
+        items: itemsToSave.map((item, i) => ({
           section: item.section,
           course: item.course,
           dishName: item.dishName,
