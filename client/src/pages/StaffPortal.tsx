@@ -54,21 +54,37 @@ export default function StaffPortal() {
 
   const { data, isLoading, error } = trpc.staffPortal.getByToken.useQuery(
     { token },
-    { enabled: !!token, retry: false }
+    { enabled: !!token, retry: false, refetchInterval: 30000 }
   );
 
   const checklist: any = (data as any)?.checklist ?? null;
   const [localItems, setLocalItems] = useState<any[]>([]);
-  const localItemsInitialized = useRef(false);
+  const pendingToggles = useRef<Set<string>>(new Set());
   const [activePortalTab, setActivePortalTab] = useState<'runsheet' | 'checklist'>('runsheet');
+
+  // Sync from server whenever checklist data changes, but preserve in-flight toggle state
   useEffect(() => {
-    if (checklist?.items && !localItemsInitialized.current) {
-      setLocalItems(checklist.items);
-      localItemsInitialized.current = true;
-    }
+    if (!checklist?.items) return;
+    const serverItems = checklist.items as any[];
+    setLocalItems(prev => {
+      const localMap = new Map(prev.map((i: any) => [i.id, i]));
+      return serverItems.map((serverItem: any) => {
+        const local = localMap.get(serverItem.id);
+        // If this item has a pending optimistic toggle, keep local checked state
+        if (local && pendingToggles.current.has(serverItem.id)) {
+          return { ...serverItem, checked: local.checked };
+        }
+        return serverItem;
+      });
+    });
   }, [checklist]);
+
   const toggleItem = trpc.checklists.toggleItemByToken.useMutation({
+    onSuccess: () => {
+      pendingToggles.current.clear();
+    },
     onError: () => {
+      pendingToggles.current.clear();
       if (checklist?.items) setLocalItems(checklist.items);
     },
   });
@@ -121,6 +137,7 @@ export default function StaffPortal() {
   function handleToggle(itemId: string, currentChecked: boolean) {
     if (!checklist?.shareToken) return;
     const nextChecked = !currentChecked;
+    pendingToggles.current.add(itemId);
     setLocalItems(prev => prev.map(i => i.id === itemId ? { ...i, checked: nextChecked } : i));
     toggleItem.mutate({ token: checklist.shareToken, itemId, checked: nextChecked });
   }
