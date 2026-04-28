@@ -184,7 +184,8 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     function renderFnbSection(sectionTitle: string, fnbArr: typeof fohItems) {
       if (!fnbArr.length) return "";
       const grouped = groupByCourse(fnbArr);
-      const orderedCourses = COURSE_ORDER.filter(c => grouped[c]);
+      const extraCourses = Object.keys(grouped).filter(c => !COURSE_ORDER.includes(c));
+      const orderedCourses = [...COURSE_ORDER.filter(c => grouped[c]), ...extraCourses];
       const isFoh = sectionTitle.includes("FOH") || sectionTitle.includes("FRONT");
       const lastColHeader = isFoh ? "STAFF" : "PREP / PLATING";
 

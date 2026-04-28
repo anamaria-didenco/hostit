@@ -148,8 +148,10 @@ export default function StaffPortal() {
     kitchenByCourse[course].push(item);
   }
 
-  const orderedFohCourses = COURSES.filter(c => fohByCourse[c]);
-  const orderedKitchenCourses = COURSES.filter(c => kitchenByCourse[c]);
+  const extraFohCourses = Object.keys(fohByCourse).filter(c => !COURSES.includes(c));
+  const orderedFohCourses = [...COURSES.filter(c => fohByCourse[c]), ...extraFohCourses];
+  const extraKitchenCourses = Object.keys(kitchenByCourse).filter(c => !COURSES.includes(c));
+  const orderedKitchenCourses = [...COURSES.filter(c => kitchenByCourse[c]), ...extraKitchenCourses];
 
   return (
     <div className="min-h-screen bg-linen">
