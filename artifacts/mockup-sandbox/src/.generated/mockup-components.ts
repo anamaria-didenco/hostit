@@ -5,10 +5,10 @@ export const modules: ModuleMap = {
   "./components/mockups/dashboard-home/AffordanceFirst.tsx": () => import("../components/mockups/dashboard-home/AffordanceFirst.tsx"),
   "./components/mockups/dashboard-home/Current.tsx": () => import("../components/mockups/dashboard-home/Current.tsx"),
   "./components/mockups/dashboard-home/HierarchyFirst.tsx": () => import("../components/mockups/dashboard-home/HierarchyFirst.tsx"),
+  "./components/mockups/dashboard-inversions/PipelineScorecard.tsx": () => import("../components/mockups/dashboard-inversions/PipelineScorecard.tsx"),
+  "./components/mockups/dashboard-inversions/TodaysBriefing.tsx": () => import("../components/mockups/dashboard-inversions/TodaysBriefing.tsx"),
   "./components/mockups/home-usability/AccessibilityReadability.tsx": () => import("../components/mockups/home-usability/AccessibilityReadability.tsx"),
   "./components/mockups/home-usability/Current.tsx": () => import("../components/mockups/home-usability/Current.tsx"),
   "./components/mockups/home-usability/HierarchyClarity.tsx": () => import("../components/mockups/home-usability/HierarchyClarity.tsx"),
-  "./components/mockups/home-usability/InteractionAffordance.tsx": () => import("../components/mockups/home-usability/InteractionAffordance.tsx"),
-  "./components/mockups/dashboard-inversions/PipelineScorecard.tsx": () => import("../components/mockups/dashboard-inversions/PipelineScorecard.tsx"),
-  "./components/mockups/dashboard-inversions/TodaysBriefing.tsx": () => import("../components/mockups/dashboard-inversions/TodaysBriefing.tsx")
+  "./components/mockups/home-usability/InteractionAffordance.tsx": () => import("../components/mockups/home-usability/InteractionAffordance.tsx")
 };
