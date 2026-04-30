@@ -121,7 +121,10 @@ async function startServer() {
       const [owner] = await db.select().from(users).where(eq(users.id, member.ownerId)).limit(1);
       if (!owner) { res.status(404).send('<h2>Account not found</h2>'); return; }
       await db.update(teamMembers).set({ lastAccessedAt: Date.now() }).where(eq(teamMembers.id, member.id));
-      const sessionToken = await sdk.createSessionToken(owner.openId, { name: member.name });
+      const sessionToken = await sdk.signSession(
+        { openId: owner.openId, appId: (await import('./env')).ENV.appId, name: member.name, isTeamMember: true },
+        { expiresInMs: 30 * 24 * 60 * 60 * 1000 }
+      );
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 30 * 24 * 60 * 60 * 1000 });
       res.redirect('/dashboard');

@@ -619,7 +619,7 @@ async function compressToDataUrl(file: File, maxW: number, maxH: number, quality
 }
 
 export default function Dashboard() {
-  const { user, isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading, isTeamMember } = useAuth();
   const [, setLocation] = useLocation();
   type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook";
   type SettingsSubTab = "venue"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
@@ -2186,7 +2186,7 @@ export default function Dashboard() {
                       <div className="font-dm text-sm text-sage">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-                      {selectedLead.email && (
+                      {selectedLead.email && !isTeamMember && (
                         <button onClick={() => {
                           setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
                           setShowEmailModal(true);
@@ -2560,7 +2560,7 @@ export default function Dashboard() {
                       )}
                       {/* Actions */}
                       <div className="flex items-center gap-2 pt-2 border-t border-border flex-wrap">
-                        {selectedLead.email && (
+                        {selectedLead.email && !isTeamMember && (
                           <button
                             onClick={() => {
                               setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });

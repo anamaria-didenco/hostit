@@ -19,7 +19,10 @@ export const appRouter = router({
   system: systemRouter,
 
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => ({
+      user: opts.ctx.user,
+      isTeamMember: opts.ctx.isTeamMember,
+    })),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -1541,6 +1544,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        if (ctx.isTeamMember) throw new Error('Team members cannot send emails. Contact your venue manager.');
         const { getDb } = await import('./db');
         const { venueSettings, leadActivity } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
