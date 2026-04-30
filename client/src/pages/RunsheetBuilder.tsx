@@ -198,7 +198,7 @@ type ParsedRunsheetData = {
 };
 
 export default function RunsheetBuilder() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { user, loading: authLoading } = useAuth();
 
   const params = new URLSearchParams(window.location.search);
@@ -220,6 +220,14 @@ export default function RunsheetBuilder() {
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [sheetId, setSheetId] = useState<number | null>(runsheetId);
+
+  // Keep sheetId in sync with the URL — navigate() changes the URL but doesn't
+  // remount the component, so useState initial value becomes stale after redirect.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const id = p.get("id") ? Number(p.get("id")) : null;
+    setSheetId(id);
+  }, [location]);
 
   // Venue area & event times
   const [venueArea, setVenueArea] = useState<"" | "bar" | "restaurant" | "full_venue">("");
