@@ -761,7 +761,11 @@ export default function RunsheetBuilder() {
   useEffect(() => {
     if (!sheetId && bookingRunsheets && bookingRunsheets.length > 0) {
       const existingId = bookingRunsheets[0].id;
-      navigate(`/runsheet?id=${existingId}&bookingId=${bookingId}`);
+      // Set state directly so the existing-runsheet query fires immediately —
+      // wouter's useLocation only tracks pathname, so navigate() alone won't
+      // re-trigger our URL-sync effect when only search params change.
+      setSheetId(existingId);
+      navigate(`/runsheet?id=${existingId}&bookingId=${bookingId}`, { replace: true });
     }
   }, [bookingRunsheets, sheetId]);
   // If this lead already has a runsheet, redirect to edit it instead of creating a new one
@@ -773,7 +777,8 @@ export default function RunsheetBuilder() {
     if (!sheetId && leadRunsheets && leadRunsheets.length > 0) {
       const existingId = leadRunsheets[0].id;
       const qs = [`id=${existingId}`, `leadId=${leadId}`].join('&');
-      navigate(`/runsheet?${qs}`);
+      setSheetId(existingId);
+      navigate(`/runsheet?${qs}`, { replace: true });
     }
   }, [leadRunsheets, sheetId]);
 
