@@ -436,7 +436,7 @@ export const appRouter = router({
                       <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[b.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${statusLabel(b.status)}</span></td>
                     </tr>`);
                   const leadRows = existingLeads
-                    .filter((l: any) => l.id !== lead.id && !['lost','cancelled'].includes(l.status))
+                    .filter((l: any) => l.id !== lead?.id && !['lost','cancelled'].includes(l.status))
                     .map((l: any) => `<tr style="border-bottom:1px solid #f3f4f6">
                       <td style="padding:5px 8px;font-size:13px">${l.firstName} ${l.lastName ?? ''}</td>
                       <td style="padding:5px 8px;font-size:13px">${l.eventType ?? '—'}</td>
@@ -4291,6 +4291,7 @@ Return ONLY valid JSON. Example structure:
         if (items.length > 0) {
           await db.insert(dailyChecklistItems).values(
             items.map(it => ({
+              ownerId: ctx.user.id,
               checklistId: newCl.id,
               text: it.text,
               note: it.note,

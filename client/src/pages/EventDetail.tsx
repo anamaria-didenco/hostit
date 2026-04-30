@@ -48,7 +48,7 @@ export default function EventDetail() {
   );
   const existingRunsheet = existingRunsheets?.[0] ?? null;
 
-  const { data: venueSettings } = trpc.venue.get.useQuery(undefined, { enabled: !!user?.id });
+  const { data: venueSettings } = trpc.venue.get.useQuery({}, { enabled: !!user?.id });
   const pipelineStages = useMemo(() => {
     const defs = parseCustomStatuses((venueSettings as any)?.customStatuses);
     return defs.map(d => {
