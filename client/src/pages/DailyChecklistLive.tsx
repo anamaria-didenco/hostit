@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { CheckSquare, Square, Loader2, RefreshCw, CheckCircle2, Pencil, Plus, Trash2, X, Check } from "lucide-react";
+import { CheckSquare, Square, Loader2, RefreshCw, CheckCircle2, Pencil, Plus, Trash2, X, Check, Wifi, WifiOff } from "lucide-react";
 
 const LS_KEY = "vf_staff_name";
 
@@ -50,6 +50,34 @@ export default function DailyChecklistLive() {
   });
 
   const [optimistic, setOptimistic] = useState<Record<number, boolean>>({});
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  const acquireWakeLock = useCallback(async () => {
+    if (!("wakeLock" in navigator)) return;
+    try {
+      wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    acquireWakeLock();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") acquireWakeLock();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      wakeLockRef.current?.release?.().catch(() => {});
+    };
+  }, [acquireWakeLock]);
+
   const [staffName, setStaffName] = useState<string>(() => {
     try { return localStorage.getItem(LS_KEY) ?? ""; } catch { return ""; }
   });
@@ -184,8 +212,14 @@ export default function DailyChecklistLive() {
             <p className="font-dm text-[10px] text-ink/30 mt-1">{assignedDateDisplay}</p>
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
-            <div className="font-bebas tracking-widest text-lg text-forest leading-none">
-              {checkedCount} / {total}
+            <div className="flex items-center gap-2">
+              {isOnline
+                ? <Wifi className="w-3.5 h-3.5 text-forest/50" />
+                : <WifiOff className="w-3.5 h-3.5 text-red-400 animate-pulse" />
+              }
+              <div className="font-bebas tracking-widest text-lg text-forest leading-none">
+                {checkedCount} / {total}
+              </div>
             </div>
             <button
               onClick={handleReset}
