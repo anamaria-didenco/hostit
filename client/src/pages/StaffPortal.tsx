@@ -240,9 +240,23 @@ export default function StaffPortal() {
               </div>
               <div>
                 <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">VENUE / SPACE</p>
-                <p className="font-dm text-sm font-semibold text-ink">
-                  {(runsheet as any).venueArea === "bar" ? "Bar" : (runsheet as any).venueArea === "restaurant" ? "Restaurant" : (runsheet as any).venueArea === "full_venue" ? "Both" : runsheet.spaceName || "—"}
-                </p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="font-dm text-sm font-semibold text-ink">
+                    {runsheet.spaceName || "—"}
+                  </p>
+                  {(runsheet as any).venueArea && (
+                    <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 border ${
+                      (runsheet as any).venueArea === 'bar' ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : (runsheet as any).venueArea === 'restaurant' ? 'bg-amber-50 border-amber-300 text-amber-700'
+                      : 'bg-forest/10 border-forest/40 text-forest'
+                    }`}>
+                      {(runsheet as any).venueArea === 'bar' ? 'BAR'
+                        : (runsheet as any).venueArea === 'restaurant' ? 'RESTAURANT'
+                        : (runsheet as any).venueArea === 'full_venue' ? 'FULL VENUE'
+                        : (runsheet as any).venueArea}
+                    </span>
+                  )}
+                </div>
               </div>
               <div>
                 <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">GUESTS</p>
@@ -373,6 +387,48 @@ export default function StaffPortal() {
           </div>
         )}
 
+        {/* ── BAR ARRANGEMENT ── */}
+        {(() => {
+          const dd = (runsheet as any).drinksData;
+          if (!dd) return null;
+          const hasContent = dd.barOption || dd.barNotes || (dd.selectedDrinks?.length) || (dd.customDrinks?.length);
+          if (!hasContent) return null;
+          const formatBar = (s: string) => (s || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+          return (
+            <div className="bg-white border border-gold/30 shadow-sm">
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
+                <span className="font-bebas tracking-widest text-sm text-white">BAR ARRANGEMENT</span>
+              </div>
+              <div className="px-5 py-4 space-y-2">
+                {dd.barOption && (
+                  <p className="font-dm text-sm text-ink">
+                    <span className="font-semibold">{formatBar(dd.barOption)}</span>
+                    {dd.tabAmount && (dd.barOption === 'bar_tab' || dd.barOption === 'bar_tab_then_cash')
+                      ? ` — Bar tab: $${Number(dd.tabAmount).toLocaleString('en-NZ')}` : ''}
+                  </p>
+                )}
+                {dd.barNotes && (
+                  <div className="bg-blue-50/60 border-l-2 border-blue-300 px-3 py-2 text-sm font-dm text-ink/80 whitespace-pre-wrap">
+                    {dd.barNotes}
+                  </div>
+                )}
+                {(dd.selectedDrinks?.length > 0 || dd.customDrinks?.length > 0) && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {dd.selectedDrinks?.map((k: string) => (
+                      <span key={k} className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 font-dm border border-blue-200">
+                        {k.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                    {dd.customDrinks?.map((d: any, i: number) => (
+                      <span key={i} className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 font-dm border border-amber-200">{d.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── F&B: FOH ── */}
         {fohItems.length > 0 && (
           <div className="bg-white border border-gold/30 shadow-sm">
@@ -404,7 +460,7 @@ export default function StaffPortal() {
                       style={{ gridTemplateColumns: ['1fr', '50px', showDietary && '70px', showServiceTime && '80px', showStaff && '1fr', showNotes && '1fr'].filter(Boolean).join(' ') }}
                     >
                       <span className="font-medium text-ink">{item.dishName}</span>
-                      <span className="text-ink/70">{item.qty}</span>
+                      <span className="text-ink/70">{isDrinks ? '' : item.qty}</span>
                       {showDietary && <span className="text-ink/60 text-xs">{item.dietary || "—"}</span>}
                       {showServiceTime && <span className="text-ink/60 text-xs">{item.serviceTime ? formatTime12(item.serviceTime) : "—"}</span>}
                       {showStaff && <span className="text-ink/60 text-xs">{item.staffAssigned || "—"}</span>}

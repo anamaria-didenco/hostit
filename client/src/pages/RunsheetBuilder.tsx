@@ -2344,6 +2344,17 @@ export default function RunsheetBuilder() {
                 >NOTES</button>
                 <div className="w-px h-4 bg-ink/10 mx-1" />
                 <button
+                  onClick={() => {
+                    const name = prompt('New course name (e.g. "Petit Fours", "Coffee & Tea"):')?.trim();
+                    if (!name) return;
+                    setFnbItems(prev => [...prev, { section: 'foh', course: name, dishName: '', qty: 1, dietary: '', serviceTime: '', staffAssigned: '', prepNotes: '', platingNotes: '', drinkCategory: '' } as any]);
+                  }}
+                  className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
+                  title="Add a new course (e.g. Petit Fours, Coffee)"
+                >
+                  <Plus className="w-3.5 h-3.5" /> ADD COURSE
+                </button>
+                <button
                   onClick={() => { setShowFnbPaste(true); setFnbPasteText(''); setFnbParsedItems([]); }}
                   className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
                 >
