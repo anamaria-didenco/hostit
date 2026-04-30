@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { CheckSquare, Square, Loader2, RefreshCw, CheckCircle2, Pencil } from "lucide-react";
+import { CheckSquare, Square, Loader2, RefreshCw, CheckCircle2, Pencil, Plus, Trash2, X, Check } from "lucide-react";
 
 const LS_KEY = "vf_staff_name";
 
@@ -26,7 +26,7 @@ export default function DailyChecklistLive() {
 
   const { data: checklist, isLoading, refetch } = trpc.dailyChecklists.getByToken.useQuery(
     { token },
-    { enabled: !!token, refetchInterval: 15000 }
+    { enabled: !!token, refetchInterval: 20000 }
   );
 
   const toggleMutation = trpc.dailyChecklists.toggleItemByToken.useMutation({
@@ -37,8 +37,19 @@ export default function DailyChecklistLive() {
     onSuccess: () => refetch(),
   });
 
-  const [optimistic, setOptimistic] = useState<Record<number, boolean>>({});
+  const addItemMutation = trpc.dailyChecklists.addItemByToken.useMutation({
+    onSuccess: () => { refetch(); setNewText(""); setNewNote(""); setShowAddForm(false); },
+  });
 
+  const deleteItemMutation = trpc.dailyChecklists.deleteItemByToken.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  const editItemMutation = trpc.dailyChecklists.editItemByToken.useMutation({
+    onSuccess: () => { refetch(); setEditingId(null); setEditText(""); setEditNote(""); },
+  });
+
+  const [optimistic, setOptimistic] = useState<Record<number, boolean>>({});
   const [staffName, setStaffName] = useState<string>(() => {
     try { return localStorage.getItem(LS_KEY) ?? ""; } catch { return ""; }
   });
@@ -46,15 +57,35 @@ export default function DailyChecklistLive() {
   const [nameInput, setNameInput] = useState(staffName);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setOptimistic({});
-  }, [checklist]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newText, setNewText] = useState("");
+  const [newNote, setNewNote] = useState("");
+  const addInputRef = useRef<HTMLInputElement>(null);
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  useEffect(() => { setOptimistic({}); }, [checklist]);
 
   useEffect(() => {
-    if (editingName && nameInputRef.current) {
-      nameInputRef.current.focus();
-    }
+    if (editingName && nameInputRef.current) nameInputRef.current.focus();
   }, [editingName]);
+
+  useEffect(() => {
+    if (showAddForm && addInputRef.current) {
+      setTimeout(() => addInputRef.current?.focus(), 50);
+    }
+  }, [showAddForm]);
+
+  useEffect(() => {
+    if (editingId !== null && editInputRef.current) {
+      setTimeout(() => editInputRef.current?.focus(), 50);
+    }
+  }, [editingId]);
 
   function saveName() {
     const trimmed = nameInput.trim();
@@ -67,17 +98,30 @@ export default function DailyChecklistLive() {
   function handleToggle(itemId: number, currentChecked: boolean) {
     const newChecked = !currentChecked;
     setOptimistic(prev => ({ ...prev, [itemId]: newChecked }));
-    if (newChecked) {
-      toggleMutation.mutate({ token, itemId, checked: true, checkedBy: staffName || undefined });
-    } else {
-      toggleMutation.mutate({ token, itemId, checked: false });
-    }
+    toggleMutation.mutate({ token, itemId, checked: newChecked, checkedBy: newChecked ? (staffName || undefined) : undefined });
   }
 
   function handleReset() {
     if (!confirm("Reset all items to unchecked?")) return;
     setOptimistic({});
     resetMutation.mutate({ token });
+  }
+
+  function startEdit(item: { id: number; text: string; note?: string | null }) {
+    setEditingId(item.id);
+    setEditText(item.text);
+    setEditNote(item.note ?? "");
+    setConfirmDeleteId(null);
+  }
+
+  function saveEdit() {
+    if (!editText.trim() || editingId === null) return;
+    editItemMutation.mutate({ token, itemId: editingId, text: editText.trim(), note: editNote.trim() || undefined });
+  }
+
+  function handleAddItem() {
+    if (!newText.trim()) return;
+    addItemMutation.mutate({ token, text: newText.trim(), note: newNote.trim() || undefined });
   }
 
   if (isLoading) {
@@ -116,13 +160,13 @@ export default function DailyChecklistLive() {
   const venueName = (checklist as any).venueName as string | null | undefined;
 
   return (
-    <div className="min-h-screen bg-linen pb-24">
-      {/* Logo banner */}
+    <div className="min-h-screen bg-linen pb-32">
       {venueLogoUrl && (
         <div className="bg-white border-b border-stone-100 px-4 py-3 flex items-center justify-center">
           <img src={venueLogoUrl} alt={venueName ?? "Venue logo"} className="h-10 w-auto max-w-[160px] object-contain" />
         </div>
       )}
+
       {/* Header */}
       <div className="bg-white border-b border-stone-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-start justify-between gap-3">
@@ -151,7 +195,6 @@ export default function DailyChecklistLive() {
             </button>
           </div>
         </div>
-        {/* Progress bar */}
         <div className="h-1 bg-stone-100">
           <div
             className="h-1 bg-forest transition-all duration-500"
@@ -160,7 +203,6 @@ export default function DailyChecklistLive() {
         </div>
       </div>
 
-      {/* All done banner */}
       {allDone && (
         <div className="max-w-2xl mx-auto px-4 pt-4">
           <div className="bg-forest/10 border border-forest/20 px-4 py-3 flex items-center gap-3">
@@ -172,55 +214,173 @@ export default function DailyChecklistLive() {
 
       {/* Items */}
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-2">
-        {total === 0 && (
-          <p className="font-dm text-sm text-ink/40 text-center py-12">No items on this checklist yet.</p>
+        {total === 0 && !showAddForm && (
+          <p className="font-dm text-sm text-ink/40 text-center py-8">No items yet — tap + Add Item below to get started.</p>
         )}
+
         {items.map(item => {
           const isChecked = optimistic[item.id] !== undefined ? optimistic[item.id] : (item.checked === 1);
+          const isEditing = editingId === item.id;
+          const isConfirmDelete = confirmDeleteId === item.id;
+
+          if (isEditing) {
+            return (
+              <div key={item.id} className="bg-white border-2 border-forest/30 rounded p-3 space-y-2">
+                <input
+                  ref={editInputRef}
+                  type="text"
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }}
+                  className="w-full border border-stone-200 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest rounded"
+                  placeholder="Item text"
+                />
+                <input
+                  type="text"
+                  value={editNote}
+                  onChange={e => setEditNote(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }}
+                  className="w-full border border-stone-200 px-3 py-2 font-dm text-xs text-ink/60 focus:outline-none focus:border-forest rounded"
+                  placeholder="Note (optional)"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveEdit}
+                    disabled={!editText.trim() || editItemMutation.isPending}
+                    className="flex items-center gap-1.5 bg-forest text-white font-bebas tracking-widest text-xs px-4 py-2 rounded disabled:opacity-50"
+                  >
+                    <Check className="w-3.5 h-3.5" /> SAVE
+                  </button>
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="flex items-center gap-1.5 border border-stone-200 text-stone-500 font-bebas tracking-widest text-xs px-4 py-2 rounded"
+                  >
+                    <X className="w-3.5 h-3.5" /> CANCEL
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
           return (
-            <button
+            <div
               key={item.id}
-              onClick={() => handleToggle(item.id, isChecked)}
-              disabled={toggleMutation.isPending && !staffName && !editingName}
-              className={`w-full text-left flex items-start gap-3 p-4 border transition-all duration-150 ${
-                isChecked
-                  ? "bg-forest/5 border-forest/20"
-                  : "bg-white border-stone-200 hover:border-stone-300 active:bg-stone-50"
+              className={`group bg-white border rounded transition-all duration-150 ${
+                isChecked ? "border-forest/20 bg-forest/5" : "border-stone-200"
               }`}
             >
-              <div className="mt-0.5 flex-shrink-0">
-                {isChecked
-                  ? <CheckSquare className="w-5 h-5 text-forest" />
-                  : <Square className="w-5 h-5 text-stone-300" />
-                }
+              <div className="flex items-start gap-0">
+                {/* Checkbox area */}
+                <button
+                  onClick={() => handleToggle(item.id, isChecked)}
+                  disabled={toggleMutation.isPending}
+                  className={`flex-1 text-left flex items-start gap-3 px-4 py-3.5 transition-colors ${
+                    isChecked ? "active:bg-forest/10" : "hover:bg-stone-50 active:bg-stone-100"
+                  }`}
+                >
+                  <div className="mt-0.5 flex-shrink-0">
+                    {isChecked
+                      ? <CheckSquare className="w-5 h-5 text-forest" />
+                      : <Square className="w-5 h-5 text-stone-300" />
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-dm text-sm leading-snug ${isChecked ? "line-through text-ink/40" : "text-ink"}`}>
+                      {item.text}
+                    </p>
+                    {item.note && (
+                      <p className="font-dm text-xs text-ink/40 mt-0.5 leading-snug">{item.note}</p>
+                    )}
+                    {isChecked && item.checkedBy && (
+                      <p className="font-dm text-[10px] text-forest/60 mt-1">
+                        ✓ {item.checkedBy}
+                        {item.checkedAt ? ` · ${new Date(item.checkedAt).toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" })}` : ""}
+                      </p>
+                    )}
+                  </div>
+                </button>
+
+                {/* Action buttons */}
+                <div className="flex flex-col border-l border-stone-100 flex-shrink-0">
+                  <button
+                    onClick={() => { setConfirmDeleteId(null); startEdit(item); }}
+                    className="px-3 py-3 text-stone-300 hover:text-forest hover:bg-forest/5 active:bg-forest/10 transition-colors border-b border-stone-100"
+                    title="Edit item"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  {isConfirmDelete ? (
+                    <button
+                      onClick={() => { deleteItemMutation.mutate({ token, itemId: item.id }); setConfirmDeleteId(null); }}
+                      disabled={deleteItemMutation.isPending}
+                      className="px-3 py-3 text-white bg-red-500 hover:bg-red-600 active:bg-red-700 transition-colors"
+                      title="Confirm delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteId(item.id)}
+                      className="px-3 py-3 text-stone-300 hover:text-red-400 hover:bg-red-50 active:bg-red-100 transition-colors"
+                      title="Delete item"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className={`font-dm text-sm leading-snug ${isChecked ? "line-through text-ink/40" : "text-ink"}`}>
-                  {item.text}
-                </p>
-                {item.note && (
-                  <p className="font-dm text-xs text-ink/40 mt-1 leading-snug">{item.note}</p>
-                )}
-                {item.photoUrl && (
-                  <img
-                    src={item.photoUrl}
-                    alt=""
-                    className="mt-2 max-h-32 rounded border border-stone-200 object-cover"
-                  />
-                )}
-                {isChecked && item.checkedBy && (
-                  <p className="font-dm text-[10px] text-forest/60 mt-1">
-                    ✓ {item.checkedBy}
-                    {item.checkedAt ? ` · ${new Date(item.checkedAt).toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" })}` : ""}
-                  </p>
-                )}
-              </div>
-            </button>
+            </div>
           );
         })}
+
+        {/* Add item form */}
+        {showAddForm ? (
+          <div className="bg-white border-2 border-forest/30 rounded p-3 space-y-2">
+            <input
+              ref={addInputRef}
+              type="text"
+              value={newText}
+              onChange={e => setNewText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleAddItem(); if (e.key === "Escape") { setShowAddForm(false); setNewText(""); setNewNote(""); } }}
+              className="w-full border border-stone-200 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest rounded"
+              placeholder="Item text e.g. Wipe down bar tops"
+            />
+            <input
+              type="text"
+              value={newNote}
+              onChange={e => setNewNote(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleAddItem(); if (e.key === "Escape") { setShowAddForm(false); setNewText(""); setNewNote(""); } }}
+              className="w-full border border-stone-200 px-3 py-2 font-dm text-xs text-ink/60 focus:outline-none focus:border-forest rounded"
+              placeholder="Note (optional)"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleAddItem}
+                disabled={!newText.trim() || addItemMutation.isPending}
+                className="flex items-center gap-1.5 bg-forest text-white font-bebas tracking-widest text-xs px-4 py-2 rounded disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" /> {addItemMutation.isPending ? "ADDING..." : "ADD"}
+              </button>
+              <button
+                onClick={() => { setShowAddForm(false); setNewText(""); setNewNote(""); }}
+                className="flex items-center gap-1.5 border border-stone-200 text-stone-500 font-bebas tracking-widest text-xs px-4 py-2 rounded"
+              >
+                <X className="w-3.5 h-3.5" /> CANCEL
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setShowAddForm(true); setConfirmDeleteId(null); setEditingId(null); }}
+            className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-stone-200 py-3 rounded text-stone-400 hover:border-forest/30 hover:text-forest hover:bg-forest/5 active:bg-forest/10 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="font-bebas tracking-widest text-sm">ADD ITEM</span>
+          </button>
+        )}
       </div>
 
-      {/* Staff name footer — always visible */}
+      {/* Staff name footer */}
       <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg">
         <div className="max-w-2xl mx-auto px-4 py-3">
           {editingName ? (

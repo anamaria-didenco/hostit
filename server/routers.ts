@@ -4362,6 +4362,60 @@ Return ONLY valid JSON. Example structure:
         return { success: true };
       }),
 
+    addItemByToken: publicProcedure
+      .input(z.object({ token: z.string(), text: z.string().min(1), note: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, count } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
+        if (!cl) throw new Error('Checklist not found');
+        const [{ total }] = await db.select({ total: count() }).from(dailyChecklistItems).where(eq(dailyChecklistItems.checklistId, cl.id));
+        const [item] = await db.insert(dailyChecklistItems).values({
+          checklistId: cl.id,
+          ownerId: cl.ownerId,
+          text: input.text.trim(),
+          note: input.note?.trim() ?? null,
+          sortOrder: Number(total),
+          checked: 0,
+          createdAt: Date.now(),
+        }).returning();
+        return item;
+      }),
+
+    deleteItemByToken: publicProcedure
+      .input(z.object({ token: z.string(), itemId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
+        if (!cl) throw new Error('Checklist not found');
+        await db.delete(dailyChecklistItems)
+          .where(and(eq(dailyChecklistItems.id, input.itemId), eq(dailyChecklistItems.checklistId, cl.id)));
+        return { success: true };
+      }),
+
+    editItemByToken: publicProcedure
+      .input(z.object({ token: z.string(), itemId: z.number(), text: z.string().min(1), note: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
+        if (!cl) throw new Error('Checklist not found');
+        await db.update(dailyChecklistItems)
+          .set({ text: input.text.trim(), note: input.note?.trim() ?? null })
+          .where(and(eq(dailyChecklistItems.id, input.itemId), eq(dailyChecklistItems.checklistId, cl.id)));
+        return { success: true };
+      }),
+
     toggleItemByToken: publicProcedure
       .input(z.object({
         token: z.string(),
