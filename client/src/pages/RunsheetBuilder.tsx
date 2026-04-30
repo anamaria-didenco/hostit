@@ -13,7 +13,7 @@ import {
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
   Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine, Package,
-  Eye, EyeOff, DollarSign, Download, ClipboardList, Calendar,
+  Eye, EyeOff, DollarSign, Download, ClipboardList, Calendar, Pencil,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -125,6 +125,49 @@ const BAR_OPTIONS = [
   { key: "bar_tab_then_cash" as const, label: "Bar Tab then Cash Bar", description: "Tab runs until set amount, then guests pay" },
   { key: "unlimited" as const, label: "Unlimited Bar Tab", description: "Unlimited drinks for the event" },
 ];
+
+function SpacePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: spaces } = trpc.spaces.list.useQuery();
+  const [customMode, setCustomMode] = useState(false);
+  const isCustom = value && spaces && !spaces.some((s: any) => s.name === value);
+  React.useEffect(() => { if (isCustom) setCustomMode(true); }, [isCustom]);
+  if (customMode) {
+    return (
+      <div className="flex gap-1">
+        <Input
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Type a custom space..."
+          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+        />
+        <button
+          type="button"
+          onClick={() => { setCustomMode(false); onChange(""); }}
+          className="no-print h-9 px-2 border border-gold/30 text-ink/40 hover:text-ink hover:border-forest transition-colors text-xs font-bebas tracking-widest"
+          title="Pick from saved spaces"
+        >
+          ✕
+        </button>
+      </div>
+    );
+  }
+  return (
+    <select
+      value={value}
+      onChange={e => {
+        if (e.target.value === "__custom__") { setCustomMode(true); onChange(""); }
+        else onChange(e.target.value);
+      }}
+      className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest text-sm h-9 px-2 bg-white font-dm no-print"
+    >
+      <option value="">— select a space —</option>
+      {spaces?.map((s: any) => (
+        <option key={s.id} value={s.name}>{s.name}{s.capacitySeated ? ` (${s.capacitySeated} seated)` : ''}</option>
+      ))}
+      <option value="__custom__">+ Custom / other...</option>
+    </select>
+  );
+}
 
 function catStyle(cat: string) {
   return CATEGORIES.find(c => c.value === cat)?.color ?? "bg-cream text-ink/70";
@@ -253,6 +296,8 @@ export default function RunsheetBuilder() {
   // Drinks (runsheet-level selection)
   const [rsBarOption, setRsBarOption] = useState<"bar_tab" | "cash_bar" | "bar_tab_then_cash" | "unlimited">("cash_bar");
   const [rsTabAmount, setRsTabAmount] = useState("");
+  const [rsBarNotes, setRsBarNotes] = useState("");
+  const [rsDrinksMode, setRsDrinksMode] = useState<"select" | "notes">("select");
   const [rsSelectedDrinks, setRsSelectedDrinks] = useState<string[]>([]);
   const [rsCustomDrinks, setRsCustomDrinks] = useState<{ name: string; description?: string; price?: number }[]>([]);
   const [rsNewCustomDrink, setRsNewCustomDrink] = useState({ name: "", description: "", price: "" });
@@ -885,6 +930,10 @@ export default function RunsheetBuilder() {
         if (dd.tabAmount) setRsTabAmount(String(dd.tabAmount));
         if (dd.selectedDrinks) setRsSelectedDrinks(dd.selectedDrinks);
         if (dd.customDrinks) setRsCustomDrinks(dd.customDrinks);
+        if (dd.barNotes) {
+          setRsBarNotes(dd.barNotes);
+          if (!dd.selectedDrinks?.length && !dd.customDrinks?.length) setRsDrinksMode("notes");
+        }
       }
     }
   }, [existing]);
@@ -1094,6 +1143,9 @@ export default function RunsheetBuilder() {
           footerText: footerText || undefined,
           gstInclusive,
           paymentNotes: paymentNotes || undefined,
+          drinksData: (rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length)
+            ? { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined }
+            : undefined,
           items: items.map((item, i) => ({
             time: item.time,
             duration: item.duration,
@@ -1106,7 +1158,7 @@ export default function RunsheetBuilder() {
             italic: item.italic,
             highlight: item.highlight,
           })),
-        });
+        } as any);
         if (fnbItems.length > 0 && created?.id) await saveFnb(created.id);
       } else {
         await updateMutation.mutateAsync({
@@ -1127,7 +1179,7 @@ export default function RunsheetBuilder() {
           proposalId: linkedProposalId,
           floorPlanId: linkedFloorPlanId ?? null,
           costItems: costItems.length ? costItems : null,
-          drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks },
+          drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined },
           gstInclusive,
           paymentNotes: paymentNotes || undefined,
         } as any);
@@ -1642,12 +1694,7 @@ export default function RunsheetBuilder() {
               </div>
               <div>
                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">VENUE / SPACE</label>
-                <Input
-                  value={spaceName}
-                  onChange={e => setSpaceName(e.target.value)}
-                  placeholder="Main Hall, Rooftop..."
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
-                />
+                <SpacePicker value={spaceName} onChange={setSpaceName} />
                 <div className="hidden print:block font-dm text-sm font-semibold">{spaceName || "—"}</div>
               </div>
               <div>
@@ -1987,7 +2034,7 @@ export default function RunsheetBuilder() {
           {[
             { id: 'timeline', label: 'TIMELINE', icon: <Clock className="w-4 h-4" />, count: items.length },
             { id: 'fnb', label: 'F&B SHEET', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
-            { id: 'drinks', label: 'DRINKS', icon: <Wine className="w-4 h-4" />, count: (rsSelectedDrinks.length + rsCustomDrinks.length) || undefined },
+            { id: 'drinks', label: 'DRINKS', icon: <Wine className="w-4 h-4" />, count: rsDrinksMode === 'notes' ? (rsBarNotes ? '✓' as any : undefined) : ((rsSelectedDrinks.length + rsCustomDrinks.length) || undefined) },
             { id: 'checklist', label: 'CHECKLIST', icon: <CheckSquare className="w-4 h-4" />, count: `${checkedCount}/${checklistItems.length}` },
             { id: 'tableplan', label: 'TABLE PLAN', icon: <LayoutGrid className="w-4 h-4" /> },
             { id: 'costs', label: 'COSTS', icon: <DollarSign className="w-4 h-4" />, count: costItems.length || undefined },
@@ -2653,7 +2700,7 @@ export default function RunsheetBuilder() {
                               {item.description && <div className="text-xs text-ink/40">{item.description}</div>}
                             </div>
                             {showQtyCol && (
-                              <div>
+                              <div className={item.course === 'Drinks' ? 'print:hidden' : ''}>
                                 {item.course !== 'Drinks' && item.qty > 1 && (
                                   <input type="number" min={1} value={item.qty} onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))} className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center" />
                                 )}
@@ -2742,14 +2789,16 @@ export default function RunsheetBuilder() {
                       <div key={course}>
                         {/* Editable course header with rename + delete */}
                         <div className={`px-5 py-1.5 flex items-center gap-2 border-b ${isDrinks ? 'bg-blue-50 border-blue-200/60' : 'bg-amber-50 border-amber-200/60'}`}>
+                          <Pencil className={`w-3 h-3 flex-shrink-0 no-print ${isDrinks ? 'text-blue-400' : 'text-amber-400'}`} />
                           <input
                             value={course}
                             onChange={e => renameCourse(course, e.target.value)}
-                            className={`bg-transparent border-0 focus:outline-none font-bebas tracking-widest text-xs w-full min-w-0 ${isDrinks ? 'text-blue-700' : 'text-amber-700'}`}
+                            className={`bg-transparent border-0 border-b border-dashed focus:outline-none focus:border-solid font-bebas tracking-widest text-xs w-full min-w-0 ${isDrinks ? 'text-blue-700 border-blue-200 focus:border-blue-500' : 'text-amber-700 border-amber-200 focus:border-amber-500'} print:border-none`}
                             title="Click to rename this course"
+                            placeholder="Course name..."
                           />
-                          <span className="text-[10px] text-ink/25 flex-shrink-0 font-dm italic no-print">rename</span>
-                          <button onClick={() => deleteCourse(course)} className="no-print flex-shrink-0 text-ink/20 hover:text-red-400 transition-colors p-0.5" title={`Delete all ${course} items`}>
+                          <span className="text-[10px] text-ink/30 flex-shrink-0 font-dm italic no-print">click to rename</span>
+                          <button onClick={() => deleteCourse(course)} className="no-print flex-shrink-0 text-ink/30 hover:text-red-500 transition-colors p-0.5" title={`Delete all ${course} items`}>
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
@@ -2789,6 +2838,37 @@ export default function RunsheetBuilder() {
                 </div>
               </div>
             )}
+            {/* ── BAR ARRANGEMENT (print + screen) ───────────────────────────── */}
+            {(rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length) ? (
+              <div className="px-5 py-4 border-t border-gold/30 print:avoid-break">
+                <div className="font-bebas tracking-widest text-xs text-forest mb-2">BAR ARRANGEMENT</div>
+                <div className="text-sm font-dm text-ink/80 capitalize mb-2">
+                  <span className="font-semibold">{rsBarOption.replace(/_/g, ' ')}</span>
+                  {rsTabAmount && (rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash')
+                    ? ` — Bar tab: $${Number(rsTabAmount).toLocaleString('en-NZ')}` : ''}
+                </div>
+                {rsBarNotes && (
+                  <div className="text-sm font-dm text-ink/70 whitespace-pre-wrap mb-2 bg-blue-50/40 border-l-2 border-blue-300 pl-2 py-1">
+                    {rsBarNotes}
+                  </div>
+                )}
+                {(rsSelectedDrinks.length > 0 || rsCustomDrinks.length > 0) && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {rsSelectedDrinks.map(k => {
+                      const found = DRINKS_MENU.flatMap((c: any) => c.items as any[]).find((i: any) => i.key === k);
+                      return (
+                        <span key={k} className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 font-dm border border-blue-200">
+                          {found ? found.name : k.replace(/_/g, ' ')}
+                        </span>
+                      );
+                    })}
+                    {rsCustomDrinks.map((d, i) => (
+                      <span key={i} className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 font-dm border border-amber-200">{d.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
             {/* ── EVENT SPEND / BUDGET ───────────────────────────────────────── */}
             {effectiveBookingId && (
               <div className="px-5 py-5 border-t border-gold/30 no-print">
@@ -2819,7 +2899,7 @@ export default function RunsheetBuilder() {
                   try {
                     await silentUpdateMutation.mutateAsync({
                       id: sheetId,
-                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks },
+                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined },
                     } as any);
                     toast.success("Drinks selection saved!");
                   } catch { toast.error("Failed to save drinks"); }
@@ -2865,7 +2945,41 @@ export default function RunsheetBuilder() {
                 )}
               </div>
 
-              {/* Drinks Menu */}
+              {/* Mode toggle: pick drinks vs notes */}
+              <div className="border-t border-gold/20 pt-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-bebas tracking-widest text-xs text-ink/40">DRINKS</div>
+                  <div className="flex border border-gold/30">
+                    <button
+                      onClick={() => setRsDrinksMode("select")}
+                      className={`px-3 py-1.5 font-bebas tracking-widest text-[11px] transition-colors ${rsDrinksMode === 'select' ? 'bg-forest text-cream' : 'bg-white text-ink/50 hover:text-ink'}`}
+                    >
+                      Pick from menu
+                    </button>
+                    <button
+                      onClick={() => setRsDrinksMode("notes")}
+                      className={`px-3 py-1.5 font-bebas tracking-widest text-[11px] transition-colors border-l border-gold/30 ${rsDrinksMode === 'notes' ? 'bg-forest text-cream' : 'bg-white text-ink/50 hover:text-ink'}`}
+                    >
+                      Notes only
+                    </button>
+                  </div>
+                </div>
+                {rsDrinksMode === 'notes' && (
+                  <div>
+                    <Textarea
+                      value={rsBarNotes}
+                      onChange={e => setRsBarNotes(e.target.value)}
+                      placeholder={`e.g. "Client will choose closer to the date"\n• Standard wine & beer package\n• Bartender to recommend cocktails on the night`}
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm font-dm min-h-[110px]"
+                    />
+                    <div className="font-dm text-[11px] text-ink/40 mt-1.5">These notes appear on the BEO instead of a drink list.</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Drinks Menu (only when in select mode) */}
+              {rsDrinksMode === 'select' && (
+              <>
               <div className="space-y-5">
                 {DRINKS_MENU.map(cat => (
                   <div key={cat.category}>
@@ -2967,6 +3081,16 @@ export default function RunsheetBuilder() {
                       <span key={i} className="bg-gold/10 text-ink text-[10px] px-2 py-0.5 font-dm border border-gold/30">{d.name}</span>
                     ))}
                   </div>
+                </div>
+              )}
+              </>
+              )}
+
+              {/* Notes summary when in notes mode */}
+              {rsDrinksMode === 'notes' && rsBarNotes && (
+                <div className="border border-gold/30 bg-linen/50 p-4">
+                  <div className="font-bebas tracking-widest text-xs text-ink/40 mb-2">BAR NOTES</div>
+                  <div className="text-xs font-dm text-ink/70 whitespace-pre-wrap">{rsBarNotes}</div>
                 </div>
               )}
             </div>

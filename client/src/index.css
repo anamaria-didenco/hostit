@@ -933,3 +933,38 @@
 .vf-rich-content br { display: block; content: ""; margin-top: 0.25em; }
 .vf-rich-content div { margin-top: 0.1em; }
 .vf-rich-content span[style] { /* preserve inline styles from rich text */ }
+
+/* ── Print / BEO ────────────────────────────────────────────────────── */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm 10mm;
+  }
+  html, body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+  }
+  .no-print { display: none !important; }
+  .print\:break-before { break-before: page; }
+  .print\:break-after  { break-after: page; }
+  .print\:avoid-break  { break-inside: avoid; page-break-inside: avoid; }
+  /* Tighter spacing throughout BEO */
+  .print-tight, .print-tight * {
+    line-height: 1.35 !important;
+  }
+  /* Keep table-style rows together */
+  tr, .grid { break-inside: avoid; page-break-inside: avoid; }
+  /* Hide all interactive controls in print */
+  button, select, input[type="checkbox"], input[type="radio"] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  /* Ensure backgrounds print (color-coded F&B rows) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Headings page-break behaviour */
+  h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+}
