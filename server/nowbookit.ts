@@ -301,6 +301,29 @@ export async function pushBookingToNbi(
       return { pushed: false, reason: 'already_pushed', nbiBookingId: booking.nbiBookingId };
     }
 
+    // Enrich customer fields from the linked contact / lead — the bookings
+    // table itself has no `phone` column, and NBI's PostBookings endpoint
+    // strictly requires FirstName, LastName, and Phone. Without this lookup
+    // every push fails with a 400 "PostBookings requires Customer's:
+    // FirstName, LastName, Phone" error.
+    const { contacts, leads } = await import('../drizzle/schema');
+    let contactPhone = '';
+    let contactLastName = '';
+    if (booking.contactId) {
+      const [c] = await db.select().from(contacts).where(eq(contacts.id, booking.contactId)).limit(1);
+      if (c) {
+        contactPhone = c.phone ?? '';
+        contactLastName = c.lastName ?? '';
+      }
+    }
+    if ((!contactPhone || !contactLastName) && booking.leadId) {
+      const [l] = await db.select().from(leads).where(eq(leads.id, booking.leadId)).limit(1);
+      if (l) {
+        if (!contactPhone) contactPhone = l.phone ?? '';
+        if (!contactLastName) contactLastName = l.lastName ?? '';
+      }
+    }
+
     const [venue] = await db.select().from(venueSettings)
       .where(eq(venueSettings.ownerId, ownerId)).limit(1);
     if (!venue) {
@@ -330,6 +353,29 @@ export async function pushBookingToNbi(
     const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
     const timeStr = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
 
+    // Resolve customer fields with safe fallbacks. NBI rejects empty values
+    // for FirstName / LastName / Phone, so we substitute placeholders rather
+    // than silently failing every push for clients with incomplete data.
+    // The placeholders are intentionally obvious so a user spotting them in
+    // NBI knows to add the real details back in VenueFlow.
+    let firstName = (booking.firstName ?? '').trim();
+    let lastName = (booking.lastName ?? '').trim() || contactLastName.trim();
+    // If lastName is still empty but firstName has a space, split it.
+    if (!lastName && firstName.includes(' ')) {
+      const parts = firstName.split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.slice(1).join(' ');
+    }
+    if (!firstName) firstName = 'Guest';
+    if (!lastName) lastName = '—';
+    const phone = (contactPhone || '').trim() || '0000000000';
+    const substituted: string[] = [];
+    if (phone === '0000000000') substituted.push('phone');
+    if (lastName === '—') substituted.push('lastName');
+    if (substituted.length) {
+      console.warn(`[NBI push:${opts.source}] booking ${bookingId} missing ${substituted.join(',')} — using placeholders`);
+    }
+
     const result = await createNbiBooking(
       {
         accountId: venue.nbiAccountId!,
@@ -338,10 +384,10 @@ export async function pushBookingToNbi(
         sectionId: (venue as any).nbiSectionId ?? undefined,
       },
       {
-        firstName: booking.firstName,
-        lastName: booking.lastName ?? '',
+        firstName,
+        lastName,
         email: booking.email ?? '',
-        phone: (booking as any).phone ?? '',
+        phone,
         date: dateStr,
         time: timeStr,
         covers: booking.guestCount ?? 2,
