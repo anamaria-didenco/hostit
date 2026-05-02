@@ -203,6 +203,13 @@
       "when": 1777800000000,
       "tag": "0028_nbi_widget",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1777716393529,
+      "tag": "0029_simple_carnage",
+      "breakpoints": true
     }
   ]
 }

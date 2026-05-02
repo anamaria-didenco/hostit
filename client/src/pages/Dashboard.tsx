@@ -1071,6 +1071,15 @@ export default function Dashboard() {
     },
     onError: (err) => toast.error(err.message || "Failed to verify NowBookIt credentials"),
   });
+  // Inbound webhook URL (NBI → VFHQ). Generated lazily server-side.
+  const { data: nbiWebhook, refetch: refetchNbiWebhook } = trpc.venue.getNbiWebhookUrl.useQuery(
+    undefined,
+    { enabled: !!nbiAccountIdSaved && !!nbiVenueIdSaved, staleTime: Infinity },
+  );
+  const regenWebhookMutation = trpc.venue.regenerateNbiWebhookSecret.useMutation({
+    onSuccess: () => { refetchNbiWebhook(); toast.success('Webhook URL regenerated — paste the new one into NowBookIt.'); },
+    onError: (err) => toast.error(err.message || 'Failed to regenerate webhook'),
+  });
   const pushToNbiMutation = trpc.bookings.pushToNbi.useMutation({
     onSuccess: (data) => {
       if (data.alreadyPushed) {
@@ -5045,6 +5054,41 @@ export default function Dashboard() {
                       <div className="bg-blue-50 border border-blue-200/50 rounded p-3 text-xs font-dm text-ink/60 leading-relaxed">
                         <strong className="text-ink/80">No API key needed.</strong> VenueFlow uses NowBookIt's public booking endpoint — the same one a customer hits when they book through your widget. Find your <strong>Account ID</strong> and <strong>Venue ID</strong> in your NowBookIt booking widget URL: <code className="bg-white/70 px-1 rounded text-[10px]">bookings.nowbookit.com/?accountid=<strong>&lt;ACCOUNT_ID&gt;</strong>&amp;venueid=<strong>&lt;VENUE_ID&gt;</strong></code>. Once connected, confirmed VenueFlow bookings appear in your NowBookIt diary automatically. You can also push individual bookings manually from each booking's side panel.
                       </div>
+
+                      {/* ── Inbound webhook (NBI → VFHQ) ── */}
+                      {nbiConnected && (
+                        <div className="border-t border-gold/20 pt-4 mt-2">
+                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">INBOUND WEBHOOK URL</label>
+                          <p className="font-dm text-[11px] text-ink/60 mb-2 leading-relaxed">
+                            Paste this into NowBookIt → <strong>Integrations → Add API Key Integration → Bookings tab</strong>, then enable <em>Bookings Webhooks</em>. Bookings made directly in NowBookIt will appear in VenueFlow automatically.
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={nbiWebhook?.url ?? 'Loading…'}
+                              onFocus={(e) => e.currentTarget.select()}
+                              className="flex-1 font-mono text-[11px] border border-gold/30 rounded px-3 py-2 bg-white text-ink/80 focus:outline-none focus:border-forest"
+                            />
+                            <button
+                              onClick={() => {
+                                if (!nbiWebhook?.url) return;
+                                navigator.clipboard.writeText(nbiWebhook.url);
+                                toast.success('Webhook URL copied');
+                              }}
+                              className="font-bebas tracking-widest text-xs px-3 py-2 border border-[#6b98e7] text-[#6b98e7] hover:bg-[#6b98e7]/10 rounded"
+                            >COPY</button>
+                            <button
+                              onClick={() => {
+                                if (!confirm('Regenerate the webhook URL? The current one will stop working until you paste the new one into NowBookIt.')) return;
+                                regenWebhookMutation.mutate();
+                              }}
+                              disabled={regenWebhookMutation.isPending}
+                              className="font-bebas tracking-widest text-xs px-3 py-2 border border-gold/30 text-ink/70 hover:bg-gold/10 rounded disabled:opacity-50"
+                            >{regenWebhookMutation.isPending ? '…' : 'ROTATE'}</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 

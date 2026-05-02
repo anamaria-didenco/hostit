@@ -141,3 +141,23 @@ Major UX overhaul of `client/src/pages/RunsheetBuilder.tsx`, BEO PDF generation 
 - **Shift→events date matching** — `shiftRunsheets.getByToken` computes day window in venue's timezone (`venueSettings.timezone`, default `Pacific/Auckland`) using an iterative Intl.DateTimeFormat-based UTC offset solver, then queries `runsheets.eventDate` in `[dayStartUTC, nextDayStartUTC)` with `gte`/`lt`.
 - **Print-friendly BEO** — `page-break-inside: avoid` on rows, `page-break-after: auto` on course groups, drink names use spaces instead of underscores.
 
+
+## NowBookIt Two-Way Sync
+
+VenueFlowHQ supports bidirectional sync with NowBookIt:
+
+**VFHQ → NBI (push)** — Existing. When a booking is set to `confirmed`, `bookings.update` calls `createNbiBooking` (`server/nowbookit.ts`) using the venue's `nbiAccountId` + `nbiVenueId` (+ optional `nbiServiceId`). Returns NBI booking ID, stored on `bookings.nbiBookingId`.
+
+**NBI → VFHQ (webhook receiver)** — `server/nbiWebhook.ts`. NowBookIt POSTs booking events to `POST /api/webhook/nowbookit/:secret`. Auth is by per-venue secret (`venue_settings.nbiWebhookSecret`, 24-byte random hex) embedded in the URL path. The handler:
+- Defensively reads booking fields from multiple paths (NBI payload shape varies).
+- Parses dates with venue timezone awareness — ISO with offset trusted as-is, ISO-without-offset and date+time treated as venue-local via iterative `Intl.DateTimeFormat` solver.
+- **Loop prevention** — detects `VF-<id>` reference echoes from our own pushes; backfills `nbiBookingId` instead of creating a duplicate.
+- **Idempotency** — partial unique index `bookings_owner_nbi_unique` on `(ownerId, nbiBookingId) WHERE nbiBookingId IS NOT NULL`; create path catches Postgres `23505` conflicts and returns the existing row.
+- Handles `cancelled/deleted/removed` actions by setting `bookings.status = 'cancelled'`.
+
+**tRPC procedures** — `venue.getNbiWebhookUrl` (lazy-generates the secret on first call) and `venue.regenerateNbiWebhookSecret` (rotates the secret). Both protected.
+
+**Security note** — the public `venue.get` procedure now strips sensitive fields (`smtp*`, `nbi*`, `notificationEmail`, `automatedTaskRules`) when called by anyone other than the owner themselves. The full row is still available via the protected `venue.getOwn`.
+
+**UI** — Dashboard → Settings → Integrations → NowBookIt card shows a read-only webhook URL with COPY and ROTATE buttons (visible once Account ID + Venue ID are saved).
+

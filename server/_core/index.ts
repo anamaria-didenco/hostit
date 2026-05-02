@@ -20,6 +20,7 @@ import { ENV } from "./env";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { handleGithubWebhook } from "../githubWebhook";
+import { handleNbiWebhook } from "../nbiWebhook";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 
@@ -66,6 +67,15 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // NowBookIt inbound webhook — auth via per-venue secret in the URL path.
+  // Mounted after json middleware so req.body is parsed.
+  app.post("/api/webhook/nowbookit/:secret", (req, res) => {
+    handleNbiWebhook(req, res).catch(err => {
+      console.error("[NBI Webhook] Unhandled error:", err);
+      res.status(500).json({ ok: false, error: "internal_error" });
+    });
+  });
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 

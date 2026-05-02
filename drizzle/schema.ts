@@ -108,6 +108,10 @@ export const venueSettings = pgTable("venue_settings", {
   nbiAccountId: varchar("nbiAccountId", { length: 100 }),
   nbiServiceId: varchar("nbiServiceId", { length: 100 }),
   nbiSyncEnabled: integer("nbiSyncEnabled").default(0),
+  // Per-venue secret token used in the inbound webhook URL so NowBookIt can
+  // POST new/updated bookings into VenueFlowHQ. The secret IS the auth — it
+  // appears in the URL path: /api/webhook/nowbookit/<secret>
+  nbiWebhookSecret: varchar("nbiWebhookSecret", { length: 64 }),
   emailSignature: text("emailSignature"),
   emailSignatureLogo: text("emailSignatureLogo"),
   customCourses: text("customCourses"),

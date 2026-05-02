@@ -50,7 +50,22 @@ export const appRouter = router({
       .query(async ({ input, ctx }) => {
         const id = input.ownerId ?? ctx.user?.id;
         if (!id) return null;
-        return getVenueSettings(id);
+        const vs = await getVenueSettings(id);
+        if (!vs) return null;
+        // For unauthenticated callers, strip every sensitive field. Even authenticated
+        // callers don't need these on this endpoint — there is a protected `getOwn`.
+        const isOwnerSelf = ctx.user?.id === id;
+        if (!isOwnerSelf) {
+          const safe: any = { ...vs };
+          delete safe.smtpHost; delete safe.smtpPort; delete safe.smtpUser; delete safe.smtpPass;
+          delete safe.smtpFromEmail; delete safe.smtpFromName; delete safe.smtpSecure;
+          delete safe.notificationEmail;
+          delete safe.nbiApiKey; delete safe.nbiAccountId; delete safe.nbiVenueId;
+          delete safe.nbiServiceId; delete safe.nbiSyncEnabled; delete safe.nbiWebhookSecret;
+          delete safe.automatedTaskRules;
+          return safe;
+        }
+        return vs;
       }),
 
     update: protectedProcedure
@@ -230,6 +245,46 @@ export const appRouter = router({
         const { listNbiServices } = await import('./nowbookit');
         return listNbiServices({ accountId: input.accountId, venueId: input.venueId }, input.date);
       }),
+
+    /**
+     * Returns the inbound webhook URL the user should paste into NowBookIt's
+     * Bookings Webhook Url field. Generates the per-venue secret on first call.
+     */
+    getNbiWebhookUrl: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { venueSettings } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) throw new Error('DB not available');
+      let [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+      if (!vs) return { url: null, secret: null };
+      let secret = vs.nbiWebhookSecret;
+      if (!secret) {
+        const { randomBytes } = await import('crypto');
+        secret = randomBytes(24).toString('hex');
+        await db.update(venueSettings).set({ nbiWebhookSecret: secret }).where(eq(venueSettings.id, vs.id));
+      }
+      const base = process.env.PUBLIC_BASE_URL
+        ?? (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+        ?? 'https://venueflowhq.com';
+      return { url: `${base.replace(/\/$/, '')}/api/webhook/nowbookit/${secret}`, secret };
+    }),
+
+    /** Rotate the webhook secret — invalidates any URL pasted into NBI before. */
+    regenerateNbiWebhookSecret: protectedProcedure.mutation(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { venueSettings } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) throw new Error('DB not available');
+      const { randomBytes } = await import('crypto');
+      const secret = randomBytes(24).toString('hex');
+      await db.update(venueSettings).set({ nbiWebhookSecret: secret }).where(eq(venueSettings.ownerId, ctx.user.id));
+      const base = process.env.PUBLIC_BASE_URL
+        ?? (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+        ?? 'https://venueflowhq.com';
+      return { url: `${base.replace(/\/$/, '')}/api/webhook/nowbookit/${secret}`, secret };
+    }),
   }),
 
   // ─── Event Spaces ──────────────────────────────────────────────────────────
