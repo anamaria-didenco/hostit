@@ -5059,6 +5059,12 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <p className="font-dm text-[11px] text-ink/50 -mt-2">Pick the service (e.g. <em>Drinks &amp; Snacks</em>) and the section/area in your venue (e.g. <em>Bar Area Level 1</em>) where new VenueFlow bookings should land.</p>
+
+                      {/* Direction header — makes it obvious which way bookings flow */}
+                      <div className="border-t border-gold/20 pt-3 mt-1">
+                        <div className="font-bebas text-xs tracking-widest text-forest mb-2">VENUEFLOW → NOWBOOKIT (push bookings out)</div>
+                      </div>
+
                       <div className="flex items-center justify-between">
                         <label className="flex items-center gap-3 cursor-pointer select-none">
                           <div
@@ -5111,9 +5117,12 @@ export default function Dashboard() {
                       {/* ── Inbound webhook (NBI → VFHQ) ── */}
                       {nbiConnected && (
                         <div className="border-t border-gold/20 pt-4 mt-2">
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">INBOUND WEBHOOK URL</label>
+                          <div className="font-bebas text-xs tracking-widest text-sage mb-2">NOWBOOKIT → VENUEFLOW (pull bookings in)</div>
+                          <label className="font-bebas text-[11px] tracking-widest text-ink/60 block mb-1">INBOUND WEBHOOK URL</label>
                           <p className="font-dm text-[11px] text-ink/60 mb-2 leading-relaxed">
-                            Paste this into NowBookIt → <strong>Integrations → Add API Key Integration → Bookings tab</strong>, then enable <em>Bookings Webhooks</em>. Bookings made directly in NowBookIt will appear in VenueFlow automatically.
+                            <strong className="text-ink/80">Only needed for the reverse direction.</strong> Paste this URL into NowBookIt → <strong>Integrations → Add API Key Integration → Bookings tab</strong>, then enable <em>Bookings Webhooks</em>. Bookings made <em>directly in NowBookIt</em> will then appear in VenueFlow automatically.
+                            <br />
+                            <span className="text-ink/50">Bookings made in VenueFlow already push to NowBookIt via the auto-sync toggle above — you don't need this URL for that.</span>
                           </p>
                           <div className="flex gap-2">
                             <input
