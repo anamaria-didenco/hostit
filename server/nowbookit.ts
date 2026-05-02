@@ -251,3 +251,91 @@ export async function createNbiBooking(
     return { success: false, error: msg };
   }
 }
+
+/**
+ * Shared helper: push a single VenueFlowHQ booking into NowBookIt.
+ *
+ * Use this from *every* place that creates or confirms a booking, so the
+ * sync rules (gate checks, idempotency, logging) stay in one place.
+ *
+ * Behaviour:
+ *  - Skips with a clear log line if NBI is not fully configured / disabled.
+ *  - Skips if the booking already has an `nbiBookingId`.
+ *  - On success, writes `nbiBookingId` back onto the booking.
+ *  - Never throws — failures are logged and returned in the result.
+ */
+export async function pushBookingToNbi(
+  bookingId: number,
+  ownerId: number,
+  opts: { source: string } = { source: 'unknown' }
+): Promise<{ pushed: boolean; reason?: string; nbiBookingId?: string }> {
+  try {
+    const { getDb } = await import('./db');
+    const { bookings, venueSettings } = await import('../drizzle/schema');
+    const { eq, and } = await import('drizzle-orm');
+    const db = await getDb();
+    if (!db) {
+      console.warn(`[NBI push:${opts.source}] booking ${bookingId} skipped — database unavailable`);
+      return { pushed: false, reason: 'db_unavailable' };
+    }
+
+    const [booking] = await db.select().from(bookings)
+      .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ownerId))).limit(1);
+    if (!booking) {
+      console.warn(`[NBI push:${opts.source}] booking ${bookingId} not found`);
+      return { pushed: false, reason: 'booking_not_found' };
+    }
+    if (booking.nbiBookingId) {
+      console.log(`[NBI push:${opts.source}] booking ${bookingId} already has nbiBookingId=${booking.nbiBookingId} — skip`);
+      return { pushed: false, reason: 'already_pushed', nbiBookingId: booking.nbiBookingId };
+    }
+
+    const [venue] = await db.select().from(venueSettings)
+      .where(eq(venueSettings.ownerId, ownerId)).limit(1);
+    if (!venue) {
+      console.warn(`[NBI push:${opts.source}] no venue_settings row for ownerId=${ownerId}`);
+      return { pushed: false, reason: 'no_venue_settings' };
+    }
+    const missing: string[] = [];
+    if (!venue.nbiAccountId) missing.push('nbiAccountId');
+    if (!venue.nbiVenueId) missing.push('nbiVenueId');
+    if ((venue.nbiSyncEnabled ?? 0) !== 1) missing.push('nbiSyncEnabled=1');
+    if (missing.length) {
+      console.log(`[NBI push:${opts.source}] booking ${bookingId} skipped — missing: ${missing.join(', ')}`);
+      return { pushed: false, reason: `not_configured: ${missing.join(',')}` };
+    }
+
+    // Format venue-local date/time. Inline to avoid circular imports.
+    const tz = venue.timezone || 'Pacific/Auckland';
+    const eventDate = booking.eventDate ?? new Date();
+    const d = eventDate instanceof Date ? eventDate : new Date(eventDate);
+    const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    const timeStr = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+
+    const result = await createNbiBooking(
+      { accountId: venue.nbiAccountId!, venueId: venue.nbiVenueId!, serviceId: venue.nbiServiceId ?? undefined },
+      {
+        firstName: booking.firstName,
+        lastName: booking.lastName ?? '',
+        email: booking.email ?? '',
+        phone: (booking as any).phone ?? '',
+        date: dateStr,
+        time: timeStr,
+        covers: booking.guestCount ?? 2,
+        notes: [booking.eventType, booking.spaceName, booking.notes].filter(Boolean).join(' · '),
+        reference: `VF-${booking.id}`,
+      }
+    );
+    if (result.success && result.nbiBookingId) {
+      await db.update(bookings).set({ nbiBookingId: result.nbiBookingId }).where(eq(bookings.id, bookingId));
+      console.log(`[NBI push:${opts.source}] booking ${bookingId} → NBI #${result.nbiBookingId}`);
+      return { pushed: true, nbiBookingId: result.nbiBookingId };
+    }
+    console.warn(`[NBI push:${opts.source}] booking ${bookingId} push FAILED: ${result.error}`);
+    return { pushed: false, reason: `nbi_error: ${result.error}` };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[NBI push:${opts.source}] booking ${bookingId} unexpected error:`, msg);
+    return { pushed: false, reason: `exception: ${msg}` };
+  }
+}

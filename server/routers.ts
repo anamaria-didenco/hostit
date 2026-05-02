@@ -613,7 +613,7 @@ export const appRouter = router({
             const existingBookings = await getBookings(ctx.user.id);
             const alreadyBooked = existingBookings.some((b: any) => b.leadId === input.id);
             if (!alreadyBooked) {
-              await createBooking({
+              const created = await createBooking({
                 ownerId: ctx.user.id,
                 leadId: input.id,
                 firstName: lead.firstName,
@@ -624,6 +624,13 @@ export const appRouter = router({
                 guestCount: lead.guestCount ?? undefined,
                 status: "confirmed",
               });
+              // Push to NBI immediately so confirmed bookings created via
+              // lead status changes also appear in the NBI diary.
+              const newId = (created as any)?.id ?? (created as any)?.[0]?.id;
+              if (newId) {
+                const { pushBookingToNbi } = await import('./nowbookit');
+                await pushBookingToNbi(newId, ctx.user.id, { source: 'leads.updateStatus→booked' });
+              }
             }
           }
         }
@@ -1225,7 +1232,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (input.action === "accepted") {
           const lead = await getLeadById(proposal.leadId);
           if (lead) {
-            await createBooking({
+            const created = await createBooking({
               ownerId: proposal.ownerId,
               leadId: proposal.leadId,
               proposalId: proposal.id,
@@ -1241,6 +1248,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               depositNzd: proposal.depositNzd as any,
               status: "confirmed",
             });
+            // Push to NBI so accepted proposals appear in the NBI diary too.
+            const newId = (created as any)?.id ?? (created as any)?.[0]?.id;
+            if (newId) {
+              const { pushBookingToNbi } = await import('./nowbookit');
+              await pushBookingToNbi(newId, proposal.ownerId, { source: 'proposals.respond→accepted' });
+            }
             await updateLeadStatus(proposal.leadId, "booked");
             await addLeadActivity({
               leadId: proposal.leadId,
@@ -1311,47 +1324,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.status !== undefined) updates.status = rest.status;
         if (rest.notes !== undefined) updates.notes = rest.notes;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
-        // ── NowBookIt sync ──────────────────────────────────────────────────
+        // ── NowBookIt sync — fires when the booking transitions into 'confirmed' ──
         if (rest.status === 'confirmed') {
-          try {
-            const [updatedBooking] = await db.select().from(bookings)
-              .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
-            if (updatedBooking && !updatedBooking.nbiBookingId) {
-              const { venueSettings: vs } = await import('../drizzle/schema');
-              const [venue] = await db.select().from(vs)
-                .where(eq(vs.ownerId, ctx.user.id)).limit(1);
-              if (venue?.nbiAccountId && venue?.nbiVenueId && (venue?.nbiSyncEnabled ?? 0) === 1) {
-                const { createNbiBooking } = await import('./nowbookit');
-                const eventDate = updatedBooking.eventDate ?? new Date();
-                const { dateStr, timeStr } = formatVenueDateTime(eventDate);
-                const nbiResult = await createNbiBooking(
-                  { accountId: venue.nbiAccountId, venueId: venue.nbiVenueId, serviceId: venue.nbiServiceId ?? undefined },
-                  {
-                    firstName: updatedBooking.firstName,
-                    lastName: updatedBooking.lastName ?? '',
-                    email: updatedBooking.email ?? '',
-                    phone: (updatedBooking as any).phone ?? '',
-                    date: dateStr,
-                    time: timeStr,
-                    covers: updatedBooking.guestCount ?? 2,
-                    notes: [updatedBooking.eventType, updatedBooking.spaceName, updatedBooking.notes]
-                      .filter(Boolean).join(' · '),
-                    reference: `VF-${updatedBooking.id}`,
-                  }
-                );
-                if (nbiResult.success && nbiResult.nbiBookingId) {
-                  await db.update(bookings)
-                    .set({ nbiBookingId: nbiResult.nbiBookingId })
-                    .where(eq(bookings.id, id));
-                  console.log(`[NBI] Booking ${id} synced → NBI #${nbiResult.nbiBookingId}`);
-                } else {
-                  console.warn(`[NBI] Sync failed for booking ${id}:`, nbiResult.error);
-                }
-              }
-            }
-          } catch (nbiErr) {
-            console.error('[NBI] Unexpected error during sync:', nbiErr);
-          }
+          const { pushBookingToNbi } = await import('./nowbookit');
+          await pushBookingToNbi(id, ctx.user.id, { source: 'bookings.update' });
         }
         return { success: true };
       }),

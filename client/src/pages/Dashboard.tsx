@@ -1060,13 +1060,35 @@ export default function Dashboard() {
   }, [nbiServicesAuto]);
 
   const verifyNbiMutation = trpc.venue.verifyNbi.useMutation({
-    onSuccess: (data) => {
-      if (data.valid) {
-        const svc = (data as any).services ?? [];
-        setNbiServiceList(svc);
-        toast.success(`Connected to NowBookIt${svc.length ? ` — ${svc.length} service${svc.length === 1 ? '' : 's'} found` : ''}!`);
-      } else {
+    onSuccess: async (data) => {
+      if (!data.valid) {
         toast.error(`NowBookIt connection failed: ${data.error ?? 'Unknown error'}`);
+        return;
+      }
+      const svc = (data as any).services ?? [];
+      setNbiServiceList(svc);
+      // ── Auto-save credentials + enable auto-sync as soon as the test passes.
+      // This removes a footgun where users clicked TEST CONNECTION, saw the
+      // success toast, and assumed the integration was live — without ever
+      // hitting SAVE or the toggle. Critically, we await the save and only
+      // claim "auto-sync ON" once the DB write succeeded.
+      const accountId = (document.getElementById('nbi-account-id') as HTMLInputElement)?.value || '';
+      const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value || '';
+      const serviceId = (document.getElementById('nbi-service-id') as HTMLSelectElement)?.value || '';
+      if (!accountId || !venueId) {
+        toast.success(`Verified${svc.length ? ` · ${svc.length} service${svc.length === 1 ? '' : 's'}` : ''} — but no Account/Venue ID to save.`);
+        return;
+      }
+      try {
+        await updateSettings.mutateAsync({
+          nbiAccountId: accountId,
+          nbiVenueId: venueId,
+          nbiServiceId: serviceId || undefined,
+          nbiSyncEnabled: 1,
+        });
+        toast.success(`Connected — auto-sync ON${svc.length ? ` · ${svc.length} service${svc.length === 1 ? '' : 's'}` : ''}.`);
+      } catch (e: any) {
+        toast.error(`Verified, but couldn't save settings: ${e?.message ?? 'Unknown error'}. Please click SAVE manually.`);
       }
     },
     onError: (err) => toast.error(err.message || "Failed to verify NowBookIt credentials"),
