@@ -953,19 +953,24 @@ export default function Dashboard() {
       setSelectedBooking(null);
       utils.bookings.list.invalidate();
       utils.bookings.byMonth.invalidate();
+      utils.leads.eventsByMonth.invalidate();
+      utils.dashboard.stats.invalidate();
       toast.success('Event deleted');
     },
-    onError: () => toast.error('Failed to delete event'),
+    onError: (err: any) => toast.error(err?.message || 'Failed to delete event'),
   });
   const deleteLead = trpc.leads.delete.useMutation({
     onSuccess: () => {
       utils.leads.list.invalidate();
       utils.leads.overdue.invalidate();
+      utils.leads.eventsByMonth.invalidate();
+      utils.bookings.byMonth.invalidate();
       utils.dashboard.stats.invalidate();
       setSelectedLead(null);
+      setSelectedBooking(null);
       toast.success("Record deleted");
     },
-    onError: () => toast.error("Failed to delete record"),
+    onError: (err: any) => toast.error(err?.message || "Failed to delete record"),
   });
   const markRead = trpc.leads.markRead.useMutation({
     onSuccess: (_data, vars) => {
@@ -2918,15 +2923,25 @@ export default function Dashboard() {
                             ))}
                             {/* Lead/enquiry cards */}
                             {dayLeads.map((l: any) => (
-                              <button key={l.id}
-                                onClick={() => setSelectedBooking({ ...l, _isLead: true })}
-                                className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}
-                                title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
-                                <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
-                                {l.guestCount && <div className="opacity-70">{l.guestCount} guests</div>}
-                                <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
-                              </button>
+                              <div key={l.id} className="relative group/card w-full">
+                                <button
+                                  onClick={() => setSelectedBooking({ ...l, _isLead: true })}
+                                  className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}
+                                  title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
+                                  <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                                  {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
+                                  {l.guestCount && <div className="opacity-70">{l.guestCount} guests</div>}
+                                  <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                </button>
+                                {!isOverflow && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); if (confirm(`Delete enquiry from ${l.firstName} ${l.lastName ?? ''}? This cannot be undone.`)) deleteLead.mutate({ id: l.id }); }}
+                                    className="absolute top-0.5 right-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center"
+                                    title="Delete enquiry">
+                                    <X className="w-2 h-2" />
+                                  </button>
+                                )}
+                              </div>
                             ))}
                             {/* Add event button */}
                             {!isOverflow && (
@@ -3055,14 +3070,18 @@ export default function Dashboard() {
                                 ) : (
                                   <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} className="font-inter text-xs font-semibold px-3 py-1.5 border border-sage-green/40 text-sage-dark rounded-lg hover:bg-sage-tint transition-colors">View</button>
                                 )}
-                                {item._type === 'booking' && (
-                                  <button
-                                    onClick={() => { if (confirm(`Delete ${item.eventType || 'event'} for ${item.firstName}?`)) deleteBooking.mutate({ id: item.id }); }}
-                                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                    title="Delete event">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => {
+                                    const label = item._type === 'booking' ? 'event' : 'enquiry';
+                                    if (confirm(`Delete ${label} for ${item.firstName} ${item.lastName ?? ''}?`)) {
+                                      if (item._type === 'booking') deleteBooking.mutate({ id: item.id });
+                                      else deleteLead.mutate({ id: item.id });
+                                    }
+                                  }}
+                                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title={`Delete ${item._type === 'booking' ? 'event' : 'enquiry'}`}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -6284,6 +6303,15 @@ export default function Dashboard() {
                       <button onClick={() => { const lead = selectedBooking; setSelectedBooking(null); selectLead(lead); setTab('enquiries'); }}
                         className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs col-span-2">
                         <FileText className="w-3 h-3 text-gold" /> OPEN ENQUIRY
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete enquiry from ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
+                            deleteLead.mutate({ id: selectedBooking.id });
+                          }
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
+                        <Trash2 className="w-3 h-3" /> DELETE ENQUIRY
                       </button>
                     </>
                   ) : (
