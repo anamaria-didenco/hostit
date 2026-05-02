@@ -153,6 +153,26 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
     );
   }
   const noSpacesYet = !isLoading && (!spaces || spaces.length === 0);
+  // Empty-state — guide user to set up spaces in Settings rather than silently
+  // showing a useless dropdown. Still offer free-text fallback so the runsheet
+  // isn't blocked.
+  if (noSpacesYet) {
+    return (
+      <div className="flex flex-col gap-1.5 no-print">
+        <div className="border border-dashed border-gold/40 bg-linen/40 px-2.5 py-2 flex items-center justify-between gap-2">
+          <span className="font-dm text-xs text-ink/50">No spaces saved yet</span>
+          <a href="/spaces" target="_blank" rel="noopener noreferrer" className="font-bebas tracking-widest text-[10px] text-forest hover:underline whitespace-nowrap">+ ADD SPACES</a>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCustomMode(true)}
+          className="text-left font-dm text-[11px] text-ink/40 hover:text-forest hover:underline transition-colors"
+        >
+          or type a one-off space →
+        </button>
+      </div>
+    );
+  }
   return (
     <select
       value={value}
@@ -162,7 +182,7 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
       }}
       className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest text-sm h-9 px-2 bg-white font-dm no-print"
     >
-      <option value="">{noSpacesYet ? '— no saved spaces yet —' : '— select a space —'}</option>
+      <option value="">— select a space —</option>
       {spaces?.map((s: any) => (
         <option key={s.id} value={s.name}>{s.name}{s.capacitySeated ? ` (${s.capacitySeated} seated)` : ''}</option>
       ))}
@@ -302,25 +322,19 @@ export default function RunsheetBuilder() {
   const [rsBarOption, setRsBarOption] = useState<"bar_tab" | "cash_bar" | "bar_tab_then_cash" | "unlimited">("cash_bar");
   const [rsTabAmount, setRsTabAmount] = useState("");
   const [rsBarNotes, setRsBarNotes] = useState("");
-  const [rsDrinksMode, setRsDrinksMode] = useState<"select" | "notes">("select");
+  // Legacy: prior versions let users tick drinks from a hard-coded menu and add
+  // "custom drinks". The user has asked us to replace this with a single notes
+  // field. We keep the state so existing rows aren't dropped on save, and we
+  // surface them as read-only chips at the bottom of the notes panel until the
+  // user clears them.
   const [rsSelectedDrinks, setRsSelectedDrinks] = useState<string[]>([]);
   const [rsCustomDrinks, setRsCustomDrinks] = useState<{ name: string; description?: string; price?: number }[]>([]);
-  const [rsNewCustomDrink, setRsNewCustomDrink] = useState({ name: "", description: "", price: "" });
   const [drinksSaving, setDrinksSaving] = useState(false);
 
-  function toggleRsDrink(key: string) {
-    setRsSelectedDrinks(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  function clearLegacyDrinkSelections() {
+    setRsSelectedDrinks([]);
+    setRsCustomDrinks([]);
   }
-  function addRsCustomDrink() {
-    if (!rsNewCustomDrink.name.trim()) return;
-    setRsCustomDrinks(prev => [...prev, {
-      name: rsNewCustomDrink.name.trim(),
-      description: rsNewCustomDrink.description.trim() || undefined,
-      price: rsNewCustomDrink.price ? parseFloat(rsNewCustomDrink.price) : undefined,
-    }]);
-    setRsNewCustomDrink({ name: "", description: "", price: "" });
-  }
-  function removeRsCustomDrink(i: number) { setRsCustomDrinks(prev => prev.filter((_, idx) => idx !== i)); }
 
   // F&B
   const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'drinks' | 'checklist' | 'tableplan' | 'equipment' | 'costs'>('timeline');
@@ -642,7 +656,7 @@ export default function RunsheetBuilder() {
   })();
 
   // Parsed F&B courses from venue settings (with fallback)
-  const courses: string[] = (() => {
+  const venueCourses: string[] = (() => {
     if ((venueSettings as any)?.customCourses) {
       try {
         const parsed = JSON.parse((venueSettings as any).customCourses);
@@ -651,6 +665,51 @@ export default function RunsheetBuilder() {
     }
     return DEFAULT_COURSES;
   })();
+  // Per-runsheet ad-hoc courses the user adds via "+ NEW COURSE". These let
+  // them spin up a brand-new course (e.g. "Pre-dinner Bites") for one event
+  // without polluting the venue-wide course list.
+  //
+  // Persistence: empty courses (no items yet) are saved to localStorage keyed
+  // by booking ID so they survive page reloads. Once the user adds an item to
+  // a custom course, that course also appears naturally in the courses-derived-
+  // from-items list, so the localStorage entry becomes redundant but harmless.
+  const [extraCourses, setExtraCourses] = useState<string[]>([]);
+  const courses: string[] = [...venueCourses, ...extraCourses.filter(c => !venueCourses.includes(c))];
+
+  // Load extraCourses from localStorage on mount / when booking changes
+  useEffect(() => {
+    if (!bookingId) return;
+    try {
+      const raw = localStorage.getItem(`runsheet:${bookingId}:extraCourses`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setExtraCourses(parsed.filter(c => typeof c === 'string'));
+      }
+    } catch {}
+  }, [bookingId]);
+
+  // Persist extraCourses whenever they change so empty courses survive reloads
+  useEffect(() => {
+    if (!bookingId) return;
+    try {
+      if (extraCourses.length > 0) {
+        localStorage.setItem(`runsheet:${bookingId}:extraCourses`, JSON.stringify(extraCourses));
+      } else {
+        localStorage.removeItem(`runsheet:${bookingId}:extraCourses`);
+      }
+    } catch {}
+  }, [bookingId, extraCourses]);
+
+  function addNewCourse() {
+    const name = prompt('New course name (e.g. "Pre-dinner Bites", "Late Night")\n\nTip: add at least one item to keep this course saved with the runsheet.');
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    if (courses.includes(trimmed)) {
+      toast.error(`"${trimmed}" already exists`);
+      return;
+    }
+    setExtraCourses(prev => [...prev, trimmed]);
+  }
 
   // State for managing dietary options
   const [showDietaryManager, setShowDietaryManager] = useState(false);
@@ -862,6 +921,16 @@ export default function RunsheetBuilder() {
     { runsheetId: sheetId! },
     { enabled: !!sheetId }
   );
+  const pushRunsheetToNbi = trpc.bookings.pushToNbi.useMutation({
+    onSuccess: (data) => {
+      if (data.alreadyPushed) {
+        toast.success(`Already in NowBookIt (#${data.nbiBookingId})`);
+      } else {
+        toast.success(`Pushed to NowBookIt${data.nbiBookingId ? ` (#${data.nbiBookingId})` : ''}!`);
+      }
+    },
+    onError: (err) => toast.error(err.message || 'Failed to push to NowBookIt'),
+  });
   const createStaffLinkMutation = trpc.staffPortal.createLink.useMutation({
     onSuccess: () => { toast.success('Staff link created'); refetchStaffLinks(); setCreatingStaffLink(false); setNewStaffLinkLabel('Staff Link'); },
     onError: () => toast.error('Failed to create staff link'),
@@ -943,10 +1012,7 @@ export default function RunsheetBuilder() {
         if (dd.tabAmount) setRsTabAmount(String(dd.tabAmount));
         if (dd.selectedDrinks) setRsSelectedDrinks(dd.selectedDrinks);
         if (dd.customDrinks) setRsCustomDrinks(dd.customDrinks);
-        if (dd.barNotes) {
-          setRsBarNotes(dd.barNotes);
-          if (!dd.selectedDrinks?.length && !dd.customDrinks?.length) setRsDrinksMode("notes");
-        }
+        if (dd.barNotes) setRsBarNotes(dd.barNotes);
       }
     }
   }, [existing]);
@@ -1531,6 +1597,20 @@ export default function RunsheetBuilder() {
               <FileText className="w-3.5 h-3.5" /> STAFF SHEET PDF
             </button>
           )}
+          {effectiveBookingId && (
+            <button
+              onClick={() => {
+                if (!effectiveBookingId) return;
+                pushRunsheetToNbi.mutate({ id: effectiveBookingId });
+              }}
+              disabled={pushRunsheetToNbi.isPending}
+              title="Push this booking to NowBookIt"
+              className="font-bebas tracking-widest text-xs bg-[#6b98e7] hover:bg-[#5a85d4] text-white px-3 py-1.5 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+            >
+              <span className="font-bebas text-[10px] tracking-wider">NBI</span>
+              {pushRunsheetToNbi.isPending ? 'PUSHING…' : 'PUSH TO NOWBOOKIT'}
+            </button>
+          )}
           <Button
             onClick={handleSave}
             disabled={saving}
@@ -2050,7 +2130,7 @@ export default function RunsheetBuilder() {
           {[
             { id: 'timeline', label: 'TIMELINE', icon: <Clock className="w-4 h-4" />, count: items.length },
             { id: 'fnb', label: 'F&B SHEET', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
-            { id: 'drinks', label: 'DRINKS', icon: <Wine className="w-4 h-4" />, count: rsDrinksMode === 'notes' ? (rsBarNotes ? '✓' as any : undefined) : ((rsSelectedDrinks.length + rsCustomDrinks.length) || undefined) },
+            { id: 'drinks', label: 'DRINKS', icon: <Wine className="w-4 h-4" />, count: rsBarNotes ? ('✓' as any) : ((rsSelectedDrinks.length + rsCustomDrinks.length) || undefined) },
             { id: 'checklist', label: 'CHECKLIST', icon: <CheckSquare className="w-4 h-4" />, count: `${checkedCount}/${checklistItems.length}` },
             { id: 'tableplan', label: 'TABLE PLAN', icon: <LayoutGrid className="w-4 h-4" /> },
             { id: 'costs', label: 'COSTS', icon: <DollarSign className="w-4 h-4" />, count: costItems.length || undefined },
@@ -2716,6 +2796,13 @@ export default function RunsheetBuilder() {
                   >
                     <UtensilsCrossed className="w-3 h-3" /> ADD FROM CATALOGUE
                   </button>
+                  <button
+                    onClick={addNewCourse}
+                    className="font-bebas tracking-widest text-[10px] text-ink/60 hover:text-forest flex items-center gap-1 border border-gold/30 px-2.5 py-1 hover:bg-linen transition-colors"
+                    title="Create a new course header for this runsheet"
+                  >
+                    <Plus className="w-3 h-3" /> NEW COURSE
+                  </button>
                 </div>
               </div>
 
@@ -2850,8 +2937,9 @@ export default function RunsheetBuilder() {
                   {showPrepPlatingCol && <div>NOTES</div>}
                   <div className="no-print"></div>
                 </div>
-                {/* Group by course — derived from actual items so renamed courses still render */}
-                {[...new Set(fnbItems.map(i => i.course ?? 'Other'))]
+                {/* Group by course — derived from actual items + any extra empty courses
+                    the user added via "+ NEW COURSE" so empty headers still render */}
+                {[...new Set([...fnbItems.map(i => i.course ?? 'Other'), ...extraCourses])]
                   .sort((a, b) => {
                     const ai = courses.indexOf(a); const bi = courses.indexOf(b);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
@@ -3125,154 +3213,43 @@ export default function RunsheetBuilder() {
                 )}
               </div>
 
-              {/* Mode toggle: pick drinks vs notes */}
+              {/* Drinks / Bar Notes — single notes field replaces the old picker UI */}
               <div className="border-t border-gold/20 pt-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="font-bebas tracking-widest text-xs text-ink/40">DRINKS</div>
-                  <div className="flex border border-gold/30">
-                    <button
-                      onClick={() => setRsDrinksMode("select")}
-                      className={`px-3 py-1.5 font-bebas tracking-widest text-[11px] transition-colors ${rsDrinksMode === 'select' ? 'bg-forest text-cream' : 'bg-white text-ink/50 hover:text-ink'}`}
-                    >
-                      Pick from menu
-                    </button>
-                    <button
-                      onClick={() => setRsDrinksMode("notes")}
-                      className={`px-3 py-1.5 font-bebas tracking-widest text-[11px] transition-colors border-l border-gold/30 ${rsDrinksMode === 'notes' ? 'bg-forest text-cream' : 'bg-white text-ink/50 hover:text-ink'}`}
-                    >
-                      Notes only
-                    </button>
-                  </div>
-                </div>
-                {rsDrinksMode === 'notes' && (
-                  <div>
-                    <Textarea
-                      value={rsBarNotes}
-                      onChange={e => setRsBarNotes(e.target.value)}
-                      placeholder={`e.g. "Client will choose closer to the date"\n• Standard wine & beer package\n• Bartender to recommend cocktails on the night`}
-                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm font-dm min-h-[110px]"
-                    />
-                    <div className="font-dm text-[11px] text-ink/40 mt-1.5">These notes appear on the BEO instead of a drink list.</div>
+                <div className="font-bebas tracking-widest text-xs text-ink/40 mb-3">DRINKS / BAR NOTES</div>
+                <Textarea
+                  value={rsBarNotes}
+                  onChange={e => setRsBarNotes(e.target.value)}
+                  placeholder={`e.g. "Client will choose closer to the date"\n• Standard wine & beer package\n• Bartender to recommend cocktails on the night\n• Set up: 1× espresso martini station, 2× cocktail bartenders`}
+                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm font-dm min-h-[160px]"
+                />
+                <div className="font-dm text-[11px] text-ink/40 mt-1.5">Notes appear on the BEO and the live runsheet (Drinks panel).</div>
+
+                {/* Legacy data — only shown if a previous save left selections behind */}
+                {(rsSelectedDrinks.length > 0 || rsCustomDrinks.length > 0) && (
+                  <div className="mt-4 border border-amber-300 bg-amber-50/60 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-bebas tracking-widest text-xs text-amber-700">SAVED FROM OLD DRINK PICKER</div>
+                      <button
+                        onClick={() => { if (confirm('Clear these saved drink selections? They will be removed on next save.')) clearLegacyDrinkSelections(); }}
+                        className="font-bebas tracking-widest text-[10px] text-amber-700 hover:text-red-600 underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {rsSelectedDrinks.map(k => (
+                        <span key={k} className="bg-white text-amber-900 text-[10px] px-2 py-0.5 font-dm border border-amber-300">
+                          {k.replace(/_/g, ' ')}
+                        </span>
+                      ))}
+                      {rsCustomDrinks.map((d, i) => (
+                        <span key={`c${i}`} className="bg-white text-amber-900 text-[10px] px-2 py-0.5 font-dm border border-amber-300">{d.name}</span>
+                      ))}
+                    </div>
+                    <div className="font-dm text-[10px] text-amber-700/70 mt-2">Tip: copy anything you want to keep into the notes above, then clear.</div>
                   </div>
                 )}
               </div>
-
-              {/* Drinks Menu (only when in select mode) */}
-              {rsDrinksMode === 'select' && (
-              <>
-              <div className="space-y-5">
-                {DRINKS_MENU.map(cat => (
-                  <div key={cat.category}>
-                    <div className="font-cormorant italic text-sm text-forest mb-2 border-b border-forest/20 pb-1">{cat.category}</div>
-                    <div className="space-y-1.5">
-                      {cat.items.map((item: any) => (
-                        <label
-                          key={item.key}
-                          className={`flex items-start gap-3 p-2 cursor-pointer transition-colors ${
-                            rsSelectedDrinks.includes(item.key) ? 'bg-forest/5 border border-forest/20' : 'hover:bg-linen border border-transparent'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={rsSelectedDrinks.includes(item.key)}
-                            onChange={() => toggleRsDrink(item.key)}
-                            className="mt-0.5 accent-forest"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-dm text-sm text-ink">{item.name}</div>
-                            {item.description && <div className="font-dm text-xs text-ink/50">{item.description}</div>}
-                          </div>
-                          <div className="font-dm text-xs text-ink/40 shrink-0 text-right">
-                            {item.price ? `$${item.price}` : ''}
-                            {item.priceGlass ? `$${item.priceGlass}/glass` : ''}
-                            {item.priceBottle ? ` · $${item.priceBottle}/btl` : ''}
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Custom Drinks */}
-              <div>
-                <div className="font-bebas tracking-widest text-xs text-ink/40 mb-2">CUSTOM DRINKS</div>
-                {rsCustomDrinks.map((d, i) => (
-                  <div key={i} className="flex items-center gap-2 mb-2 p-2 bg-linen border border-gold/30">
-                    <div className="flex-1 min-w-0">
-                      <span className="font-dm text-sm text-ink">{d.name}</span>
-                      {d.description && <span className="font-dm text-xs text-ink/50 ml-2">{d.description}</span>}
-                      {d.price && <span className="font-dm text-xs text-forest ml-2">${d.price}</span>}
-                    </div>
-                    <button onClick={() => removeRsCustomDrink(i)} className="text-ink/30 hover:text-red-500 transition-colors">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  <Input
-                    value={rsNewCustomDrink.name}
-                    onChange={e => setRsNewCustomDrink(p => ({ ...p, name: e.target.value }))}
-                    placeholder="Drink name"
-                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
-                  />
-                  <Input
-                    value={rsNewCustomDrink.description}
-                    onChange={e => setRsNewCustomDrink(p => ({ ...p, description: e.target.value }))}
-                    placeholder="Description (optional)"
-                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
-                  />
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      value={rsNewCustomDrink.price}
-                      onChange={e => setRsNewCustomDrink(p => ({ ...p, price: e.target.value }))}
-                      placeholder="Price"
-                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm flex-1"
-                    />
-                    <button
-                      onClick={addRsCustomDrink}
-                      className="bg-forest text-white font-bebas tracking-widest text-xs px-3 hover:bg-forest/80 transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Summary of selected */}
-              {(rsSelectedDrinks.length > 0 || rsCustomDrinks.length > 0) && (
-                <div className="border border-gold/30 bg-linen/50 p-4">
-                  <div className="font-bebas tracking-widest text-xs text-ink/40 mb-2">SELECTED FOR EVENT</div>
-                  <div className="text-xs font-dm text-ink/70 mb-2">
-                    <span className="font-semibold capitalize">{rsBarOption.replace(/_/g, ' ')}</span>
-                    {rsTabAmount && (rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash') ? ` — Bar tab: $${Number(rsTabAmount).toLocaleString('en-NZ')}` : ''}
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {rsSelectedDrinks.map(k => {
-                      const found = DRINKS_MENU.flatMap(c => c.items).find((i: any) => i.key === k);
-                      return (
-                        <span key={k} className="bg-forest/10 text-forest text-[10px] px-2 py-0.5 font-dm border border-forest/20">
-                          {found ? found.name : k.replace(/_/g, ' ')}
-                        </span>
-                      );
-                    })}
-                    {rsCustomDrinks.map((d, i) => (
-                      <span key={i} className="bg-gold/10 text-ink text-[10px] px-2 py-0.5 font-dm border border-gold/30">{d.name}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              </>
-              )}
-
-              {/* Notes summary when in notes mode */}
-              {rsDrinksMode === 'notes' && rsBarNotes && (
-                <div className="border border-gold/30 bg-linen/50 p-4">
-                  <div className="font-bebas tracking-widest text-xs text-ink/40 mb-2">BAR NOTES</div>
-                  <div className="text-xs font-dm text-ink/70 whitespace-pre-wrap">{rsBarNotes}</div>
-                </div>
-              )}
             </div>
           </div>
         )}

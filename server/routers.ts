@@ -61,7 +61,7 @@ export const appRouter = router({
           delete safe.smtpFromEmail; delete safe.smtpFromName; delete safe.smtpSecure;
           delete safe.notificationEmail;
           delete safe.nbiApiKey; delete safe.nbiAccountId; delete safe.nbiVenueId;
-          delete safe.nbiServiceId; delete safe.nbiSyncEnabled; delete safe.nbiWebhookSecret;
+          delete safe.nbiServiceId; delete safe.nbiSectionId; delete safe.nbiSyncEnabled; delete safe.nbiWebhookSecret;
           delete safe.automatedTaskRules;
           return safe;
         }
@@ -137,6 +137,7 @@ export const appRouter = router({
         nbiVenueId: z.string().optional(),
         nbiAccountId: z.string().optional(),
         nbiServiceId: z.string().optional(),
+        nbiSectionId: z.string().optional(),
         nbiSyncEnabled: z.number().optional(),
         emailSignature: z.string().optional(),
         emailSignatureLogo: z.string().optional(),
@@ -1371,11 +1372,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!venue?.nbiAccountId || !venue?.nbiVenueId) {
           throw new Error('NowBookIt is not connected. Add your Account ID and Venue ID in Settings → Integrations.');
         }
+        if (!booking.eventDate) {
+          throw new Error('This booking has no event date set. Add an event date and time before pushing to NowBookIt.');
+        }
         const { createNbiBooking } = await import('./nowbookit');
-        const eventDate = booking.eventDate ?? new Date();
+        const eventDate = booking.eventDate;
         const { dateStr, timeStr } = formatVenueDateTime(eventDate);
         const result = await createNbiBooking(
-          { accountId: venue.nbiAccountId, venueId: venue.nbiVenueId, serviceId: venue.nbiServiceId ?? undefined },
+          {
+            accountId: venue.nbiAccountId,
+            venueId: venue.nbiVenueId,
+            serviceId: venue.nbiServiceId ?? undefined,
+            sectionId: (venue as any).nbiSectionId ?? undefined,
+          },
           {
             firstName: booking.firstName,
             lastName: booking.lastName ?? '',

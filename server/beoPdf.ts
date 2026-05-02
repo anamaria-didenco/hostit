@@ -455,13 +455,14 @@ export async function handleBeoPdf(req: Request, res: Response) {
     background: #ffffff;
     color: #6b98e7;
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    padding: 3px 10px;
-    margin-left: 6px;
+    font-size: 14px;
+    letter-spacing: 0.16em;
+    padding: 4px 12px;
+    margin-left: 10px;
     vertical-align: middle;
-    border: 1.5px solid #ffffff;
+    border: 2px solid #ffffff;
     font-weight: 700;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
   }
 
   /* ── Cards ── */
@@ -629,10 +630,19 @@ export async function handleBeoPdf(req: Request, res: Response) {
   }
 
   @media print {
-    body { background: white; }
+    /* Page size only — margins are controlled by Puppeteer's PDF options
+       (server/beoPdf.ts ~line 711) so leaving margin out of @page avoids
+       conflicting rules between Chromium's CSS engine and Puppeteer. */
+    @page { size: A4 portrait; }
+    body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .card { page-break-inside: avoid; break-inside: avoid; }
     .fnb-row, .tl-row, .dietary-item, .detail-row { page-break-inside: avoid; break-inside: avoid; }
     .course-group { page-break-after: avoid; break-after: avoid; }
+    .doc-header { page-break-after: avoid; break-after: avoid; }
+    .details-row { page-break-inside: avoid; break-inside: avoid; }
+    .card-header { page-break-after: avoid; break-after: avoid; }
+    /* Force heavy backgrounds (forest/blue) to actually print on most browsers */
+    .doc-header, .card-header, .venue-area-chip, .status-badge { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   }
 </style>
 </head>

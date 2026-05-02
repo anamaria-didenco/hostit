@@ -300,12 +300,12 @@ export default function ShiftRunsheetLive() {
                       {(venueAreaLabel || ev.spaceName) && (
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
                           {venueAreaLabel && (
-                            <span className="bg-[#6b98e7] text-white font-bebas tracking-widest text-[10px] px-2 py-1 rounded inline-flex items-center gap-1">
-                              <MapPin className="w-3 h-3" />{venueAreaLabel.toUpperCase()}
+                            <span className="bg-[#6b98e7] text-white font-bebas tracking-widest text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5 shadow-sm">
+                              <MapPin className="w-4 h-4" />{venueAreaLabel.toUpperCase()}
                             </span>
                           )}
                           {ev.spaceName && (
-                            <span className="font-dm text-[10px] text-stone-400">{ev.spaceName}</span>
+                            <span className="font-dm text-[11px] text-stone-500 font-medium">{ev.spaceName}</span>
                           )}
                         </div>
                       )}

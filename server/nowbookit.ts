@@ -34,6 +34,8 @@ export interface NbiCredentials {
   venueId: string;
   /** preferred service id; if omitted we pick the first online service */
   serviceId?: string;
+  /** preferred section/area id within the chosen service (e.g. "Bar Area"). Falls back to first section. */
+  sectionId?: string;
 }
 
 export interface NbiService {
@@ -137,7 +139,8 @@ export async function listNbiServices(
  */
 function pickBestTime(
   service: any,
-  desired: string // "HH:MM"
+  desired: string, // "HH:MM"
+  preferredSectionId?: string
 ): { time: string; sectionId: string } | null {
   const times: any[] = (service?.times ?? []).filter((t: any) => !t.expired && !t.isBlockOut);
   if (!times.length) return null;
@@ -154,8 +157,12 @@ function pickBestTime(
       best = t;
     }
   }
-  const section = (best.sections ?? [])[0];
-  return { time: best.time, sectionId: section?.id ?? "all" };
+  // Prefer the user-configured section (e.g. "Bar Area") if it's present in this slot.
+  // Otherwise fall back to the first section returned by NBI, otherwise "all".
+  const sections: any[] = best.sections ?? [];
+  const matched = preferredSectionId ? sections.find((s: any) => String(s.id) === String(preferredSectionId)) : null;
+  const sectionId = matched?.id ?? sections[0]?.id ?? "all";
+  return { time: best.time, sectionId };
 }
 
 /**
@@ -187,12 +194,16 @@ export async function createNbiBooking(
     const services: any[] = sched?.services ?? [];
     if (!services.length) return { success: false, error: "NowBookIt returned no services for that date" };
 
+    // Normalize string comparison — NBI sometimes returns numeric ids while we
+    // persist the configured value as a string from the <select>. Without this
+    // the configured "Drinks & Snacks" service can silently fall back to first
+    // online service, which then routes bookings to the wrong section/area.
     const service =
-      (creds.serviceId && services.find((s) => s.id === creds.serviceId)) ||
+      (creds.serviceId && services.find((s) => String(s.id) === String(creds.serviceId))) ||
       services.find((s) => s.online !== false) ||
       services[0];
 
-    const slot = pickBestTime(service, payload.time);
+    const slot = pickBestTime(service, payload.time, creds.sectionId);
     if (!slot) {
       return { success: false, error: `No available slots for "${service.name}" on ${payload.date}` };
     }
@@ -305,15 +316,27 @@ export async function pushBookingToNbi(
       return { pushed: false, reason: `not_configured: ${missing.join(',')}` };
     }
 
+    // Refuse to push a booking with no event date — falling back to "now" would
+    // create a NBI reservation for today at the current time, which is a wrong-
+    // date push that's hard to spot. Better to surface the gap than corrupt NBI.
+    if (!booking.eventDate) {
+      console.warn(`[NBI push:${opts.source}] booking ${bookingId} skipped — no eventDate set`);
+      return { pushed: false, reason: 'missing_event_date' };
+    }
     // Format venue-local date/time. Inline to avoid circular imports.
     const tz = venue.timezone || 'Pacific/Auckland';
-    const eventDate = booking.eventDate ?? new Date();
+    const eventDate = booking.eventDate;
     const d = eventDate instanceof Date ? eventDate : new Date(eventDate);
     const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
     const timeStr = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
 
     const result = await createNbiBooking(
-      { accountId: venue.nbiAccountId!, venueId: venue.nbiVenueId!, serviceId: venue.nbiServiceId ?? undefined },
+      {
+        accountId: venue.nbiAccountId!,
+        venueId: venue.nbiVenueId!,
+        serviceId: venue.nbiServiceId ?? undefined,
+        sectionId: (venue as any).nbiSectionId ?? undefined,
+      },
       {
         firstName: booking.firstName,
         lastName: booking.lastName ?? '',

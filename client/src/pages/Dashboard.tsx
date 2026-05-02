@@ -1045,7 +1045,8 @@ export default function Dashboard() {
     onSuccess: () => toast.success("Test email sent! Check your inbox."),
     onError: (err) => toast.error(err.message || "Failed to send test email"),
   });
-  const [nbiServiceList, setNbiServiceList] = useState<{ id: string; name: string; serviceType: string; duration: number }[]>([]);
+  const [nbiServiceList, setNbiServiceList] = useState<{ id: string; name: string; serviceType: string; duration: number; sections?: { id: string; name: string }[] }[]>([]);
+  const [nbiSelectedServiceId, setNbiSelectedServiceId] = useState<string>('');
   // Auto-load NBI services when integrations tab opens with saved credentials
   const nbiAccountIdSaved = (venueSettings as any)?.nbiAccountId as string | undefined;
   const nbiVenueIdSaved = (venueSettings as any)?.nbiVenueId as string | undefined;
@@ -1075,6 +1076,7 @@ export default function Dashboard() {
       const accountId = (document.getElementById('nbi-account-id') as HTMLInputElement)?.value || '';
       const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value || '';
       const serviceId = (document.getElementById('nbi-service-id') as HTMLSelectElement)?.value || '';
+      const sectionId = (document.getElementById('nbi-section-id') as HTMLSelectElement)?.value || '';
       if (!accountId || !venueId) {
         toast.success(`Verified${svc.length ? ` · ${svc.length} service${svc.length === 1 ? '' : 's'}` : ''} — but no Account/Venue ID to save.`);
         return;
@@ -1084,6 +1086,7 @@ export default function Dashboard() {
           nbiAccountId: accountId,
           nbiVenueId: venueId,
           nbiServiceId: serviceId || undefined,
+          nbiSectionId: sectionId || undefined,
           nbiSyncEnabled: 1,
         });
         toast.success(`Connected — auto-sync ON${svc.length ? ` · ${svc.length} service${svc.length === 1 ? '' : 's'}` : ''}.`);
@@ -5016,20 +5019,46 @@ export default function Dashboard() {
                           />
                         </div>
                       </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DEFAULT SERVICE (optional)</label>
-                        <select
-                          id="nbi-service-id"
-                          defaultValue={(venueSettings as any)?.nbiServiceId ?? ''}
-                          className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest"
-                        >
-                          <option value="">Auto-pick first available service</option>
-                          {(nbiServiceList ?? []).map((s: any) => (
-                            <option key={s.id} value={s.id}>{s.name} — {s.serviceType} ({s.duration} min)</option>
-                          ))}
-                        </select>
-                        <p className="font-dm text-[11px] text-ink/50 mt-1">Hit "Test Connection" to load your services from NowBookIt, then pick which one new VenueFlow bookings should be created under.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DEFAULT SERVICE</label>
+                          <select
+                            id="nbi-service-id"
+                            defaultValue={(venueSettings as any)?.nbiServiceId ?? ''}
+                            onChange={(e) => {
+                              // Reset section when service changes — sections are per-service.
+                              const sectionEl = document.getElementById('nbi-section-id') as HTMLSelectElement | null;
+                              if (sectionEl) sectionEl.value = '';
+                              // Force a re-render of the section list by updating local state.
+                              setNbiSelectedServiceId(e.target.value);
+                            }}
+                            className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest"
+                          >
+                            <option value="">Auto-pick first available</option>
+                            {(nbiServiceList ?? []).map((s: any) => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SECTION / AREA</label>
+                          <select
+                            id="nbi-section-id"
+                            defaultValue={(venueSettings as any)?.nbiSectionId ?? ''}
+                            className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest"
+                          >
+                            <option value="">Auto-pick first section</option>
+                            {(() => {
+                              const selectedSvcId = nbiSelectedServiceId || (venueSettings as any)?.nbiServiceId || '';
+                              const svc = (nbiServiceList ?? []).find((s: any) => s.id === selectedSvcId) || (nbiServiceList ?? [])[0];
+                              return ((svc?.sections ?? []) as any[]).map((sec: any) => (
+                                <option key={sec.id} value={sec.id}>{sec.name}</option>
+                              ));
+                            })()}
+                          </select>
+                        </div>
                       </div>
+                      <p className="font-dm text-[11px] text-ink/50 -mt-2">Pick the service (e.g. <em>Drinks &amp; Snacks</em>) and the section/area in your venue (e.g. <em>Bar Area Level 1</em>) where new VenueFlow bookings should land.</p>
                       <div className="flex items-center justify-between">
                         <label className="flex items-center gap-3 cursor-pointer select-none">
                           <div
@@ -5039,7 +5068,8 @@ export default function Dashboard() {
                               const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value || (venueSettings as any)?.nbiVenueId || '';
                               if (!accountId || !venueId) { toast.error('Enter your Account ID and Venue ID first'); return; }
                               const serviceId = (document.getElementById('nbi-service-id') as HTMLSelectElement)?.value || '';
-                              updateSettings.mutate({ nbiAccountId: accountId, nbiVenueId: venueId, nbiServiceId: serviceId, nbiSyncEnabled: nbiEnabled ? 0 : 1 });
+                              const sectionId = (document.getElementById('nbi-section-id') as HTMLSelectElement)?.value || '';
+                              updateSettings.mutate({ nbiAccountId: accountId, nbiVenueId: venueId, nbiServiceId: serviceId, nbiSectionId: sectionId || undefined, nbiSyncEnabled: nbiEnabled ? 0 : 1 });
                             }}
                           >
                             <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${nbiEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -5064,7 +5094,8 @@ export default function Dashboard() {
                               const accountId = (document.getElementById('nbi-account-id') as HTMLInputElement)?.value;
                               const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value;
                               const serviceId = (document.getElementById('nbi-service-id') as HTMLSelectElement)?.value;
-                              updateSettings.mutate({ nbiAccountId: accountId || undefined, nbiVenueId: venueId || undefined, nbiServiceId: serviceId || undefined });
+                              const sectionId = (document.getElementById('nbi-section-id') as HTMLSelectElement)?.value;
+                              updateSettings.mutate({ nbiAccountId: accountId || undefined, nbiVenueId: venueId || undefined, nbiServiceId: serviceId || undefined, nbiSectionId: sectionId || undefined });
                             }}
                             disabled={updateSettings.isPending}
                             className="font-bebas tracking-widest text-xs px-4 py-2 bg-forest text-cream hover:bg-forest/90 rounded disabled:opacity-50"
