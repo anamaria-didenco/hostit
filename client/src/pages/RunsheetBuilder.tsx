@@ -127,10 +127,10 @@ const BAR_OPTIONS = [
 ];
 
 function SpacePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: spaces } = trpc.spaces.list.useQuery();
+  const { data: spaces, isLoading } = trpc.spaces.list.useQuery();
   const [customMode, setCustomMode] = useState(false);
-  const isCustom = value && spaces && !spaces.some((s: any) => s.name === value);
-  React.useEffect(() => { if (isCustom) setCustomMode(true); }, [isCustom]);
+  const matchesSaved = !!value && !!spaces && spaces.some((s: any) => s.name === value);
+  // If user is typing a custom value, show free-text mode
   if (customMode) {
     return (
       <div className="flex gap-1">
@@ -139,6 +139,7 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
           onChange={e => onChange(e.target.value)}
           placeholder="Type a custom space..."
           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+          autoFocus
         />
         <button
           type="button"
@@ -151,6 +152,7 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
       </div>
     );
   }
+  const noSpacesYet = !isLoading && (!spaces || spaces.length === 0);
   return (
     <select
       value={value}
@@ -160,10 +162,13 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
       }}
       className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest text-sm h-9 px-2 bg-white font-dm no-print"
     >
-      <option value="">— select a space —</option>
+      <option value="">{noSpacesYet ? '— no saved spaces yet —' : '— select a space —'}</option>
       {spaces?.map((s: any) => (
         <option key={s.id} value={s.name}>{s.name}{s.capacitySeated ? ` (${s.capacitySeated} seated)` : ''}</option>
       ))}
+      {value && !matchesSaved && (
+        <option value={value}>{value} (custom)</option>
+      )}
       <option value="__custom__">+ Custom / other...</option>
     </select>
   );
@@ -340,9 +345,14 @@ export default function RunsheetBuilder() {
   const [floorPlanSectionOpen, setFloorPlanSectionOpen] = useState(false);
 
   // Section ordering and visibility (persisted to localStorage)
+  // Note: 'dietary' was removed — it now lives as a sub-tab inside the F&B tab.
   const [sectionOrder, setSectionOrder] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('vfhq_rs_section_order') || '["setup","dietary"]'); }
-    catch { return ['setup', 'dietary']; }
+    try {
+      const raw = JSON.parse(localStorage.getItem('vfhq_rs_section_order') || '["setup"]');
+      // Strip legacy 'dietary' entry so DnD model matches what's actually rendered.
+      return Array.isArray(raw) ? raw.filter((s: string) => s !== 'dietary') : ['setup'];
+    }
+    catch { return ['setup']; }
   });
   const [hiddenSections, setHiddenSections] = useState<Set<string>>(() => {
     try {
@@ -670,6 +680,9 @@ export default function RunsheetBuilder() {
     updateVenueMutation.mutate({ customSetupTemplates: JSON.stringify(editingSetups) });
     setShowSetupManager(false);
   }
+
+  // F&B sub-tab navigation (Items vs Dietaries)
+  const [fnbSubTab, setFnbSubTab] = useState<'items' | 'dietaries'>('items');
 
   // F&B column visibility toggles
   const [showDietaryCol, setShowDietaryCol] = useState(true);
@@ -1870,7 +1883,10 @@ export default function RunsheetBuilder() {
                 </SortableSection>
               );
 
-              if (sectionId === 'dietary') return (
+              // Dietaries now live inside the F&B tab as a sub-tab — skip top-level rendering.
+              if (sectionId === 'dietary') return null;
+              // (legacy block kept below but unreachable; renderable if needed in future)
+              if (false && sectionId === 'dietary') return (
                 <SortableSection key="dietary" id="dietary">
                   <div className={`bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
@@ -2371,11 +2387,162 @@ export default function RunsheetBuilder() {
               </div>
             </div>
 
+            {/* Sub-tab nav: F&B Items vs Dietaries */}
+            <div className="flex border-b border-gold/30 no-print bg-linen/40">
+              <button
+                onClick={() => setFnbSubTab('items')}
+                className={`px-5 py-2.5 font-bebas tracking-widest text-xs transition-colors flex items-center gap-2 ${
+                  fnbSubTab === 'items'
+                    ? 'bg-white text-forest border-b-2 border-forest -mb-px'
+                    : 'text-ink/50 hover:text-ink hover:bg-white/50'
+                }`}
+              >
+                <UtensilsCrossed className="w-3.5 h-3.5" />
+                MENU & SERVICE
+                <span className={`text-[10px] px-1.5 py-0.5 ${fnbSubTab === 'items' ? 'bg-forest/10 text-forest' : 'bg-ink/5 text-ink/40'}`}>{fnbItems.length}</span>
+              </button>
+              <button
+                onClick={() => setFnbSubTab('dietaries')}
+                className={`px-5 py-2.5 font-bebas tracking-widest text-xs transition-colors flex items-center gap-2 ${
+                  fnbSubTab === 'dietaries'
+                    ? 'bg-white text-forest border-b-2 border-forest -mb-px'
+                    : 'text-ink/50 hover:text-ink hover:bg-white/50'
+                }`}
+              >
+                <Leaf className="w-3.5 h-3.5" />
+                DIETARY REQS
+                <span className={`text-[10px] px-1.5 py-0.5 ${fnbSubTab === 'dietaries' ? 'bg-forest/10 text-forest' : 'bg-ink/5 text-ink/40'}`}>{dietaries.length}</span>
+              </button>
+            </div>
+
+            {/* Dietaries sub-tab content */}
+            {fnbSubTab === 'dietaries' && (
+              <div className="px-5 pt-4 pb-5 space-y-4 no-print">
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <span className="font-bebas tracking-widest text-sm text-forest">DIETARY REQUIREMENTS</span>
+                    <p className="font-dm text-xs text-ink/40 mt-0.5">Tag each guest's dietary needs — surfaces in BEO and on the F&B print sheet.</p>
+                  </div>
+                  <button
+                    onClick={openDietaryManager}
+                    className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
+                  >
+                    <Settings2 className="w-3 h-3" /> CUSTOMISE OPTIONS
+                  </button>
+                </div>
+                <div>
+                  <span className="font-bebas tracking-widest text-[10px] text-ink/40 mb-2 block">QUICK ADD</span>
+                  <div className="flex flex-wrap gap-2">
+                    {activeDietaryOptions.map(d => (
+                      <button
+                        key={d}
+                        onClick={() => {
+                          if (!dietaries.find(x => x.name === d)) {
+                            setDietaries(prev => [...prev, { name: d, count: 1 }]);
+                          }
+                        }}
+                        className={`text-xs font-bebas tracking-widest px-3 py-1.5 border transition-colors ${
+                          dietaries.find(x => x.name === d)
+                            ? "bg-forest text-cream border-forest"
+                            : "border-forest/30 text-forest hover:bg-forest/5"
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {dietaries.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {dietaries.map((d, idx) => (
+                      <div key={idx} className="border border-gold/30 bg-linen/40 p-3 group relative">
+                        <button
+                          onClick={() => removeDietary(idx)}
+                          className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                        <div className="flex items-end gap-2 mb-2">
+                          <input
+                            type="number" min={1}
+                            value={d.count}
+                            onChange={e => updateDietary(idx, "count", Number(e.target.value))}
+                            className="font-cormorant text-3xl font-semibold text-forest bg-transparent border-0 focus:outline-none w-16 leading-none"
+                          />
+                          <span className="font-bebas tracking-widest text-xs text-ink/40 mb-1">GUESTS</span>
+                        </div>
+                        <input
+                          value={d.name}
+                          onChange={e => updateDietary(idx, "name", e.target.value)}
+                          className="font-dm text-sm font-semibold text-ink bg-transparent border-0 focus:outline-none w-full"
+                        />
+                        <input
+                          value={d.notes ?? ""}
+                          onChange={e => updateDietary(idx, "notes", e.target.value)}
+                          placeholder="Notes..."
+                          className="w-full font-dm text-xs text-ink/40 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    value={newDietary.name}
+                    onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Add requirement..."
+                    className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                    onKeyDown={e => e.key === "Enter" && addDietary()}
+                  />
+                  <Input
+                    type="number" min={1}
+                    value={newDietary.count}
+                    onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
+                    placeholder="Count"
+                    className="w-20 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                  />
+                  <Input
+                    value={newDietary.notes}
+                    onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Notes (optional)"
+                    className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                  />
+                  <Button
+                    onClick={addDietary}
+                    className="bg-forest hover:bg-forest/90 text-cream rounded-none font-bebas tracking-widest text-xs gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> ADD
+                  </Button>
+                </div>
+                {dietaries.length === 0 && (
+                  <div className="text-center py-3 text-ink/30 font-dm text-sm">No dietary requirements recorded</div>
+                )}
+              </div>
+            )}
+
             {/* Print F&B header */}
             <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-forest">
               <UtensilsCrossed className="w-4 h-4 text-white" />
               <span className="font-bebas tracking-widest text-sm text-white">F&B SHEET</span>
             </div>
+
+            {/* Print: Dietary requirements summary at top of F&B sheet */}
+            {dietaries.length > 0 && (
+              <div className="hidden print:block px-5 py-3 border-b border-gold/30">
+                <div className="font-bebas tracking-widest text-xs text-forest mb-2">DIETARY REQUIREMENTS</div>
+                <div className="flex flex-wrap gap-2">
+                  {dietaries.map((d, i) => (
+                    <div key={i} className="border border-gold/30 px-3 py-1.5 text-sm font-dm">
+                      <span className="font-semibold">{d.count}×</span> {d.name}
+                      {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Items sub-tab wrapper */}
+            <div className={fnbSubTab === 'items' ? '' : 'hidden print:block'}>
 
             {/* ── PROPOSAL F&B SUMMARY ─────────────────────────────────── */}
             {linkedProposalId && (proposalDrinks || (proposalQuote?.items && proposalQuote.items.length > 0) || (linkedProposal?.lineItems)) && (
@@ -2886,6 +3053,8 @@ export default function RunsheetBuilder() {
                 <EventSpendSection bookingId={effectiveBookingId} />
               </div>
             )}
+
+            </div>{/* /Items sub-tab wrapper */}
           </div>
         </div>
 

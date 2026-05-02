@@ -15,6 +15,19 @@ import {
   getDashboardStats,
 } from "./db";
 
+/**
+ * Format a stored event timestamp into the venue's local date + time strings
+ * suitable for sending to NowBookIt. NowBookIt expects naive local time, but
+ * Postgres stores UTC, so we convert via Intl with the venue's timezone.
+ */
+function formatVenueDateTime(eventDate: Date | string, timeZone: string = "Pacific/Auckland"): { dateStr: string; timeStr: string } {
+  const d = eventDate instanceof Date ? eventDate : new Date(eventDate);
+  // en-CA gives YYYY-MM-DD; en-GB hour12:false gives HH:MM
+  const dateStr = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  const timeStr = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+  return { dateStr, timeStr };
+}
+
 export const appRouter = router({
   system: systemRouter,
 
@@ -107,6 +120,8 @@ export const appRouter = router({
         formSuccessMessage: z.string().optional(),
         nbiApiKey: z.string().optional(),
         nbiVenueId: z.string().optional(),
+        nbiAccountId: z.string().optional(),
+        nbiServiceId: z.string().optional(),
         nbiSyncEnabled: z.number().optional(),
         emailSignature: z.string().optional(),
         emailSignatureLogo: z.string().optional(),
@@ -203,10 +218,17 @@ export const appRouter = router({
       }),
 
     verifyNbi: protectedProcedure
-      .input(z.object({ apiKey: z.string(), venueId: z.string() }))
+      .input(z.object({ accountId: z.string(), venueId: z.string() }))
       .mutation(async ({ input }) => {
         const { verifyNbiCredentials } = await import('./nowbookit');
-        return verifyNbiCredentials({ apiKey: input.apiKey, venueId: input.venueId });
+        return verifyNbiCredentials({ accountId: input.accountId, venueId: input.venueId });
+      }),
+
+    listNbiServices: protectedProcedure
+      .input(z.object({ accountId: z.string(), venueId: z.string(), date: z.string().optional() }))
+      .query(async ({ input }) => {
+        const { listNbiServices } = await import('./nowbookit');
+        return listNbiServices({ accountId: input.accountId, venueId: input.venueId }, input.date);
       }),
   }),
 
@@ -1243,13 +1265,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               const { venueSettings: vs } = await import('../drizzle/schema');
               const [venue] = await db.select().from(vs)
                 .where(eq(vs.ownerId, ctx.user.id)).limit(1);
-              if (venue?.nbiApiKey && venue?.nbiVenueId && (venue?.nbiSyncEnabled ?? 0) === 1) {
+              if (venue?.nbiAccountId && venue?.nbiVenueId && (venue?.nbiSyncEnabled ?? 0) === 1) {
                 const { createNbiBooking } = await import('./nowbookit');
                 const eventDate = updatedBooking.eventDate ?? new Date();
-                const dateStr = new Date(eventDate).toISOString().slice(0, 10);
-                const timeStr = new Date(eventDate).toTimeString().slice(0, 5);
+                const { dateStr, timeStr } = formatVenueDateTime(eventDate);
                 const nbiResult = await createNbiBooking(
-                  { apiKey: venue.nbiApiKey, venueId: venue.nbiVenueId },
+                  { accountId: venue.nbiAccountId, venueId: venue.nbiVenueId, serviceId: venue.nbiServiceId ?? undefined },
                   {
                     firstName: updatedBooking.firstName,
                     lastName: updatedBooking.lastName ?? '',
@@ -1258,7 +1279,6 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                     date: dateStr,
                     time: timeStr,
                     covers: updatedBooking.guestCount ?? 2,
-                    duration: 120,
                     notes: [updatedBooking.eventType, updatedBooking.spaceName, updatedBooking.notes]
                       .filter(Boolean).join(' · '),
                     reference: `VF-${updatedBooking.id}`,
@@ -1295,6 +1315,57 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!db) throw new Error('DB not available');
         await db.delete(bookings).where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)));
         return { success: true };
+      }),
+
+    /**
+     * Manually push a single booking into NowBookIt. Returns the NBI booking
+     * id on success, or throws with the upstream error so the UI can show it.
+     */
+    pushToNbi: protectedProcedure
+      .input(z.object({ id: z.number(), force: z.boolean().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings, venueSettings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [booking] = await db.select().from(bookings)
+          .where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+        if (!booking) throw new Error('Booking not found');
+        if (booking.nbiBookingId && !input.force) {
+          return { success: true, nbiBookingId: booking.nbiBookingId, alreadyPushed: true };
+        }
+        const [venue] = await db.select().from(venueSettings)
+          .where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        if (!venue?.nbiAccountId || !venue?.nbiVenueId) {
+          throw new Error('NowBookIt is not connected. Add your Account ID and Venue ID in Settings → Integrations.');
+        }
+        const { createNbiBooking } = await import('./nowbookit');
+        const eventDate = booking.eventDate ?? new Date();
+        const { dateStr, timeStr } = formatVenueDateTime(eventDate);
+        const result = await createNbiBooking(
+          { accountId: venue.nbiAccountId, venueId: venue.nbiVenueId, serviceId: venue.nbiServiceId ?? undefined },
+          {
+            firstName: booking.firstName,
+            lastName: booking.lastName ?? '',
+            email: booking.email ?? '',
+            phone: (booking as any).phone ?? '',
+            date: dateStr,
+            time: timeStr,
+            covers: booking.guestCount ?? 2,
+            notes: [booking.eventType, booking.spaceName, booking.notes].filter(Boolean).join(' · '),
+            reference: `VF-${booking.id}`,
+          }
+        );
+        if (!result.success) {
+          throw new Error(result.error || 'NowBookIt rejected the booking');
+        }
+        if (result.nbiBookingId) {
+          await db.update(bookings)
+            .set({ nbiBookingId: result.nbiBookingId })
+            .where(eq(bookings.id, input.id));
+        }
+        return { success: true, nbiBookingId: result.nbiBookingId };
       }),
   }),
 
@@ -4491,8 +4562,8 @@ Return ONLY valid JSON. Example structure:
       .input(z.object({ token: z.string() }))
       .query(async ({ input }) => {
         const { getDb } = await import('./db');
-        const { shiftRunsheets, dailyChecklists, dailyChecklistItems, venueSettings } = await import('../drizzle/schema');
-        const { eq, inArray } = await import('drizzle-orm');
+        const { shiftRunsheets, dailyChecklists, dailyChecklistItems, venueSettings, runsheets, fnbItems, bookings } = await import('../drizzle/schema');
+        const { eq, and, inArray, gte, lt } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return null;
         const [sr] = await db.select().from(shiftRunsheets).where(eq(shiftRunsheets.token, input.token)).limit(1);
@@ -4513,7 +4584,74 @@ Return ONLY valid JSON. Example structure:
             })
             .filter(Boolean) as any[];
         }
-        return { ...sr, checklists, venueLogoUrl: venue?.logoUrl ?? null, venueName: venue?.name ?? null, shiftSections: venue?.shiftSections ?? null };
+
+        // ── Event runsheets matching this shift's date — surface F&B + venue area ──
+        let events: any[] = [];
+        if (sr.date) {
+          // Compute the day window in the venue's timezone (default Pacific/Auckland).
+          // sr.date is "YYYY-MM-DD" representing a calendar day in venue's local time.
+          const venueTz = (venue as any)?.timezone ?? 'Pacific/Auckland';
+          // Find the UTC instant that corresponds to YYYY-MM-DD 00:00:00 in venueTz.
+          const computeUtcAtVenueMidnight = (dateStr: string): Date | null => {
+            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+            if (!m) return null;
+            const [, y, mo, d] = m;
+            // Iteratively converge on the offset for that local date.
+            let guess = new Date(`${y}-${mo}-${d}T00:00:00Z`);
+            for (let i = 0; i < 3; i++) {
+              const parts = new Intl.DateTimeFormat('en-US', { timeZone: venueTz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).formatToParts(guess);
+              const get = (t: string) => Number(parts.find(p => p.type === t)?.value);
+              const localY = get('year'), localM = get('month'), localD = get('day');
+              const localH = get('hour') === 24 ? 0 : get('hour');
+              const localMin = get('minute'), localS = get('second');
+              const localAsUtc = Date.UTC(localY, localM - 1, localD, localH, localMin, localS);
+              const wantAsUtc = Date.UTC(Number(y), Number(mo) - 1, Number(d), 0, 0, 0);
+              const offsetMs = localAsUtc - wantAsUtc;
+              guess = new Date(guess.getTime() - offsetMs);
+            }
+            return guess;
+          };
+          const dayStart = computeUtcAtVenueMidnight(sr.date);
+          const nextDay = sr.date ? new Date(new Date(sr.date + 'T00:00:00Z').getTime() + 24 * 3600 * 1000).toISOString().slice(0, 10) : null;
+          const dayEnd = nextDay ? computeUtcAtVenueMidnight(nextDay) : null;
+          if (dayStart && dayEnd) {
+            const dayRunsheets = await db.select().from(runsheets)
+              .where(and(
+                eq(runsheets.ownerId, sr.ownerId),
+                gte(runsheets.eventDate, dayStart),
+                lt(runsheets.eventDate, dayEnd),
+              ));
+            if (dayRunsheets.length > 0) {
+              const rsIds = dayRunsheets.map((r: any) => r.id);
+              const bookingIds = dayRunsheets.map((r: any) => r.bookingId).filter(Boolean) as number[];
+              const allFnb = await db.select().from(fnbItems).where(inArray(fnbItems.runsheetId, rsIds));
+              const bks = bookingIds.length > 0
+                ? await db.select({ id: bookings.id, firstName: bookings.firstName, lastName: bookings.lastName, eventType: bookings.eventType, guestCount: bookings.guestCount, spaceName: bookings.spaceName }).from(bookings).where(inArray(bookings.id, bookingIds))
+                : [];
+              events = dayRunsheets.map((r: any) => {
+                const bk = bks.find((b: any) => b.id === r.bookingId);
+                const clientName = bk ? [bk.firstName, bk.lastName].filter(Boolean).join(' ').trim() : '';
+                return {
+                  id: r.id,
+                  bookingId: r.bookingId,
+                  clientName: clientName || null,
+                  eventType: bk?.eventType ?? null,
+                  guestCount: bk?.guestCount ?? null,
+                  venueArea: r.venueArea ?? null,
+                  spaceName: r.spaceName ?? bk?.spaceName ?? null,
+                  eventStartTime: r.eventStartTime ?? null,
+                  eventEndTime: r.eventEndTime ?? null,
+                  drinksData: r.drinksData ?? null,
+                  fnb: allFnb
+                    .filter((f: any) => f.runsheetId === r.id)
+                    .sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+                };
+              }).sort((a, b) => (a.eventStartTime ?? '').localeCompare(b.eventStartTime ?? ''));
+            }
+          }
+        }
+
+        return { ...sr, checklists, events, venueLogoUrl: venue?.logoUrl ?? null, venueName: venue?.name ?? null, shiftSections: venue?.shiftSections ?? null };
       }),
 
     create: protectedProcedure

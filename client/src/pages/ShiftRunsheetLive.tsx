@@ -3,8 +3,30 @@ import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import {
   Loader2, CheckSquare, Square, RefreshCw, CheckCircle2, Pencil,
-  Users, Utensils, Wine, Star, Fish, Megaphone, Wifi, WifiOff,
+  Users, Utensils, Wine, Star, Fish, Megaphone, Wifi, WifiOff, MapPin, Clock,
 } from "lucide-react";
+
+const VENUE_AREA_LABELS: Record<string, string> = {
+  full_venue: "Full Venue",
+  restaurant: "Restaurant",
+  bar: "Bar",
+  private_room: "Private Room",
+  garden: "Garden",
+  rooftop: "Rooftop",
+  terrace: "Terrace",
+  function_room: "Function Room",
+};
+
+function fmt12(t?: string | null): string {
+  if (!t) return "";
+  const [hStr, mStr] = t.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr ?? "0", 10);
+  if (isNaN(h)) return t;
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
 
 const DEFAULT_SECTION_LABELS: { key: string; label: string }[] = [
   { key: "bar", label: "Bar" },
@@ -117,6 +139,13 @@ export default function ShiftRunsheetLive() {
 
   const sections = sr.sections as Record<string, string> | null;
   const checklists = (sr as any).checklists as { id: number; name: string; token: string; items: any[] }[] | undefined ?? [];
+  const events = ((sr as any).events ?? []) as Array<{
+    id: number; bookingId: number | null; clientName: string | null; eventType: string | null;
+    guestCount: number | null; venueArea: string | null; spaceName: string | null;
+    eventStartTime: string | null; eventEndTime: string | null;
+    drinksData: { barOption?: string; barNotes?: string; selectedDrinks?: string[]; customDrinks?: { name: string }[] } | null;
+    fnb: Array<{ id: number; section?: string | null; course?: string | null; dishName: string; qty?: number | null; serviceTime?: string | null; dietary?: string | null; staffAssigned?: string | null; description?: string | null }>;
+  }>;
   const sectionDefs = parseSectionDefs((sr as any).shiftSections);
   const venueLogoUrl = (sr as any).venueLogoUrl as string | null | undefined;
   const venueName = (sr as any).venueName as string | null | undefined;
@@ -229,6 +258,145 @@ export default function ShiftRunsheetLive() {
           </div>
         )}
 
+        {/* Today's events with F&B (color-coded) */}
+        {events.length > 0 && (
+          <div className="bg-white border border-stone-200 rounded overflow-hidden">
+            <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5 flex items-center gap-2">
+              <Utensils className="w-3.5 h-3.5 text-[#6b98e7]" />
+              <span className="font-bebas tracking-widest text-xs text-stone-600">EVENTS TODAY</span>
+              <span className="font-dm text-xs text-stone-400">· {events.length}</span>
+            </div>
+            <div className="divide-y divide-stone-100">
+              {events.map(ev => {
+                const foodItems = ev.fnb.filter(f => (f.course ?? '').toLowerCase() !== 'drinks');
+                const drinkItems = ev.fnb.filter(f => (f.course ?? '').toLowerCase() === 'drinks');
+                const venueAreaLabel = ev.venueArea ? (VENUE_AREA_LABELS[ev.venueArea] ?? ev.venueArea) : null;
+                const time = ev.eventStartTime
+                  ? (ev.eventEndTime ? `${fmt12(ev.eventStartTime)} – ${fmt12(ev.eventEndTime)}` : fmt12(ev.eventStartTime))
+                  : null;
+
+                // Group food by course for clear separation
+                const foodByCourse = foodItems.reduce<Record<string, typeof foodItems>>((acc, it) => {
+                  const c = it.course || 'Other';
+                  if (!acc[c]) acc[c] = [];
+                  acc[c].push(it);
+                  return acc;
+                }, {});
+
+                return (
+                  <div key={ev.id} className="px-4 py-4 space-y-3">
+                    {/* Event header */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-dm text-sm font-semibold text-stone-800 truncate">
+                          {ev.clientName || `Event #${ev.id}`}
+                        </p>
+                        <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] font-dm text-stone-500">
+                          {time && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{time}</span>}
+                          {ev.guestCount != null && <span className="flex items-center gap-1"><Users className="w-3 h-3" />{ev.guestCount}</span>}
+                          {ev.eventType && <span>{ev.eventType}</span>}
+                        </div>
+                      </div>
+                      {(venueAreaLabel || ev.spaceName) && (
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {venueAreaLabel && (
+                            <span className="bg-[#6b98e7] text-white font-bebas tracking-widest text-[10px] px-2 py-1 rounded inline-flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />{venueAreaLabel.toUpperCase()}
+                            </span>
+                          )}
+                          {ev.spaceName && (
+                            <span className="font-dm text-[10px] text-stone-400">{ev.spaceName}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Food (warm amber tone) */}
+                    {foodItems.length > 0 && (
+                      <div className="bg-amber-50/60 border-l-4 border-amber-400 rounded-r overflow-hidden">
+                        <div className="px-3 py-1.5 flex items-center gap-1.5 bg-amber-100/50">
+                          <Utensils className="w-3 h-3 text-amber-700" />
+                          <span className="font-bebas tracking-widest text-[10px] text-amber-800">FOOD · {foodItems.length}</span>
+                        </div>
+                        <div className="px-3 py-2 space-y-1.5">
+                          {Object.entries(foodByCourse).map(([course, items]) => (
+                            <div key={course}>
+                              <div className="font-bebas tracking-widest text-[9px] text-amber-700/70 mb-0.5">{course.toUpperCase()}</div>
+                              <ul className="space-y-0.5">
+                                {items.map(it => (
+                                  <li key={it.id} className="flex items-baseline gap-2 font-dm text-[12px] text-stone-700">
+                                    {it.qty != null && it.qty > 1 && (
+                                      <span className="text-amber-700 font-semibold flex-shrink-0">{it.qty}×</span>
+                                    )}
+                                    <span className="flex-1">{it.dishName}</span>
+                                    {it.serviceTime && (
+                                      <span className="text-[10px] text-stone-400 font-medium">{fmt12(it.serviceTime)}</span>
+                                    )}
+                                    {it.dietary && (
+                                      <span className="text-[9px] bg-amber-200/60 text-amber-800 px-1 py-0.5 rounded font-bebas tracking-widest">{it.dietary}</span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Drinks (cool blue tone) */}
+                    {(drinkItems.length > 0 || ev.drinksData?.barNotes || (ev.drinksData?.selectedDrinks?.length ?? 0) > 0 || (ev.drinksData?.customDrinks?.length ?? 0) > 0) && (
+                      <div className="bg-[#eef3fb] border-l-4 border-[#6b98e7] rounded-r overflow-hidden">
+                        <div className="px-3 py-1.5 flex items-center gap-1.5 bg-[#dde7f7]">
+                          <Wine className="w-3 h-3 text-[#3a5ab0]" />
+                          <span className="font-bebas tracking-widest text-[10px] text-[#3a5ab0]">DRINKS</span>
+                        </div>
+                        <div className="px-3 py-2 space-y-1.5">
+                          {ev.drinksData?.barNotes && (
+                            <div className="font-dm text-[12px] text-stone-700 whitespace-pre-wrap leading-relaxed border-b border-[#dde7f7] pb-2 mb-1">
+                              {ev.drinksData.barNotes}
+                            </div>
+                          )}
+                          {drinkItems.length > 0 && (
+                            <ul className="space-y-0.5">
+                              {drinkItems.map(it => (
+                                <li key={it.id} className="flex items-baseline gap-2 font-dm text-[12px] text-stone-700">
+                                  <span className="flex-1">{it.dishName}</span>
+                                  {it.serviceTime && (
+                                    <span className="text-[10px] text-stone-400 font-medium">{fmt12(it.serviceTime)}</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {((ev.drinksData?.selectedDrinks?.length ?? 0) > 0 || (ev.drinksData?.customDrinks?.length ?? 0) > 0) && (
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {ev.drinksData?.selectedDrinks?.map((d, i) => (
+                                <span key={i} className="bg-white border border-[#6b98e7]/30 text-[#3a5ab0] text-[10px] font-dm px-2 py-0.5 rounded">
+                                  {d.replace(/_/g, ' ')}
+                                </span>
+                              ))}
+                              {ev.drinksData?.customDrinks?.map((d, i) => (
+                                <span key={`c${i}`} className="bg-white border border-[#6b98e7]/30 text-[#3a5ab0] text-[10px] font-dm px-2 py-0.5 rounded">
+                                  {d.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {ev.fnb.length === 0 && !ev.drinksData?.barNotes && (
+                      <p className="font-dm text-xs text-stone-400 italic">No F&B added yet for this event.</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Linked checklists */}
         {checklists.map(cl => {
           const items = cl.items ?? [];
@@ -297,7 +465,7 @@ export default function ShiftRunsheetLive() {
           );
         })}
 
-        {!activeSections.length && infoFields.length === 0 && !hasChecklists && (
+        {!activeSections.length && infoFields.length === 0 && !hasChecklists && events.length === 0 && (
           <div className="text-center py-16">
             <p className="font-dm text-sm text-stone-400">No details have been added to this shift runsheet yet.</p>
           </div>

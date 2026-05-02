@@ -105,6 +105,8 @@ export const venueSettings = pgTable("venue_settings", {
   formSuccessMessage: text("formSuccessMessage"),
   nbiApiKey: text("nbiApiKey"),
   nbiVenueId: varchar("nbiVenueId", { length: 100 }),
+  nbiAccountId: varchar("nbiAccountId", { length: 100 }),
+  nbiServiceId: varchar("nbiServiceId", { length: 100 }),
   nbiSyncEnabled: integer("nbiSyncEnabled").default(0),
   emailSignature: text("emailSignature"),
   emailSignatureLogo: text("emailSignatureLogo"),

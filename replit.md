@@ -127,3 +127,17 @@ Drizzle ORM with PostgreSQL requires `.returning({ id: table.id })` after `.valu
 Configured for autoscale deployment:
 - Build: `pnpm run build`
 - Run: `node dist/index.js`
+
+## Runsheet Improvements (May 2026)
+
+Major UX overhaul of `client/src/pages/RunsheetBuilder.tsx`, BEO PDF generation (`server/beoPdf.ts`), and `client/src/pages/ShiftRunsheetLive.tsx`:
+
+- **Bar arrangement notes** — `runsheets.drinksData.barNotes` field stores free-text bar instructions. Surfaced in BEO PDF (blue callout in bar section) and Shift Runsheet Live (per-event drinks panel). BEO loader merges `runsheet.drinksData` over `proposalDrinks` so runsheet edits win.
+- **Drink quantities hidden** — F&B grid, BEO, and Live all suppress the qty column for drinks rows.
+- **Space picker** — dropdown of `spaces.list` with a "Custom…" option that preserves any pre-existing custom value.
+- **Venue area badge** — prominent chip in BEO title row + colored badge in Live event panel.
+- **F&B sub-tabs** — "Menu & Service" / "Dietary Reqs" sub-tabs inside the F&B section. Legacy top-level Dietary section removed from `sectionOrder` (filter strips legacy localStorage entries).
+- **Color-coded F&B in Live** — `ShiftRunsheetLive` adds an "EVENTS TODAY" panel: food rows = warm amber, drinks rows = cool blue.
+- **Shift→events date matching** — `shiftRunsheets.getByToken` computes day window in venue's timezone (`venueSettings.timezone`, default `Pacific/Auckland`) using an iterative Intl.DateTimeFormat-based UTC offset solver, then queries `runsheets.eventDate` in `[dayStartUTC, nextDayStartUTC)` with `gte`/`lt`.
+- **Print-friendly BEO** — `page-break-inside: avoid` on rows, `page-break-after: auto` on course groups, drink names use spaces instead of underscores.
+

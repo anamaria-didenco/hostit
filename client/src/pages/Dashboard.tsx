@@ -1045,15 +1045,43 @@ export default function Dashboard() {
     onSuccess: () => toast.success("Test email sent! Check your inbox."),
     onError: (err) => toast.error(err.message || "Failed to send test email"),
   });
+  const [nbiServiceList, setNbiServiceList] = useState<{ id: string; name: string; serviceType: string; duration: number }[]>([]);
+  // Auto-load NBI services when integrations tab opens with saved credentials
+  const nbiAccountIdSaved = (venueSettings as any)?.nbiAccountId as string | undefined;
+  const nbiVenueIdSaved = (venueSettings as any)?.nbiVenueId as string | undefined;
+  const { data: nbiServicesAuto } = trpc.venue.listNbiServices.useQuery(
+    { accountId: nbiAccountIdSaved ?? '', venueId: nbiVenueIdSaved ?? '' },
+    { enabled: !!nbiAccountIdSaved && !!nbiVenueIdSaved, staleTime: 60_000 * 5 },
+  );
+  useEffect(() => {
+    if (nbiServicesAuto && nbiServicesAuto.length && nbiServiceList.length === 0) {
+      setNbiServiceList(nbiServicesAuto as any);
+    }
+  }, [nbiServicesAuto]);
+
   const verifyNbiMutation = trpc.venue.verifyNbi.useMutation({
     onSuccess: (data) => {
       if (data.valid) {
-        toast.success(`Connected to NowBookIt${data.venueName ? ` — ${data.venueName}` : ''}!`);
+        const svc = (data as any).services ?? [];
+        setNbiServiceList(svc);
+        toast.success(`Connected to NowBookIt${svc.length ? ` — ${svc.length} service${svc.length === 1 ? '' : 's'} found` : ''}!`);
       } else {
         toast.error(`NowBookIt connection failed: ${data.error ?? 'Unknown error'}`);
       }
     },
     onError: (err) => toast.error(err.message || "Failed to verify NowBookIt credentials"),
+  });
+  const pushToNbiMutation = trpc.bookings.pushToNbi.useMutation({
+    onSuccess: (data) => {
+      if (data.alreadyPushed) {
+        toast.success(`Already in NowBookIt (#${data.nbiBookingId})`);
+      } else {
+        toast.success(`Pushed to NowBookIt${data.nbiBookingId ? ` (#${data.nbiBookingId})` : ''}!`);
+      }
+      utils.bookings.list.invalidate();
+      utils.bookings.byMonth.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to push to NowBookIt"),
   });
   const createSpace = trpc.spaces.create.useMutation({
     onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
@@ -4903,7 +4931,7 @@ export default function Dashboard() {
 
               {/* ── MENU SUB-TAB (Menus & Floor Plans) ──────────── */}
               {settingsSubTab === "integrations" && (() => {
-                const nbiConnected = !!(venueSettings as any)?.nbiApiKey && !!(venueSettings as any)?.nbiVenueId;
+                const nbiConnected = !!(venueSettings as any)?.nbiAccountId && !!(venueSettings as any)?.nbiVenueId;
                 const nbiEnabled = (venueSettings as any)?.nbiSyncEnabled === 1;
                 return (
                 <div className="max-w-3xl mx-auto">
@@ -4937,13 +4965,13 @@ export default function Dashboard() {
                     <div className="border-t border-gold/20 bg-cream/40 p-5 space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">API KEY</label>
+                          <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ACCOUNT ID</label>
                           <input
-                            type="password"
-                            id="nbi-api-key"
-                            defaultValue={(venueSettings as any)?.nbiApiKey ?? ''}
-                            placeholder="paste your NowBookIt API key"
-                            className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest"
+                            type="text"
+                            id="nbi-account-id"
+                            defaultValue={(venueSettings as any)?.nbiAccountId ?? ''}
+                            placeholder="e.g. e9d59bc3-73d5-4e64-a6e7-32a753b7dd3a"
+                            className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest font-mono"
                           />
                         </div>
                         <div>
@@ -4952,33 +4980,48 @@ export default function Dashboard() {
                             type="text"
                             id="nbi-venue-id"
                             defaultValue={(venueSettings as any)?.nbiVenueId ?? ''}
-                            placeholder="e.g. 12345"
-                            className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest"
+                            placeholder="e.g. 12388"
+                            className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest font-mono"
                           />
                         </div>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DEFAULT SERVICE (optional)</label>
+                        <select
+                          id="nbi-service-id"
+                          defaultValue={(venueSettings as any)?.nbiServiceId ?? ''}
+                          className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest"
+                        >
+                          <option value="">Auto-pick first available service</option>
+                          {(nbiServiceList ?? []).map((s: any) => (
+                            <option key={s.id} value={s.id}>{s.name} — {s.serviceType} ({s.duration} min)</option>
+                          ))}
+                        </select>
+                        <p className="font-dm text-[11px] text-ink/50 mt-1">Hit "Test Connection" to load your services from NowBookIt, then pick which one new VenueFlow bookings should be created under.</p>
                       </div>
                       <div className="flex items-center justify-between">
                         <label className="flex items-center gap-3 cursor-pointer select-none">
                           <div
                             className={`relative w-10 h-5 rounded-full transition-colors ${nbiEnabled ? 'bg-forest' : 'bg-stone-300'}`}
                             onClick={() => {
-                              const apiKey = (document.getElementById('nbi-api-key') as HTMLInputElement)?.value || (venueSettings as any)?.nbiApiKey || '';
+                              const accountId = (document.getElementById('nbi-account-id') as HTMLInputElement)?.value || (venueSettings as any)?.nbiAccountId || '';
                               const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value || (venueSettings as any)?.nbiVenueId || '';
-                              if (!apiKey || !venueId) { toast.error('Enter your API Key and Venue ID first'); return; }
-                              updateSettings.mutate({ nbiApiKey: apiKey, nbiVenueId: venueId, nbiSyncEnabled: nbiEnabled ? 0 : 1 });
+                              if (!accountId || !venueId) { toast.error('Enter your Account ID and Venue ID first'); return; }
+                              const serviceId = (document.getElementById('nbi-service-id') as HTMLSelectElement)?.value || '';
+                              updateSettings.mutate({ nbiAccountId: accountId, nbiVenueId: venueId, nbiServiceId: serviceId, nbiSyncEnabled: nbiEnabled ? 0 : 1 });
                             }}
                           >
                             <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${nbiEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
                           </div>
-                          <span className="font-dm text-sm text-ink">{nbiEnabled ? 'Sync enabled — confirmed bookings push to NowBookIt' : 'Sync disabled'}</span>
+                          <span className="font-dm text-sm text-ink">{nbiEnabled ? 'Auto-sync on — confirmed bookings push to NowBookIt' : 'Auto-sync off (you can still push manually from each booking)'}</span>
                         </label>
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
-                              const apiKey = (document.getElementById('nbi-api-key') as HTMLInputElement)?.value;
+                              const accountId = (document.getElementById('nbi-account-id') as HTMLInputElement)?.value;
                               const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value;
-                              if (!apiKey || !venueId) { toast.error('Enter your API Key and Venue ID first'); return; }
-                              verifyNbiMutation.mutate({ apiKey, venueId });
+                              if (!accountId || !venueId) { toast.error('Enter your Account ID and Venue ID first'); return; }
+                              verifyNbiMutation.mutate({ accountId, venueId });
                             }}
                             disabled={verifyNbiMutation.isPending}
                             className="font-bebas tracking-widest text-xs px-4 py-2 border border-[#6b98e7] text-[#6b98e7] hover:bg-[#6b98e7]/10 rounded disabled:opacity-50"
@@ -4987,9 +5030,10 @@ export default function Dashboard() {
                           </button>
                           <button
                             onClick={() => {
-                              const apiKey = (document.getElementById('nbi-api-key') as HTMLInputElement)?.value;
+                              const accountId = (document.getElementById('nbi-account-id') as HTMLInputElement)?.value;
                               const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value;
-                              updateSettings.mutate({ nbiApiKey: apiKey || undefined, nbiVenueId: venueId || undefined });
+                              const serviceId = (document.getElementById('nbi-service-id') as HTMLSelectElement)?.value;
+                              updateSettings.mutate({ nbiAccountId: accountId || undefined, nbiVenueId: venueId || undefined, nbiServiceId: serviceId || undefined });
                             }}
                             disabled={updateSettings.isPending}
                             className="font-bebas tracking-widest text-xs px-4 py-2 bg-forest text-cream hover:bg-forest/90 rounded disabled:opacity-50"
@@ -4999,7 +5043,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="bg-blue-50 border border-blue-200/50 rounded p-3 text-xs font-dm text-ink/60 leading-relaxed">
-                        <strong className="text-ink/80">Where to find these:</strong> Log in to NowBookIt → Settings → API Access. Copy your API Key and Venue ID from there. Once connected, every booking you mark as <em>Confirmed</em> in VenueFlow will appear automatically in your NowBookIt diary.
+                        <strong className="text-ink/80">No API key needed.</strong> VenueFlow uses NowBookIt's public booking endpoint — the same one a customer hits when they book through your widget. Find your <strong>Account ID</strong> and <strong>Venue ID</strong> in your NowBookIt booking widget URL: <code className="bg-white/70 px-1 rounded text-[10px]">bookings.nowbookit.com/?accountid=<strong>&lt;ACCOUNT_ID&gt;</strong>&amp;venueid=<strong>&lt;VENUE_ID&gt;</strong></code>. Once connected, confirmed VenueFlow bookings appear in your NowBookIt diary automatically. You can also push individual bookings manually from each booking's side panel.
                       </div>
                     </div>
                   </div>
@@ -6350,6 +6394,19 @@ export default function Dashboard() {
                         className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs col-span-2">
                         <DollarSign className="w-3 h-3" /> PAYMENTS
                       </button>
+                      {(venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
+                        <button
+                          onClick={() => pushToNbiMutation.mutate({ id: selectedBooking.id, force: !!selectedBooking.nbiBookingId })}
+                          disabled={pushToNbiMutation.isPending}
+                          className={`flex items-center gap-2 px-3 py-2 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50 ${selectedBooking.nbiBookingId ? 'border border-[#6b98e7]/50 text-[#6b98e7] hover:bg-[#6b98e7]/10' : 'bg-[#6b98e7] text-white hover:bg-[#5a87d6]'}`}>
+                          <span className="font-bebas text-[10px] tracking-wider">NBI</span>
+                          {pushToNbiMutation.isPending
+                            ? 'PUSHING…'
+                            : selectedBooking.nbiBookingId
+                            ? `IN NOWBOOKIT (#${selectedBooking.nbiBookingId}) — RE-PUSH`
+                            : 'PUSH TO NOWBOOKIT'}
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {

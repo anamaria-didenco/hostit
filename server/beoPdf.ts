@@ -136,6 +136,13 @@ export async function handleBeoPdf(req: Request, res: Response) {
         .where(eq(quoteItems.proposalId, booking.proposalId));
     }
 
+    // Prefer runsheet's drinksData (which includes barNotes saved from RunsheetBuilder).
+    // Merge over proposalDrinks so runsheet edits win, but proposal data still acts as fallback.
+    const rsDrinks = (runsheet as any)?.drinksData;
+    if (rsDrinks && (rsDrinks.barOption || rsDrinks.barNotes || (rsDrinks.selectedDrinks ?? []).length > 0 || (rsDrinks.customDrinks ?? []).length > 0 || rsDrinks.tabAmount)) {
+      drinks = { ...(drinks ?? {}), ...rsDrinks };
+    }
+
     // ── Extracted values ─────────────────────────────────────────────────────
     const venueName = venue?.name ?? "Venue";
     const venueAddress = [venue?.addressLine1, venue?.city].filter(Boolean).join(", ");
@@ -279,17 +286,23 @@ export async function handleBeoPdf(req: Request, res: Response) {
     }
 
     // Bar section
+    const barNotes = (drinks as any)?.barNotes as string | undefined;
     const barSection = drinks ? `
 <div class="card">
   <div class="card-header">BAR &amp; DRINKS</div>
   <div class="card-body">
     <div class="detail-row"><span class="detail-label">Bar Arrangement</span><span class="detail-value">${BAR_LABELS[drinks.barOption] ?? drinks.barOption}</span></div>
     ${drinks.tabAmount ? `<div class="detail-row"><span class="detail-label">Bar Tab Amount</span><span class="detail-value">${fmtCurrency(drinks.tabAmount)}</span></div>` : ""}
-    ${(drinks.selectedDrinks ?? []).length > 0 ? `
+    ${barNotes ? `
+    <div style="margin-top:8px;padding:8px 10px;background:#eef3fb;border-left:3px solid #6b98e7">
+      <div class="detail-label" style="margin-bottom:4px;color:#3a5ab0">Bar Notes</div>
+      <div style="font-size:9.5px;line-height:1.55;color:#1a1209;white-space:pre-wrap">${(barNotes as string).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>
+    </div>` : ""}
+    ${(drinks.selectedDrinks ?? []).length > 0 || (drinks.customDrinks ?? []).length > 0 ? `
     <div style="margin-top:8px">
       <div class="detail-label" style="margin-bottom:4px">Selected Drinks</div>
       <ul style="margin:0;padding-left:14px">
-        ${(drinks.selectedDrinks as string[]).map((key: string) => `<li style="font-size:9px;margin-bottom:2px">${key}</li>`).join("")}
+        ${(drinks.selectedDrinks as string[]).map((key: string) => `<li style="font-size:9px;margin-bottom:2px">${key.replace(/_/g, ' ')}</li>`).join("")}
         ${(drinks.customDrinks ?? []).map((d: any) => `<li style="font-size:9px;margin-bottom:2px"><strong>${d.name}</strong>${d.description ? ` — ${d.description}` : ""}</li>`).join("")}
       </ul>
     </div>` : ""}
@@ -436,17 +449,19 @@ export async function handleBeoPdf(req: Request, res: Response) {
     word-break: break-word;
   }
 
-  /* ── Venue area badge ── */
+  /* ── Venue area badge (header chip - prominent) ── */
   .venue-area-chip {
     display: inline-block;
-    background: #6b98e7;
-    color: white;
+    background: #ffffff;
+    color: #6b98e7;
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 8px;
-    letter-spacing: 0.1em;
-    padding: 2px 7px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    padding: 3px 10px;
     margin-left: 6px;
     vertical-align: middle;
+    border: 1.5px solid #ffffff;
+    font-weight: 700;
   }
 
   /* ── Cards ── */
@@ -569,13 +584,15 @@ export async function handleBeoPdf(req: Request, res: Response) {
   .fnb-row:last-child { border-bottom: none; }
   .course-group {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 8px;
-    letter-spacing: 0.1em;
+    font-size: 9px;
+    letter-spacing: 0.12em;
     color: #8b6914;
-    background: rgba(201,168,76,0.1);
-    padding: 2px 12px;
-    border-bottom: 1px solid rgba(201,168,76,0.2);
+    background: rgba(201,168,76,0.14);
+    padding: 4px 12px;
+    border-bottom: 1px solid rgba(201,168,76,0.28);
+    page-break-after: avoid;
   }
+  .course-group + .fnb-row { page-break-before: avoid; }
   .dish-name { font-weight: 600; font-size: 9.5px; }
   .dish-desc { font-size: 8px; color: rgba(26,18,9,0.45); margin-top: 1px; }
   .diet-tag {
@@ -613,7 +630,9 @@ export async function handleBeoPdf(req: Request, res: Response) {
 
   @media print {
     body { background: white; }
-    .card { page-break-inside: avoid; }
+    .card { page-break-inside: avoid; break-inside: avoid; }
+    .fnb-row, .tl-row, .dietary-item, .detail-row { page-break-inside: avoid; break-inside: avoid; }
+    .course-group { page-break-after: avoid; break-after: avoid; }
   }
 </style>
 </head>
@@ -623,15 +642,14 @@ export async function handleBeoPdf(req: Request, res: Response) {
   <div class="doc-header-left">
     <div>${logoHtml}</div>
     <div class="doc-type" style="margin-top:8px">BANQUET EVENT ORDER</div>
-    <div class="doc-title">${clientName}</div>
-    <div class="doc-sub">${eventType ? `${eventType} · ` : ""}${venueName}${venueAddress ? ` · ${venueAddress}` : ""}</div>
+    <div class="doc-title">${clientName}${venueAreaLabel ? `<span class="venue-area-chip">${venueAreaLabel}</span>` : ""}</div>
+    <div class="doc-sub">${eventType ? `${eventType} · ` : ""}${venueName}${venueAddress ? ` · ${venueAddress}` : ""}${spaceName && venueAreaLabel ? ` · ${spaceName}` : ""}</div>
   </div>
   <div class="doc-header-right">
     <div class="doc-beo-num">BEO #${booking.id}</div>
     <div class="doc-date">${eventDate || "—"}</div>
     ${timeRange !== "—" ? `<div class="doc-time">${timeRange}</div>` : ""}
-    ${venueAreaLabel ? `<div style="margin-top:4px"><span class="status-badge">${venueAreaLabel}</span></div>` : ""}
-    <div class="status-badge" style="margin-top:${venueAreaLabel ? "4px" : "8px"}">${(booking.status ?? "").replace(/_/g, " ").toUpperCase()}</div>
+    <div class="status-badge" style="margin-top:8px">${(booking.status ?? "").replace(/_/g, " ").toUpperCase()}</div>
   </div>
 </div>
 
