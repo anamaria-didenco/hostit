@@ -244,8 +244,21 @@ export async function createNbiBooking(
     });
     if (!res.ok) {
       const t = await res.text().catch(() => "");
-      console.error("[NBI] save-new-booking failed:", res.status, t.slice(0, 300));
-      return { success: false, error: `NowBookIt ${res.status}: ${t.slice(0, 200)}` };
+      console.error("[NBI] save-new-booking failed:", res.status, t.slice(0, 300), "payload:",
+        JSON.stringify({ time: slot.time, sectionId: slot.sectionId, service: service.name, customer: body.customer }));
+      // 409 from NBI usually means either the slot is already taken or NBI thinks
+      // this is a duplicate booking. Their response body is typically empty so
+      // surface a helpful message instead of just "NowBookIt 409:".
+      if (res.status === 409) {
+        return {
+          success: false,
+          error:
+            "NowBookIt rejected this as a conflict (409). The booking may already exist in NowBookIt under a different reference, or that exact time slot is unavailable. Check NowBookIt for an existing booking around " +
+            `${payload.date} ${payload.time}, or try a slightly different time.`,
+        };
+      }
+      const detail = t.trim() ? `: ${t.slice(0, 200)}` : "";
+      return { success: false, error: `NowBookIt ${res.status}${detail}` };
     }
     const data: any = await res.json().catch(() => ({}));
     const id =
@@ -395,9 +408,13 @@ export async function pushBookingToNbi(
         reference: `VF-${booking.id}`,
       }
     );
-    if (result.success && result.nbiBookingId) {
-      await db.update(bookings).set({ nbiBookingId: result.nbiBookingId }).where(eq(bookings.id, bookingId));
-      console.log(`[NBI push:${opts.source}] booking ${bookingId} → NBI #${result.nbiBookingId}`);
+    if (result.success) {
+      // Save the id when NBI returned one; if not, still record the push so we
+      // don't keep retrying and getting 409 conflicts on re-push.
+      if (result.nbiBookingId) {
+        await db.update(bookings).set({ nbiBookingId: result.nbiBookingId }).where(eq(bookings.id, bookingId));
+      }
+      console.log(`[NBI push:${opts.source}] booking ${bookingId} → NBI #${result.nbiBookingId ?? '(no id returned)'}`);
       return { pushed: true, nbiBookingId: result.nbiBookingId };
     }
     console.warn(`[NBI push:${opts.source}] booking ${bookingId} push FAILED: ${result.error}`);
