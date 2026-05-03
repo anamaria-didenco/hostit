@@ -469,7 +469,11 @@ export const appRouter = router({
               // Format event date as "Saturday 12 April 2026"
               const formattedEventDate = input.eventDate
                 ? (() => {
-                    const d = new Date(input.eventDate + 'T00:00:00');
+                    // input.eventDate may be either "YYYY-MM-DD" or a full ISO timestamp.
+                    // For bare dates, anchor to local midnight to avoid UTC-shift; for ISO,
+                    // use as-is (stored time is already meaningful).
+                    const raw = String(input.eventDate);
+                    const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(raw + 'T00:00:00') : new Date(raw);
                     return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
                   })()
                 : null;
@@ -480,8 +484,11 @@ export const appRouter = router({
                 try {
                   const { bookings: bTable, leads: lTable } = await import('../drizzle/schema');
                   const { and, gte, lt } = await import('drizzle-orm');
-                  const dayStart = new Date(input.eventDate + 'T00:00:00');
-                  const dayEnd = new Date(input.eventDate + 'T23:59:59');
+                  // Compute the calendar day window regardless of whether input.eventDate
+                  // is "YYYY-MM-DD" or a full ISO timestamp.
+                  const eventD = new Date(input.eventDate);
+                  const dayStart = new Date(eventD.getFullYear(), eventD.getMonth(), eventD.getDate(), 0, 0, 0);
+                  const dayEnd = new Date(eventD.getFullYear(), eventD.getMonth(), eventD.getDate(), 23, 59, 59);
                   const [existingBookings, existingLeads] = await Promise.all([
                     db.select().from(bTable).where(
                       and(eq(bTable.ownerId, input.ownerId), gte(bTable.eventDate, dayStart), lt(bTable.eventDate, dayEnd))

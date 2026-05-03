@@ -22,7 +22,7 @@ const SOURCE_OPTIONS = [
 type FormFieldDef = {
   id: string;
   label: string;
-  type: 'text' | 'email' | 'tel' | 'number' | 'date' | 'select' | 'textarea';
+  type: 'text' | 'email' | 'tel' | 'number' | 'date' | 'time' | 'select' | 'textarea';
   required: boolean;
   visible: boolean;
   isDefault: boolean;
@@ -145,7 +145,7 @@ export default function LeadForm() {
   const visibleFields = fields.filter(f => f.visible);
 
   const detailIds = new Set(['firstName', 'lastName', 'email', 'phone', 'company']);
-  const eventIds = new Set(['eventType', 'eventDate', 'guestCount', 'budget']);
+  const eventIds = new Set(['eventType', 'eventDate', 'eventTime', 'guestCount', 'budget']);
   const detailFields = visibleFields.filter(f => detailIds.has(f.id));
   const eventFields = visibleFields.filter(f => eventIds.has(f.id));
   const sourceField = visibleFields.find(f => f.id === 'source');

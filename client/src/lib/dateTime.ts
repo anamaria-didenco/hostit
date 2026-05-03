@@ -8,7 +8,9 @@ export function fmtEventTime(date: Date | string | null | undefined): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
   if (isNaN(d.getTime())) return "";
-  if (d.getHours() === 0 && d.getMinutes() === 0) return "";
+  // Legacy date-only entries are stored as UTC midnight (from new Date("YYYY-MM-DD")).
+  // Treat UTC-midnight values as "no time set" so they don't show a misleading time.
+  if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) return "";
   return d.toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
@@ -20,7 +22,9 @@ export function extractEventTimeHHMM(date: Date | string | null | undefined): st
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
   if (isNaN(d.getTime())) return "";
-  if (d.getHours() === 0 && d.getMinutes() === 0) return "";
+  // Legacy date-only entries (UTC midnight) → treat as no time set so the
+  // edit form shows an empty time input rather than a fake 12:00 PM.
+  if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) return "";
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
