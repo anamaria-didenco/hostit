@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CheckCircle, MapPin, Phone, Mail } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { combineLocalDateTime } from "@/lib/dateTime";
 import { toast } from "sonner";
 
 const EVENT_TYPES = [
@@ -101,9 +102,7 @@ export default function LeadForm() {
       phone: form.phone || undefined,
       company: form.company || undefined,
       eventType: form.eventType || undefined,
-      eventDate: form.eventDate
-        ? (form.eventTime ? new Date(`${form.eventDate}T${form.eventTime}:00`).toISOString() : form.eventDate)
-        : undefined,
+      eventDate: combineLocalDateTime(form.eventDate, form.eventTime),
       guestCount: form.guestCount ? parseInt(form.guestCount) : undefined,
       budget: form.budget ? parseFloat(form.budget) : undefined,
       message: fullMessage || undefined,

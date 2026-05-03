@@ -15,7 +15,7 @@ import {
   SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { fmtEventTime } from "@/lib/dateTime";
+import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
@@ -714,7 +714,7 @@ export default function Dashboard() {
   const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
-  const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked' });
+  const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked' });
   const [widgetEditMode, setWidgetEditMode] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
@@ -729,7 +729,7 @@ export default function Dashboard() {
   const [enquiryPasteText, setEnquiryPasteText] = useState('');
   const [enquiryParsing, setEnquiryParsing] = useState(false);
   const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
-  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', guestCount: '', budget: '', message: '', status: 'new' as const });
+  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as const });
 
   const utils = trpc.useUtils();
 
@@ -1103,7 +1103,7 @@ export default function Dashboard() {
     onSuccess: () => {
       refetchLeads();
       setShowAddLead(false);
-      setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', guestCount: '', budget: '', message: '', status: 'new' });
+      setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' });
       setEnquiryPasteText('');
       setEnquiryPasteMode(true);
       toast.success('Added successfully!');
@@ -1875,7 +1875,7 @@ export default function Dashboard() {
                                   }`}>{day}</span>
                                   {!isOverflow && (
                                     <button
-                                      onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' }); }}
+                                      onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' }); }}
                                       className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
                                       title="Add event">
                                       <Plus className="w-3 h-3 text-forest" />
@@ -6868,7 +6868,7 @@ export default function Dashboard() {
               firstName: quickCreateForm.firstName,
               lastName: quickCreateForm.lastName || undefined,
               eventType: quickCreateForm.eventType || undefined,
-              eventDate: quickCreateDate,
+              eventDate: combineLocalDateTime(quickCreateDate, quickCreateForm.eventTime),
               guestCount: quickCreateForm.guestCount ? parseInt(quickCreateForm.guestCount) : undefined,
               message: quickCreateForm.notes || undefined,
               status: quickCreateForm.status,
@@ -6889,11 +6889,19 @@ export default function Dashboard() {
                   placeholder="Last name" className="rounded-xl border-gray-200 text-sm" />
               </div>
             </div>
-            <div>
-              <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Type</label>
-              <Input value={quickCreateForm.eventType}
-                onChange={e => setQuickCreateForm(f => ({ ...f, eventType: e.target.value }))}
-                placeholder="e.g. Wedding, Birthday, Corporate" className="rounded-xl border-gray-200 text-sm" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Type</label>
+                <Input value={quickCreateForm.eventType}
+                  onChange={e => setQuickCreateForm(f => ({ ...f, eventType: e.target.value }))}
+                  placeholder="e.g. Wedding" className="rounded-xl border-gray-200 text-sm" />
+              </div>
+              <div>
+                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Time</label>
+                <Input type="time" value={quickCreateForm.eventTime}
+                  onChange={e => setQuickCreateForm(f => ({ ...f, eventTime: e.target.value }))}
+                  className="rounded-xl border-gray-200 text-sm" />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -7038,7 +7046,7 @@ export default function Dashboard() {
                 phone: addEnquiryForm.phone || undefined,
                 company: addEnquiryForm.company || undefined,
                 eventType: addEnquiryForm.eventType || undefined,
-                eventDate: addEnquiryForm.eventDate || undefined,
+                eventDate: combineLocalDateTime(addEnquiryForm.eventDate, addEnquiryForm.eventTime),
                 guestCount: addEnquiryForm.guestCount ? parseInt(addEnquiryForm.guestCount) : undefined,
                 budget: addEnquiryForm.budget ? parseFloat(addEnquiryForm.budget) : undefined,
                 message: addEnquiryForm.message || undefined,
@@ -7092,6 +7100,11 @@ export default function Dashboard() {
                 <div>
                   <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT DATE</label>
                   <Input type="date" value={addEnquiryForm.eventDate} onChange={e => setAddEnquiryForm(f => ({ ...f, eventDate: e.target.value }))}
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                </div>
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME</label>
+                  <Input type="time" value={addEnquiryForm.eventTime} onChange={e => setAddEnquiryForm(f => ({ ...f, eventTime: e.target.value }))}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
