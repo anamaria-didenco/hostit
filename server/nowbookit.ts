@@ -141,7 +141,7 @@ function pickBestTime(
   service: any,
   desired: string, // "HH:MM"
   preferredSectionId?: string
-): { time: string; sectionId: string } | null {
+): { time: string; sectionId: string; diffMins: number; available: string[] } | null {
   const times: any[] = (service?.times ?? []).filter((t: any) => !t.expired && !t.isBlockOut);
   if (!times.length) return null;
   const [hh, mm] = desired.split(":").map(Number);
@@ -162,7 +162,10 @@ function pickBestTime(
   const sections: any[] = best.sections ?? [];
   const matched = preferredSectionId ? sections.find((s: any) => String(s.id) === String(preferredSectionId)) : null;
   const sectionId = matched?.id ?? sections[0]?.id ?? "all";
-  return { time: best.time, sectionId };
+  // Return the human-readable list of what was actually offered so callers
+  // can explain to the user when nothing matches their requested time.
+  const available = times.map((t: any) => (t.time as string).slice(11, 16)).sort();
+  return { time: best.time, sectionId, diffMins: bestDiff, available };
 }
 
 /**
@@ -206,6 +209,25 @@ export async function createNbiBooking(
     const slot = pickBestTime(service, payload.time, creds.sectionId);
     if (!slot) {
       return { success: false, error: `No available slots for "${service.name}" on ${payload.date}` };
+    }
+    // Refuse to silently substitute a slot that's far from the user's requested
+    // time. NowBookIt's schedule API often only returns slots for the active
+    // service window (e.g. dinner-only "Drinks & Snacks"), and pickBestTime
+    // would happily pick the nearest dinner slot for a 12pm booking — leading
+    // to a wrong-time push and a confusing 409 from NBI when that slot is
+    // actually taken. Better to surface what NBI offered and let the user
+    // adjust the booking time or use a different service.
+    const SLOT_TOLERANCE_MINS = 60;
+    if (slot.diffMins > SLOT_TOLERANCE_MINS) {
+      const nearby = slot.available.slice(0, 8).join(", ");
+      return {
+        success: false,
+        error:
+          `NowBookIt has no slots near ${payload.time} for "${service.name}" on ${payload.date}. ` +
+          `The nearest available slot is ${slot.time.slice(11, 16)} (${Math.round(slot.diffMins / 60 * 10) / 10}h away). ` +
+          `Available times: ${nearby}${slot.available.length > 8 ? "…" : ""}. ` +
+          `Adjust the booking time, or check that the right NowBookIt service is configured (Settings → NowBookIt).`,
+      };
     }
 
     // Step 2: build widget-shaped payload
