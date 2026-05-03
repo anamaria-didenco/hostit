@@ -469,9 +469,9 @@ export default function ProposalBuilder() {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input value={spaceName} onChange={e => setSpaceName(e.target.value)}
-                    placeholder="The Main Dining Room"
-                    className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
+                  <div className="border border-dashed border-border bg-muted/30 px-3 py-2 text-xs font-dm text-muted-foreground">
+                    No spaces saved yet — add them in <a href="/dashboard?tab=settings&sub=venue" className="text-primary hover:underline">Settings → Venue → Spaces</a>.
+                  </div>
                 )}
               </div>
             </div>
@@ -919,7 +919,7 @@ export default function ProposalBuilder() {
             >
               <div className="flex items-center gap-3">
                 <span className="font-bebas text-xs tracking-widest text-muted-foreground">QUOTE &amp; MINIMUM SPEND</span>
-                {minimumSpend && (
+                {Number(minimumSpend) > 0 && (
                   <span className="font-bebas text-xs tracking-widest bg-burgundy text-cream px-2 py-0.5">
                     MIN ${parseFloat(minimumSpend).toLocaleString("en-NZ")}
                   </span>
@@ -963,7 +963,7 @@ export default function ProposalBuilder() {
                 </div>
 
                 {/* Min Spend Breakdown */}
-                {minimumSpend && (
+                {Number(minimumSpend) > 0 && (
                   <div className="bg-ink text-cream p-4 space-y-2">
                     <div className="font-bebas text-xs tracking-widest text-sage-green mb-2">MINIMUM SPEND BREAKDOWN</div>
                     <div className="flex justify-between font-dm text-sm">

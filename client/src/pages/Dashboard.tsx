@@ -531,7 +531,6 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { id: "taxes", label: "Taxes & Fees" },
     { id: "team", label: "Team" },
     { id: "billing", label: "Billing" },
-    { id: "group-settings", label: "Group Settings" },
     { id: "statuses", label: "Enquiry Statuses" },
     { id: "waitlist", label: "Waitlist" },
   ];
@@ -4042,32 +4041,6 @@ export default function Dashboard() {
                       ))}
                     </div>
                   </div>
-                  {/* ── Runsheet Courses ── */}
-                  <div className="dante-card p-6">
-                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-1">RUNSHEET F&amp;B COURSES</h2>
-                    <p className="font-dm text-xs text-ink/50 mb-3">Customise the F&amp;B course categories used in your runsheets (one per line). Leave blank to use defaults.</p>
-                    <textarea
-                      rows={6}
-                      value={(() => {
-                        if (settingsForm.customCourses) {
-                          try {
-                            const arr = JSON.parse(settingsForm.customCourses);
-                            if (Array.isArray(arr)) return arr.join('\n');
-                          } catch {}
-                          return settingsForm.customCourses;
-                        }
-                        return ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'].join('\n');
-                      })()}
-                      onChange={e => {
-                        const lines = e.target.value.split('\n').map((s: string) => s.trim()).filter(Boolean);
-                        setSettingsForm((f: any) => ({ ...f, customCourses: JSON.stringify(lines) }));
-                      }}
-                      placeholder={'Canapes\nEntree\nMain\nDessert\nCheese\nDrinks\nOther'}
-                      className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-y"
-                    />
-                    <p className="font-dm text-[10px] text-ink/30 mt-1">Changes save with the button below.</p>
-                  </div>
-
                   <button type="submit" disabled={updateSettings.isPending}
                     className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50">
                     {updateSettings.isPending ? "SAVING..." : "SAVE VENUE DETAILS"}
@@ -4283,7 +4256,7 @@ export default function Dashboard() {
                           <div className="font-cormorant font-semibold text-base text-ink">{s.name}</div>
                           <div className="font-dm text-xs text-ink/60">
                             {s.minCapacity && s.maxCapacity ? `${s.minCapacity}–${s.maxCapacity} guests` : s.maxCapacity ? `Up to ${s.maxCapacity} guests` : ""}
-                            {s.minSpend ? ` · Min spend $${Number(s.minSpend).toLocaleString()}` : ""}
+                            {Number(s.minSpend) > 0 ? ` · Min spend $${Number(s.minSpend).toLocaleString()}` : ""}
                           </div>
                           {s.description && <div className="font-dm text-xs text-ink/40 mt-0.5">{s.description}</div>}
                         </div>
@@ -4582,11 +4555,10 @@ export default function Dashboard() {
               {/* ── PROPOSAL/TEMPLATES SUB-TAB ────────────────── */}
               {settingsSubTab === "templates" && (
               <div>
-              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Proposal & Templates</h1>
-              {/* Email Templates */}
+              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Templates</h1>
               <div className="mt-0">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-cormorant text-xl font-semibold text-ink">Staff Checklist Templates</h2>
+                  <h2 className="font-cormorant text-xl font-semibold text-ink">Checklist Templates</h2>
                   <button onClick={() => setShowChecklistForm(v => !v)}
                     className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
                     <Plus className="w-3 h-3" /> {showChecklistForm ? 'CANCEL' : 'NEW TEMPLATE'}
@@ -5536,8 +5508,8 @@ export default function Dashboard() {
                 );
               })()}
 
-              {/* ── GROUP SETTINGS ──────────────────────────────── */}
-              {settingsSubTab === "group-settings" && (
+              {/* Group Settings tab removed — panel was non-functional placeholder UI */}
+              {false && settingsSubTab === ("group-settings" as any) && (
               <div className="max-w-3xl mx-auto space-y-6">
                 <h1 className="font-cormorant text-3xl font-semibold text-ink">Group Settings</h1>
                 {/* Automated Reminder Emails */}
@@ -6071,6 +6043,40 @@ export default function Dashboard() {
               <div className="max-w-5xl mx-auto">
                 <h1 className="font-cormorant text-3xl font-semibold text-ink mb-2">Menu</h1>
                 <p className="font-dm text-sm text-ink/60 mb-6">Build your food &amp; beverage menu. Create custom categories under Food and Beverages, then add items inside each — by hand, by pasting CSV, or by letting AI parse a description for you.</p>
+
+                {/* ── Runsheet F&B Courses (moved here from Venue Settings) ── */}
+                {settingsForm && (
+                  <div className="dante-card p-6 mb-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-1">RUNSHEET F&amp;B COURSES</h2>
+                    <p className="font-dm text-xs text-ink/50 mb-3">Customise the course headers used inside Runsheet Builder (one per line). Leave blank to use defaults.</p>
+                    <textarea
+                      rows={6}
+                      value={(() => {
+                        if (settingsForm.customCourses) {
+                          try {
+                            const arr = JSON.parse(settingsForm.customCourses);
+                            if (Array.isArray(arr)) return arr.join('\n');
+                          } catch {}
+                          return settingsForm.customCourses;
+                        }
+                        return ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'].join('\n');
+                      })()}
+                      onChange={e => {
+                        const lines = e.target.value.split('\n').map((s: string) => s.trim()).filter(Boolean);
+                        setSettingsForm((f: any) => ({ ...f, customCourses: JSON.stringify(lines) }));
+                      }}
+                      placeholder={'Canapes\nEntree\nMain\nDessert\nCheese\nDrinks\nOther'}
+                      className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-y"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateSettings.mutate({ customCourses: settingsForm.customCourses })}
+                      disabled={updateSettings.isPending}
+                      className="mt-3 btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream disabled:opacity-50">
+                      {updateSettings.isPending ? 'SAVING…' : 'SAVE COURSES'}
+                    </button>
+                  </div>
+                )}
 
                 {/* ── PACKAGES TAB ── */}
                 {menuSettingsSection === 'packages' && (<div className="max-w-3xl mx-auto space-y-6">

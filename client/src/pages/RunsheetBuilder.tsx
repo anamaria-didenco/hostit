@@ -128,58 +128,20 @@ const BAR_OPTIONS = [
 
 function SpacePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { data: spaces, isLoading } = trpc.spaces.list.useQuery();
-  const [customMode, setCustomMode] = useState(false);
   const matchesSaved = !!value && !!spaces && spaces.some((s: any) => s.name === value);
-  // If user is typing a custom value, show free-text mode
-  if (customMode) {
-    return (
-      <div className="flex gap-1">
-        <Input
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder="Type a custom space..."
-          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
-          autoFocus
-        />
-        <button
-          type="button"
-          onClick={() => { setCustomMode(false); onChange(""); }}
-          className="no-print h-9 px-2 border border-gold/30 text-ink/40 hover:text-ink hover:border-forest transition-colors text-xs font-bebas tracking-widest"
-          title="Pick from saved spaces"
-        >
-          ✕
-        </button>
-      </div>
-    );
-  }
   const noSpacesYet = !isLoading && (!spaces || spaces.length === 0);
-  // Empty-state — guide user to set up spaces in Settings rather than silently
-  // showing a useless dropdown. Still offer free-text fallback so the runsheet
-  // isn't blocked.
   if (noSpacesYet) {
     return (
-      <div className="flex flex-col gap-1.5 no-print">
-        <div className="border border-dashed border-gold/40 bg-linen/40 px-2.5 py-2 flex items-center justify-between gap-2">
-          <span className="font-dm text-xs text-ink/50">No spaces saved yet</span>
-          <a href="/spaces" target="_blank" rel="noopener noreferrer" className="font-bebas tracking-widest text-[10px] text-forest hover:underline whitespace-nowrap">+ ADD SPACES</a>
-        </div>
-        <button
-          type="button"
-          onClick={() => setCustomMode(true)}
-          className="text-left font-dm text-[11px] text-ink/40 hover:text-forest hover:underline transition-colors"
-        >
-          or type a one-off space →
-        </button>
+      <div className="border border-dashed border-gold/40 bg-linen/40 px-2.5 py-2 flex items-center justify-between gap-2 no-print">
+        <span className="font-dm text-xs text-ink/50">No spaces saved yet — add them in Settings → Venue → Spaces.</span>
+        <a href="/dashboard?tab=settings&sub=venue" className="font-bebas tracking-widest text-[10px] text-forest hover:underline whitespace-nowrap">+ ADD SPACES</a>
       </div>
     );
   }
   return (
     <select
       value={value}
-      onChange={e => {
-        if (e.target.value === "__custom__") { setCustomMode(true); onChange(""); }
-        else onChange(e.target.value);
-      }}
+      onChange={e => onChange(e.target.value)}
       className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest text-sm h-9 px-2 bg-white font-dm no-print"
     >
       <option value="">— select a space —</option>
@@ -187,9 +149,8 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
         <option key={s.id} value={s.name}>{s.name}{s.capacitySeated ? ` (${s.capacitySeated} seated)` : ''}</option>
       ))}
       {value && !matchesSaved && (
-        <option value={value}>{value} (custom)</option>
+        <option value={value}>{value} (legacy — pick a saved space)</option>
       )}
-      <option value="__custom__">+ Custom / other...</option>
     </select>
   );
 }
