@@ -685,7 +685,11 @@ export default function Dashboard() {
   const [tab, setTab] = useState<DashTab>(_initTab);
   const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>(_initSubTab);
   const [venueSettingsSection, setVenueSettingsSection] = useState<"details"|"profile"|"spaces">("details");
-  const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("packages");
+  const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("catalogue");
+  const [showCatalogAiPanel, setShowCatalogAiPanel] = useState(false);
+  const [catalogAiText, setCatalogAiText] = useState("");
+  const [catalogAiPreview, setCatalogAiPreview] = useState<Array<{ name: string; description?: string; price?: number; pricingType?: 'per_person'|'per_item'; allergens?: string }>>([]);
+  const parseFnbForCatalog = trpc.menuCatalog.parseFnbText.useMutation();
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
@@ -696,6 +700,16 @@ export default function Dashboard() {
   const [customDateTo, setCustomDateTo] = useState("");
   const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("list");
   const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
+
+  // ── Color-code calendar events by space, so it's easy to see *where* a booking
+  // is at a glance. Hash the space name into a fixed palette of soft accents
+  // (returns a CSS color string usable as borderLeftColor / a small dot).
+  const SPACE_PALETTE = ['#6b98e7','#e4a25b','#7fb069','#c97b9c','#9b8acc','#5fb6ad','#d97a5b','#b88e4a','#8aa9d6','#a07cc5'];
+  const spaceColor = (name?: string | null) => {
+    if (!name) return null;
+    let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return SPACE_PALETTE[h % SPACE_PALETTE.length];
+  };
   const [kanbanDetailOpen, setKanbanDetailOpen] = useState(false);
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
   const [kanbanStagePrefs, setKanbanStagePrefs] = useState<{ visible: string[]; order: string[] } | null>(null);
@@ -1746,11 +1760,12 @@ export default function Dashboard() {
                                     draggable
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { setSelectedBooking(b); }}
+                                    style={spaceColor(b.spaceName) ? { borderLeft: `3px solid ${spaceColor(b.spaceName)}` } : undefined}
                                     className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
                                     <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
                                     {(b.guestCount || b.spaceName) && (
-                                      <div className="opacity-75 truncate text-[9px]">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                      <div className="opacity-75 truncate text-[9px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
                                     )}
                                     <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                   </button>
@@ -1760,6 +1775,7 @@ export default function Dashboard() {
                                     draggable
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { selectLead(l); setTab('enquiries'); }}
+                                    style={spaceColor(l.spaceName) ? { borderLeft: `3px solid ${spaceColor(l.spaceName)}` } : undefined}
                                     className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
                                     <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
@@ -3133,6 +3149,7 @@ export default function Dashboard() {
                                   draggable
                                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => setSelectedBooking(b)}
+                                  style={spaceColor(b.spaceName) ? { borderLeft: `4px solid ${spaceColor(b.spaceName)}` } : undefined}
                                   className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity cursor-move`}
                                   title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
                                   <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
@@ -3160,6 +3177,7 @@ export default function Dashboard() {
                                   draggable
                                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => setSelectedBooking({ ...l, _isLead: true })}
+                                  style={spaceColor(l.spaceName) ? { borderLeft: `4px solid ${spaceColor(l.spaceName)}` } : undefined}
                                   className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move`}
                                   title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
                                   <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
@@ -6051,22 +6069,8 @@ export default function Dashboard() {
               {/* ── MENU & CATALOGUE ─────────────────────────────── */}
               {settingsSubTab === "menu" && (
               <div className="max-w-5xl mx-auto">
-                <h1 className="font-cormorant text-3xl font-semibold text-ink mb-4">Menu & Catalogue</h1>
-
-                {/* Sub-section tabs */}
-                <div className="flex gap-0 mb-6 border-b border-gold/20">
-                  {([
-                    { id: 'packages', label: 'F&B Packages' },
-                    { id: 'catalogue', label: 'Menu Catalogue' },
-                  ] as const).map(s => (
-                    <button key={s.id} onClick={() => setMenuSettingsSection(s.id)}
-                      className={`font-bebas tracking-widest text-sm px-5 py-2.5 border-b-2 transition-colors ${
-                        menuSettingsSection === s.id ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink/70'
-                      }`}>
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
+                <h1 className="font-cormorant text-3xl font-semibold text-ink mb-2">Menu</h1>
+                <p className="font-dm text-sm text-ink/60 mb-6">Build your food &amp; beverage menu. Create custom categories under Food and Beverages, then add items inside each — by hand, by pasting CSV, or by letting AI parse a description for you.</p>
 
                 {/* ── PACKAGES TAB ── */}
                 {menuSettingsSection === 'packages' && (<div className="max-w-3xl mx-auto space-y-6">
@@ -6236,7 +6240,7 @@ export default function Dashboard() {
                       className={`font-bebas tracking-widest text-sm px-6 py-2.5 border-b-2 transition-colors ${
                         catalogActiveType === t ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink/70'
                       }`}>
-                      {t === 'food' ? '🍽 FOOD' : '🍷 DRINKS'}
+                      {t === 'food' ? '🍽 FOOD' : '🍷 BEVERAGES'}
                     </button>
                   ))}
                 </div>
@@ -6254,7 +6258,7 @@ export default function Dashboard() {
                         <form onSubmit={e => { e.preventDefault(); createCatalogCategory.mutate({ name: catalogCategoryForm.name, type: catalogActiveType, description: catalogCategoryForm.description || undefined }); }}
                           className="p-3 border-b border-gold/10 bg-linen/40 space-y-2">
                           <Input required value={catalogCategoryForm.name} onChange={e => setCatalogCategoryForm(f => ({ ...f, name: e.target.value }))}
-                            placeholder={catalogActiveType === 'food' ? 'e.g. Canapés' : 'e.g. Wines'}
+                            placeholder={catalogActiveType === 'food' ? 'e.g. Canapés, Grazing, Shared Plates…' : 'e.g. Wines, Cocktails, Beer, Non-Alcoholic…'}
                             className="rounded-none border border-gold/30 text-sm h-8" />
                           <div className="flex gap-1.5">
                             <button type="submit" disabled={createCatalogCategory.isPending} className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 py-1">ADD</button>
@@ -6306,12 +6310,86 @@ export default function Dashboard() {
                                 className="w-16 font-dm text-xs text-ink bg-transparent outline-none placeholder:text-ink/30"
                               />
                             </div>
-                            <button onClick={() => setShowCatalogCsvImport(v => !v)}
-                              className="border border-gold/30 text-ink/60 font-bebas tracking-widest text-xs px-3 py-1.5 hover:border-forest hover:text-forest transition-colors">CSV IMPORT</button>
+                            <button onClick={() => { setShowCatalogAiPanel(v => !v); setShowCatalogCsvImport(false); }}
+                              className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors border ${showCatalogAiPanel ? 'bg-forest text-cream border-forest' : 'border-forest/40 text-forest hover:bg-forest/10'}`}>✨ AI ADD</button>
+                            <button onClick={() => { setShowCatalogCsvImport(v => !v); setShowCatalogAiPanel(false); }}
+                              className="border border-gold/30 text-ink/60 font-bebas tracking-widest text-xs px-3 py-1.5 hover:border-forest hover:text-forest transition-colors">CSV / PASTE</button>
                             <button onClick={() => { setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); setShowCatalogItemForm(true); }}
                               className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 py-1.5">+ ADD ITEM</button>
                           </div>
                         </div>
+
+                        {/* AI smart-add panel */}
+                        {showCatalogAiPanel && (
+                          <div className="p-4 border-b border-gold/10 bg-forest/5 space-y-3">
+                            <div>
+                              <p className="font-dm text-xs text-ink/70 mb-1"><span className="font-semibold text-forest">✨ AI Smart Add</span> — paste anything: a menu PDF excerpt, a supplier list, an email, even a rough description. AI will extract items into the current category.</p>
+                              <p className="font-dm text-[11px] text-ink/40">Adding to <span className="font-semibold text-ink/70">{(catalogCategories ?? []).find((c: any) => c.id === catalogActiveCategoryId)?.name ?? '—'}</span></p>
+                            </div>
+                            <Textarea value={catalogAiText} onChange={e => setCatalogAiText(e.target.value)}
+                              placeholder={catalogActiveType === 'food'
+                                ? "e.g.\n• Smoked salmon blini with creme fraiche - $8.50pp\n• Pork belly bao buns - $9 each\n• Vegetarian arancini, pea & mint - $6.50pp (V, GF available)\n\n…or just paste a whole menu and let AI sort it out."
+                                : "e.g.\nNZ Pinot Noir 2022 - $14 per glass / $65 per bottle\nLocal IPA on tap - $12\nEspresso Martini cocktail - $18\nHouse-made lemonade (non-alc) - $7"}
+                              className="rounded-none border border-forest/30 text-sm h-32" />
+                            {catalogAiPreview.length > 0 && (
+                              <div className="bg-white border border-forest/30 rounded p-2 max-h-56 overflow-auto">
+                                <p className="font-bebas tracking-widest text-[11px] text-forest mb-2 px-1">PREVIEW · {catalogAiPreview.length} ITEMS — review then confirm</p>
+                                <div className="divide-y divide-gold/10">
+                                  {catalogAiPreview.map((it, i) => (
+                                    <div key={i} className="flex items-center justify-between gap-2 px-1 py-1.5">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="font-dm text-sm text-ink truncate">{it.name}</div>
+                                        {it.description && <div className="font-dm text-[11px] text-ink/50 truncate">{it.description}</div>}
+                                      </div>
+                                      <span className="font-dm text-xs text-ink/70 whitespace-nowrap">${(it.price ?? 0).toFixed(2)} <span className="text-ink/40">/ {it.pricingType === 'per_item' ? 'item' : 'person'}</span></span>
+                                      <button onClick={() => setCatalogAiPreview(p => p.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex gap-2 flex-wrap">
+                              {catalogAiPreview.length === 0 ? (
+                                <button onClick={async () => {
+                                  if (!catalogAiText.trim() || !catalogActiveCategoryId) return;
+                                  try {
+                                    const res = await parseFnbForCatalog.mutateAsync({ text: catalogAiText });
+                                    const parsed = (res.fnbItems ?? []).map((x: any) => {
+                                      const raw = String(x.dishName ?? x.name ?? '').trim();
+                                      const priceMatch = raw.match(/\$?\s*(\d+(?:\.\d+)?)/);
+                                      const cleanName = raw.replace(/[-–—:|]?\s*\$?\s*\d+(?:\.\d+)?\s*(?:pp|per\s*person|per\s*item|each)?\s*$/i, '').trim() || raw;
+                                      const desc = String(x.description ?? '').trim();
+                                      const descPriceMatch = !priceMatch ? desc.match(/\$?\s*(\d+(?:\.\d+)?)/) : null;
+                                      const priceStr = priceMatch?.[1] ?? descPriceMatch?.[1];
+                                      const price = priceStr ? parseFloat(priceStr) : 0;
+                                      const lower = (raw + ' ' + desc).toLowerCase();
+                                      const pricingType: 'per_person'|'per_item' = /(\bper\s*item\b|\beach\b|\bpiece\b|\bbottle\b|\bglass\b|\bcocktail\b)/.test(lower) ? 'per_item' : 'per_person';
+                                      return { name: cleanName, description: desc || undefined, price, pricingType, allergens: x.dietary || undefined };
+                                    }).filter((x: any) => x.name);
+                                    setCatalogAiPreview(parsed);
+                                    if (!parsed.length) toast.error("AI couldn't find any items in that text");
+                                  } catch (err: any) {
+                                    toast.error('AI parse failed: ' + (err?.message ?? 'unknown error'));
+                                  }
+                                }} disabled={parseFnbForCatalog.isPending || !catalogAiText.trim() || !catalogActiveCategoryId}
+                                  className="btn-forest text-cream font-bebas tracking-widest text-xs px-4 py-1.5">{parseFnbForCatalog.isPending ? 'PARSING…' : '✨ PARSE WITH AI'}</button>
+                              ) : (
+                                <>
+                                  <button onClick={() => {
+                                    if (!catalogActiveCategoryId) return;
+                                    const rows = catalogAiPreview.map(it => ({ categoryId: catalogActiveCategoryId, name: it.name, description: it.description, pricingType: it.pricingType ?? 'per_person', price: it.price ?? 0, unit: it.pricingType === 'per_item' ? 'piece' : 'person', allergens: it.allergens }));
+                                    bulkCreateCatalogItems.mutate(rows, { onSuccess: () => { setCatalogAiPreview([]); setCatalogAiText(''); setShowCatalogAiPanel(false); } });
+                                  }} disabled={bulkCreateCatalogItems.isPending}
+                                    className="btn-forest text-cream font-bebas tracking-widest text-xs px-4 py-1.5">ADD {catalogAiPreview.length} ITEMS</button>
+                                  <button onClick={() => setCatalogAiPreview([])}
+                                    className="border border-gold/30 text-ink/60 font-bebas tracking-widest text-xs px-3 py-1.5">RE-PARSE</button>
+                                </>
+                              )}
+                              <button onClick={() => { setShowCatalogAiPanel(false); setCatalogAiText(''); setCatalogAiPreview([]); }}
+                                className="border border-gray-300 text-gray-500 text-xs px-3 py-1.5">Cancel</button>
+                            </div>
+                          </div>
+                        )}
 
                         {/* CSV Import panel */}
                         {showCatalogCsvImport && (
