@@ -259,24 +259,38 @@ export async function createNbiBooking(
     };
 
     const postUrl = `${NBI_API}/bookings/save-new-booking/venue/${encodeURIComponent(creds.venueId)}`;
-    const res = await fetch(postUrl, {
+    let res = await fetch(postUrl, {
       method: "POST",
       headers: widgetHeaders(),
       body: JSON.stringify(body),
     });
+    // NBI dedupes on our `VF-{id}` reference even when the prior booking has
+    // been deleted/hidden in their UI — so a user who clicks "push" again sees
+    // a 409 with no visible counterpart in NBI. Retry once with a uniquified
+    // reference (timestamp suffix) so the user can recover without us forcing
+    // them to manually rename the booking on NBI's side.
+    if (res.status === 409) {
+      const uniqueRef = `${payload.reference || `VF-${Date.now()}`}-${Date.now().toString(36)}`;
+      console.warn(`[NBI] save-new-booking 409 — retrying with reference="${uniqueRef}"`);
+      res = await fetch(postUrl, {
+        method: "POST",
+        headers: widgetHeaders(),
+        body: JSON.stringify({ ...body, reference: uniqueRef }),
+      });
+    }
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       console.error("[NBI] save-new-booking failed:", res.status, t.slice(0, 300), "payload:",
         JSON.stringify({ time: slot.time, sectionId: slot.sectionId, service: service.name, customer: body.customer }));
-      // 409 from NBI usually means either the slot is already taken or NBI thinks
-      // this is a duplicate booking. Their response body is typically empty so
-      // surface a helpful message instead of just "NowBookIt 409:".
+      // After the 409 retry, a second 409 means the *time slot* is genuinely
+      // taken (or the venue has another booking we can't see in their UI) —
+      // not a stale-reference dedupe. Surface that distinction.
       if (res.status === 409) {
         return {
           success: false,
           error:
-            "NowBookIt rejected this as a conflict (409). The booking may already exist in NowBookIt under a different reference, or that exact time slot is unavailable. Check NowBookIt for an existing booking around " +
-            `${payload.date} ${payload.time}, or try a slightly different time.`,
+            `NowBookIt rejected the booking again (409) after retrying with a fresh reference. ` +
+            `That usually means the ${payload.date} ${payload.time} slot for "${service.name}" is already taken in NowBookIt — try a different time, or check the NowBookIt diary for an overlapping booking.`,
         };
       }
       const detail = t.trim() ? `: ${t.slice(0, 200)}` : "";
