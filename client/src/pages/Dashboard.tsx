@@ -1853,7 +1853,7 @@ export default function Dashboard() {
                                   <button key={l.id}
                                     draggable
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
-                                    onClick={() => { selectLead(l); setTab('enquiries'); }}
+                                    onClick={() => { setSelectedBooking({ ...l, _isLead: true }); }}
                                     style={spaceColor(l.spaceName) ? { borderLeft: `3px solid ${spaceColor(l.spaceName)}` } : undefined}
                                     className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>

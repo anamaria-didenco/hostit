@@ -1398,7 +1398,7 @@ export default function RunsheetBuilder() {
   // ── Home screen: no runsheet selected ────────────────────────────────────────
   if (!sheetId && !leadId && !bookingId && !isNewMode) {
     return (
-      <div className="min-h-screen bg-linen">
+      <div className="min-h-screen bg-cream">
         <div className="bg-forest border-b border-white/10 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-4">
             <button onClick={() => navigate("/")} className="text-white/50 hover:text-white transition-colors">
@@ -1495,49 +1495,43 @@ export default function RunsheetBuilder() {
   const checkedCount = checklistItems.filter(i => i.checked).length;
 
   return (
-    <div className="min-h-screen bg-linen print:bg-white">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="no-print bg-forest border-b border-white/10 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => {
-              if (bookingId) navigate(`/event/${bookingId}`);
-              else if (leadId) navigate("/");
-              else navigate("/runsheet");
-            }}
-            className="text-white/50 hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <span className="font-bebas tracking-widest text-gold text-sm">RUNSHEET BUILDER</span>
-            {sheetId && <span className="ml-2 text-white/30 text-xs font-dm">#{sheetId}</span>}
-            {bookingId && (
-              <span className="ml-2 text-white/40 text-xs font-dm">
-                · Event #{bookingId}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-cream print:bg-white">
+      {/* ── Header (matches EventDetail style) ──────────────────────────── */}
+      <nav className="no-print bg-forest-dark sticky top-0 z-50 border-b border-gold/20 h-14 flex items-center px-4 gap-3">
+        <button
+          onClick={() => {
+            if (bookingId) navigate(`/event/${bookingId}`);
+            else if (leadId) navigate("/");
+            else navigate("/runsheet");
+          }}
+          className="text-cream/70 hover:text-cream flex items-center gap-1.5 font-bebas tracking-widest text-xs"
+        >
+          <ArrowLeft className="w-4 h-4" /> {bookingId ? 'EVENT' : 'BACK'}
+        </button>
+        <div className="h-4 w-px bg-gold/20" />
+        <span className="font-cormorant text-cream font-semibold text-base flex-1 truncate">
+          {title || 'Runsheet Builder'}
+          {sheetId && <span className="ml-2 text-cream/40 text-xs font-dm">#{sheetId}</span>}
+        </span>
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setShowTemplates(v => !v)}
             className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 transition-colors px-3 py-1.5 border ${
-              showTemplates ? 'border-gold text-gold bg-gold/10' : 'border-white/20 text-white/60 hover:text-gold hover:border-gold/50'
+              showTemplates ? 'border-gold text-gold bg-gold/10' : 'border-cream/20 text-cream/70 hover:text-gold hover:border-gold/40'
             }`}
           >
             <FileText className="w-3.5 h-3.5" /> TEMPLATES
           </button>
           <button
             onClick={() => setPrintColumns(c => c === 1 ? 2 : 1)}
-            className="font-bebas tracking-widest text-xs text-white/60 hover:text-gold flex items-center gap-1.5 transition-colors no-print"
+            className="hidden md:flex font-bebas tracking-widest text-xs text-cream/70 hover:text-gold items-center gap-1.5 transition-colors px-2 py-1.5"
             title={printColumns === 1 ? 'Switch to 2-column print' : 'Switch to 1-column print'}
           >
             <LayoutGrid className="w-3.5 h-3.5" /> {printColumns === 1 ? '1 COL' : '2 COL'}
           </button>
           <button
             onClick={() => window.print()}
-            className="font-bebas tracking-widest text-xs text-white/60 hover:text-gold flex items-center gap-1.5 transition-colors"
+            className="font-bebas tracking-widest text-xs text-cream/70 hover:text-gold flex items-center gap-1.5 transition-colors px-2 py-1.5"
           >
             <Printer className="w-4 h-4" /> PRINT
           </button>
@@ -1546,18 +1540,11 @@ export default function RunsheetBuilder() {
               href={`/api/staff-sheet/${sheetId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-bebas tracking-widest text-xs bg-forest/80 hover:bg-forest-dark text-white px-3 py-1.5 flex items-center gap-1.5 transition-colors"
+              className="hidden md:flex font-bebas tracking-widest text-xs border border-cream/20 text-cream/70 hover:border-gold/40 hover:text-gold px-3 py-1.5 items-center gap-1.5 transition-colors"
             >
-              <FileText className="w-3.5 h-3.5" /> STAFF SHEET PDF
+              <FileText className="w-3.5 h-3.5" /> STAFF PDF
             </a>
-          ) : (
-            <button
-              onClick={() => toast.error('Save the runsheet first to generate a Staff Sheet PDF')}
-              className="font-bebas tracking-widest text-xs text-white/30 flex items-center gap-1.5 cursor-not-allowed"
-            >
-              <FileText className="w-3.5 h-3.5" /> STAFF SHEET PDF
-            </button>
-          )}
+          ) : null}
           {effectiveBookingId && (
             <button
               onClick={() => {
@@ -1566,7 +1553,7 @@ export default function RunsheetBuilder() {
               }}
               disabled={pushRunsheetToNbi.isPending}
               title="Push this booking to NowBookIt"
-              className="font-bebas tracking-widest text-xs bg-[#6b98e7] hover:bg-[#5a85d4] text-white px-3 py-1.5 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              className="hidden lg:flex font-bebas tracking-widest text-xs bg-[#6b98e7] hover:bg-[#5a85d4] text-white px-3 py-1.5 items-center gap-1.5 transition-colors disabled:opacity-50"
             >
               <span className="font-bebas text-[10px] tracking-wider">NBI</span>
               {pushRunsheetToNbi.isPending ? 'PUSHING…' : 'PUSH TO NOWBOOKIT'}
@@ -1575,13 +1562,13 @@ export default function RunsheetBuilder() {
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
+            className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
-            {saving ? "SAVING..." : "SAVE RUNSHEET"}
+            {saving ? "SAVING..." : "SAVE"}
           </Button>
         </div>
-      </div>
+      </nav>
 
       {/* ── Templates Panel ─────────────────────────────────────────────── */}
       {showTemplates && (
@@ -1712,9 +1699,13 @@ export default function RunsheetBuilder() {
         </div>
 
         {/* ── Event Details Card ──────────────────────────────────────────── */}
-        <div className="bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none print:border-0 print:mb-2">
+        <div className="dante-card p-6 mb-6 print:shadow-none print:border-0 print:mb-2 print:p-0">
+          {/* Section header */}
+          <div className="flex items-center justify-between mb-4 no-print">
+            <div className="gold-rule max-w-xs"><span>EVENT DETAILS</span></div>
+          </div>
           {/* Editable title */}
-          <div className="px-6 pt-5 pb-3 no-print">
+          <div className="pb-4 no-print">
             <Input
               value={title}
               onChange={e => setTitle(e.target.value)}
@@ -1723,7 +1714,7 @@ export default function RunsheetBuilder() {
             />
           </div>
 
-          <div className="px-6 pb-5">
+          <div>
             {/* Event details grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div>
@@ -1853,7 +1844,7 @@ export default function RunsheetBuilder() {
 
               if (sectionId === 'setup') return (
                 <SortableSection key="setup" id="setup">
-                  <div className={`bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
+                  <div className={`dante-card mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
                     <div className="flex items-center no-print">
                       <button
@@ -1929,7 +1920,7 @@ export default function RunsheetBuilder() {
               // (legacy block kept below but unreachable; renderable if needed in future)
               if (false && sectionId === 'dietary') return (
                 <SortableSection key="dietary" id="dietary">
-                  <div className={`bg-white border border-gold/30 shadow-sm mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
+                  <div className={`dante-card mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
                     <div className="flex items-center no-print">
                       <button
@@ -3426,7 +3417,7 @@ export default function RunsheetBuilder() {
         {(() => {
           const proposalList = (leadProposals ?? allProposals ?? []) as any[];
           return (
-          <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
+          <div className="dante-card mt-4 no-print">
             <button
               onClick={() => setProposalSectionOpen(v => !v)}
               className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors"
@@ -3524,7 +3515,7 @@ export default function RunsheetBuilder() {
         })()}
 
         {/* ── Floor Plan Link section ──────────────────────────────────── */}
-        <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
+        <div className="dante-card mt-4 no-print">
           <button
             onClick={() => setFloorPlanSectionOpen(v => !v)}
             className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors"
@@ -3582,7 +3573,7 @@ export default function RunsheetBuilder() {
 
         {/* ── Staff Portal Links section ───────────────────────────────── */}
         {sheetId && (
-          <div className="bg-white border border-gold/30 shadow-sm mt-4 no-print">
+          <div className="dante-card mt-4 no-print">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-forest" />

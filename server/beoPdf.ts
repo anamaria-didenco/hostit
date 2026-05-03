@@ -296,24 +296,26 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     ${showLastCol ? `<div class="fnb-last">${lastColHeader}</div>` : ""}
   </div>
   ${allCourses.map(course => `
-  <div class="course-group">${course}</div>
-  ${(grouped[course] ?? []).map((f: any) => `
-  <div class="fnb-row">
-    <div class="fnb-course"></div>
-    <div class="fnb-dish">
-      <div class="dish-name">${f.dishName}</div>
-      ${f.description ? `<div class="dish-desc">${f.description}</div>` : ""}
-    </div>
-    ${showQty ? `<div class="fnb-qty">${course === "Drinks" ? "" : (f.qty ?? 1)}</div>` : ""}
-    <div class="fnb-time">${f.serviceTime ? fmt12(f.serviceTime) : ""}</div>
-    <div class="fnb-diet">${f.dietary ? `<span class="diet-tag">${f.dietary}</span>` : ""}</div>
-    ${showLastCol ? `<div class="fnb-last">
-      ${isKitchen
-        ? `${f.prepNotes ? `<div class="prep-note">${f.prepNotes}</div>` : ""}${f.platingNotes ? `<div class="plating-note">${f.platingNotes}</div>` : ""}`
-        : (f.staffAssigned || "")
-      }
-    </div>` : ""}
-  </div>`).join("")}`).join("")}
+  <div class="course-block">
+    <div class="course-group">${course}</div>
+    ${(grouped[course] ?? []).map((f: any) => `
+    <div class="fnb-row">
+      <div class="fnb-course"></div>
+      <div class="fnb-dish">
+        <div class="dish-name">${f.dishName}</div>
+        ${f.description ? `<div class="dish-desc">${f.description}</div>` : ""}
+      </div>
+      ${showQty ? `<div class="fnb-qty">${course === "Drinks" ? "" : (f.qty ?? 1)}</div>` : ""}
+      <div class="fnb-time">${f.serviceTime ? fmt12(f.serviceTime) : ""}</div>
+      <div class="fnb-diet">${f.dietary ? `<span class="diet-tag">${f.dietary}</span>` : ""}</div>
+      ${showLastCol ? `<div class="fnb-last">
+        ${isKitchen
+          ? `${f.prepNotes ? `<div class="prep-note">${f.prepNotes}</div>` : ""}${f.platingNotes ? `<div class="plating-note">${f.platingNotes}</div>` : ""}`
+          : (f.staffAssigned || "")
+        }
+      </div>` : ""}
+    </div>`).join("")}
+  </div>`).join("")}
 </div>`;
     }
 
@@ -388,7 +390,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     background: #f9f5ef;
     padding: 0;
   }
-  .page { padding: 16px 20px; max-width: 210mm; margin: 0 auto; }
+  /* Page margins are controlled by Puppeteer (12mm all sides) so .page only
+     needs minimal internal padding for visual rhythm. */
+  .page { padding: 0 4px; max-width: 210mm; margin: 0 auto; }
 
   /* ── Header ── */
   .doc-header {
@@ -663,9 +667,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     color: rgba(26,18,9,0.3);
   }
 
+  /* A course-block keeps a course header + its first row together; if the
+     whole block fits on the remaining page it stays whole, otherwise it
+     breaks at a row boundary (rather than orphaning the course header). */
+  .course-block { page-break-inside: auto; break-inside: auto; }
+
   @media print {
     /* Page size only — margins are controlled by Puppeteer's PDF options
-       (server/beoPdf.ts ~line 711) so leaving margin out of @page avoids
+       (server/beoPdf.ts ~line 745) so leaving margin out of @page avoids
        conflicting rules between Chromium's CSS engine and Puppeteer. */
     @page { size: A4 portrait; }
     body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -742,10 +751,22 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: "networkidle0" });
+      // Symmetric 12mm margins so multi-page BEOs have proper breathing
+      // room on every page (top/left/right used to be 0mm which made
+      // page 2+ feel cramped against the printable edge). Footer template
+      // adds page numbers + BEO ref so detached pages stay identifiable.
+      const footerTemplate = `
+        <div style="font-family:'DM Sans',Helvetica,Arial,sans-serif;font-size:7pt;color:#8a7c66;width:100%;padding:0 12mm;display:flex;justify-content:space-between;">
+          <span>BEO #${booking.id} · ${clientName.replace(/[<>&"']/g,'')}</span>
+          <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+        </div>`;
       const pdf = await page.pdf({
         format: "A4",
         printBackground: true,
-        margin: { top: "0mm", right: "0mm", bottom: "12mm", left: "0mm" },
+        margin: { top: "12mm", right: "10mm", bottom: "16mm", left: "10mm" },
+        displayHeaderFooter: true,
+        headerTemplate: `<div></div>`,
+        footerTemplate,
       });
       res.setHeader("Content-Type", "application/pdf");
       // Public event-pack opens inline in the browser (no forced download)

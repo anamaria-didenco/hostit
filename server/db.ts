@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   InsertUser, users,
@@ -220,15 +220,40 @@ export async function updateProposal(id: number, data: Partial<InsertProposal>) 
 }
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────
+// Auto-mark confirmed events as 'finished' once the event date is more than
+// 1 day in the past. Runs cheaply on every list/byMonth fetch.
+async function autoFinishPastBookings(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, ownerId: number) {
+  try {
+    // Flip confirmed → finished once the event's effective end (eventEndDate
+    // when set, else eventDate) is more than 24 h in the past. Multi-day
+    // events stay 'confirmed' until their end date passes.
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await db.update(bookings)
+      .set({ status: 'finished' })
+      .where(and(
+        eq(bookings.ownerId, ownerId),
+        eq(bookings.status, 'confirmed'),
+        or(
+          and(isNull(bookings.eventEndDate), lt(bookings.eventDate, cutoff)),
+          lt(bookings.eventEndDate, cutoff),
+        ),
+      ));
+  } catch (e) {
+    console.warn('[autoFinishPastBookings] failed:', e);
+  }
+}
+
 export async function getBookings(ownerId: number) {
   const db = await getDb();
   if (!db) return [];
+  await autoFinishPastBookings(db, ownerId);
   return db.select().from(bookings).where(eq(bookings.ownerId, ownerId)).orderBy(desc(bookings.eventDate));
 }
 
 export async function getBookingsByMonth(ownerId: number, year: number, month: number) {
   const db = await getDb();
   if (!db) return [];
+  await autoFinishPastBookings(db, ownerId);
   const start = new Date(year, month - 1, 1);
   const end = new Date(year, month, 0, 23, 59, 59);
   return db.select().from(bookings).where(
@@ -277,12 +302,12 @@ export async function getDashboardStats(ownerId: number) {
   const bookedLeads = allLeads.filter(l => l.status === 'booked').length;
   const conversionRate = allLeads.length > 0 ? Math.round((bookedLeads / allLeads.length) * 100) : 0;
   // Total revenue all time
-  const totalRevenueAllTime = allBookings.filter(b => b.status === 'confirmed').reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);
+  const totalRevenueAllTime = allBookings.filter(b => b.status === 'confirmed' || b.status === 'finished').reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);
   // Pending payments (bookings with outstanding balance)
   const allPayments = await db.select().from(payments).where(eq(payments.ownerId, ownerId));
   const paidByBooking: Record<number, number> = {};
   allPayments.forEach(p => { paidByBooking[p.bookingId] = (paidByBooking[p.bookingId] ?? 0) + Number(p.amount); });
-  const pendingPayments = allBookings.filter(b => b.status === 'confirmed' && Number(b.totalNzd ?? 0) > (paidByBooking[b.id] ?? 0)).length;
+  const pendingPayments = allBookings.filter(b => (b.status === 'confirmed' || b.status === 'finished') && Number(b.totalNzd ?? 0) > (paidByBooking[b.id] ?? 0)).length;
   return {
     newLeads,
     totalLeads: allLeads.length,

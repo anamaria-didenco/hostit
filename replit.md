@@ -1,5 +1,16 @@
 # VenueFlow — NZ Venue Management Platform (VenueFlowHQ)
 
+## Recent Changes (May 2026)
+
+- **Auto-finish past events**: Added `finished` value to `bookingStatusEnum` (drizzle/schema.ts) and to `DEFAULT_STATUSES` in StatusManager (stone color). `server/db.ts` calls `autoFinishPastBookings(db, ownerId)` lazily inside `getBookings()` and `getBookingsByMonth()`, flipping `confirmed → finished` once `COALESCE(eventEndDate, eventDate) < now() − 24h` — multi-day events stay confirmed until their end date passes. Reports.tsx + db.ts revenue/pending-payment counters include both `confirmed` and `finished` so historical revenue isn't dropped.
+- **Mini-calendar lead clicks**: On the Overview mini calendar, clicking a lead-only event now opens the same right-side drawer (`setSelectedBooking({ ...l, _isLead: true })`) as bookings, instead of jumping the user to the Enquiries tab — matches behaviour of the full calendar view.
+- **RunsheetBuilder design pass**: Restyled to match `EventDetail` look — slim `bg-forest-dark h-14` sticky nav with breadcrumb-style back link + truncated cormorant title; page background `bg-linen → bg-cream`; Event Details card uses `dante-card` + `gold-rule` heading; all 6 section panels converted from `bg-white border border-gold/30 shadow-sm` to `dante-card` via replace_all.
+- **BEO PDF print-friendly pass** (`server/beoPdf.ts`):
+  - Puppeteer margins changed from `{top:0, right:0, bottom:12mm, left:0}` to symmetric `{top:12mm, right:10mm, bottom:16mm, left:10mm}` so multi-page BEOs have proper breathing room on every page (page 2+ used to be cramped against the printable edge).
+  - `displayHeaderFooter: true` + `footerTemplate` adds `BEO #N · Client` on the left and `Page X of Y` on the right of every page so detached pages stay identifiable.
+  - Each F&B course (course header + rows) now wrapped in a `.course-block` container so courses break at row boundaries rather than orphaning the course header.
+  - `.page` padding reduced from `16px 20px` to `0 4px` since Puppeteer margins now own the page edges.
+
 ## Production Hardening (release-readiness pass)
 
 - `JWT_SECRET` (or `SESSION_SECRET`) is **required** in production — server throws on startup if not set or <16 chars (`server/_core/env.ts`). Dev fallback retained.

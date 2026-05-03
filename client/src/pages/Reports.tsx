@@ -31,7 +31,7 @@ export default function Reports() {
   const { data: allLeads } = trpc.leads.list.useQuery({});
   const { data: allBookings } = trpc.bookings.list.useQuery();
 
-  const confirmedBookings = (allBookings ?? []).filter((b: any) => b.status === "confirmed" || b.status === "tentative");
+  const confirmedBookings = (allBookings ?? []).filter((b: any) => b.status === "confirmed" || b.status === "tentative" || b.status === "finished");
   const totalRevenue = (allBookings ?? []).reduce((sum: number, b: any) => sum + (Number(b.totalValue) || 0), 0);
   const avgBookingValue = confirmedBookings.length > 0 ? totalRevenue / confirmedBookings.length : 0;
 

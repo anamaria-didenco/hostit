@@ -7,7 +7,7 @@ import {
 export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
 export const leadStatusEnum = pgEnum("lead_status", ["new", "contacted", "proposal_sent", "negotiating", "booked", "lost", "cancelled"]);
 export const proposalStatusEnum = pgEnum("proposal_status", ["draft", "sent", "viewed", "accepted", "declined", "expired"]);
-export const bookingStatusEnum = pgEnum("booking_status", ["confirmed", "tentative", "cancelled"]);
+export const bookingStatusEnum = pgEnum("booking_status", ["confirmed", "tentative", "cancelled", "finished"]);
 export const leadActivityTypeEnum = pgEnum("lead_activity_type", ["note", "status_change", "proposal_sent", "email", "call", "booking_created"]);
 export const menuPackageTypeEnum = pgEnum("menu_package_type", ["food", "beverages", "food_and_beverages"]);
 export const paymentTypeEnum = pgEnum("payment_type", ["deposit", "final", "partial", "refund", "other"]);
