@@ -570,6 +570,15 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
             EON Report
             <ExternalLink className="w-3.5 h-3.5 opacity-60" />
           </a>
+          <a
+            href="/ordering-guide.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 font-inter text-sm font-medium text-gray-600 bg-gray-50 border border-border rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            Ordering Guide
+            <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+          </a>
         </div>
       </div>
       {/* Desktop: sidebar */}
@@ -653,9 +662,9 @@ async function compressToDataUrl(file: File, maxW: number, maxH: number, quality
 export default function Dashboard() {
   const { user, isAuthenticated, loading, isTeamMember } = useAuth();
   const [, setLocation] = useLocation();
-  type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook"|"operations";
+  type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook";
   type SettingsSubTab = "venue"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
-  const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","expressbook","operations"];
+  const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","expressbook"];
   const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","lead-form","integrations","menu","templates","email","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist"];
   const isDashTab = (v: string | null): v is DashTab => v !== null && (DASH_TABS as readonly string[]).includes(v);
   const isSettingsSubTab = (v: string | null): v is SettingsSubTab => v !== null && (SETTINGS_SUB_TABS as readonly string[]).includes(v);
@@ -1608,7 +1617,6 @@ export default function Dashboard() {
             { id: "enquiries", label: "Events" },
             { id: "calendar", label: "Calendar" },
             { id: "tasks", label: "Tasks" },
-            { id: "operations", label: "Operations" },
             { id: "reports", label: "Reports" },
           ].map(item => (
             <button
@@ -1643,7 +1651,7 @@ export default function Dashboard() {
         {/* Mobile: current tab label */}
         <div className="md:hidden flex-1 text-center">
           <span className="font-inter text-sm font-semibold text-sage-dark">
-            {tab === "overview" ? "Home" : tab === "enquiries" ? "Events" : tab === "calendar" ? "Calendar" : tab === "tasks" ? "Tasks" : tab === "operations" ? "Operations" : tab === "reports" ? "Reports" : "Settings"}
+            {tab === "overview" ? "Home" : tab === "enquiries" ? "Events" : tab === "calendar" ? "Calendar" : tab === "tasks" ? "Tasks" : tab === "reports" ? "Reports" : "Settings"}
           </span>
         </div>
         {/* Spacer (desktop only) */}
