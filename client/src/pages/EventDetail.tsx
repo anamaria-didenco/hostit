@@ -14,7 +14,7 @@ import {
   Link2, PenLine, Plus, Trash2
 } from "lucide-react";
 import { COLOR_PRESETS, parseCustomStatuses } from "@/components/StatusManager";
-import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput } from "@/lib/dateTime";
+import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput, combineLocalDateTime } from "@/lib/dateTime";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
@@ -121,11 +121,9 @@ export default function EventDetail() {
       lastName: form.lastName,
       email: form.email,
       eventType: form.eventType || undefined,
-      eventDate: form.eventDate
-        ? (form.eventTime ? new Date(`${form.eventDate}T${form.eventTime}:00`).toISOString() : form.eventDate + 'T00:00:00.000Z')
-        : undefined,
+      eventDate: combineLocalDateTime(form.eventDate, form.eventTime),
       eventEndDate: form.eventEndDate
-        ? (form.eventEndTime ? new Date(`${form.eventEndDate}T${form.eventEndTime}:00`).toISOString() : form.eventEndDate + 'T00:00:00.000Z')
+        ? combineLocalDateTime(form.eventEndDate, form.eventEndTime)
         : null,
       guestCount: form.guestCount ? parseInt(form.guestCount) : null,
       spaceName: form.spaceName || null,
@@ -211,20 +209,18 @@ export default function EventDetail() {
                   </Select>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">EVENT DATE</label>
-                  <Input type="date" value={form.eventDate} onChange={e => setForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="font-dm text-sm" />
+                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">EVENT STARTS</label>
+                  <div className="flex gap-2">
+                    <Input type="date" value={form.eventDate} onChange={e => setForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="font-dm text-sm flex-1" aria-label="Event start date" />
+                    <Input type="time" value={form.eventTime} onChange={e => setForm((p: any) => ({ ...p, eventTime: e.target.value }))} className="font-dm text-sm w-28" aria-label="Event start time" />
+                  </div>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">START TIME</label>
-                  <Input type="time" value={form.eventTime} onChange={e => setForm((p: any) => ({ ...p, eventTime: e.target.value }))} className="font-dm text-sm" />
-                </div>
-                <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">END DATE</label>
-                  <Input type="date" value={form.eventEndDate} onChange={e => setForm((p: any) => ({ ...p, eventEndDate: e.target.value }))} className="font-dm text-sm" />
-                </div>
-                <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">END TIME</label>
-                  <Input type="time" value={form.eventEndTime} onChange={e => setForm((p: any) => ({ ...p, eventEndTime: e.target.value }))} className="font-dm text-sm" />
+                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">EVENT ENDS</label>
+                  <div className="flex gap-2">
+                    <Input type="date" value={form.eventEndDate} onChange={e => setForm((p: any) => ({ ...p, eventEndDate: e.target.value }))} className="font-dm text-sm flex-1" aria-label="Event end date" />
+                    <Input type="time" value={form.eventEndTime} onChange={e => setForm((p: any) => ({ ...p, eventEndTime: e.target.value }))} className="font-dm text-sm w-28" aria-label="Event end time" />
+                  </div>
                 </div>
                 <div>
                   <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">GUEST COUNT</label>
