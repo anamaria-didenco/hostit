@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bar Franco — Ordering Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --campari: #B80E27;
+    --orange: #C44D18;
+    --cream: #FDFAF5;
+    --white: #FFFFFF;
+    --dark: #1C1410;
+    --mid: #4A3728;
+    --muted: #9A8577;
+    --light-border: #E8E0D5;
+    --green: #2A6049;
+    --amber: #9C5C08;
+    --dd-bg: #FFF5F5;
+    --dd-border: #F5C2C7;
+    --inv-bg: #FFF8F2;
+    --inv-border: #F5D9C0;
+    --tip-bg: #F3FAF6;
+    --tip-border: #A8D5BC;
+    --warn-bg: #FFFBF0;
+    --warn-border: #F0D890;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--cream); color: var(--dark); font-family: 'Cormorant Garamond', serif; font-size: 17px; line-height: 1.6; }
+
+  header { background: var(--white); border-bottom: 3px solid var(--campari); padding: 40px 48px 32px; }
+  .eyebrow { font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; }
+  header h1 { font-family: 'Bebas Neue', sans-serif; font-size: 56px; letter-spacing: 0.04em; color: var(--dark); line-height: 1; margin-bottom: 12px; }
+  header h1 span { color: var(--campari); }
+  header p { font-size: 18px; font-style: italic; color: var(--muted); }
+
+  .page { max-width: 900px; margin: 0 auto; padding: 40px 48px 80px; }
+
+  .billing-section { background: var(--white); border: 1px solid var(--light-border); border-radius: 6px; padding: 32px 36px; margin-bottom: 24px; }
+  .billing-section h2 { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 0.06em; color: var(--dark); margin-bottom: 4px; }
+  .billing-section .subtitle { font-size: 16px; color: var(--muted); font-style: italic; margin-bottom: 24px; }
+  .billing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .billing-box { border-radius: 4px; padding: 20px 22px; }
+  .billing-box.dd { background: var(--dd-bg); border: 1.5px solid var(--dd-border); }
+  .billing-box.inv { background: var(--inv-bg); border: 1.5px solid var(--inv-border); }
+  .btype { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 6px; }
+  .billing-box.dd .btype { color: var(--campari); }
+  .billing-box.inv .btype { color: var(--orange); }
+  .billing-box h3 { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.05em; color: var(--dark); margin-bottom: 10px; }
+  .billing-box p { font-size: 15px; color: var(--mid); line-height: 1.65; }
+  .billing-box p strong { color: var(--dark); font-weight: 600; }
+
+  /* Philosophy items */
+  .philo-item { border-left: 3px solid var(--campari); padding: 8px 0 8px 16px; margin-bottom: 16px; }
+  .philo-item:last-child { margin-bottom: 0; }
+  .philo-item .plabel { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--campari); margin-bottom: 4px; }
+  .philo-item p { font-size: 15px; color: var(--mid); line-height: 1.6; }
+  .philo-item p strong { color: var(--dark); }
+
+  .section-heading { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--light-border); padding-bottom: 10px; margin-bottom: 20px; margin-top: 40px; }
+
+  .card { background: var(--white); border: 1px solid var(--light-border); border-radius: 6px; margin-bottom: 20px; overflow: hidden; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 22px 28px 18px; border-bottom: 1px solid var(--light-border); gap: 16px; }
+  .supplier-name { font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 0.05em; color: var(--dark); line-height: 1; }
+  .rep { font-size: 16px; font-style: italic; color: var(--muted); margin-top: 3px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+  .badge { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 12px; border-radius: 20px; white-space: nowrap; }
+  .badge-dd { background: var(--dd-bg); color: var(--campari); border: 1.5px solid var(--dd-border); }
+  .badge-inv { background: var(--inv-bg); color: var(--orange); border: 1.5px solid var(--inv-border); }
+  .badge-emer { background: #F5F5F5; color: var(--muted); border: 1.5px solid #DDDDD0; }
+  .badge-min { background: #F5F5F5; color: var(--mid); border: 1.5px solid #DDDDD0; }
+  .badge-nomin { background: var(--tip-bg); color: var(--green); border: 1.5px solid var(--tip-border); }
+
+  .card-body { padding: 22px 28px; }
+  .info-grid { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 20px; }
+  .info-item .key { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+  .info-item .val { font-size: 17px; font-weight: 600; color: var(--dark); }
+  .info-item .val a { color: var(--dark); text-decoration: none; }
+  .info-item .val a:hover { color: var(--campari); }
+
+  .notice { border-radius: 4px; padding: 14px 18px; margin-top: 14px; font-size: 16px; line-height: 1.6; }
+  .notice p { color: var(--mid); }
+  .notice p strong { color: var(--dark); }
+  .notice-label { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 6px; display: block; }
+  .notice.billing-dd { background: var(--dd-bg); border: 1.5px solid var(--dd-border); }
+  .notice.billing-dd .notice-label { color: var(--campari); }
+  .notice.billing-inv { background: var(--inv-bg); border: 1.5px solid var(--inv-border); }
+  .notice.billing-inv .notice-label { color: var(--orange); }
+  .notice.tip { background: var(--tip-bg); border: 1.5px solid var(--tip-border); }
+  .notice.tip .notice-label { color: var(--green); }
+  .notice.warn { background: var(--warn-bg); border: 1.5px solid var(--warn-border); }
+  .notice.warn .notice-label { color: var(--amber); }
+
+  .what-we-buy { background: #F8F6F2; border: 1px solid var(--light-border); border-radius: 4px; padding: 12px 18px; margin-top: 14px; }
+  .what-we-buy .key { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+  .what-we-buy p { font-size: 16px; font-style: italic; color: var(--mid); }
+
+  .quick-ref { background: var(--white); border: 1px solid var(--light-border); border-radius: 6px; padding: 28px 32px; margin-top: 48px; }
+  .quick-ref h2 { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 0.08em; color: var(--dark); margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0 16px 12px 0; border-bottom: 1px solid var(--light-border); }
+  tbody tr { border-bottom: 1px solid #F0EBE3; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody td { padding: 13px 16px 13px 0; font-size: 15px; color: var(--mid); vertical-align: top; }
+  tbody td:first-child { font-weight: 600; color: var(--dark); font-size: 16px; }
+  .t-dd { color: var(--campari); font-family: 'DM Mono', monospace; font-size: 12px; }
+  .t-inv { color: var(--orange); font-family: 'DM Mono', monospace; font-size: 12px; }
+  .t-sm { font-size: 12px; color: var(--muted); display: block; margin-top: 2px; }
+
+  @media (max-width: 640px) {
+    header { padding: 28px 20px 24px; }
+    header h1 { font-size: 40px; }
+    .page { padding: 28px 20px 60px; }
+    .billing-grid { grid-template-columns: 1fr; }
+    .card-header { flex-direction: column; align-items: flex-start; }
+    .quick-ref { overflow-x: auto; }
+    table { min-width: 540px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Bar Franco — Internal Operations</div>
+  <h1>Supplier &amp; <span>Ordering</span> Guide</h1>
+  <p>Order smart, protect cashflow, keep us stocked.</p>
+</header>
+
+<div class="page">
+
+  <!-- STOCK PHILOSOPHY -->
+  <div class="billing-section" style="border-left: 4px solid var(--campari);">
+    <h2>Why Stock Control Matters</h2>
+    <p class="subtitle">Bar Franco's ordering philosophy.</p>
+
+    <div class="philo-item">
+      <div class="plabel">📊 20% COGS — maximum</div>
+      <p>We target a maximum of 20% cost of goods on beverage sales. We invest in wages above the industry standard — which means COGS has to work harder to compensate. <strong>We can't control how busy we are. We can control what we spend.</strong></p>
+    </div>
+    <div class="philo-item">
+      <div class="plabel">💡 A busy week isn't always a profitable one</div>
+      <p>Revenue gets eaten fast by over-ordering and dead stock. <strong>Stock control is one of the few levers we hold directly</strong> — so we use it with intention.</p>
+    </div>
+    <div class="philo-item">
+      <div class="plabel">📋 Keep the list focused</div>
+      <p>Every bottle on a shelf is cash out of our account. A tight, well-curated list that sells through cleanly is more profitable than an impressive one that doesn't move. Nothing gets added without good reason.</p>
+    </div>
+    <div class="philo-item">
+      <div class="plabel">🖥 Let Loaded Reports guide every order</div>
+      <p>Budget, stock received, top sellers — it's all there. If something isn't selling, don't reorder just because it's low. If something is flying, make sure we're covered. Data over habit.</p>
+    </div>
+  </div>
+
+  <!-- HOW BILLING WORKS -->
+  <div class="billing-section">
+    <h2>How Billing Works</h2>
+    <p class="subtitle">How our suppliers charge us.</p>
+    <div class="billing-grid">
+      <div class="billing-box dd">
+        <div class="btype">Type 1 — Direct Debit</div>
+        <h3>Debited the Following Friday</h3>
+        <p>Peroni/Asahi, Hancocks, Allied Liquor, and Service Foods <strong>direct debit the following Friday</strong> after you place the order — regardless of what day you order. So an order placed Monday gets debited that Friday. <strong>Order earlier in the week</strong> so debits land predictably and don't stack.</p>
+      </div>
+      <div class="billing-box inv">
+        <div class="btype">Type 2 — Invoice</div>
+        <h3>Paid 20th of Following Month</h3>
+        <p>Campari, Red + White, and Casamassima invoice us — paid on the <strong>20th of the following month</strong>. We sell the stock before we pay for it — good terms. <strong>Don't order at the end of the month</strong> — it falls into the next invoice cycle and makes cashflow harder to manage.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADED REPORTS -->
+  <div class="billing-section" style="border-left: 4px solid var(--dark); background: #FAFAF7;">
+    <h2>📋 All Ordering Goes Through Loaded Reports</h2>
+    <p class="subtitle">Every order, every time — no exceptions.</p>
+    <div class="notice tip" style="margin-bottom: 16px;">
+      <span class="notice-label">✅ Standard process</span>
+      <p><strong>All ordering must be done through Loaded Reports.</strong> Every purchase order needs to be raised in the system before (or at the time of) placing the order with the supplier. This keeps our stock records accurate and our accounts reconciled.</p>
+    </div>
+    <div class="notice warn">
+      <span class="notice-label">⚠️ Emergency or off-system orders</span>
+      <p>If you ever have to order through a different avenue — a direct call, an emergency, anything outside the normal flow — <strong>still create a purchase order in Loaded Reports</strong>, but <strong>leave it outstanding</strong>. Do not receive it in yet. When the stock physically arrives, that's when you receive it into the system. This way our inventory stays accurate and nothing falls through the cracks.</p>
+    </div>
+  </div>
+
+  <div class="section-heading">🍷 Beverage &amp; Alcohol Suppliers</div>
+
+  <!-- PERONI -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="supplier-name">Peroni / Asahi</div>
+        <div class="rep">Rep: Morgan Hawkins</div>
+      </div>
+      <div class="badges">
+        <span class="badge badge-dd">Direct Debit</span>
+        <span class="badge badge-min">$1,000 min</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="info-grid">
+        <div class="info-item"><div class="key">Phone</div><div class="val"><a href="tel:+64277033150">+64 277 033 150</a></div></div>
+        <div class="info-item"><div class="key">Delivery</div><div class="val">Fridays only</div></div>
+        <div class="info-item"><div class="key">Minimum</div><div class="val">$1,000</div></div>
+      </div>
+      <div class="what-we-buy">
+        <div class="key">What we order</div>
+        <p>Peroni Nastro Azzurro 330ml, Peroni Nastro Azzurro 0.0%, Balter Hazy cans, Haagen Citrus, Somersby Apple Cider</p>
+      </div>
+      <div class="notice warn">
+        <span class="notice-label">⏰ Order cutoff</span>
+        <p>Must order by <strong>Wednesday 4pm</strong> — 48 hours before Friday delivery. Miss this and you're waiting a full week.</p>
+      </div>
+      <div class="notice billing-dd">
+        <span class="notice-label">🏦 Direct Debit — following Friday</span>
+        <p>They debit the <strong>following Friday</strong> after you order. Place mid-week so it lands predictably.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- HANCOCKS -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="supplier-name">Hancocks</div>
+        <div class="rep">Rep: Sharon Pierce</div>
+      </div>
+      <div class="badges">
+        <span class="badge badge-dd">Direct Debit</span>
+        <span class="badge badge-nomin">No Minimum</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="info-grid">
+        <div class="info-item"><div class="key">Phone</div><div class="val"><a href="tel:0272444188">027 244 4188</a></div></div>
+        <div class="info-item"><div class="key">Delivery</div><div class="val">Mon – Sun</div></div>
+        <div class="info-item"><div class="key">Cutoff</div><div class="val">10am same day</div></div>
+      </div>
+      <div class="what-we-buy">
+        <div class="key">What we order</div>
+        <p>All Fever-Tree range, Chambord, De Kuyper Amaretto, De Kuyper Cherry Liqueur, Fee Brothers Bitters, Prosecco De Bortoli</p>
+      </div>
+      <div class="notice warn">
+        <span class="notice-label">⚠️ Heads up</span>
+        <p>Sharon rarely answers her direct line. <strong>Call the Hancocks main call centre</strong> rather than waiting on a callback.</p>
+      </div>
+      <div class="notice billing-dd">
+        <span class="notice-label">🏦 Direct Debit — following Friday</span>
+        <p>They debit the <strong>following Friday</strong> after you order. Order earlier in the week.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- CAMPARI -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="supplier-name">Campari</div>
+        <div class="rep">Rep: Rhueben Burke</div>
+      </div>
+      <div class="badges">
+        <span class="badge badge-inv">Invoice — 20th</span>
+        <span class="badge badge-min">$1,000 min</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="info-grid">
+        <div class="info-item"><div class="key">Phone</div><div class="val"><a href="tel:+6421746590">+64 21 746590</a></div></div>
+        <div class="info-item"><div class="key">Email</div><div class="val"><a href="mailto:Rheuben.Burke@campari.com">Rheuben.Burke@campari.com</a></div></div>
+        <div class="info-item"><div class="key">Delivery</div><div class="val">Mon – Fri</div></div>
+        <div class="info-item"><div class="key">Cutoff</div><div class="val">9am next day</div></div>
+      </div>
+      <div class="what-we-buy">
+        <div class="key">What we order</div>
+        <p>Campari, Aperol, Disaronno, Frangelico, Grand Marnier, Averna Amaro, Cynar, Opal Nera Sambuca, Tia Maria, Fiorente Elderflower, Santa Marta Limoncello</p>
+      </div>
+      <div class="notice warn">
+        <span class="notice-label">⏰ Order cutoff</span>
+        <p>Order by <strong>9am for next-day delivery</strong>. Need something urgently? <strong>Call Rhueben directly</strong> — he'll often arrange an emergency delivery.</p>
+      </div>
+      <div class="notice billing-inv">
+        <span class="notice-label">📄 Invoice — paid 20th of following month</span>
+        <p>Great terms — we sell before we pay. <strong>Avoid ordering at month's end</strong> — it shifts the bill into the next cycle and makes cashflow harder to predict.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- RED + WHITE -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="supplier-name">Red + White</div>
+        <div class="rep">Rep: Connor James</div>
+      </div>
+      <div class="badges">
+        <span class="badge badge-inv">Invoice — 20th</span>
+        <span class="badge badge-nomin">No Minimum</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="info-grid">
+        <div class="info-item"><div class="key">Phone</div><div class="val"><a href="tel:+64272516147">+64 27 251 6147</a></div></div>
+        <div class="info-item"><div class="key">Delivery</div><div class="val">Same day on request</div></div>
+        <div class="info-item"><div class="key">Cutoff</div><div class="val">10am same day</div></div>
+      </div>
+      <div class="what-we-buy">
+        <div class="key">What we order</div>
+        <p>Dicey Pinot Noir, Laurent-Perrier La Cuvée (375ml &amp; 750ml), Mahi Sauvignon Blanc, Greystone Chardonnay, Amisfield Brut, Bird in Hand Shiraz, Mojo Pinot Grigio, RockBare Riesling, Spy Valley Sauvignon Blanc</p>
+      </div>
+      <div class="notice warn">
+        <span class="notice-label">⏰ Order cutoff</span>
+        <p>Order by <strong>10am for same-day delivery</strong>. Need something after that? <strong>Call Connor directly.</strong></p>
+      </div>
+      <div class="notice billing-inv">
+        <span class="notice-label">📄 Invoice — paid 20th of following month</span>
+        <p><strong>Avoid ordering at month's end</strong> — it shifts the bill into the next cycle and makes cashflow harder to predict.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- CASAMASSIMA -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="supplier-name">Casamassima</div>
+        <div class="rep">Rep: James Solotti</div>
+      </div>
+      <div class="badges">
+        <span class="badge badge-inv">Invoice — 20th</span>
+        <span class="badge badge-nomin">No Minimum</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="info-grid">
+        <div class="info-item"><div class="key">Phone</div><div class="val"><a href="tel:0210537182">021 053 7182</a></div></div>
+        <div class="info-item"><div class="key">Email</div><div class="val"><a href="mailto:james@casamassima.co.nz">james@casamassima.co.nz</a></div></div>
+        <div class="info-item"><div class="key">Delivery</div><div class="val">Tuesdays &amp; Fridays</div></div>
+      </div>
+      <div class="what-we-buy">
+        <div class="key">What we order</div>
+        <p>All Italian wines (Ascheri Nebbiolo, Fantini Montepulciano, Fattoria Rosato Toscana, Pellegrino Nero d'Avola, Primo Sangiovese Merlot, Renzo Masi Chianti, Mezzacorona Sav Blanc, Pellegrino Grillo, Pipoli Bianco, Primo Malvasia, Vesevo Falanghina, Vigneti Romio Pinot Grigio), Smeraldina sparkling water, Tallero Prosecco, Cinzano Bianco &amp; Rosso Vermouth, Amaro del Capo, Italian food products</p>
+      </div>
+      <div class="notice warn">
+        <span class="notice-label">⏰ Order cutoff</span>
+        <p>You can place orders at any time — but if ordering on a <strong>Tuesday or Friday</strong>, get your order in by <strong>7am</strong> for same-day delivery.</p>
+      </div>
+      <div class="notice tip">
+        <span class="notice-label">💡 If you're stuck</span>
+        <p>Outside of delivery days? <strong>Call James directly</strong> — he always helps us out.</p>
+      </div>
+      <div class="notice billing-inv">
+        <span class="notice-label">📄 Invoice — paid 20th of following month</span>
+        <p><strong>Don't order at month's end.</strong> Order earlier and make the terms work for us.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALLIED LIQUOR -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="supplier-name">Allied Liquor</div>
+        <div class="rep">Online portal — emergencies only</div>
+      </div>
+      <div class="badges">
+        <span class="badge badge-emer">Emergencies Only</span>
+        <span class="badge badge-dd">Direct Debit</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="info-grid">
+        <div class="info-item"><div class="key">How to Order</div><div class="val">Online portal</div></div>
+        <div class="info-item"><div class="key">Cutoff</div><div class="val">9am same day</div></div>
+        <div class="info-item"><div class="key">Stock</div><div class="val">Peroni bottles, Campari range</div></div>
+      </div>
+      <div class="notice warn">
+        <span class="notice-label">⚠️ Use sparingly</span>
+        <p>Allied charges a <strong>high delivery fee and packing fee</strong> on top of product cost. Only use when we're genuinely out of options — it eats directly into our margin.</p>
+      </div>
+      <div class="notice billing-dd">
+        <span class="notice-label">🏦 Direct Debit — following Friday</span>
+        <p>They debit the <strong>following Friday</strong> after you order.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-heading" style="margin-top: 48px;">🕯️ General Supplies</div>
+
+  <!-- SERVICE FOODS -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="supplier-name">Service Foods</div>
+        <div class="rep">Online ordering</div>
+      </div>
+      <div class="badges">
+        <span class="badge badge-dd">Direct Debit</span>
+        <span class="badge badge-nomin">No Minimum</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="info-grid">
+        <div class="info-item"><div class="key">Cutoff</div><div class="val">11pm for next day</div></div>
+        <div class="info-item"><div class="key">Delivery</div><div class="val">Mon – Sat</div></div>
+      </div>
+      <div class="what-we-buy">
+        <div class="key">What we order</div>
+        <p>Candles, tea lights, napkins, Coconut Water, Coke cans, Coke Zero cans</p>
+      </div>
+      <div class="notice tip">
+        <span class="notice-label">💡 Napkin rule</span>
+        <p>Order <strong>one box at a time</strong> — not two. Check what we have, order what we need. Over-ordering ties up cash for no reason.</p>
+      </div>
+      <div class="notice warn">
+        <span class="notice-label">⚠️ No Sunday delivery</span>
+        <p>Avoid large Sunday orders — no delivery that day, and it rolls into next week's debit unnecessarily.</p>
+      </div>
+      <div class="notice billing-dd">
+        <span class="notice-label">🏦 Direct Debit — following Friday</span>
+        <p>They debit the <strong>following Friday</strong> after you order. Avoid large late-week orders if cashflow is tight.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUICK REFERENCE -->
+  <div class="quick-ref">
+    <h2>Quick Reference — All Suppliers</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Supplier</th>
+          <th>Contact</th>
+          <th>Delivery</th>
+          <th>Order Cutoff</th>
+          <th>Min</th>
+          <th>Billing</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Peroni / Asahi</td>
+          <td><a href="tel:+64277033150" style="color:var(--mid);text-decoration:none;">+64 277 033 150</a><span class="t-sm">Morgan Hawkins</span></td>
+          <td>Fridays only</td>
+          <td>Wed 4pm (48hrs)</td>
+          <td>$1,000</td>
+          <td><span class="t-dd">DD Friday</span></td>
+        </tr>
+        <tr>
+          <td>Hancocks</td>
+          <td><a href="tel:0272444188" style="color:var(--mid);text-decoration:none;">027 244 4188</a><span class="t-sm">Call centre (not Sharon)</span></td>
+          <td>Mon – Sun</td>
+          <td>10am same day</td>
+          <td>None</td>
+          <td><span class="t-dd">DD Friday</span></td>
+        </tr>
+        <tr>
+          <td>Campari</td>
+          <td><a href="tel:+6421746590" style="color:var(--mid);text-decoration:none;">+64 21 746590</a><span class="t-sm">Rhueben Burke</span></td>
+          <td>Mon – Fri</td>
+          <td>9am next day</td>
+          <td>$1,000</td>
+          <td><span class="t-inv">Invoice 20th</span></td>
+        </tr>
+        <tr>
+          <td>Red + White</td>
+          <td><a href="tel:+64272516147" style="color:var(--mid);text-decoration:none;">+64 27 251 6147</a><span class="t-sm">Connor James — call if urgent</span></td>
+          <td>Same day</td>
+          <td>10am same day</td>
+          <td>None</td>
+          <td><span class="t-inv">Invoice 20th</span></td>
+        </tr>
+        <tr>
+          <td>Casamassima</td>
+          <td><a href="tel:0210537182" style="color:var(--mid);text-decoration:none;">021 053 7182</a><span class="t-sm">James Solotti</span></td>
+          <td>Tue &amp; Fri</td>
+          <td>7am Tue &amp; Fri<span class="t-sm">Anytime otherwise</span></td>
+          <td>None</td>
+          <td><span class="t-inv">Invoice 20th</span></td>
+        </tr>
+        <tr>
+          <td>Allied Liquor ⚠️</td>
+          <td>Online portal</td>
+          <td>Same day</td>
+          <td>9am same day</td>
+          <td>None</td>
+          <td><span class="t-dd">DD Friday</span></td>
+        </tr>
+        <tr>
+          <td>Service Foods</td>
+          <td>Online ordering</td>
+          <td>Mon – Sat</td>
+          <td>11pm for next day</td>
+          <td>None</td>
+          <td><span class="t-dd">DD Friday</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>
