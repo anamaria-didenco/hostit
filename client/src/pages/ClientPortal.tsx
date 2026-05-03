@@ -1,6 +1,7 @@
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
+import { toast } from "sonner";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600",
@@ -198,7 +199,7 @@ export default function ClientPortal() {
                     await signContract.mutateAsync({ token: token ?? "", signerName, signatureData });
                     setSigned(true);
                   } catch (e) {
-                    alert("Could not sign contract. Please try again or contact your coordinator.");
+                    toast.error("Could not sign contract. Please try again or contact your coordinator.");
                   } finally {
                     setSigning(false);
                   }

@@ -81,18 +81,27 @@ interface AppThemeContextType {
 
 const AppThemeContext = createContext<AppThemeContextType | undefined>(undefined);
 
+// Safe localStorage helpers — Safari private mode and some embedded webviews
+// throw on access, which would otherwise crash the entire app at boot.
+function safeGet(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function safeSet(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch { /* ignore quota / private mode */ }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [colourTheme, setColourThemeState] = useState<ColourTheme>(() => {
-    return (localStorage.getItem("hostit-colour-theme") as ColourTheme) || "sage";
+    return (safeGet("hostit-colour-theme") as ColourTheme) || "sage";
   });
   const [fontTheme, setFontThemeState] = useState<FontTheme>(() => {
-    return (localStorage.getItem("hostit-font-theme") as FontTheme) || "modern";
+    return (safeGet("hostit-font-theme") as FontTheme) || "modern";
   });
 
   // Apply colour theme as data-theme attribute on <html>
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", colourTheme);
-    localStorage.setItem("hostit-colour-theme", colourTheme);
+    safeSet("hostit-colour-theme", colourTheme);
   }, [colourTheme]);
 
   // Apply font theme as CSS variables on <html>
@@ -100,7 +109,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement;
     root.style.setProperty("--font-heading", FONT_HEADING_MAP[fontTheme]);
     root.style.setProperty("--font-body", FONT_BODY_MAP[fontTheme]);
-    localStorage.setItem("hostit-font-theme", fontTheme);
+    safeSet("hostit-font-theme", fontTheme);
   }, [fontTheme]);
 
   const setColourTheme = (t: ColourTheme) => setColourThemeState(t);
