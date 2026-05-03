@@ -76,31 +76,39 @@ export default function Checklist() {
   return (
     <div className="min-h-screen bg-cream print:bg-white">
       {/* Nav */}
-      <nav className="bg-ink text-cream px-6 py-3 flex items-center justify-between print:hidden">
-        <div className="flex items-center gap-4">
+      <nav className="bg-ink text-cream px-4 md:px-6 py-3 flex items-center justify-between gap-2 print:hidden">
+        <div className="flex items-center gap-2 md:gap-4 min-w-0">
           <Link href="/dashboard">
-            <button className="flex items-center gap-2 font-bebas text-xs tracking-widest text-cream/60 hover:text-cream">
-              <ChevronLeft className="w-4 h-4" /> BACK TO DASHBOARD
+            <button className="flex items-center gap-1.5 font-bebas text-xs tracking-widest text-cream/60 hover:text-cream min-h-[44px]">
+              <ChevronLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">BACK TO DASHBOARD</span>
+              <span className="sm:hidden">BACK</span>
             </button>
           </Link>
-          <div className="w-px h-4 bg-cream/20" />
-          <span className="font-bebas text-sm tracking-widest text-cream">EVENT CHECKLISTS</span>
+          <div className="w-px h-4 bg-cream/20 hidden sm:block" />
+          <span className="font-bebas text-xs md:text-sm tracking-widest text-cream truncate">EVENT CHECKLISTS</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
           {isAuthenticated && (
             <Button onClick={() => setShowAssignModal(true)} size="sm"
-              className="bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest text-xs rounded-none">
-              <Plus className="w-3.5 h-3.5 mr-1" /> ASSIGN TEMPLATE
+              className="bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest text-xs rounded-none min-h-[44px]"
+              aria-label="Assign template"
+            >
+              <Plus className="w-3.5 h-3.5 sm:mr-1" />
+              <span className="hidden sm:inline">ASSIGN TEMPLATE</span>
             </Button>
           )}
           <Button onClick={() => window.print()} variant="outline" size="sm"
-            className="font-bebas tracking-widest text-xs border-cream/30 text-cream hover:bg-cream/10">
-            <Printer className="w-3.5 h-3.5 mr-1" /> PRINT
+            className="font-bebas tracking-widest text-xs border-cream/30 text-cream hover:bg-cream/10 min-h-[44px]"
+            aria-label="Print"
+          >
+            <Printer className="w-3.5 h-3.5 sm:mr-1" />
+            <span className="hidden sm:inline">PRINT</span>
           </Button>
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 print:px-0 print:py-4">
+      <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8 print:px-0 print:py-4">
         {/* Instance selector */}
         {(instances ?? []).length > 1 && (
           <div className="flex gap-2 mb-6 print:hidden">
@@ -141,16 +149,17 @@ export default function Checklist() {
         {selectedInstance && (
           <div>
             {/* Header */}
-            <div className="flex items-start justify-between mb-6 print:mb-4">
-              <div>
-                <h1 className="font-cormorant text-3xl font-semibold text-ink print:text-2xl">{selectedInstance.name}</h1>
+            <div className="flex items-start justify-between gap-3 mb-6 print:mb-4">
+              <div className="min-w-0">
+                <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink print:text-2xl break-words">{selectedInstance.name}</h1>
                 <p className="font-dm text-sm text-muted-foreground mt-1">
                   {completedCount(selectedInstance)} of {(selectedInstance.items as ChecklistItem[]).length} tasks completed
                 </p>
               </div>
               <button
                 onClick={() => { if (confirm("Remove this checklist?")) deleteInstance.mutate({ id: selectedInstance.id }); }}
-                className="text-muted-foreground hover:text-destructive transition-colors print:hidden"
+                className="text-muted-foreground hover:text-destructive active:text-destructive transition-colors print:hidden flex items-center justify-center min-w-[44px] min-h-[44px] flex-shrink-0"
+                aria-label="Remove checklist"
               >
                 <Trash2 className="w-4 h-4" />
               </button>

@@ -66,16 +66,16 @@ export default function Tasks() {
   const now = Date.now();
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-4 md:p-6 max-w-3xl mx-auto pb-24 md:pb-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-cormorant text-3xl font-semibold text-ink">Tasks</h1>
-          <p className="font-dm text-sm text-sage mt-0.5">Track follow-ups, event prep, and team to-dos</p>
+      <div className="flex items-start justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink">Tasks</h1>
+          <p className="font-dm text-xs md:text-sm text-sage mt-0.5">Track follow-ups, event prep, and team to-dos</p>
         </div>
         <button
           onClick={() => setShowForm(v => !v)}
-          className="flex items-center gap-1.5 bg-burgundy text-cream font-bebas tracking-widest text-xs px-4 py-2 hover:bg-burg-dark transition-colors"
+          className="flex items-center gap-1.5 bg-burgundy text-cream font-bebas tracking-widest text-xs px-4 py-2 hover:bg-burg-dark active:bg-burg-dark transition-colors min-h-[44px] flex-shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
           {showForm ? "CANCEL" : "NEW TASK"}
@@ -106,7 +106,7 @@ export default function Tasks() {
               className="rounded-none border-gold/30 focus-visible:ring-0 focus-visible:border-burgundy resize-none text-sm"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DUE DATE</label>
               <input
@@ -148,13 +148,13 @@ export default function Tasks() {
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div className="flex gap-1 mb-4 border-b border-border">
+      {/* Filter tabs — horizontally scrollable on mobile to prevent overflow */}
+      <div className="flex gap-1 mb-4 border-b border-border overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
         {FILTERS.map(f => (
           <button
             key={f.key}
             onClick={() => setFilter(f.key as any)}
-            className={`font-bebas tracking-widest text-xs px-4 py-2.5 transition-colors border-b-2 -mb-px ${
+            className={`flex-shrink-0 font-bebas tracking-widest text-xs px-4 py-2.5 transition-colors border-b-2 -mb-px min-h-[44px] ${
               filter === f.key
                 ? "border-burgundy text-burgundy"
                 : "border-transparent text-sage hover:text-ink"

@@ -177,26 +177,29 @@ export default function DailyChecklists() {
   return (
     <div className="min-h-screen bg-[#f9f5ef]">
       {/* Header */}
-      <div className="bg-[#6b98e7] text-white px-6 py-5">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div>
+      <div className="bg-[#6b98e7] text-white px-4 md:px-6 py-4 md:py-5">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="min-w-0">
             <a href="/dashboard" className="text-white/60 text-xs font-dm hover:text-white transition-colors mb-1 block">← Back to Dashboard</a>
-            <h1 className="font-bebas text-3xl tracking-wider">Daily Operations</h1>
-            <p className="font-dm text-sm text-white/70 mt-1">Checklists and shift runsheets for your team.</p>
+            <h1 className="font-bebas text-2xl md:text-3xl tracking-wider">Daily Operations</h1>
+            <p className="font-dm text-xs md:text-sm text-white/70 mt-1">Checklists and shift runsheets for your team.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setShowSettings(true)}
-              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 transition-colors text-white font-bebas tracking-wider text-sm px-3 py-2.5 rounded"
+              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors text-white font-bebas tracking-wider text-sm px-3 py-2.5 rounded min-h-[44px]"
               title="Customise sections & logo"
+              aria-label="Settings"
             >
               <Settings className="w-4 h-4" />
             </button>
             <button
               onClick={() => activeTab === "checklists" ? setShowCreate(true) : setShowShiftCreate(true)}
-              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 transition-colors text-white font-bebas tracking-wider text-sm px-5 py-2.5 rounded"
+              className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 active:bg-white/40 transition-colors text-white font-bebas tracking-wider text-sm px-4 md:px-5 py-2.5 rounded min-h-[44px]"
             >
-              <Plus className="w-4 h-4" /> {activeTab === "checklists" ? "NEW CHECKLIST" : "NEW SHIFT RUNSHEET"}
+              <Plus className="w-4 h-4" />
+              <span className="md:hidden">{activeTab === "checklists" ? "NEW" : "NEW SHIFT"}</span>
+              <span className="hidden md:inline">{activeTab === "checklists" ? "NEW CHECKLIST" : "NEW SHIFT RUNSHEET"}</span>
             </button>
           </div>
         </div>
@@ -214,7 +217,7 @@ export default function DailyChecklists() {
 
       {/* Tabs */}
       <div className="bg-white border-b border-[#c9a84c]/20">
-        <div className="max-w-4xl mx-auto px-6 flex gap-0">
+        <div className="max-w-4xl mx-auto px-4 md:px-6 flex gap-0">
           {[
             { key: "checklists", label: "CHECKLISTS" },
             { key: "shifts", label: "SHIFT RUNSHEETS" },
@@ -222,7 +225,7 @@ export default function DailyChecklists() {
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key as any)}
-              className={`font-bebas tracking-widest text-sm px-5 py-3 border-b-2 transition-colors ${activeTab === t.key ? 'border-[#6b98e7] text-[#6b98e7]' : 'border-transparent text-[#8a7a60] hover:text-[#1a1209]'}`}
+              className={`font-bebas tracking-widest text-xs md:text-sm px-3 md:px-5 py-3 border-b-2 transition-colors min-h-[44px] ${activeTab === t.key ? 'border-[#6b98e7] text-[#6b98e7]' : 'border-transparent text-[#8a7a60] hover:text-[#1a1209]'}`}
             >
               {t.label}
             </button>
@@ -230,7 +233,7 @@ export default function DailyChecklists() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8">
 
         {/* ── CHECKLISTS TAB ─────────────────────────────────────────────── */}
         {activeTab === "checklists" && (
@@ -238,7 +241,7 @@ export default function DailyChecklists() {
             {showCreate && (
               <div className="bg-white border border-[#c9a84c]/30 rounded mb-6 p-5 shadow-sm">
                 <h2 className="font-bebas text-lg tracking-wider text-[#1a1209] mb-4">Create New Checklist</h2>
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <div className="col-span-2">
                     <label className="font-bebas text-xs tracking-widest text-[#8a7a60] block mb-1">CHECKLIST NAME</label>
                     <input autoFocus value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}

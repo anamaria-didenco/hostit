@@ -127,7 +127,7 @@ export default function PaymentTracker() {
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
         {/* Summary */}
         {summary && (
           <div className="bg-white border border-border p-6">
@@ -135,7 +135,7 @@ export default function PaymentTracker() {
               <h2 className="font-bebas tracking-widest text-ink text-lg">PAYMENT SUMMARY</h2>
               <StatusBadge status={summary.status} />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="text-center p-4 bg-cream">
                 <div className="font-bebas tracking-widest text-xs text-ink/50 mb-1">TOTAL BOOKING VALUE</div>
                 <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(summary.total ?? 0)}</div>
@@ -181,8 +181,8 @@ export default function PaymentTracker() {
             </div>
           </button>
           {adding && (
-            <div className="border-t border-border p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="border-t border-border p-4 md:p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">AMOUNT (NZD) *</label>
                   <Input
