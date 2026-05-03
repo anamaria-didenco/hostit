@@ -907,6 +907,48 @@ export default function Dashboard() {
     });
   }
 
+  const rescheduleLead = trpc.leads.update.useMutation({
+    onSuccess: () => { refetchLeads(); utils.bookings.byMonth.invalidate(); toast.success("Event rescheduled"); },
+    onError: () => toast.error("Failed to reschedule"),
+  });
+  const rescheduleBooking = trpc.bookings.update.useMutation({
+    onSuccess: () => { utils.bookings.list.invalidate(); utils.bookings.byMonth.invalidate(); refetchLeads(); toast.success("Event rescheduled"); },
+    onError: () => toast.error("Failed to reschedule"),
+  });
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  function handleEventDrop(payload: { id: number; type: 'lead'|'booking'; eventDate: string }, newDateStr: string) {
+    if (!payload || !newDateStr) return;
+    const orig = new Date(payload.eventDate);
+    let newIso: string;
+    if (isNaN(orig.getTime())) {
+      newIso = newDateStr;
+    } else {
+      // Date-only ("timeless") events: UTC midnight with zero seconds/ms — keep
+      // them date-only so we don't conjure a fake time on reschedule.
+      const isTimeless = orig.getUTCHours() === 0 && orig.getUTCMinutes() === 0
+        && orig.getUTCSeconds() === 0 && orig.getUTCMilliseconds() === 0;
+      if (isTimeless) {
+        newIso = newDateStr;
+      } else {
+        // Timed events: preserve local time-of-day on the new date.
+        const hh = String(orig.getHours()).padStart(2, '0');
+        const mm = String(orig.getMinutes()).padStart(2, '0');
+        const ss = String(orig.getSeconds()).padStart(2, '0');
+        const ms = String(orig.getMilliseconds()).padStart(3, '0');
+        newIso = new Date(`${newDateStr}T${hh}:${mm}:${ss}.${ms}`).toISOString();
+        // Reapply the 1ms midnight-collision guard from combineLocalDateTime.
+        if (newIso.endsWith('T00:00:00.000Z')) {
+          newIso = new Date(`${newDateStr}T${hh}:${mm}:${ss}.001`).toISOString();
+        }
+      }
+    }
+    if (payload.type === 'booking') {
+      rescheduleBooking.mutate({ id: payload.id, eventDate: newIso });
+    } else {
+      rescheduleLead.mutate({ id: payload.id, eventDate: newIso });
+    }
+  }
+
   const updateLeadSource = trpc.leads.update.useMutation({
     onSuccess: (_data, vars) => {
       refetchLeads();
@@ -1624,7 +1666,6 @@ export default function Dashboard() {
           {[
             { id: "overview", label: "Home" },
             { id: "enquiries", label: "Events" },
-            { id: "calendar", label: "Calendar" },
             { id: "tasks", label: "Tasks" },
             { id: "reports", label: "Reports" },
           ].map(item => (
@@ -1820,7 +1861,13 @@ export default function Dashboard() {
                               <div key={di}
                                 className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
                                   isOverflow ? 'bg-linen/40 opacity-60' : isWeekend ? 'bg-linen/20' : 'bg-white'
-                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${!isOverflow ? 'hover:bg-linen/30 transition-colors' : ''}`}
+                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!isOverflow ? 'hover:bg-linen/30 transition-colors' : ''}`}
+                                onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
+                                onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
+                                onDrop={!isOverflow ? (e) => {
+                                  e.preventDefault(); setDragOverDate(null);
+                                  try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
+                                } : undefined}
                               >
                                 <div className="flex items-center justify-between mb-0.5">
                                   <span className={`font-dm text-xs font-semibold leading-none ${
@@ -1837,19 +1884,29 @@ export default function Dashboard() {
                                 </div>
                                 {dayBookings.slice(0, 2).map((b: any) => (
                                   <button key={b.id}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { setSelectedBooking(b); }}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity`}
-                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}`}>
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
+                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
                                     <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
+                                    {(b.guestCount || b.spaceName) && (
+                                      <div className="opacity-75 truncate text-[9px]">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                    )}
                                     <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                   </button>
                                 ))}
                                 {dayLeads.slice(0, 1).map((l: any) => (
                                   <button key={l.id}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { selectLead(l); setTab('enquiries'); }}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity`}
-                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}`}>
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
+                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
                                     <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                                    {l.guestCount && (
+                                      <div className="opacity-75 truncate text-[9px]">{l.guestCount} pax</div>
+                                    )}
                                     <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                   </button>
                                 ))}
@@ -1993,6 +2050,11 @@ export default function Dashboard() {
                         {icon}
                       </button>
                     ))}
+                    <button onClick={() => setTab('calendar' as any)}
+                      title="Calendar view"
+                      className="px-2.5 py-1.5 transition-colors text-ink/50 hover:bg-linen hover:text-ink border-l border-gold/30">
+                      <Calendar className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   {/* Actions */}
@@ -2934,6 +2996,9 @@ export default function Dashboard() {
                   }}
                   className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
                 <button onClick={() => setCalDate(new Date())} className="hidden sm:block font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
+                <button onClick={() => setTab('enquiries')} className="hidden sm:flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors" title="Back to events list">
+                  <List className="w-3 h-3" /> EVENTS
+                </button>
                 <h2 className="font-cormorant text-base md:text-xl font-semibold text-ink flex-1">
                   {calendarView === 'week' ? (() => {
                     const dow = (calDate.getDay() + 6) % 7;
@@ -3019,7 +3084,13 @@ export default function Dashboard() {
                         return (
                           <div key={di} className={`border-r border-gold/10 last:border-r-0 p-1 flex flex-col gap-0.5 ${
                             isOverflow ? 'bg-linen/40 opacity-60' : isWeekend ? 'bg-linen/20' : 'bg-white'
-                          } ${isToday ? 'ring-2 ring-inset ring-gold' : ''}`}>
+                          } ${isToday ? 'ring-2 ring-inset ring-gold' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''}`}
+                            onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
+                            onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
+                            onDrop={!isOverflow ? (e) => {
+                              e.preventDefault(); setDragOverDate(null);
+                              try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
+                            } : undefined}>
                             <span className={`text-xs font-dm leading-none mb-0.5 self-start px-1 rounded ${
                               isToday ? 'bg-forest-dark text-cream font-bold px-1.5 py-0.5' : isOverflow ? 'text-ink/30' : isWeekend ? 'text-forest/70 font-semibold' : 'text-ink/70'
                             }`}>{day}</span>
@@ -3027,13 +3098,17 @@ export default function Dashboard() {
                             {dayBookings.map((b: any) => (
                               <div key={b.id} className="relative group/card w-full">
                                 <button
+                                  draggable
+                                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => setSelectedBooking(b)}
-                                  className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity`}
-                                  title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests`}>
+                                  className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity cursor-move`}
+                                  title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
                                   <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
                                   {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
                                   {b.startTime && <div className="opacity-70">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
-                                  {b.guestCount && <div className="opacity-70">{b.guestCount} guests</div>}
+                                  {(b.guestCount || b.spaceName) && (
+                                    <div className="opacity-70 truncate">{b.guestCount ? `${b.guestCount} guests` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                  )}
                                   <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                 </button>
                                 {!isOverflow && (
@@ -3050,12 +3125,16 @@ export default function Dashboard() {
                             {dayLeads.map((l: any) => (
                               <div key={l.id} className="relative group/card w-full">
                                 <button
+                                  draggable
+                                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => setSelectedBooking({ ...l, _isLead: true })}
-                                  className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}
+                                  className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move`}
                                   title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
                                   <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                                   {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
-                                  {l.guestCount && <div className="opacity-70">{l.guestCount} guests</div>}
+                                  {(l.guestCount || l.spaceId) && (
+                                    <div className="opacity-70 truncate">{l.guestCount ? `${l.guestCount} guests` : ''}{l.guestCount && l.spaceName ? ' · ' : ''}{l.spaceName ?? ''}</div>
+                                  )}
                                   <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                 </button>
                                 {!isOverflow && (
@@ -7060,7 +7139,6 @@ export default function Dashboard() {
         {[
           { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
           { id: "enquiries", label: "Events", icon: <MessageSquare className="w-5 h-5" /> },
-          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
           // Daily Checklists is a separate route, not a tab — rendered as an
           // anchor below so mobile users can reach it without diving into More.
           { id: "checklists", label: "Checklists", icon: <CheckSquare className="w-5 h-5" />, href: "/daily-checklists" },
