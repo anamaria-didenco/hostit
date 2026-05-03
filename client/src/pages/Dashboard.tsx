@@ -537,8 +537,8 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
   const currentLabel = items.find(i => i.id === settingsSubTab)?.label ?? 'Settings';
   return (
     <>
-      {/* Mobile: dropdown selector */}
-      <div className="md:hidden border-b border-border bg-white px-4 py-3">
+      {/* Mobile: dropdown selector + external links (mirrors desktop sidebar) */}
+      <div className="md:hidden border-b border-border bg-white px-4 py-3 space-y-2">
         <select
           value={settingsSubTab}
           onChange={e => setSettingsSubTab(e.target.value as any)}
@@ -548,6 +548,28 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
             <option key={item.id} value={item.id}>{item.label}</option>
           ))}
         </select>
+        {/* External links — these are full-page routes, not settings sub-tabs,
+            so we render them as buttons rather than smuggling them into the
+            <select> above. Without these, mobile users had no way to reach
+            /daily-checklists at all. */}
+        <div className="grid grid-cols-2 gap-2">
+          <a
+            href="/daily-checklists"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 font-inter text-sm font-medium text-sage-dark bg-sage-tint border border-sage-green/30 rounded-lg hover:bg-sage-tint/80 transition-colors"
+          >
+            Daily Checklists
+            <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+          </a>
+          <a
+            href="/eon-report.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 font-inter text-sm font-medium text-gray-600 bg-gray-50 border border-border rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            EON Report
+            <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+          </a>
+        </div>
       </div>
       {/* Desktop: sidebar */}
       <aside className="hidden md:flex w-52 bg-ivory-sand border-r border-border flex-shrink-0 flex-col">
