@@ -1381,6 +1381,46 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         }
         throw new Error(result.error || result.reason || 'NowBookIt rejected the booking');
       }),
+
+    /**
+     * Mark a booking as already synced in NowBookIt without actually pushing
+     * it. Use when NBI returned a 409 conflict but the booking does (or will)
+     * exist in NBI manually — stops VenueFlow from trying to re-push.
+     * Pass an optional NBI booking id; otherwise we set a "manual-sync" tag.
+     */
+    markNbiSynced: protectedProcedure
+      .input(z.object({ id: z.number(), nbiBookingId: z.string().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const value = (input.nbiBookingId?.trim() || `manual-sync-${Date.now()}`).slice(0, 100);
+        const [updated] = await db.update(bookings)
+          .set({ nbiBookingId: value })
+          .where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)))
+          .returning();
+        if (!updated) throw new Error('Booking not found');
+        return { success: true, nbiBookingId: updated.nbiBookingId };
+      }),
+
+    /**
+     * Clear the NowBookIt sync marker so the booking can be re-pushed cleanly.
+     */
+    clearNbiSync: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.update(bookings)
+          .set({ nbiBookingId: null })
+          .where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
   }),
 
   // ─── Menu Packages & Items ────────────────────────────────────────────────

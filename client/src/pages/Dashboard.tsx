@@ -1139,6 +1139,22 @@ export default function Dashboard() {
     },
     onError: (err) => toast.error(err.message || "Failed to push to NowBookIt"),
   });
+  const markNbiSyncedMutation = trpc.bookings.markNbiSynced.useMutation({
+    onSuccess: () => {
+      toast.success("Marked as synced in NowBookIt — VenueFlow will stop trying to re-push.");
+      utils.bookings.list.invalidate();
+      utils.bookings.byMonth.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to update sync status"),
+  });
+  const clearNbiSyncMutation = trpc.bookings.clearNbiSync.useMutation({
+    onSuccess: () => {
+      toast.success("Cleared NowBookIt sync — you can push again.");
+      utils.bookings.list.invalidate();
+      utils.bookings.byMonth.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to clear sync"),
+  });
   const createSpace = trpc.spaces.create.useMutation({
     onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
   });
@@ -6523,17 +6539,45 @@ export default function Dashboard() {
                         <DollarSign className="w-3 h-3" /> PAYMENTS
                       </button>
                       {(venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
-                        <button
-                          onClick={() => pushToNbiMutation.mutate({ id: selectedBooking.id, force: !!selectedBooking.nbiBookingId })}
-                          disabled={pushToNbiMutation.isPending}
-                          className={`flex items-center gap-2 px-3 py-2 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50 ${selectedBooking.nbiBookingId ? 'border border-[#6b98e7]/50 text-[#6b98e7] hover:bg-[#6b98e7]/10' : 'bg-[#6b98e7] text-white hover:bg-[#5a87d6]'}`}>
-                          <span className="font-bebas text-[10px] tracking-wider">NBI</span>
-                          {pushToNbiMutation.isPending
-                            ? 'PUSHING…'
-                            : selectedBooking.nbiBookingId
-                            ? `IN NOWBOOKIT (#${selectedBooking.nbiBookingId}) — RE-PUSH`
-                            : 'PUSH TO NOWBOOKIT'}
-                        </button>
+                        <>
+                          <button
+                            onClick={() => pushToNbiMutation.mutate({ id: selectedBooking.id, force: !!selectedBooking.nbiBookingId })}
+                            disabled={pushToNbiMutation.isPending}
+                            className={`flex items-center gap-2 px-3 py-2 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50 ${selectedBooking.nbiBookingId ? 'border border-[#6b98e7]/50 text-[#6b98e7] hover:bg-[#6b98e7]/10' : 'bg-[#6b98e7] text-white hover:bg-[#5a87d6]'}`}>
+                            <span className="font-bebas text-[10px] tracking-wider">NBI</span>
+                            {pushToNbiMutation.isPending
+                              ? 'PUSHING…'
+                              : selectedBooking.nbiBookingId
+                              ? `IN NOWBOOKIT (#${selectedBooking.nbiBookingId}) — RE-PUSH`
+                              : 'PUSH TO NOWBOOKIT'}
+                          </button>
+                          {!selectedBooking.nbiBookingId ? (
+                            <button
+                              onClick={() => {
+                                const ref = prompt(
+                                  "If this booking already exists in NowBookIt, paste its NBI booking id (or leave blank to just mark it synced).\n\nThis stops VenueFlow from trying to push it again.",
+                                  ""
+                                );
+                                if (ref === null) return;
+                                markNbiSyncedMutation.mutate({ id: selectedBooking.id, nbiBookingId: ref || undefined });
+                              }}
+                              disabled={markNbiSyncedMutation.isPending}
+                              className="flex items-center gap-2 px-3 py-2 border border-ink/20 text-ink/60 hover:bg-ink/5 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50">
+                              {markNbiSyncedMutation.isPending ? 'MARKING…' : 'MARK AS ALREADY SYNCED IN NBI'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (confirm("Clear the NowBookIt sync marker for this booking? You'll be able to push it again, but if NBI already has it you may get a 409 conflict.")) {
+                                  clearNbiSyncMutation.mutate({ id: selectedBooking.id });
+                                }
+                              }}
+                              disabled={clearNbiSyncMutation.isPending}
+                              className="flex items-center gap-2 px-3 py-2 border border-ink/20 text-ink/60 hover:bg-ink/5 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50">
+                              {clearNbiSyncMutation.isPending ? 'CLEARING…' : 'CLEAR NBI SYNC'}
+                            </button>
+                          )}
+                        </>
                       )}
                       <button
                         onClick={() => {
