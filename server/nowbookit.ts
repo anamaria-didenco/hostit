@@ -278,8 +278,8 @@ export async function createNbiBooking(
 export async function pushBookingToNbi(
   bookingId: number,
   ownerId: number,
-  opts: { source: string } = { source: 'unknown' }
-): Promise<{ pushed: boolean; reason?: string; nbiBookingId?: string }> {
+  opts: { source: string; force?: boolean } = { source: 'unknown' }
+): Promise<{ pushed: boolean; reason?: string; nbiBookingId?: string; error?: string }> {
   try {
     const { getDb } = await import('./db');
     const { bookings, venueSettings } = await import('../drizzle/schema');
@@ -296,7 +296,7 @@ export async function pushBookingToNbi(
       console.warn(`[NBI push:${opts.source}] booking ${bookingId} not found`);
       return { pushed: false, reason: 'booking_not_found' };
     }
-    if (booking.nbiBookingId) {
+    if (booking.nbiBookingId && !opts.force) {
       console.log(`[NBI push:${opts.source}] booking ${bookingId} already has nbiBookingId=${booking.nbiBookingId} — skip`);
       return { pushed: false, reason: 'already_pushed', nbiBookingId: booking.nbiBookingId };
     }
@@ -401,7 +401,7 @@ export async function pushBookingToNbi(
       return { pushed: true, nbiBookingId: result.nbiBookingId };
     }
     console.warn(`[NBI push:${opts.source}] booking ${bookingId} push FAILED: ${result.error}`);
-    return { pushed: false, reason: `nbi_error: ${result.error}` };
+    return { pushed: false, reason: `nbi_error: ${result.error}`, error: result.error };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[NBI push:${opts.source}] booking ${bookingId} unexpected error:`, msg);

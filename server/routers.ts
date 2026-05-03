@@ -1350,62 +1350,36 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
 
     /**
-     * Manually push a single booking into NowBookIt. Returns the NBI booking
-     * id on success, or throws with the upstream error so the UI can show it.
+     * Manually push a single booking into NowBookIt. Routes through
+     * pushBookingToNbi so it benefits from the same contact/lead enrichment
+     * (phone + lastName lookup) and placeholder fallbacks. Without that,
+     * bookings created without a contact/lead would 400 with NBI's
+     * "PostBookings requires Customer's: FirstName, LastName, Phone".
      */
     pushToNbi: protectedProcedure
       .input(z.object({ id: z.number(), force: z.boolean().optional() }))
       .mutation(async ({ input, ctx }) => {
-        const { getDb } = await import('./db');
-        const { bookings, venueSettings } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) throw new Error('DB not available');
-        const [booking] = await db.select().from(bookings)
-          .where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id))).limit(1);
-        if (!booking) throw new Error('Booking not found');
-        if (booking.nbiBookingId && !input.force) {
-          return { success: true, nbiBookingId: booking.nbiBookingId, alreadyPushed: true };
+        const { pushBookingToNbi } = await import('./nowbookit');
+        const result = await pushBookingToNbi(input.id, ctx.user.id, {
+          source: 'bookings.pushToNbi(manual)',
+          force: input.force,
+        });
+        if (result.pushed) {
+          return { success: true, nbiBookingId: result.nbiBookingId };
         }
-        const [venue] = await db.select().from(venueSettings)
-          .where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
-        if (!venue?.nbiAccountId || !venue?.nbiVenueId) {
+        if (result.reason === 'already_pushed') {
+          return { success: true, nbiBookingId: result.nbiBookingId, alreadyPushed: true };
+        }
+        if (result.reason?.startsWith('not_configured')) {
           throw new Error('NowBookIt is not connected. Add your Account ID and Venue ID in Settings → Integrations.');
         }
-        if (!booking.eventDate) {
+        if (result.reason === 'missing_event_date') {
           throw new Error('This booking has no event date set. Add an event date and time before pushing to NowBookIt.');
         }
-        const { createNbiBooking } = await import('./nowbookit');
-        const eventDate = booking.eventDate;
-        const { dateStr, timeStr } = formatVenueDateTime(eventDate);
-        const result = await createNbiBooking(
-          {
-            accountId: venue.nbiAccountId,
-            venueId: venue.nbiVenueId,
-            serviceId: venue.nbiServiceId ?? undefined,
-            sectionId: (venue as any).nbiSectionId ?? undefined,
-          },
-          {
-            firstName: booking.firstName,
-            lastName: booking.lastName ?? '',
-            email: booking.email ?? '',
-            phone: (booking as any).phone ?? '',
-            date: dateStr,
-            time: timeStr,
-            covers: booking.guestCount ?? 2,
-            notes: [booking.eventType, booking.spaceName, booking.notes].filter(Boolean).join(' · '),
-            reference: `VF-${booking.id}`,
-          }
-        );
-        if (!result.success) {
-          throw new Error(result.error || 'NowBookIt rejected the booking');
+        if (result.reason === 'booking_not_found') {
+          throw new Error('Booking not found');
         }
-        if (result.nbiBookingId) {
-          await db.update(bookings)
-            .set({ nbiBookingId: result.nbiBookingId })
-            .where(eq(bookings.id, input.id));
-        }
-        return { success: true, nbiBookingId: result.nbiBookingId };
+        throw new Error(result.error || result.reason || 'NowBookIt rejected the booking');
       }),
   }),
 
