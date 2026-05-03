@@ -12,7 +12,7 @@ import {
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
-  SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer
+  SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -6992,25 +6992,39 @@ export default function Dashboard() {
           { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
           { id: "enquiries", label: "Events", icon: <MessageSquare className="w-5 h-5" /> },
           { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
+          // Daily Checklists is a separate route, not a tab — rendered as an
+          // anchor below so mobile users can reach it without diving into More.
+          { id: "checklists", label: "Checklists", icon: <CheckSquare className="w-5 h-5" />, href: "/daily-checklists" },
           { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
           { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
-        ].map(item => (
-          <button
-            key={item.id}
-            onClick={() => setTab(item.id as any)}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
-              tab === item.id ? "text-sage-dark" : "text-gray-400"
-            }`}
-          >
-            {item.icon}
-            <span className="text-[10px] font-inter font-medium leading-none">{item.label}</span>
-            {item.id === "enquiries" && unreadCount > 0 && (
-              <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </button>
-        ))}
+        ].map(item => {
+          const baseClass = `flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
+            tab === item.id ? "text-sage-dark" : "text-gray-400"
+          }`;
+          if ((item as any).href) {
+            return (
+              <a key={item.id} href={(item as any).href} className={baseClass}>
+                {item.icon}
+                <span className="text-[10px] font-inter font-medium leading-none">{item.label}</span>
+              </a>
+            );
+          }
+          return (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id as any)}
+              className={baseClass}
+            >
+              {item.icon}
+              <span className="text-[10px] font-inter font-medium leading-none">{item.label}</span>
+              {item.id === "enquiries" && unreadCount > 0 && (
+                <span className="absolute top-1.5 right-[calc(50%-14px)] min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </nav>
     </div>
   );
