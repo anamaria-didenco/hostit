@@ -385,6 +385,25 @@ export async function pushBookingToNbi(
     const tz = venue.timezone || 'Pacific/Auckland';
     const eventDate = booking.eventDate;
     const d = eventDate instanceof Date ? eventDate : new Date(eventDate);
+    // Refuse to push "timeless" bookings — i.e. legacy date-only entries that
+    // sit on exact UTC midnight with zero seconds + ms. Without this guard
+    // every such booking gets sent to NBI as 12:00 NZ local, which usually
+    // falls outside the configured service window (e.g. "Drinks & Snacks"
+    // starting 16:00) and produces a confusing "no slots near 12:00" error.
+    // Better to surface the missing time than silently push a wrong one.
+    const isTimeless =
+      d.getUTCHours() === 0 &&
+      d.getUTCMinutes() === 0 &&
+      d.getUTCSeconds() === 0 &&
+      d.getUTCMilliseconds() === 0;
+    if (isTimeless) {
+      console.warn(`[NBI push:${opts.source}] booking ${bookingId} skipped — eventDate has no time set`);
+      return {
+        pushed: false,
+        reason: 'missing_event_time',
+        error: 'This booking has no event time set. Open the booking, set the event time, then push to NowBookIt.',
+      };
+    }
     const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
     const timeStr = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
 
