@@ -57,6 +57,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   await runMigrations();
   const app = express();
+  // Trust the first proxy hop (Replit's edge) so req.ip reflects the real
+  // client and X-Forwarded-For cannot be spoofed by random clients.
+  app.set("trust proxy", 1);
   const server = createServer(app);
   // GitHub webhook — must capture raw body BEFORE json middleware for HMAC verification
   app.post("/api/webhook/github", express.raw({ type: "application/json" }), (req, res) => {
@@ -79,9 +82,35 @@ async function startServer() {
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 
+  // Tiny in-memory rate limiter (per IP) for the public login endpoint to slow
+  // down brute-force attempts against ADMIN_PASSWORD. 10 attempts / 5 min window.
+  const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+  const LOGIN_WINDOW_MS = 5 * 60 * 1000;
+  const LOGIN_MAX = 10;
+  function getClientIp(req: express.Request): string {
+    // With `trust proxy` configured above, Express resolves req.ip from the
+    // first hop in X-Forwarded-For — safe from client-side spoofing.
+    return req.ip || "unknown";
+  }
+  function checkLoginRate(ip: string): boolean {
+    const now = Date.now();
+    const entry = loginAttempts.get(ip);
+    if (!entry || entry.resetAt < now) {
+      loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+      return true;
+    }
+    entry.count += 1;
+    return entry.count <= LOGIN_MAX;
+  }
+
   // Local password login (for trial/dev use — no external OAuth needed)
   app.post("/api/auth/local-login", async (req, res) => {
     try {
+      const ip = getClientIp(req);
+      if (!checkLoginRate(ip)) {
+        res.status(429).json({ error: "Too many login attempts. Please wait a few minutes and try again." });
+        return;
+      }
       const { password } = req.body ?? {};
       const adminPassword = ENV.adminPassword;
 
@@ -171,13 +200,27 @@ async function startServer() {
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   app.use("/uploads", express.static(uploadsDir));
 
-  // Image upload endpoint — saves to local filesystem
+  // Image upload endpoint — requires authenticated session and restricts file types.
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+  // NB: SVG is intentionally excluded — uploads are served from /uploads on the
+  // same origin, and SVG can embed <script> resulting in stored XSS.
+  const ALLOWED_IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
   app.post("/api/upload-image", upload.single("file"), async (req, res) => {
     try {
+      // Require an authenticated session — without this, anyone on the public internet
+      // can write 10MB files to the server filesystem under /uploads.
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user) { res.status(401).json({ error: "Unauthorized" }); return; }
       const multerReq = req as express.Request & { file?: Express.Multer.File };
       if (!multerReq.file) { res.status(400).json({ error: "No file" }); return; }
-      const ext = (multerReq.file.originalname.split(".").pop() ?? "jpg").toLowerCase();
+      // Whitelist by mime AND extension to block scripts/HTML uploads being served from /uploads.
+      const mime = multerReq.file.mimetype || "";
+      const rawExt = (multerReq.file.originalname.split(".").pop() ?? "").toLowerCase();
+      const ext = ALLOWED_IMAGE_EXTS.has(rawExt) ? rawExt : "";
+      if (!mime.startsWith("image/") || !ext) {
+        res.status(400).json({ error: "Only image files are allowed" });
+        return;
+      }
       const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const filePath = path.join(uploadsDir, filename);
       fs.writeFileSync(filePath, multerReq.file.buffer);

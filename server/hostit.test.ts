@@ -18,6 +18,7 @@ function createAuthContext(role: "user" | "admin" = "user"): { ctx: TrpcContext 
   };
   const ctx: TrpcContext = {
     user,
+    isTeamMember: false,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { clearCookie: () => {} } as TrpcContext["res"],
   };
@@ -27,6 +28,7 @@ function createAuthContext(role: "user" | "admin" = "user"): { ctx: TrpcContext 
 function createPublicContext(): { ctx: TrpcContext } {
   const ctx: TrpcContext = {
     user: null,
+    isTeamMember: false,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { clearCookie: () => {} } as TrpcContext["res"],
   };
@@ -34,19 +36,20 @@ function createPublicContext(): { ctx: TrpcContext } {
 }
 
 describe("auth.me", () => {
-  it("returns null for unauthenticated users", async () => {
+  it("returns null user for unauthenticated users", async () => {
     const { ctx } = createPublicContext();
     const caller = appRouter.createCaller(ctx);
     const result = await caller.auth.me();
-    expect(result).toBeNull();
+    expect(result.user).toBeNull();
+    expect(result.isTeamMember).toBe(false);
   });
 
   it("returns user for authenticated users", async () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
     const result = await caller.auth.me();
-    expect(result).not.toBeNull();
-    expect(result?.email).toBe("owner@venue.co.nz");
+    expect(result.user).not.toBeNull();
+    expect(result.user?.email).toBe("owner@venue.co.nz");
   });
 });
 

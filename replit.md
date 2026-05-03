@@ -1,5 +1,15 @@
 # VenueFlow — NZ Venue Management Platform (VenueFlowHQ)
 
+## Production Hardening (release-readiness pass)
+
+- `JWT_SECRET` (or `SESSION_SECRET`) is **required** in production — server throws on startup if not set or <16 chars (`server/_core/env.ts`). Dev fallback retained.
+- `/api/upload-image` now requires an authenticated session and whitelists image mime+extension (jpg/jpeg/png/gif/webp). **SVG intentionally excluded** — uploads are served from `/uploads` on the same origin and SVG can embed `<script>` (stored XSS).
+- `/api/auth/local-login` rate-limited to 10 attempts / 5 min per IP (in-memory Map). `app.set("trust proxy", 1)` so `req.ip` resolves to the real client via Replit's edge — XFF cannot be spoofed by clients.
+- `ThemeContext` localStorage access wrapped in `safeGet`/`safeSet` try/catch helpers — prevents app boot crash in Safari private mode / embedded webviews where `localStorage` throws on access.
+- `ClientPortal` contract-sign error path uses `toast.error` (sonner) instead of native `alert()`.
+- Removed orphan files: `client/src/pages/MenuManagement.tsx`, `client/src/pages/ComponentShowcase.tsx`, `client/src/components/AIChatBox.tsx` (~2,235 lines of dead code).
+- Test ctxs updated for the `{user, isTeamMember}` `auth.me` shape; all 88 tests pass.
+
 ## Overview
 
 **NowBookIt push** (`server/nowbookit.ts` — `pushBookingToNbi`) enriches the customer payload from the linked contact then lead before posting, because the bookings table itself has no `phone` column and NBI's PostBookings endpoint strictly requires FirstName, LastName, and Phone (returns 400 "PostBookings requires Customer's: FirstName, LastName, Phone" otherwise). Safe placeholders are substituted when data is missing: `firstName="Guest"`, `lastName="—"`, `phone="0000000000"`, with a console.warn flagging which fields were placeholdered. If `firstName` contains a space and `lastName` is empty, it's split (e.g. "Tate Jiang" → first="Tate", last="Jiang") before falling back to placeholders.

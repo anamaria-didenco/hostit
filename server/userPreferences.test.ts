@@ -18,6 +18,7 @@ function createAuthContext(): { ctx: TrpcContext } {
   };
   const ctx: TrpcContext = {
     user,
+    isTeamMember: false,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
   };
