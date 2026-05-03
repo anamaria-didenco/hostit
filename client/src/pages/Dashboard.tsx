@@ -695,6 +695,7 @@ export default function Dashboard() {
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
   const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("list");
+  const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
   const [kanbanDetailOpen, setKanbanDetailOpen] = useState(false);
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
   const [kanbanStagePrefs, setKanbanStagePrefs] = useState<{ visible: string[]; order: string[] } | null>(null);
@@ -1666,6 +1667,121 @@ export default function Dashboard() {
     </div>
   );
 
+  const monthCalendarCard = (
+                  <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0">
+                    <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
+                    <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
+                    <h2 className="font-cormorant text-lg font-semibold text-ink flex-1">{MONTHS[month]} {year}</h2>
+                    <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
+                    <button onClick={() => setTab('calendar' as any)} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors">FULL VIEW</button>
+                  </div>
+                  <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
+                    {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
+                      <div key={d} className={`text-center font-bebas tracking-widest text-xs py-2 border-r border-border last:border-r-0 ${
+                        d === 'SAT' || d === 'SUN' ? 'text-forest bg-linen/40' : 'text-sage'
+                      }`}>{d}</div>
+                    ))}
+                  </div>
+                  <div className="overflow-auto" style={{ minHeight: 340 }}>
+                    {(() => {
+                      const firstDayOfMonth = new Date(year, month, 1).getDay();
+                      const mondayOffset = (firstDayOfMonth + 6) % 7;
+                      const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
+                      const nxtYear = adjNextMonthDate.getFullYear();
+                      const nxtMonth = adjNextMonthDate.getMonth();
+                      const adjBLIds = new Set((adjMonthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
+                      const cells = Array.from({ length: totalCells }, (_, i) => {
+                        const dayNum = i - mondayOffset + 1;
+                        if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
+                        if (dayNum > daysInMonth) return { day: dayNum - daysInMonth, isOverflow: true };
+                        return null;
+                      });
+                      const weeks = [];
+                      for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+                      const numWeeks = weeks.length;
+                      return weeks.map((week, wi) => (
+                        <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(340 / numWeeks)}px` }}>
+                          {week.map((cell, di) => {
+                            if (!cell) return <div key={di} className="border-r border-border last:border-r-0 bg-linen/20" />;
+                            const { day, isOverflow } = cell;
+                            const cellYear = isOverflow ? nxtYear : year;
+                            const cellMonth = isOverflow ? nxtMonth : month;
+                            const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
+                            const isWeekend = di >= 5;
+                            const dayBookings = isOverflow
+                              ? (adjMonthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day)
+                              : (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
+                            const dayLeads = isOverflow
+                              ? (adjMonthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
+                              : (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                            const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                            return (
+                              <div key={di}
+                                className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
+                                  isOverflow ? 'bg-linen/40 opacity-60' : isWeekend ? 'bg-linen/20' : 'bg-white'
+                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!isOverflow ? 'hover:bg-linen/30 transition-colors' : ''}`}
+                                onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
+                                onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
+                                onDrop={!isOverflow ? (e) => {
+                                  e.preventDefault(); setDragOverDate(null);
+                                  try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
+                                } : undefined}
+                              >
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span className={`font-dm text-xs font-semibold leading-none ${
+                                    isToday ? 'w-5 h-5 bg-forest text-cream rounded-full flex items-center justify-center text-[10px]' : isOverflow ? 'text-ink/30' : isWeekend ? 'text-forest' : 'text-ink/60'
+                                  }`}>{day}</span>
+                                  {!isOverflow && (
+                                    <button
+                                      onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' }); }}
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
+                                      title="Add event">
+                                      <Plus className="w-3 h-3 text-forest" />
+                                    </button>
+                                  )}
+                                </div>
+                                {dayBookings.slice(0, 2).map((b: any) => (
+                                  <button key={b.id}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
+                                    onClick={() => { setSelectedBooking(b); }}
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
+                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
+                                    <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
+                                    {(b.guestCount || b.spaceName) && (
+                                      <div className="opacity-75 truncate text-[9px]">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                    )}
+                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                  </button>
+                                ))}
+                                {dayLeads.slice(0, 1).map((l: any) => (
+                                  <button key={l.id}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
+                                    onClick={() => { selectLead(l); setTab('enquiries'); }}
+                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
+                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
+                                    <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                                    {l.guestCount && (
+                                      <div className="opacity-75 truncate text-[9px]">{l.guestCount} pax</div>
+                                    )}
+                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                  </button>
+                                ))}
+                                {(dayBookings.length + dayLeads.length) > 3 && (
+                                  <span className="font-dm text-[9px] text-sage px-1">+{dayBookings.length + dayLeads.length - 3} more</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+    );
+  
   return (
     <div className="h-screen bg-background font-inter flex flex-col overflow-hidden">
       {/* ── TOP NAVIGATION BAR ──────────────────────────────────────────────── */}
@@ -1822,118 +1938,7 @@ export default function Dashboard() {
               {/* Calendar + Sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Calendar card */}
-                <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
-                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0">
-                    <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
-                    <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
-                    <h2 className="font-cormorant text-lg font-semibold text-ink flex-1">{MONTHS[month]} {year}</h2>
-                    <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
-                    <button onClick={() => setTab('calendar' as any)} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors">FULL VIEW</button>
-                  </div>
-                  <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
-                    {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
-                      <div key={d} className={`text-center font-bebas tracking-widest text-xs py-2 border-r border-border last:border-r-0 ${
-                        d === 'SAT' || d === 'SUN' ? 'text-forest bg-linen/40' : 'text-sage'
-                      }`}>{d}</div>
-                    ))}
-                  </div>
-                  <div className="overflow-auto" style={{ minHeight: 340 }}>
-                    {(() => {
-                      const firstDayOfMonth = new Date(year, month, 1).getDay();
-                      const mondayOffset = (firstDayOfMonth + 6) % 7;
-                      const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
-                      const nxtYear = adjNextMonthDate.getFullYear();
-                      const nxtMonth = adjNextMonthDate.getMonth();
-                      const adjBLIds = new Set((adjMonthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
-                      const cells = Array.from({ length: totalCells }, (_, i) => {
-                        const dayNum = i - mondayOffset + 1;
-                        if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
-                        if (dayNum > daysInMonth) return { day: dayNum - daysInMonth, isOverflow: true };
-                        return null;
-                      });
-                      const weeks = [];
-                      for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-                      const numWeeks = weeks.length;
-                      return weeks.map((week, wi) => (
-                        <div key={wi} className="grid grid-cols-7 border-b border-border last:border-b-0" style={{ minHeight: `${Math.floor(340 / numWeeks)}px` }}>
-                          {week.map((cell, di) => {
-                            if (!cell) return <div key={di} className="border-r border-border last:border-r-0 bg-linen/20" />;
-                            const { day, isOverflow } = cell;
-                            const cellYear = isOverflow ? nxtYear : year;
-                            const cellMonth = isOverflow ? nxtMonth : month;
-                            const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
-                            const isWeekend = di >= 5;
-                            const dayBookings = isOverflow
-                              ? (adjMonthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day)
-                              : (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
-                            const dayLeads = isOverflow
-                              ? (adjMonthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
-                              : (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
-                            const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                            return (
-                              <div key={di}
-                                className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
-                                  isOverflow ? 'bg-linen/40 opacity-60' : isWeekend ? 'bg-linen/20' : 'bg-white'
-                                } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!isOverflow ? 'hover:bg-linen/30 transition-colors' : ''}`}
-                                onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
-                                onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
-                                onDrop={!isOverflow ? (e) => {
-                                  e.preventDefault(); setDragOverDate(null);
-                                  try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
-                                } : undefined}
-                              >
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <span className={`font-dm text-xs font-semibold leading-none ${
-                                    isToday ? 'w-5 h-5 bg-forest text-cream rounded-full flex items-center justify-center text-[10px]' : isOverflow ? 'text-ink/30' : isWeekend ? 'text-forest' : 'text-ink/60'
-                                  }`}>{day}</span>
-                                  {!isOverflow && (
-                                    <button
-                                      onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' }); }}
-                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
-                                      title="Add event">
-                                      <Plus className="w-3 h-3 text-forest" />
-                                    </button>
-                                  )}
-                                </div>
-                                {dayBookings.slice(0, 2).map((b: any) => (
-                                  <button key={b.id}
-                                    draggable
-                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
-                                    onClick={() => { setSelectedBooking(b); }}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
-                                    title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
-                                    <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                                    {(b.guestCount || b.spaceName) && (
-                                      <div className="opacity-75 truncate text-[9px]">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
-                                    )}
-                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
-                                  </button>
-                                ))}
-                                {dayLeads.slice(0, 1).map((l: any) => (
-                                  <button key={l.id}
-                                    draggable
-                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
-                                    onClick={() => { selectLead(l); setTab('enquiries'); }}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
-                                    title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
-                                    <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                    {l.guestCount && (
-                                      <div className="opacity-75 truncate text-[9px]">{l.guestCount} pax</div>
-                                    )}
-                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
-                                  </button>
-                                ))}
-                                {(dayBookings.length + dayLeads.length) > 3 && (
-                                  <span className="font-dm text-[9px] text-sage px-1">+{dayBookings.length + dayLeads.length - 3} more</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                </div>
+                {monthCalendarCard}
 
                 {/* Sidebar cards */}
                 <div className="space-y-4">
@@ -2023,6 +2028,14 @@ export default function Dashboard() {
           {tab === "enquiries" && (
             <div className="flex flex-col h-full overflow-hidden">
 
+                {/* Big monthly calendar at the top of the events tab */}
+                {showEventsCalendar && (
+                  <div className="flex-shrink-0 px-3 md:px-6 pt-3 pb-2 border-b border-gold/15 bg-cream">
+                    <div className="h-[420px]">{monthCalendarCard}</div>
+                  </div>
+                )}
+
+
               {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-white border-b border-gold/15">
                 {/* Row 1: Sub-tabs + view modes + actions */}
@@ -2069,6 +2082,12 @@ export default function Dashboard() {
                       <Calendar className="w-3.5 h-3.5" />
                     </button>
                   </div>
+
+                  <button onClick={() => setShowEventsCalendar(v => !v)}
+                    title={showEventsCalendar ? "Hide calendar" : "Show calendar"}
+                    className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 border rounded-lg transition-colors ${showEventsCalendar ? 'bg-forest/10 border-forest/40 text-forest' : 'border-gold/30 text-ink/60 hover:border-gold hover:text-ink'}`}>
+                    {showEventsCalendar ? 'HIDE CAL' : 'SHOW CAL'}
+                  </button>
 
                   {/* Actions */}
                   <div className="ml-auto flex items-center gap-2">
