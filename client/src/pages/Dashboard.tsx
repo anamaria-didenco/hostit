@@ -775,6 +775,19 @@ export default function Dashboard() {
       knownMaxLeadId.current = maxId;
     }
   }, [allLeads]);
+  // Auto-open a lead drawer when ?leadId=N is in the URL (e.g. from Event → View Enquiry)
+  const leadIdParamApplied = useRef(false);
+  useEffect(() => {
+    if (leadIdParamApplied.current) return;
+    if (!allLeads || allLeads.length === 0) return;
+    const qp = new URLSearchParams(window.location.search);
+    const idStr = qp.get('leadId');
+    if (!idStr) { leadIdParamApplied.current = true; return; }
+    const id = parseInt(idStr, 10);
+    const lead = allLeads.find((l: any) => l.id === id);
+    if (lead) setSelectedLead(lead);
+    leadIdParamApplied.current = true;
+  }, [allLeads]);
   const { data: selectedLeadActivity } = trpc.leads.getActivity.useQuery(
     { leadId: selectedLead?.id ?? 0 },
     { enabled: !!selectedLead?.id }

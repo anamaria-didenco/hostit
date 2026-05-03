@@ -22,7 +22,6 @@ const EVENT_TYPES = [
   "Baby Shower", "Hen's Party", "Fundraiser", "Other"
 ];
 
-const SPACES = ["Whole Venue", "Main Dining Room", "Private Dining Room", "Bar Area", "Terrace", "Rooftop"];
 
 export default function EventDetail() {
   const [, params] = useRoute("/event/:id");
@@ -148,23 +147,6 @@ export default function EventDetail() {
         <span className="font-cormorant text-cream font-semibold text-base">
           {booking.firstName} {booking.lastName} — {booking.eventType || "Event"}
         </span>
-        <div className="ml-auto flex items-center gap-2">
-          {editing ? (
-            <>
-              <button onClick={() => setEditing(false)} className="font-bebas tracking-widest text-xs text-cream/60 hover:text-cream flex items-center gap-1 px-3 py-1.5">
-                <X className="w-3 h-3" /> CANCEL
-              </button>
-              <button onClick={handleSave} disabled={updateBooking.isPending}
-                className="btn-gold font-bebas tracking-widest text-xs px-4 py-1.5 flex items-center gap-1">
-                <Save className="w-3 h-3" /> {updateBooking.isPending ? "SAVING..." : "SAVE CHANGES"}
-              </button>
-            </>
-          ) : (
-            <button onClick={() => setEditing(true)} className="btn-gold font-bebas tracking-widest text-xs px-4 py-1.5 flex items-center gap-1">
-              <Edit3 className="w-3 h-3" /> EDIT EVENT
-            </button>
-          )}
-        </div>
       </nav>
 
       <div className="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -182,9 +164,27 @@ export default function EventDetail() {
                 </h1>
                 <div className="font-dm text-sm text-ink/60 mt-1">{booking.email}</div>
               </div>
-              <span className={`font-bebas text-xs tracking-widest px-3 py-1 border ${statusColor}`}>
-                {getStatusInfo(booking.status).label.toUpperCase()}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`font-bebas text-xs tracking-widest px-3 py-1 border ${statusColor}`}>
+                  {getStatusInfo(booking.status).label.toUpperCase()}
+                </span>
+                {editing ? (
+                  <>
+                    <button onClick={() => setEditing(false)} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink flex items-center gap-1 px-2 py-1">
+                      <X className="w-3 h-3" /> CANCEL
+                    </button>
+                    <button onClick={handleSave} disabled={updateBooking.isPending}
+                      className="btn-gold font-bebas tracking-widest text-xs px-3 py-1 flex items-center gap-1">
+                      <Save className="w-3 h-3" /> {updateBooking.isPending ? "SAVING..." : "SAVE"}
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => setEditing(true)}
+                    className="font-bebas tracking-widest text-xs text-forest border border-forest/30 hover:bg-forest/10 transition-colors px-3 py-1 flex items-center gap-1">
+                    <Edit3 className="w-3 h-3" /> EDIT
+                  </button>
+                )}
+              </div>
             </div>
 
             {editing ? (
@@ -231,8 +231,13 @@ export default function EventDetail() {
                   <Select value={form.spaceName} onValueChange={v => setForm((p: any) => ({ ...p, spaceName: v }))}>
                     <SelectTrigger className="font-dm text-sm"><SelectValue placeholder="Select space" /></SelectTrigger>
                     <SelectContent>
-                      {SPACES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                      {(spaces ?? []).map((s: any) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                      {(spaces ?? []).length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-ink/50 font-dm">
+                          No spaces configured. Add them in Settings → Venue → Spaces.
+                        </div>
+                      ) : (
+                        (spaces ?? []).map((s: any) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -431,7 +436,7 @@ export default function EventDetail() {
               </Link>
               {booking.leadId && (
                 <button
-                  onClick={() => setLocation('/dashboard')}
+                  onClick={() => setLocation(`/dashboard?tab=leads&leadId=${booking.leadId}`)}
                   className="w-full flex items-center gap-3 px-4 py-3 border border-gold/30 text-amber-700 hover:bg-gold/10 transition-colors font-bebas tracking-widest text-xs">
                   <Mail className="w-4 h-4" />
                   VIEW ENQUIRY
@@ -446,12 +451,17 @@ export default function EventDetail() {
             <div className="space-y-2">
               <button
                 onClick={() => {
-                  if (!booking.proposalId) { toast.error("No proposal linked to this booking"); return; }
-                  setLocation(`/proposals/new?proposalId=${booking.proposalId}`);
+                  if (booking.proposalId) {
+                    setLocation(`/proposals/new?proposalId=${booking.proposalId}`);
+                  } else if (booking.leadId) {
+                    setLocation(`/proposals/new?leadId=${booking.leadId}`);
+                  } else {
+                    toast.error("This booking has no linked enquiry — start a proposal from the enquiry first.");
+                  }
                 }}
                 className="w-full flex items-center gap-3 px-4 py-3 border border-gold/30 text-amber-700 hover:bg-gold/10 transition-colors font-bebas tracking-widest text-xs">
                 <FileText className="w-4 h-4" />
-                OPEN PROPOSAL BUILDER
+                {booking.proposalId ? 'OPEN PROPOSAL BUILDER' : 'START PROPOSAL'}
               </button>
               <button
                 onClick={() => {
