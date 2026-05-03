@@ -36,6 +36,7 @@ const DEFAULT_FORM_FIELDS: FormFieldDef[] = [
   { id: 'company', label: 'Company / Organisation', type: 'text', required: false, visible: true, isDefault: true },
   { id: 'eventType', label: 'Type of Event', type: 'select', required: false, visible: true, isDefault: true },
   { id: 'eventDate', label: 'Preferred Date', type: 'date', required: false, visible: true, isDefault: true },
+  { id: 'eventTime', label: 'Preferred Time', type: 'time', required: false, visible: true, isDefault: true },
   { id: 'guestCount', label: 'Guest Count', type: 'number', required: false, visible: true, isDefault: true },
   { id: 'budget', label: 'Approximate Budget (NZD)', type: 'number', required: false, visible: true, isDefault: true },
   { id: 'source', label: 'How did you hear about us?', type: 'select', required: false, visible: true, isDefault: true },
@@ -100,7 +101,9 @@ export default function LeadForm() {
       phone: form.phone || undefined,
       company: form.company || undefined,
       eventType: form.eventType || undefined,
-      eventDate: form.eventDate || undefined,
+      eventDate: form.eventDate
+        ? (form.eventTime ? new Date(`${form.eventDate}T${form.eventTime}:00`).toISOString() : form.eventDate)
+        : undefined,
       guestCount: form.guestCount ? parseInt(form.guestCount) : undefined,
       budget: form.budget ? parseFloat(form.budget) : undefined,
       message: fullMessage || undefined,

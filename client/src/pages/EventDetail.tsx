@@ -14,6 +14,7 @@ import {
   Link2, PenLine, Plus, Trash2
 } from "lucide-react";
 import { COLOR_PRESETS, parseCustomStatuses } from "@/components/StatusManager";
+import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput } from "@/lib/dateTime";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
@@ -78,8 +79,10 @@ export default function EventDetail() {
         lastName: booking.lastName ?? "",
         email: booking.email ?? "",
         eventType: booking.eventType ?? "",
-        eventDate: booking.eventDate ? new Date(booking.eventDate).toISOString().slice(0, 10) : "",
-        eventEndDate: booking.eventEndDate ? new Date(booking.eventEndDate).toISOString().slice(0, 10) : "",
+        eventDate: booking.eventDate ? toLocalDateInput(booking.eventDate) : "",
+        eventTime: booking.eventDate ? extractEventTimeHHMM(booking.eventDate) : "",
+        eventEndDate: booking.eventEndDate ? toLocalDateInput(booking.eventEndDate) : "",
+        eventEndTime: booking.eventEndDate ? extractEventTimeHHMM(booking.eventEndDate) : "",
         guestCount: booking.guestCount ?? "",
         spaceName: booking.spaceName ?? "",
         totalNzd: booking.totalNzd ?? "",
@@ -118,8 +121,12 @@ export default function EventDetail() {
       lastName: form.lastName,
       email: form.email,
       eventType: form.eventType || undefined,
-      eventDate: form.eventDate ? form.eventDate + 'T00:00:00.000Z' : undefined,
-      eventEndDate: form.eventEndDate ? form.eventEndDate + 'T00:00:00.000Z' : null,
+      eventDate: form.eventDate
+        ? (form.eventTime ? new Date(`${form.eventDate}T${form.eventTime}:00`).toISOString() : form.eventDate + 'T00:00:00.000Z')
+        : undefined,
+      eventEndDate: form.eventEndDate
+        ? (form.eventEndTime ? new Date(`${form.eventEndDate}T${form.eventEndTime}:00`).toISOString() : form.eventEndDate + 'T00:00:00.000Z')
+        : null,
       guestCount: form.guestCount ? parseInt(form.guestCount) : null,
       spaceName: form.spaceName || null,
       totalNzd: form.totalNzd ? parseFloat(form.totalNzd) : null,
@@ -208,8 +215,16 @@ export default function EventDetail() {
                   <Input type="date" value={form.eventDate} onChange={e => setForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
+                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">START TIME</label>
+                  <Input type="time" value={form.eventTime} onChange={e => setForm((p: any) => ({ ...p, eventTime: e.target.value }))} className="font-dm text-sm" />
+                </div>
+                <div>
                   <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">END DATE</label>
                   <Input type="date" value={form.eventEndDate} onChange={e => setForm((p: any) => ({ ...p, eventEndDate: e.target.value }))} className="font-dm text-sm" />
+                </div>
+                <div>
+                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">END TIME</label>
+                  <Input type="time" value={form.eventEndTime} onChange={e => setForm((p: any) => ({ ...p, eventEndTime: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
                   <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">GUEST COUNT</label>
@@ -263,10 +278,14 @@ export default function EventDetail() {
                     <div className="font-bebas text-xs tracking-widest text-ink/40">DATE</div>
                     <div className="font-dm text-sm text-ink">
                       {new Date(booking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                      {fmtEventTime(booking.eventDate) && (
+                        <span className="text-ink/70"> · {fmtEventTime(booking.eventDate)}</span>
+                      )}
                     </div>
                     {booking.eventEndDate && (
                       <div className="font-dm text-xs text-ink/50">
-                        until {new Date(booking.eventEndDate).toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" })}
+                        until {new Date(booking.eventEndDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
+                        {fmtEventTime(booking.eventEndDate) && ` · ${fmtEventTime(booking.eventEndDate)}`}
                       </div>
                     )}
                   </div>

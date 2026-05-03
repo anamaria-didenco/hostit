@@ -310,7 +310,7 @@ function NewEnquiriesWidget({ newEnquiries, overdueLeads, onSelectLead, onViewAl
               <div className="w-2 h-2 rounded-full bg-gold mt-1.5 flex-shrink-0 animate-pulse" />
               <div className="flex-1 min-w-0">
                 <div className="font-cormorant font-semibold text-sm text-ink">{lead.firstName} {lead.lastName}</div>
-                <div className="font-dm text-xs text-ink/60 truncate">{lead.eventType || 'Event'}{lead.guestCount ? ` · ${lead.guestCount} guests` : ''}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : ''}</div>
+                <div className="font-dm text-xs text-ink/60 truncate">{lead.eventType || 'Event'}{lead.guestCount ? ` · ${lead.guestCount} guests` : ''}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
                 {lead.message && <div className="font-dm text-xs text-ink/40 truncate mt-0.5 italic">"{lead.message}"</div>}
               </div>
               <div className="font-dm text-xs text-ink/40 flex-shrink-0">
@@ -1910,7 +1910,7 @@ export default function Dashboard() {
                             <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} />
                             <div className="flex-1 min-w-0">
                               <div className="font-dm text-xs font-semibold text-ink truncate">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-dm text-xs text-sage truncate">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}` : ''}</div>
+                              <div className="font-dm text-xs text-sage truncate">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
                             </div>
                           </button>
                         ))}
@@ -2128,7 +2128,7 @@ export default function Dashboard() {
                                 )}
                                 <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink whitespace-nowrap">{lead.firstName} {lead.lastName}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/70 max-w-[160px] truncate">{lead.eventType || "—"}</td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" }) : "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : "—"}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
                                 <td className="px-4 py-3">
                                   <span className={`font-bebas text-[10px] tracking-widest px-2 py-0.5 border ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}>
@@ -2193,6 +2193,9 @@ export default function Dashboard() {
                               <div className="font-bebas text-[9px] tracking-widest text-sage/60 uppercase">Event Date</div>
                               <div className="font-dm text-xs font-semibold text-forest">
                                 {new Date(lead.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                                {fmtEventTime(lead.eventDate) && (
+                                  <span className="text-forest/70"> · {fmtEventTime(lead.eventDate)}</span>
+                                )}
                               </div>
                             </div>
                           ) : (
@@ -2250,7 +2253,10 @@ export default function Dashboard() {
                                   )}
                                   <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
                                     {lead.eventDate && (
-                                      <span>{new Date(lead.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}</span>
+                                      <span>
+                                        {new Date(lead.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
+                                        {fmtEventTime(lead.eventDate) && ` · ${fmtEventTime(lead.eventDate)}`}
+                                      </span>
                                     )}
                                     {lead.guestCount && <span>{lead.guestCount} guests</span>}
                                   </div>
@@ -3535,7 +3541,7 @@ export default function Dashboard() {
                             {b.firstName} {b.lastName}
                           </button>
                           <div className="font-dm text-xs text-ink/60">
-                            {b.eventType || "Event"} · {new Date(b.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })}
+                            {b.eventType || "Event"} · {new Date(b.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })}{fmtEventTime(b.eventDate) && ` · ${fmtEventTime(b.eventDate)}`}
                             {b.guestCount ? ` · ${b.guestCount} guests` : ""}
                           </div>
                           <div className={`font-bebas text-xs tracking-widest mt-1 ${
