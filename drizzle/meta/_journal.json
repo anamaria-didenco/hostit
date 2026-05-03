@@ -210,6 +210,13 @@
       "when": 1777716393529,
       "tag": "0029_simple_carnage",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1777806937937,
+      "tag": "0030_foamy_saracen",
+      "breakpoints": true
     }
   ]
 }

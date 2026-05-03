@@ -11,7 +11,8 @@ import {
   ArrowLeft, FileText, Clock, MapPin, Users, DollarSign, CheckCircle,
   Calendar, Mail, Phone, Edit3, Save, X, ExternalLink, Printer,
   ClipboardList, LayoutGrid, ChefHat, MessageSquare, Package, Layers,
-  Link2, PenLine, Plus, Trash2
+  Link2, PenLine, Plus, Trash2,
+  Link as LinkIcon
 } from "lucide-react";
 import { COLOR_PRESETS, parseCustomStatuses } from "@/components/StatusManager";
 import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput, combineLocalDateTime } from "@/lib/dateTime";
@@ -69,6 +70,24 @@ export default function EventDetail() {
       toast.success("Event updated");
     },
     onError: () => toast.error("Failed to update event"),
+  });
+
+  const getBeoToken = trpc.bookings.getOrCreateBeoToken.useMutation({
+    onSuccess: async ({ token }) => {
+      const url = `${window.location.origin}/api/beo/public/${token}`;
+      try { await navigator.clipboard.writeText(url); toast.success("Live event pack link copied to clipboard"); }
+      catch { toast.success(`Live link: ${url}`); }
+      utils.bookings.getById.invalidate({ id: bookingId });
+    },
+    onError: (e) => toast.error(e.message ?? "Failed to create link"),
+  });
+
+  const revokeBeoToken = trpc.bookings.revokeBeoToken.useMutation({
+    onSuccess: () => {
+      toast.success("Old link revoked — generate a new one to share again");
+      utils.bookings.getById.invalidate({ id: bookingId });
+    },
+    onError: (e) => toast.error(e.message ?? "Failed to revoke"),
   });
 
   useEffect(() => {
@@ -477,6 +496,27 @@ export default function EventDetail() {
                 <Printer className="w-4 h-4" />
                 GENERATE BEO PDF
               </button>
+              <button
+                onClick={() => getBeoToken.mutate({ id: booking.id })}
+                disabled={getBeoToken.isPending}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-amber-700 text-amber-700 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs disabled:opacity-50">
+                <LinkIcon className="w-4 h-4" />
+                {getBeoToken.isPending ? 'CREATING LINK…'
+                  : (booking as any).beoShareToken ? 'COPY LIVE EVENT PACK LINK' : 'CREATE LIVE EVENT PACK LINK'}
+              </button>
+              {(booking as any).beoShareToken && (
+                <button
+                  onClick={() => {
+                    if (confirm('Revoke the current event-pack link? Anyone using the existing link will lose access.')) {
+                      revokeBeoToken.mutate({ id: booking.id });
+                    }
+                  }}
+                  disabled={revokeBeoToken.isPending}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-xs font-dm text-ink/50 hover:text-red-600 transition-colors disabled:opacity-50">
+                  <X className="w-3 h-3" />
+                  {revokeBeoToken.isPending ? 'Revoking…' : 'Revoke event-pack link'}
+                </button>
+              )}
             </div>
           </div>
 

@@ -12,7 +12,8 @@ import {
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
-  SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare
+  SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare,
+  Link as LinkIcon
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
@@ -667,6 +668,84 @@ async function compressToDataUrl(file: File, maxW: number, maxH: number, quality
   });
 }
 
+function PostEventSpendPrompt() {
+  const utils = trpc.useUtils();
+  const { data: pending } = trpc.bookings.pendingSpend.useQuery();
+  const recordSpend = trpc.bookings.recordActualSpend.useMutation({
+    onSuccess: () => { utils.bookings.pendingSpend.invalidate(); toast.success('Actual spend recorded'); },
+    onError: (e) => toast.error(e.message ?? 'Failed to save'),
+  });
+  const dismiss = trpc.bookings.dismissSpendPrompt.useMutation({
+    onSuccess: () => utils.bookings.pendingSpend.invalidate(),
+  });
+  const [drafts, setDrafts] = useState<Record<number, { spend: string; notes: string }>>({});
+  if (!pending || pending.length === 0) return null;
+  return (
+    <div className="dante-card p-5 border-l-4 border-l-amber-500 bg-amber-50/40">
+      <div className="flex items-start gap-3 mb-3">
+        <DollarSign className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <div className="font-cormorant text-lg font-semibold text-ink">Record actual spend</div>
+          <div className="font-dm text-xs text-ink/60">
+            {pending.length} {pending.length === 1 ? 'event' : 'events'} finished 2+ days ago without a final spend recorded — track what was actually paid for accurate reporting.
+          </div>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {pending.map((b: any) => {
+          const draft = drafts[b.id] ?? { spend: '', notes: '' };
+          const dateStr = b.eventDate ? new Date(b.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+          const quoted = b.totalNzd ? Number(b.totalNzd) : null;
+          return (
+            <div key={b.id} className="flex flex-wrap items-center gap-2 p-3 bg-white border border-amber-200/60">
+              <div className="flex-1 min-w-[180px]">
+                <div className="font-dm text-sm font-medium text-ink">{b.firstName} {b.lastName ?? ''}</div>
+                <div className="font-dm text-xs text-ink/50">{dateStr}{quoted ? ` · Quoted $${quoted.toLocaleString()}` : ''}</div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-dm text-sm text-ink/60">$</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={draft.spend}
+                  onChange={e => setDrafts(d => ({ ...d, [b.id]: { ...draft, spend: e.target.value } }))}
+                  className="w-28 border border-gold/30 px-2 py-1 text-sm font-dm rounded-none focus:outline-none focus:border-forest"
+                />
+                <input
+                  type="text"
+                  placeholder="Notes (optional)"
+                  value={draft.notes}
+                  onChange={e => setDrafts(d => ({ ...d, [b.id]: { ...draft, notes: e.target.value } }))}
+                  className="w-40 border border-gold/30 px-2 py-1 text-sm font-dm rounded-none focus:outline-none focus:border-forest"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const num = parseFloat(draft.spend);
+                    if (!isFinite(num) || num < 0) { toast.error('Enter a valid amount'); return; }
+                    recordSpend.mutate({ id: b.id, actualSpend: num, actualSpendNotes: draft.notes || undefined });
+                  }}
+                  disabled={recordSpend.isPending}
+                  className="font-bebas tracking-widest text-[11px] px-3 py-1.5 bg-forest text-cream hover:bg-forest-dark transition-colors disabled:opacity-50">
+                  SAVE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => dismiss.mutate({ id: b.id })}
+                  title="Dismiss"
+                  className="text-ink/40 hover:text-ink transition-colors p-1">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user, isAuthenticated, loading, isTeamMember } = useAuth();
   const [, setLocation] = useLocation();
@@ -1252,6 +1331,7 @@ export default function Dashboard() {
   const deleteSpace = trpc.spaces.delete.useMutation({
     onSuccess: () => { refetchSpaces(); toast.success("Space deleted!"); },
   });
+  const getBeoTokenMutation = trpc.bookings.getOrCreateBeoToken.useMutation();
 
   // Menu packages
   const { data: menuPackages, refetch: refetchMenuPackages } = trpc.menu.listPackages.useQuery(undefined, { enabled: !!user?.id });
@@ -1936,19 +2016,41 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* KPI Cards */}
+              {/* KPI Cards — clickable, route to relevant tab */}
               {visibleStats.length > 0 && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  {visibleStats.map(s => (
-                    <div key={s.id} className="dante-card p-5">
-                      <div className="mb-3">{s.icon}</div>
-                      <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
-                      <div className="font-bebas text-xs tracking-widest text-sage">{s.label}</div>
-                      <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
-                    </div>
-                  ))}
+                  {visibleStats.map(s => {
+                    const target: DashTab = (
+                      s.id === 'active_enquiries' ? 'enquiries' :
+                      s.id === 'upcoming_events' ? 'calendar' :
+                      s.id === 'proposals_sent' ? 'pipeline' :
+                      s.id === 'conversion_rate' ? 'reports' :
+                      s.id === 'revenue_month' ? 'reports' :
+                      s.id === 'overdue_tasks' ? 'tasks' :
+                      s.id === 'overdue_followups' ? 'tasks' :
+                      'overview'
+                    );
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setTab(target)}
+                        aria-label={`Open ${s.label}`}
+                        className="dante-card p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      >
+                        <div className="mb-3">{s.icon}</div>
+                        <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
+                        <div className="font-bebas text-xs tracking-widest text-sage">{s.label}</div>
+                        <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
+
+              {/* Post-Event Spend Prompt — surfaces 2 days after event end */}
+              <PostEventSpendPrompt />
+              
 
               {/* Calendar + Sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -6745,6 +6847,18 @@ export default function Dashboard() {
                         }}
                         className="flex items-center gap-2 px-3 py-2 bg-amber-700 text-white hover:bg-amber-800 transition-colors font-bebas tracking-widest text-xs">
                         <Printer className="w-3 h-3" /> BEO PDF
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const { token } = await getBeoTokenMutation.mutateAsync({ id: selectedBooking.id });
+                            const url = `${window.location.origin}/api/beo/public/${token}`;
+                            await navigator.clipboard.writeText(url);
+                            toast.success('Live event pack link copied to clipboard');
+                          } catch (e: any) { toast.error(e.message ?? 'Failed to create link'); }
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 border border-amber-700 text-amber-700 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs">
+                        <LinkIcon className="w-3 h-3" /> COPY EVENT PACK LINK
                       </button>
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
                         className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">

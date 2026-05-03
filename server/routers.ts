@@ -1280,6 +1280,101 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     list: protectedProcedure.query(async ({ ctx }) => {
       return getBookings(ctx.user.id);
     }),
+
+    /**
+     * Bookings whose event ended ≥2 days ago and have no actualSpend recorded
+     * yet — surfaced as a prompt on the Overview so the user records what was
+     * actually spent. Dismissible per-booking via spendPromptDismissedAt.
+     */
+    pendingSpend: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { bookings } = await import('../drizzle/schema');
+      const { eq, and, isNull, lte, or, sql } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      const cutoff = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      const rows = await db.select().from(bookings).where(and(
+        eq(bookings.ownerId, ctx.user.id),
+        eq(bookings.status, 'confirmed'),
+        isNull(bookings.actualSpend),
+        isNull(bookings.spendPromptDismissedAt),
+        // event finished — use eventEndDate if set, otherwise eventDate
+        or(
+          and(sql`${bookings.eventEndDate} IS NOT NULL`, lte(bookings.eventEndDate, cutoff)),
+          and(isNull(bookings.eventEndDate), lte(bookings.eventDate, cutoff)),
+        )!,
+      ));
+      // newest events first
+      rows.sort((a: any, b: any) => +new Date(b.eventDate) - +new Date(a.eventDate));
+      return rows.slice(0, 10);
+    }),
+
+    recordActualSpend: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        actualSpend: z.number().nullable(),
+        actualSpendNotes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.update(bookings).set({
+          actualSpend: input.actualSpend !== null ? String(input.actualSpend) : null,
+          actualSpendNotes: input.actualSpendNotes ?? null,
+          actualSpendRecordedAt: new Date(),
+        }).where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    dismissSpendPrompt: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.update(bookings).set({ spendPromptDismissedAt: new Date() })
+          .where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    /** Mint (or return existing) public token used as the live event-pack URL. */
+    getOrCreateBeoToken: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(bookings)
+          .where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+        if (!row) throw new Error('Booking not found');
+        if (row.beoShareToken) return { token: row.beoShareToken };
+        const { randomBytes } = await import('crypto');
+        const token = randomBytes(20).toString('hex');
+        await db.update(bookings).set({ beoShareToken: token })
+          .where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)));
+        return { token };
+      }),
+
+    revokeBeoToken: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.update(bookings).set({ beoShareToken: null })
+          .where(and(eq(bookings.id, input.id), eq(bookings.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input, ctx }) => {
@@ -1716,9 +1811,16 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           contentType: a.contentType,
         }));
 
+        // Reply-To = notification email (or sender) so customer replies land
+        // in the user's normal inbox. BCC the same address so the user keeps
+        // a copy of every outgoing message in their email log.
+        const replyAndBcc = settings.notificationEmail || fromEmail;
+
         await transporter.sendMail({
           from: `"${fromName}" <${fromEmail}>`,
           to: input.toName ? `"${input.toName}" <${input.to}>` : input.to,
+          replyTo: replyAndBcc,
+          bcc: replyAndBcc,
           subject: input.subject,
           html: fullHtml,
           text: input.body,

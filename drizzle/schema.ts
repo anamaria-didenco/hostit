@@ -243,6 +243,11 @@ export const bookings = pgTable("bookings", {
   status: bookingStatusEnum("status").default("confirmed").notNull(),
   notes: text("notes"),
   nbiBookingId: varchar("nbiBookingId", { length: 100 }),
+  actualSpend: decimal("actualSpend", { precision: 10, scale: 2 }),
+  actualSpendNotes: text("actualSpendNotes"),
+  actualSpendRecordedAt: timestamp("actualSpendRecordedAt"),
+  spendPromptDismissedAt: timestamp("spendPromptDismissedAt"),
+  beoShareToken: varchar("beoShareToken", { length: 64 }).unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

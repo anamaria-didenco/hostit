@@ -6,7 +6,7 @@ import multer from "multer";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
-import { handleBeoPdf } from "../beoPdf";
+import { handleBeoPdf, handleBeoPdfPublic } from "../beoPdf";
 import { handleStaffSheetPdf } from "../staffSheetPdf";
 import { handleFloorPlanPdf } from "../floorPlanPdf";
 import { appRouter } from "../routers";
@@ -186,6 +186,9 @@ async function startServer() {
       handleBeoPdf(req, res);
     }).catch(next);
   });
+
+  // BEO Live Link — public, token-gated. Used as the customer-facing event pack.
+  app.get("/api/beo/public/:token", handleBeoPdfPublic);
 
   // Staff Sheet PDF download (requires session auth)
   app.get("/api/staff-sheet/:runsheetId", (req, res, next) => {

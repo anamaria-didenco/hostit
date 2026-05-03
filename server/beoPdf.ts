@@ -71,20 +71,43 @@ function groupByCourse(items: any[]) {
 }
 
 export async function handleBeoPdf(req: Request, res: Response) {
+  return _renderBeo(req, res, "auth");
+}
+
+export async function handleBeoPdfPublic(req: Request, res: Response) {
+  return _renderBeo(req, res, "token");
+}
+
+async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
+  const isPublic = mode === "token";
   try {
-    const bookingId = parseInt(req.params.bookingId, 10);
-    if (isNaN(bookingId)) return res.status(400).send("Invalid booking ID");
-
-    const userId: number | undefined = (req as any).user?.id;
-    if (!userId) return res.status(401).send("Unauthorised");
-
     const db = await getDb();
     if (!db) return res.status(503).send("Database unavailable");
 
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, userId)))
-      .limit(1);
-    if (!booking) return res.status(404).send("Booking not found");
+    let booking: any = null;
+    let userId: number;
+
+    if (mode === "token") {
+      const token = String(req.params.token || "").trim();
+      if (!token) return res.status(400).send("Invalid token");
+      const [b] = await db.select().from(bookings)
+        .where(eq(bookings.beoShareToken, token)).limit(1);
+      if (!b) return res.status(404).send("Event pack not found or link revoked");
+      booking = b;
+      userId = b.ownerId;
+    } else {
+      const bookingId = parseInt(req.params.bookingId, 10);
+      if (isNaN(bookingId)) return res.status(400).send("Invalid booking ID");
+      const sessionUserId: number | undefined = (req as any).user?.id;
+      if (!sessionUserId) return res.status(401).send("Unauthorised");
+      const [b] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, sessionUserId)))
+        .limit(1);
+      if (!b) return res.status(404).send("Booking not found");
+      booking = b;
+      userId = sessionUserId;
+    }
+    const bookingId = booking.id;
 
     const [venue] = await db.select().from(venueSettings)
       .where(eq(venueSettings.ownerId, userId)).limit(1);
@@ -169,8 +192,9 @@ export async function handleBeoPdf(req: Request, res: Response) {
     const eventType = booking.eventType ?? (runsheet as any)?.eventType ?? "";
     const dietaries: { name: string; count: number; notes?: string }[] = (runsheet as any)?.dietaries ?? [];
     const venueSetup = (runsheet as any)?.venueSetup ?? "";
-    const rsNotes = (runsheet as any)?.notes ?? "";
-    const bookingNotes = (booking as any).notes ?? "";
+    // Internal-only fields — never surfaced via the public event-pack link.
+    const rsNotes = isPublic ? "" : ((runsheet as any)?.notes ?? "");
+    const bookingNotes = isPublic ? "" : ((booking as any).notes ?? "");
     const fnbCols = (runsheet as any)?.fnbColumns ?? {};
     const showQty = fnbCols.qty !== false;
 
@@ -182,7 +206,9 @@ export async function handleBeoPdf(req: Request, res: Response) {
       ? `<img src="${venueLogoUrl}" alt="${venueName}" style="height:40px;max-width:120px;object-fit:contain;display:block;">`
       : `<div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:white;letter-spacing:0.04em;">${venueName}</div>`;
 
-    // Details grid
+    // Details grid — public event-pack hides financials (DEPOSIT), internal
+    // workflow info (STATUS), and contact PII (EMAIL/PHONE) since the link
+    // may be forwarded beyond the original recipient.
     const detailCells = [
       { label: "CLIENT", value: clientName },
       { label: "EVENT TYPE", value: eventType || "—" },
@@ -190,10 +216,12 @@ export async function handleBeoPdf(req: Request, res: Response) {
       { label: "TIME", value: timeRange },
       { label: "GUESTS", value: guestCount ? String(guestCount) : "—" },
       { label: "SPACE / ROOM", value: [venueAreaLabel, spaceName].filter(Boolean).join(" · ") || "—" },
-      { label: "EMAIL", value: leadEmail || "—" },
-      { label: "PHONE", value: leadPhone || booking.phone || "—" },
-      { label: "DEPOSIT", value: booking.depositNzd ? fmtCurrency(booking.depositNzd) + (booking.depositPaid ? " ✓ Paid" : " — Outstanding") : "—" },
-      { label: "STATUS", value: (booking.status ?? "").replace(/_/g, " ").toUpperCase() },
+      ...(isPublic ? [] : [
+        { label: "EMAIL", value: leadEmail || "—" },
+        { label: "PHONE", value: leadPhone || booking.phone || "—" },
+        { label: "DEPOSIT", value: booking.depositNzd ? fmtCurrency(booking.depositNzd) + (booking.depositPaid ? " ✓ Paid" : " — Outstanding") : "—" },
+        { label: "STATUS", value: (booking.status ?? "").replace(/_/g, " ").toUpperCase() },
+      ]),
     ].filter(c => c.value && c.value !== "—");
 
     // Venue setup section
@@ -246,10 +274,14 @@ export async function handleBeoPdf(req: Request, res: Response) {
     // F&B section renderer
     function renderFnbSection(title: string, items: any[], isKitchen = false) {
       if (!items.length) return "";
+      // Public event-pack hides internal kitchen prep/plating + staff
+      // assignments — guests don't need (and shouldn't see) operational detail.
+      if (isPublic && isKitchen) return "";
       const grouped = groupByCourse(items);
       const ordered = COURSE_ORDER.filter(c => grouped[c]);
       const remaining = Object.keys(grouped).filter(c => !COURSE_ORDER.includes(c));
       const allCourses = [...ordered, ...remaining];
+      const showLastCol = !isPublic;
       const lastColHeader = isKitchen ? "PREP / PLATING" : "STAFF";
 
       return `
@@ -261,7 +293,7 @@ export async function handleBeoPdf(req: Request, res: Response) {
     ${showQty ? `<div class="fnb-qty">QTY</div>` : ""}
     <div class="fnb-time">TIME</div>
     <div class="fnb-diet">DIETARY</div>
-    <div class="fnb-last">${lastColHeader}</div>
+    ${showLastCol ? `<div class="fnb-last">${lastColHeader}</div>` : ""}
   </div>
   ${allCourses.map(course => `
   <div class="course-group">${course}</div>
@@ -275,12 +307,12 @@ export async function handleBeoPdf(req: Request, res: Response) {
     ${showQty ? `<div class="fnb-qty">${course === "Drinks" ? "" : (f.qty ?? 1)}</div>` : ""}
     <div class="fnb-time">${f.serviceTime ? fmt12(f.serviceTime) : ""}</div>
     <div class="fnb-diet">${f.dietary ? `<span class="diet-tag">${f.dietary}</span>` : ""}</div>
-    <div class="fnb-last">
+    ${showLastCol ? `<div class="fnb-last">
       ${isKitchen
         ? `${f.prepNotes ? `<div class="prep-note">${f.prepNotes}</div>` : ""}${f.platingNotes ? `<div class="plating-note">${f.platingNotes}</div>` : ""}`
         : (f.staffAssigned || "")
       }
-    </div>
+    </div>` : ""}
   </div>`).join("")}`).join("")}
 </div>`;
     }
@@ -309,8 +341,10 @@ export async function handleBeoPdf(req: Request, res: Response) {
   </div>
 </div>` : "";
 
-    // Financials section
-    const financialsSection = (quoteSettingsRow || quoteItemsList.length > 0 || booking.totalNzd) ? `
+    // Financials section — hidden on public event-pack to avoid exposing
+    // deposit status / margin breakdown / pricing line items to anyone with
+    // the link. The customer already has their proposal for that.
+    const financialsSection = !isPublic && (quoteSettingsRow || quoteItemsList.length > 0 || booking.totalNzd) ? `
 <div class="card">
   <div class="card-header">FINANCIALS</div>
   <div class="card-body">
@@ -332,10 +366,10 @@ export async function handleBeoPdf(req: Request, res: Response) {
   <div class="card-body notes-text">${allNotes.replace(/\n/g, "<br>")}</div>
 </div>` : "";
 
-    // F&B grid columns
-    const fnbGridCols = showQty
-      ? "65px 1fr 32px 50px 70px 1fr"
-      : "65px 1fr 50px 70px 1fr";
+    // F&B grid columns — drop trailing STAFF / PREP column on public view.
+    const fnbGridCols = isPublic
+      ? (showQty ? "65px 1fr 32px 50px 70px" : "65px 1fr 50px 70px")
+      : (showQty ? "65px 1fr 32px 50px 70px 1fr" : "65px 1fr 50px 70px 1fr");
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -714,8 +748,12 @@ export async function handleBeoPdf(req: Request, res: Response) {
         margin: { top: "0mm", right: "0mm", bottom: "12mm", left: "0mm" },
       });
       res.setHeader("Content-Type", "application/pdf");
+      // Public event-pack opens inline in the browser (no forced download)
+      // so customers click the link and see it; internal BEO PDF still
+      // downloads as a file.
+      const disposition = isPublic ? "inline" : "attachment";
       res.setHeader("Content-Disposition",
-        `attachment; filename="BEO-${booking.id}-${clientName.replace(/\s+/g, "-")}.pdf"`);
+        `${disposition}; filename="${isPublic ? "Event-Pack" : "BEO"}-${booking.id}-${clientName.replace(/\s+/g, "-")}.pdf"`);
       res.send(Buffer.from(pdf));
     } finally {
       await browser.close();
