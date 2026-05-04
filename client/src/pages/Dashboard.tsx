@@ -1611,7 +1611,16 @@ export default function Dashboard() {
         ]),
         emailSignature: vs?.emailSignature ?? "",
         emailSignatureLogo: (vs as any)?.emailSignatureLogo ?? "",
-        customCourses: vs?.customCourses ?? "",
+        customCourses: (() => {
+          if (vs?.customCourses) {
+            try {
+              const arr = JSON.parse(vs.customCourses);
+              if (Array.isArray(arr)) return arr.join('\n');
+            } catch {}
+            return vs.customCourses;
+          }
+          return '';
+        })(),
       });
     }
    }, [venueSettings]);
@@ -6155,16 +6164,7 @@ export default function Dashboard() {
                     <p className="font-dm text-xs text-ink/50 mb-3">Customise the course headers used inside Runsheet Builder (one per line). Leave blank to use defaults.</p>
                     <textarea
                       rows={6}
-                      value={(() => {
-                        if (settingsForm.customCourses) {
-                          try {
-                            const arr = JSON.parse(settingsForm.customCourses);
-                            if (Array.isArray(arr)) return arr.join('\n');
-                          } catch {}
-                          return settingsForm.customCourses;
-                        }
-                        return ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'].join('\n');
-                      })()}
+                      value={settingsForm.customCourses || ''}
                       onChange={e => {
                         setSettingsForm((f: any) => ({ ...f, customCourses: e.target.value }));
                       }}
@@ -6746,7 +6746,7 @@ export default function Dashboard() {
                   : selectedBooking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
                   : selectedBooking.status === 'new' ? 'text-amber-700 bg-amber-50 border-amber-200'
                   : 'text-stone-500 bg-stone-50 border-stone-200'
-                }`}>{selectedBooking._isLead ? 'ENQUIRY' : (selectedBooking.status?.toUpperCase() ?? 'EVENT')}</span>
+                }`}>{selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status) ? 'ENQUIRY' : (selectedBooking.status?.toUpperCase() ?? 'EVENT')}</span>
                 {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60">{selectedBooking.eventType}</span>}
               </div>
               {/* Key Details */}
@@ -6816,6 +6816,11 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-2">
                   {selectedBooking._isLead ? (
                     <>
+                      {['confirmed','booked','finished'].includes(selectedBooking.status) && (
+                        <div className="col-span-2 bg-amber-50 border border-amber-200 px-3 py-2 font-dm text-xs text-amber-700">
+                          This event is confirmed but still in the enquiry pipeline. Open it to create a booking record with full event tools.
+                        </div>
+                      )}
                       <button onClick={() => { const lead = selectedBooking; setSelectedBooking(null); selectLead(lead); setTab('enquiries'); }}
                         className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs col-span-2">
                         <FileText className="w-3 h-3 text-gold" /> OPEN ENQUIRY
