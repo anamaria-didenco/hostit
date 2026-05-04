@@ -6821,11 +6821,6 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-2">
                   {selectedBooking._isLead ? (
                     <>
-                      {['confirmed','booked','finished'].includes(selectedBooking.status) && (
-                        <div className="col-span-2 bg-amber-50 border border-amber-200 px-3 py-2 font-dm text-xs text-amber-700">
-                          This event is confirmed but still in the enquiry pipeline. Open it to create a booking record with full event tools.
-                        </div>
-                      )}
                       <button onClick={() => { const lead = selectedBooking; setSelectedBooking(null); selectLead(lead); setTab('enquiries'); }}
                         className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                         <FileText className="w-3 h-3 text-gold" /> {['confirmed','booked','finished'].includes(selectedBooking.status) ? 'VIEW DETAILS' : 'OPEN ENQUIRY'}
