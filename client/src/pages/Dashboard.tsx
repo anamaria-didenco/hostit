@@ -2159,7 +2159,35 @@ export default function Dashboard() {
 
           {/* ── ENQUIRIES INBOX ──────────────────────────────────────────────────── */}
           {tab === "enquiries" && (
-            <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex h-full overflow-hidden">
+
+              {/* ── EVENTS SUB-SIDEBAR ─────────────────────────────────────── */}
+              <aside className="hidden md:flex flex-col w-48 flex-shrink-0 bg-forest-dark text-cream/90 border-r border-forest overflow-y-auto">
+                <div className="px-4 py-3 border-b border-forest/40">
+                  <div className="font-bebas tracking-widest text-xs text-gold">EVENTS</div>
+                </div>
+                {([
+                  { key: 'calendar', label: 'Calendar', icon: <Calendar className="w-3.5 h-3.5" />, onClick: () => setTab('calendar' as any) },
+                  { key: 'table', label: 'View Events Table', icon: <Table2 className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter('all'); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadViewMode === 'table' && leadStatusFilter === 'all' },
+                  { key: 'add_event', label: 'Add Event', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'booked' as any })); setShowAddLead(true); } },
+                  { key: 'add_enquiry', label: 'Add Enquiry', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'new' as any })); setShowAddLead(true); } },
+                  { key: 'add_quote', label: 'Add Quote', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setLocation('/proposals/new') },
+                  { key: 'view_enquiries', label: 'View Enquiries', icon: <MessageSquare className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter('new'); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadStatusFilter === 'new' },
+                  { key: 'view_quotes', label: 'View Quotes', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setLocation('/proposals') },
+                ]).map((item: any) => (
+                  <button
+                    key={item.key}
+                    onClick={item.onClick}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-left font-dm text-xs border-l-2 transition-colors ${item.active ? 'bg-forest border-gold text-cream' : 'border-transparent hover:bg-forest hover:border-gold/40'}`}
+                  >
+                    {item.icon}
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                ))}
+              </aside>
+
+              {/* ── MAIN EVENTS COLUMN ─────────────────────────────────────── */}
+              <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
               {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-white border-b border-gold/15">
@@ -2789,7 +2817,7 @@ export default function Dashboard() {
                     setSelectedLead((prev: any) => prev ? { ...prev, followUpDate: updated } : prev);
                   }} />
                 </div>
-              ) : (
+              ) : leadViewMode === "list" ? (
                 <div className="flex-1 hidden md:flex items-center justify-center text-center p-8">
                   <div>
                     <MessageSquare className="w-12 h-12 text-ink/60/20 mx-auto mb-4" />
@@ -2797,7 +2825,7 @@ export default function Dashboard() {
                     <p className="font-dm text-ink/60/50 text-sm mt-2">Click a lead from the list to view details</p>
                   </div>
                 </div>
-              ))}
+              ) : null)}
               </div>{/* ── End content area ────────────────────────────────────── */}
 
               {/* Floating Bulk Action Toolbar */}
@@ -2937,6 +2965,7 @@ export default function Dashboard() {
                   </DialogContent>
                 </Dialog>
               )}
+              </div>
             </div>
           )}
 
@@ -3089,6 +3118,7 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+          {/* end EMAIL MODAL */}
 
           {/* ── PIPELINE ─────────────────────────────────────────────────────── */}
           {tab === "pipeline" && (
