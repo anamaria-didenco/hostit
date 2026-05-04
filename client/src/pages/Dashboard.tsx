@@ -891,6 +891,11 @@ export default function Dashboard() {
     { leadId: selectedLead?.id ?? 0 },
     { enabled: !!selectedLead?.id }
   );
+  const drawerLeadId = selectedBooking?._isLead ? selectedBooking.id : null;
+  const { data: drawerLeadRunsheets } = trpc.runsheets.list.useQuery(
+    { leadId: drawerLeadId ?? 0 },
+    { enabled: !!drawerLeadId }
+  );
   const { data: venueSettings, refetch: refetchSettings } = trpc.venue.get.useQuery(
     { ownerId: user?.id },
     { enabled: !!user?.id }
@@ -6822,9 +6827,49 @@ export default function Dashboard() {
                         </div>
                       )}
                       <button onClick={() => { const lead = selectedBooking; setSelectedBooking(null); selectLead(lead); setTab('enquiries'); }}
-                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs col-span-2">
-                        <FileText className="w-3 h-3 text-gold" /> {['confirmed','booked','finished'].includes(selectedBooking.status) ? 'VIEW EVENT DETAILS' : 'OPEN ENQUIRY'}
+                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                        <FileText className="w-3 h-3 text-gold" /> {['confirmed','booked','finished'].includes(selectedBooking.status) ? 'VIEW DETAILS' : 'OPEN ENQUIRY'}
                       </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/proposals/new?leadId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                        <FileText className="w-3 h-3 text-gold" /> CREATE PROPOSAL
+                      </button>
+                      {drawerLeadRunsheets && drawerLeadRunsheets.length > 0 ? (
+                        <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?id=${drawerLeadRunsheets[drawerLeadRunsheets.length - 1].id}&leadId=${selectedBooking.id}`); }}
+                          className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                          <Clock className="w-3 h-3 text-gold" /> EDIT RUNSHEET
+                        </button>
+                      ) : ['booked','confirmed'].includes(selectedBooking.status) ? (
+                        <button
+                          onClick={() => {
+                            createRunsheet.mutate({
+                              leadId: selectedBooking.id,
+                              eventDate: selectedBooking.eventDate ?? undefined,
+                              guestCount: selectedBooking.guestCount ?? undefined,
+                              venueName: (venueSettings as any)?.name ?? undefined,
+                            });
+                          }}
+                          disabled={createRunsheet.isPending}
+                          className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs disabled:opacity-50">
+                          <Clock className="w-3 h-3" /> {createRunsheet.isPending ? 'CREATING...' : 'GENERATE RUNSHEET'}
+                        </button>
+                      ) : (
+                        <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?leadId=${selectedBooking.id}`); }}
+                          className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                          <Clock className="w-3 h-3" /> RUNSHEET
+                        </button>
+                      )}
+                      {selectedBooking.email && !isTeamMember && (
+                        <button
+                          onClick={() => {
+                            setEmailForm({ subject: `Re: Your event enquiry — ${selectedBooking.eventType || 'Event'}`, body: `Hi ${selectedBooking.firstName},\n\nThank you for your enquiry. ` });
+                            setShowEmailModal(true);
+                            setSelectedBooking(null);
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                          <Mail className="w-3 h-3" /> EMAIL
+                        </button>
+                      )}
                       {!['confirmed','booked','finished'].includes(selectedBooking.status) && (
                         <button
                           onClick={() => {
@@ -6832,8 +6877,8 @@ export default function Dashboard() {
                               deleteLead.mutate({ id: selectedBooking.id });
                             }
                           }}
-                          className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
-                          <Trash2 className="w-3 h-3" /> DELETE ENQUIRY
+                          className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs">
+                          <Trash2 className="w-3 h-3" /> DELETE
                         </button>
                       )}
                     </>
