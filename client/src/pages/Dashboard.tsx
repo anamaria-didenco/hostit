@@ -2902,7 +2902,12 @@ export default function Dashboard() {
                         {selectedLead.eventDate && (
                           <div>
                             <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">EVENT DATE</p>
-                            <p className="font-dm text-sm text-ink">{new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+                            <p className="font-dm text-sm text-ink">
+                              {new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                              {fmtEventTime(selectedLead.eventDate) && (
+                                <span className="text-forest"> · {fmtEventTime(selectedLead.eventDate)}</span>
+                              )}
+                            </p>
                           </div>
                         )}
                         {selectedLead.guestCount && (
@@ -3420,26 +3425,27 @@ export default function Dashboard() {
                       .map((item: any) => {
                         const si = getStatusInfo(item.status);
                         return (
-                          <div key={item.id} className="flex items-stretch rounded-xl border border-gray-100 overflow-hidden transition-all hover:shadow-sm bg-white">
+                          <div key={item.id} className="flex items-stretch border border-gold/20 overflow-hidden transition-all hover:shadow-sm bg-white">
                             <div className={`w-1 flex-shrink-0 ${si.barClasses}`} />
                             <div className="flex-1 p-3 flex items-center justify-between gap-3">
                               <div className="flex-1 min-w-0">
-                                <div className="font-inter font-semibold text-sm text-gray-900">{item.firstName} {item.lastName}</div>
-                                <div className="font-inter text-xs text-gray-500 truncate">
+                                <div className="font-cormorant font-semibold text-base text-ink">{item.firstName} {item.lastName}</div>
+                                <div className="font-dm text-xs text-ink/60 truncate">
                                   {item.eventType || (item._type === 'booking' ? 'Event' : 'Enquiry')}
                                   {' · '}{new Date(item.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                  {fmtEventTime(item.eventDate) && ` · ${fmtEventTime(item.eventDate)}`}
                                   {item.guestCount ? ` · ${item.guestCount} guests` : ''}
                                   {item.company ? ` · ${item.company}` : ''}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-                                <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 rounded ${si.calClasses}`}>
+                                <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${si.calClasses}`}>
                                   {si.label.toUpperCase()}
                                 </span>
                                 {item._type === 'booking' ? (
-                                  <button onClick={() => setLocation(`/event/${item.id}`)} className="font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">Open</button>
+                                  <button onClick={() => setLocation(`/event/${item.id}`)} className="font-bebas tracking-widest text-xs px-3 py-1.5 bg-forest-dark text-cream hover:bg-forest transition-colors">OPEN</button>
                                 ) : (
-                                  <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} className="font-inter text-xs font-semibold px-3 py-1.5 border border-sage-green/40 text-sage-dark rounded-lg hover:bg-sage-tint transition-colors">View</button>
+                                  <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/10 transition-colors">VIEW</button>
                                 )}
                                 <button
                                   onClick={() => {
@@ -6763,9 +6769,12 @@ export default function Dashboard() {
                     <div className="font-dm text-sm text-ink">
                       {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
                     </div>
-                    {selectedBooking.eventEndDate && (
-                      <div className="font-dm text-xs text-ink/50">
-                        until {new Date(selectedBooking.eventEndDate).toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" })}
+                    {(fmtEventTime(selectedBooking.eventDate) || selectedBooking.eventEndDate) && (
+                      <div className="font-dm text-xs text-forest mt-0.5">
+                        {fmtEventTime(selectedBooking.eventDate)}
+                        {selectedBooking.eventEndDate && fmtEventTime(selectedBooking.eventEndDate) && (
+                          <> – {fmtEventTime(selectedBooking.eventEndDate)}</>
+                        )}
                       </div>
                     )}
                   </div>
