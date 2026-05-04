@@ -142,7 +142,7 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
-      className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest text-sm h-9 px-2 bg-white font-dm no-print"
+      className="w-full rounded-sm border border-gold/20 focus:outline-none focus:border-forest text-sm h-9 px-2 bg-white font-dm no-print"
     >
       <option value="">— select a space —</option>
       {spaces?.map((s: any) => (
@@ -435,6 +435,7 @@ export default function RunsheetBuilder() {
   // Smart paste-import state
   const [showPasteImport, setShowPasteImport] = useState(false);
   const [pasteText, setPasteText] = useState('');
+  const [smartPasteOpen, setSmartPasteOpen] = useState(false);
   const [parsedData, setParsedData] = useState<ParsedRunsheetData|null>(null);
   const [includeEventDetails, setIncludeEventDetails] = useState(true);
   const [includeDietaries, setIncludeDietaries] = useState(true);
@@ -1562,7 +1563,7 @@ export default function RunsheetBuilder() {
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
+            className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 shadow-sm shadow-gold/30"
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? "SAVING..." : "SAVE"}
@@ -1573,7 +1574,7 @@ export default function RunsheetBuilder() {
       {/* ── Templates Panel ─────────────────────────────────────────────── */}
       {showTemplates && (
         <div className="bg-forest border-b border-white/10 no-print">
-          <div className="max-w-5xl mx-auto px-6 py-5">
+          <div className="max-w-6xl mx-auto px-6 py-5">
             <div className="flex items-start gap-6">
               {/* Save current as template */}
               <div className="flex-1">
@@ -1637,18 +1638,20 @@ export default function RunsheetBuilder() {
         </div>
       )}
 
-      {/* ── Smart Paste Import Banner ───────────────────────────────────────── */}
-      <div className="no-print bg-gradient-to-r from-forest/8 via-gold/8 to-forest/8 border-b border-gold/25 px-6 py-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 pt-1">
-              <Sparkles className="w-5 h-5 text-gold" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className="font-bebas tracking-widest text-sm text-forest">SMART PASTE IMPORT</span>
-                <span className="font-dm text-xs text-ink/50">Paste a client email, booking brief, Word doc or notes — AI fills in everything automatically</span>
-              </div>
+      {/* ── Smart Paste Import Banner (collapsible) ─────────────────────────── */}
+      <div className="no-print border-b border-gold/20">
+        <button
+          onClick={() => setSmartPasteOpen(v => !v)}
+          className="w-full flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-forest/5 via-gold/5 to-forest/5 hover:from-forest/8 hover:via-gold/8 hover:to-forest/8 transition-colors"
+        >
+          <Sparkles className="w-4 h-4 text-gold" />
+          <span className="font-bebas tracking-widest text-xs text-forest">SMART PASTE IMPORT</span>
+          <span className="font-dm text-xs text-ink/40 hidden sm:inline">— paste a brief, email or doc and AI fills everything in</span>
+          <ChevronDown className={`w-3.5 h-3.5 text-ink/30 ml-auto transition-transform ${smartPasteOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {smartPasteOpen && (
+          <div className="bg-gradient-to-r from-forest/5 via-gold/5 to-forest/5 px-6 pb-4">
+            <div className="max-w-6xl mx-auto">
               <div className="flex gap-2 items-end">
                 <textarea
                   value={pasteText}
@@ -1663,14 +1666,14 @@ export default function RunsheetBuilder() {
                       setPasteText(pasteText.slice(0, start) + text + pasteText.slice(end));
                     }
                   }}
-                  placeholder={"Paste anything here — for example:\n• A client email with event details, guest numbers, dietary requirements\n• A previous runsheet or Word document\n• Catering brief with menu and timeline\n\nAI will extract: event details, dietaries, F&B items, and timeline"}
-                  rows={4}
-                  className="flex-1 rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm resize-none bg-white/80 placeholder:text-ink/30 p-3"
+                  placeholder={"Paste anything here — client email, booking brief, Word doc, or catering notes.\nAI will extract: event details, dietaries, F&B items, and timeline."}
+                  rows={3}
+                  className="flex-1 rounded-sm border border-gold/20 focus:outline-none focus:border-forest font-dm text-sm resize-none bg-white/80 placeholder:text-ink/30 p-3"
                 />
                 <button
                   onClick={() => { if (pasteText.trim()) { setShowPasteImport(true); setParsedData(null); setEditedParsedTimeline([]); } }}
                   disabled={!pasteText.trim()}
-                  className="font-bebas tracking-widest text-sm bg-forest text-cream px-5 flex flex-col items-center justify-center gap-1.5 hover:bg-forest/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 self-stretch"
+                  className="font-bebas tracking-widest text-sm bg-forest text-cream px-5 flex flex-col items-center justify-center gap-1.5 rounded-sm hover:bg-forest/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 self-stretch"
                 >
                   <Sparkles className="w-4 h-4" />
                   IMPORT
@@ -1678,10 +1681,10 @@ export default function RunsheetBuilder() {
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
-      <div className={`max-w-5xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0 ${printColumns === 2 ? 'print-cols-2' : ''}`}>
+      <div className={`max-w-6xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0 ${printColumns === 2 ? 'print-cols-2' : ''}`}>
 
         {/* ── Print Header ────────────────────────────────────────────────── */}
         <div className="hidden print:block mb-6 pb-4 border-b-2 border-ink">
@@ -1723,7 +1726,7 @@ export default function RunsheetBuilder() {
                   type="date"
                   value={eventDate}
                   onChange={e => setEventDate(e.target.value)}
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{formattedEventDate || "—"}</div>
               </div>
@@ -1733,7 +1736,7 @@ export default function RunsheetBuilder() {
                   value={eventType}
                   onChange={e => setEventType(e.target.value)}
                   placeholder="Wedding, Birthday..."
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventType || "—"}</div>
               </div>
@@ -1749,7 +1752,7 @@ export default function RunsheetBuilder() {
                   value={guestCount}
                   onChange={e => setGuestCount(e.target.value)}
                   placeholder="0"
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{guestCount || "—"}</div>
               </div>
@@ -1762,7 +1765,7 @@ export default function RunsheetBuilder() {
                   type="time"
                   value={eventStartTime}
                   onChange={e => setEventStartTime(e.target.value)}
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventStartTime || "—"}</div>
               </div>
@@ -1772,7 +1775,7 @@ export default function RunsheetBuilder() {
                   type="time"
                   value={eventEndTime}
                   onChange={e => setEventEndTime(e.target.value)}
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventEndTime || "—"}</div>
               </div>
@@ -1788,7 +1791,7 @@ export default function RunsheetBuilder() {
                       key={opt.value}
                       type="button"
                       onClick={() => setVenueArea(v => v === opt.value ? "" : opt.value)}
-                      className={`flex-1 font-bebas tracking-widest text-xs h-9 border transition-colors ${venueArea === opt.value ? "bg-forest text-cream border-forest" : "border-gold/40 text-ink/50 hover:border-forest/50 hover:text-ink"}`}
+                      className={`flex-1 font-bebas tracking-widest text-xs h-9 border rounded-sm transition-colors ${venueArea === opt.value ? "bg-forest text-cream border-forest" : "border-gold/20 text-ink/50 hover:border-forest/50 hover:text-ink"}`}
                     >
                       {opt.label}
                     </button>
@@ -1801,14 +1804,14 @@ export default function RunsheetBuilder() {
             </div>
 
             {/* Contact info row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gold/30">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gold/20">
               <div>
                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1 flex items-center gap-1"><User className="w-3 h-3" /> CLIENT NAME</label>
                 <Input
                   value={contactName}
                   onChange={e => setContactName(e.target.value)}
                   placeholder="Client name..."
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm">{contactName || "—"}</div>
               </div>
@@ -1818,7 +1821,7 @@ export default function RunsheetBuilder() {
                   value={contactPhone}
                   onChange={e => setContactPhone(e.target.value)}
                   placeholder="Phone number..."
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm">{contactPhone || "—"}</div>
               </div>
@@ -1828,7 +1831,7 @@ export default function RunsheetBuilder() {
                   value={contactEmail}
                   onChange={e => setContactEmail(e.target.value)}
                   placeholder="Email address..."
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm">{contactEmail || "—"}</div>
               </div>
@@ -1988,7 +1991,7 @@ export default function RunsheetBuilder() {
                         {dietaries.length > 0 && (
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {dietaries.map((d, idx) => (
-                              <div key={idx} className="border border-gold/30 bg-linen/40 p-3 group relative">
+                              <div key={idx} className="border border-gold/20 bg-linen/40 p-3 group relative">
                                 <button
                                   onClick={() => removeDietary(idx)}
                                   className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors no-print opacity-0 group-hover:opacity-100"
@@ -2027,7 +2030,7 @@ export default function RunsheetBuilder() {
                             value={newDietary.name}
                             onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
                             placeholder="Add requirement..."
-                            className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                            className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                             onKeyDown={e => e.key === "Enter" && addDietary()}
                           />
                           <Input
@@ -2035,17 +2038,17 @@ export default function RunsheetBuilder() {
                             value={newDietary.count}
                             onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
                             placeholder="Count"
-                            className="w-20 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                            className="w-20 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                           />
                           <Input
                             value={newDietary.notes}
                             onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
                             placeholder="Notes (optional)"
-                            className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                            className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                           />
                           <Button
                             onClick={addDietary}
-                            className="bg-forest hover:bg-forest/90 text-cream rounded-none font-bebas tracking-widest text-xs gap-1"
+                            className="bg-forest hover:bg-forest/90 text-cream rounded-sm font-bebas tracking-widest text-xs gap-1"
                           >
                             <Plus className="w-3 h-3" /> ADD
                           </Button>
@@ -2142,7 +2145,7 @@ export default function RunsheetBuilder() {
             </div>
 
             {/* General notes — at top */}
-            <div className="px-5 py-3 border-b border-gold/30 bg-linen/30">
+            <div className="px-5 py-3 border-b border-gold/20 bg-linen/30">
               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1.5">GENERAL NOTES</label>
               <RichTextarea
                 value={notes}
@@ -2155,9 +2158,10 @@ export default function RunsheetBuilder() {
             </div>
 
             {items.length === 0 ? (
-              <div className="text-center py-16 text-ink/30 font-dm text-sm">
-                <Clock className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                No items yet. Click "Add Item" to build your runsheet.
+              <div className="text-center py-20 text-ink/30 font-dm text-sm">
+                <Clock className="w-12 h-12 mx-auto mb-4 opacity-15" />
+                <p className="mb-1">No items yet.</p>
+                <p className="text-ink/20 text-xs">Click "Add Item" above to build your runsheet timeline.</p>
               </div>
             ) : (
               <div className="divide-y divide-gold/20">
@@ -2172,7 +2176,7 @@ export default function RunsheetBuilder() {
                       {/* Main row */}
                       <div className="flex items-center gap-0 print:gap-3">
                         {/* Time column */}
-                        <div className="w-[90px] flex-shrink-0 px-4 py-3 border-r border-gold/30 print:border-0">
+                        <div className="w-[90px] flex-shrink-0 px-4 py-3 border-r border-gold/15 print:border-0">
                           <input
                             type="time"
                             value={item.time}
@@ -2253,7 +2257,7 @@ export default function RunsheetBuilder() {
 
                       {/* Expanded detail row */}
                       {isExpanded && (
-                        <div className="border-t border-gold/30 px-5 py-4 space-y-4 bg-linen/50 no-print">
+                        <div className="border-t border-gold/15 px-5 py-4 space-y-4 bg-linen/30 no-print">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
                               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DURATION (MINS)</label>
@@ -2263,7 +2267,7 @@ export default function RunsheetBuilder() {
                                 value={item.duration > 0 ? item.duration : ''}
                                 placeholder="—"
                                 onChange={e => updateItemField(idx, "duration", Number(e.target.value) || 0)}
-                                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                                className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                               />
                             </div>
                             <div>
@@ -2271,7 +2275,7 @@ export default function RunsheetBuilder() {
                               <select
                                 value={item.category}
                                 onChange={e => updateItemField(idx, "category", e.target.value)}
-                                className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                                className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
                               >
                                 {CATEGORIES.map(c => (
                                   <option key={c.value} value={c.value}>{c.label}</option>
@@ -2284,7 +2288,7 @@ export default function RunsheetBuilder() {
                                 value={item.assignedTo ?? ""}
                                 onChange={e => updateItemField(idx, "assignedTo", e.target.value)}
                                 placeholder="Staff member..."
-                                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                                className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                               />
                             </div>
                             <div>
@@ -2293,7 +2297,7 @@ export default function RunsheetBuilder() {
                                 value={item.description ?? ""}
                                 onChange={e => updateItemField(idx, "description", e.target.value)}
                                 placeholder="Additional notes..."
-                                className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                                className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                               />
                             </div>
                           </div>
@@ -2302,12 +2306,12 @@ export default function RunsheetBuilder() {
                             <span className="font-bebas tracking-widest text-[10px] text-ink/40">STYLE</span>
                             <button
                               onClick={() => updateItemField(idx, "bold", !item.bold)}
-                              className={`font-bold text-xs px-2 py-1 border rounded-none transition-colors font-dm ${item.bold ? 'bg-ink text-white border-ink' : 'bg-white text-ink/50 border-gold/30 hover:border-ink/30'}`}
+                              className={`font-bold text-xs px-2 py-1 border rounded-sm transition-colors font-dm ${item.bold ? 'bg-ink text-white border-ink' : 'bg-white text-ink/50 border-gold/20 hover:border-ink/30'}`}
                               title="Bold"
                             >B</button>
                             <button
                               onClick={() => updateItemField(idx, "italic", !item.italic)}
-                              className={`italic text-xs px-2 py-1 border rounded-none transition-colors font-dm ${item.italic ? 'bg-ink text-white border-ink' : 'bg-white text-ink/50 border-gold/30 hover:border-ink/30'}`}
+                              className={`italic text-xs px-2 py-1 border rounded-sm transition-colors font-dm ${item.italic ? 'bg-ink text-white border-ink' : 'bg-white text-ink/50 border-gold/20 hover:border-ink/30'}`}
                               title="Italic"
                             >I</button>
                             <span className="font-bebas tracking-widest text-[10px] text-ink/40 ml-2">HIGHLIGHT</span>
@@ -2324,7 +2328,7 @@ export default function RunsheetBuilder() {
                                 key={label}
                                 onClick={() => updateItemField(idx, "highlight", value || undefined)}
                                 title={label}
-                                className={`w-5 h-5 border-2 rounded-full transition-all ${(item.highlight ?? '') === value ? 'border-ink scale-110' : 'border-gold/30 hover:border-ink/40'}`}
+                                className={`w-5 h-5 border-2 rounded-full transition-all ${(item.highlight ?? '') === value ? 'border-ink scale-110' : 'border-gold/20 hover:border-ink/40'}`}
                                 style={{ backgroundColor: value || '#ffffff' }}
                               />
                             ))}
@@ -2338,7 +2342,7 @@ export default function RunsheetBuilder() {
             )}
 
             {/* Footer / payment notes */}
-            <div className="px-5 py-4 border-t border-gold/30">
+            <div className="px-5 py-4 border-t border-gold/20">
               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">FOOTER NOTE</label>
               <p className="font-dm text-[10px] text-ink/35 mb-2">Shown at the bottom of the runsheet — use for payment info, terms, or any closing note.</p>
               <RichTextarea
@@ -2357,7 +2361,7 @@ export default function RunsheetBuilder() {
         <div className={activeMainTab !== 'fnb' ? 'hidden print:block' : ''}>
           <div className="dante-card border-t-0 print:shadow-none">
             {/* F&B unified header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30 no-print">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
               <div className="flex items-center gap-2">
                 <UtensilsCrossed className="w-4 h-4 text-gold" />
                 <span className="font-bebas tracking-widest text-sm text-ink">F&B SHEET</span>
@@ -2411,7 +2415,7 @@ export default function RunsheetBuilder() {
                 <Button
                   onClick={() => saveFnb()}
                   disabled={fnbSaving}
-                  className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5"
+                  className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-sm px-4 py-2 flex items-center gap-1.5"
                 >
                   <Save className="w-3.5 h-3.5" />
                   {fnbSaving ? 'SAVING...' : 'SAVE F&B'}
@@ -2487,7 +2491,7 @@ export default function RunsheetBuilder() {
                 {dietaries.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {dietaries.map((d, idx) => (
-                      <div key={idx} className="border border-gold/30 bg-linen/40 p-3 group relative">
+                      <div key={idx} className="border border-gold/20 bg-linen/40 p-3 group relative">
                         <button
                           onClick={() => removeDietary(idx)}
                           className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
@@ -2523,7 +2527,7 @@ export default function RunsheetBuilder() {
                     value={newDietary.name}
                     onChange={e => setNewDietary(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Add requirement..."
-                    className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                    className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                     onKeyDown={e => e.key === "Enter" && addDietary()}
                   />
                   <Input
@@ -2531,17 +2535,17 @@ export default function RunsheetBuilder() {
                     value={newDietary.count}
                     onChange={e => setNewDietary(prev => ({ ...prev, count: e.target.value }))}
                     placeholder="Count"
-                    className="w-20 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                    className="w-20 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   />
                   <Input
                     value={newDietary.notes}
                     onChange={e => setNewDietary(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="Notes (optional)"
-                    className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                    className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   />
                   <Button
                     onClick={addDietary}
-                    className="bg-forest hover:bg-forest/90 text-cream rounded-none font-bebas tracking-widest text-xs gap-1"
+                    className="bg-forest hover:bg-forest/90 text-cream rounded-sm font-bebas tracking-widest text-xs gap-1"
                   >
                     <Plus className="w-3 h-3" /> ADD
                   </Button>
@@ -2723,21 +2727,21 @@ export default function RunsheetBuilder() {
 
             {/* No proposal linked notice */}
             {!linkedProposalId && (
-              <div className="mx-5 my-3 p-3 bg-linen border border-gold/30 text-xs font-dm text-ink/50 flex items-center gap-2">
+              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/50 flex items-center gap-2">
                 <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
                 Use the <strong className="text-forest/70">LINKED PROPOSAL</strong> section below to connect a proposal and auto-import F&amp;B selections.
               </div>
             )}
 
             {/* Add new item form */}
-            <div className="px-5 py-4 border-b border-gold/30 bg-linen/50 no-print">
+            <div className="px-5 py-4 border-b border-gold/20 bg-linen/30 no-print">
               <div className="flex items-center justify-between mb-3">
                 <div className="font-bebas tracking-widest text-[10px] text-ink/40">ADD ITEM</div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => { setFnbCustomMode(true); setFnbCustomName(''); }}
                     className={`font-bebas tracking-widest text-[10px] flex items-center gap-1 border px-2.5 py-1 transition-colors ${
-                      fnbCustomMode ? 'bg-gold/20 border-gold text-ink' : 'border-gold/30 text-ink/50 hover:bg-linen'
+                      fnbCustomMode ? 'bg-gold/20 border-gold text-ink' : 'border-gold/20 text-ink/50 hover:bg-linen'
                     }`}
                   >
                     <Plus className="w-3 h-3" /> CUSTOM ITEM
@@ -2750,7 +2754,7 @@ export default function RunsheetBuilder() {
                   </button>
                   <button
                     onClick={addNewCourse}
-                    className="font-bebas tracking-widest text-[10px] text-ink/60 hover:text-forest flex items-center gap-1 border border-gold/30 px-2.5 py-1 hover:bg-linen transition-colors"
+                    className="font-bebas tracking-widest text-[10px] text-ink/60 hover:text-forest flex items-center gap-1 border border-gold/20 px-2.5 py-1 hover:bg-linen transition-colors"
                     title="Create a new course header for this runsheet"
                   >
                     <Plus className="w-3 h-3" /> NEW COURSE
@@ -2767,7 +2771,7 @@ export default function RunsheetBuilder() {
                       <select
                         value={fnbCustomCourse}
                         onChange={e => { setFnbCustomCourse(e.target.value); setFnbCustomDrinkCat(''); }}
-                        className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                        className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
                       >
                         {courses.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
@@ -2778,7 +2782,7 @@ export default function RunsheetBuilder() {
                         <select
                           value={fnbCustomDrinkCat}
                           onChange={e => setFnbCustomDrinkCat(e.target.value)}
-                          className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                          className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
                         >
                           <option value="">— select —</option>
                           {DRINK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -2791,7 +2795,7 @@ export default function RunsheetBuilder() {
                         value={fnbCustomName}
                         onChange={e => setFnbCustomName(e.target.value)}
                         placeholder="e.g. Beef Wellington"
-                        className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                        className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                         onKeyDown={e => e.key === 'Enter' && addFnbItem()}
                         autoFocus
                       />
@@ -2802,7 +2806,7 @@ export default function RunsheetBuilder() {
                         type="time"
                         value={newFnbItem.serviceTime ?? ''}
                         onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
-                        className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                        className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                       />
                     </div>
                     <div>
@@ -2811,7 +2815,7 @@ export default function RunsheetBuilder() {
                         type="number" min={1}
                         value={newFnbItem.qty ?? 1}
                         onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
-                        className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                        className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                       />
                     </div>
                   </div>
@@ -2822,19 +2826,19 @@ export default function RunsheetBuilder() {
                         value={newFnbItem.dietary ?? ''}
                         onChange={e => setNewFnbItem(p => ({ ...p, dietary: e.target.value }))}
                         placeholder="GF, VG, DF, NF..."
-                        className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                        className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                       />
                     </div>
                     <Button
                       onClick={() => setFnbCustomMode(false)}
                       variant="outline"
-                      className="rounded-none border-gold/30 font-bebas tracking-widest text-xs h-9 px-3"
+                      className="rounded-sm border-gold/20 font-bebas tracking-widest text-xs h-9 px-3"
                     >
                       CANCEL
                     </Button>
                     <Button
                       onClick={addFnbItem}
-                      className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 py-2 flex items-center gap-1.5 h-9"
+                      className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm px-4 py-2 flex items-center gap-1.5 h-9"
                     >
                       <Plus className="w-3.5 h-3.5" /> ADD
                     </Button>
@@ -2849,7 +2853,7 @@ export default function RunsheetBuilder() {
                       type="time"
                       value={newFnbItem.serviceTime ?? ''}
                       onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
-                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                      className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                     />
                   </div>
                   {newFnbItem.course !== 'Drinks' && (
@@ -2859,7 +2863,7 @@ export default function RunsheetBuilder() {
                       type="number" min={1}
                       value={newFnbItem.qty ?? 1}
                       onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
-                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                      className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                     />
                   </div>
                   )}
@@ -2909,7 +2913,7 @@ export default function RunsheetBuilder() {
                       return (
                         <div key={item._tempId ?? originalIdx}>
                           <div
-                            className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/30 text-sm font-dm group transition-colors ${isDrinks ? 'border-l-4 border-l-blue-300 hover:bg-blue-50/50' : 'border-l-4 border-l-amber-300 hover:bg-amber-50/40'} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : 'bg-amber-50/40') : ''}`}
+                            className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm group transition-colors ${isDrinks ? 'border-l-4 border-l-blue-300 hover:bg-blue-50/50' : 'border-l-4 border-l-amber-300 hover:bg-amber-50/40'} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : 'bg-amber-50/40') : ''}`}
                             style={{ gridTemplateColumns: fnbGridCols }}
                           >
                             <div className={`text-xs font-bebas tracking-widest ${isDrinks ? 'text-blue-500' : 'text-amber-600'}`}>{isDrinks ? (item.drinkCategory || 'Drink') : item.course}</div>
@@ -2953,10 +2957,10 @@ export default function RunsheetBuilder() {
                             </div>
                           </div>
                           {isExpanded && (
-                            <div className={`px-5 py-4 border-b border-gold/30 grid grid-cols-2 md:grid-cols-4 gap-3 no-print ${isDrinks ? 'bg-blue-50/40' : 'bg-amber-50/30'}`}>
+                            <div className={`px-5 py-4 border-b border-gold/20 grid grid-cols-2 md:grid-cols-4 gap-3 no-print ${isDrinks ? 'bg-blue-50/40' : 'bg-amber-50/30'}`}>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
-                                <select value={item.course ?? 'Other'} onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)} className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
+                                <select value={item.course ?? 'Other'} onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
                                   {courses.map(c => <option key={c} value={c}>{c}</option>)}
                                   {!courses.includes(item.course ?? 'Other') && <option value={item.course ?? 'Other'}>{item.course ?? 'Other'}</option>}
                                 </select>
@@ -2964,7 +2968,7 @@ export default function RunsheetBuilder() {
                               {isDrinks && (
                                 <div>
                                   <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DRINK CATEGORY</label>
-                                  <select value={item.drinkCategory || ''} onChange={e => updateFnbItem(originalIdx, 'drinkCategory', e.target.value)} className="w-full border border-gold/30 rounded-none px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
+                                  <select value={item.drinkCategory || ''} onChange={e => updateFnbItem(originalIdx, 'drinkCategory', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
                                     <option value="">— No category —</option>
                                     {DRINK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                   </select>
@@ -2972,31 +2976,31 @@ export default function RunsheetBuilder() {
                               )}
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
-                                <input type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <input type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
-                                <input type="number" min={1} value={item.qty ?? 1} onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))} className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <input type="number" min={1} value={item.qty ?? 1} onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY / ALLERGEN</label>
-                                <input value={item.dietary ?? ''} onChange={e => updateFnbItem(originalIdx, 'dietary', e.target.value)} placeholder="e.g. GF, VG, Nut-free..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <input value={item.dietary ?? ''} onChange={e => updateFnbItem(originalIdx, 'dietary', e.target.value)} placeholder="e.g. GF, VG, Nut-free..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">STAFF ASSIGNED</label>
-                                <input value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff member..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <input value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff member..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PREP NOTES</label>
-                                <input value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Preparation notes..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <input value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Preparation notes..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PLATING NOTES</label>
-                                <input value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating / presentation..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <input value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating / presentation..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DESCRIPTION</label>
-                                <input value={item.description ?? ''} onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)} placeholder="Dish description..." className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <input value={item.description ?? ''} onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)} placeholder="Dish description..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                             </div>
                           )}
@@ -3044,7 +3048,7 @@ export default function RunsheetBuilder() {
 
             {/* Dietary summary */}
             {dietaries.length > 0 && (
-              <div className="px-5 py-4 border-t border-gold/30 bg-blue-50/50">
+              <div className="px-5 py-4 border-t border-gold/20 bg-blue-50/50">
                 <div className="font-bebas tracking-widest text-xs text-forest mb-2">DIETARY SUMMARY</div>
                 <div className="flex flex-wrap gap-2">
                   {dietaries.map((d, i) => (
@@ -3058,7 +3062,7 @@ export default function RunsheetBuilder() {
             )}
             {/* ── BAR ARRANGEMENT (print + screen) ───────────────────────────── */}
             {(rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length) ? (
-              <div className="px-5 py-4 border-t border-gold/30 print:avoid-break">
+              <div className="px-5 py-4 border-t border-gold/20 print:avoid-break">
                 <div className="font-bebas tracking-widest text-xs text-forest mb-2">BAR ARRANGEMENT</div>
                 <div className="text-sm font-dm text-ink/80 capitalize mb-2">
                   <span className="font-semibold">{rsBarOption.replace(/_/g, ' ')}</span>
@@ -3089,7 +3093,7 @@ export default function RunsheetBuilder() {
             ) : null}
             {/* ── EVENT SPEND / BUDGET ───────────────────────────────────────── */}
             {effectiveBookingId && (
-              <div className="px-5 py-5 border-t border-gold/30 no-print">
+              <div className="px-5 py-5 border-t border-gold/20 no-print">
                 <EventSpendSection bookingId={effectiveBookingId} />
               </div>
             )}
@@ -3102,7 +3106,7 @@ export default function RunsheetBuilder() {
         {activeMainTab === 'drinks' && (
           <div className="dante-card border-t-0">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
                 <Wine className="w-4 h-4 text-gold" />
                 <span className="font-bebas tracking-widest text-sm text-ink">DRINKS SELECTION</span>
@@ -3143,7 +3147,7 @@ export default function RunsheetBuilder() {
                       key={opt.key}
                       onClick={() => setRsBarOption(opt.key)}
                       className={`p-3 border-2 text-left transition-colors ${
-                        rsBarOption === opt.key ? 'border-forest bg-forest/5' : 'border-gold/30 hover:border-forest/40'
+                        rsBarOption === opt.key ? 'border-forest bg-forest/5' : 'border-gold/20 hover:border-forest/40'
                       }`}
                     >
                       <div className="font-bebas text-xs tracking-widest text-ink">{opt.label}</div>
@@ -3159,7 +3163,7 @@ export default function RunsheetBuilder() {
                       value={rsTabAmount}
                       onChange={e => setRsTabAmount(e.target.value)}
                       placeholder="e.g. 1500"
-                      className="rounded-none border-2 border-gold/30 focus-visible:border-forest focus-visible:ring-0 text-sm w-36"
+                      className="rounded-sm border-2 border-gold/20 focus-visible:border-forest focus-visible:ring-0 text-sm w-36"
                     />
                   </div>
                 )}
@@ -3172,7 +3176,7 @@ export default function RunsheetBuilder() {
                   value={rsBarNotes}
                   onChange={e => setRsBarNotes(e.target.value)}
                   placeholder={`e.g. "Client will choose closer to the date"\n• Standard wine & beer package\n• Bartender to recommend cocktails on the night\n• Set up: 1× espresso martini station, 2× cocktail bartenders`}
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm font-dm min-h-[160px]"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm font-dm min-h-[160px]"
                 />
                 <div className="font-dm text-[11px] text-ink/40 mt-1.5">Notes appear on the BEO and the live runsheet (Drinks panel).</div>
 
@@ -3289,17 +3293,17 @@ export default function RunsheetBuilder() {
             </div>
 
             {/* Add checklist item */}
-            <div className="px-5 py-4 border-t border-gold/30 flex gap-2">
+            <div className="px-5 py-4 border-t border-gold/20 flex gap-2">
               <Input
                 value={newChecklistText}
                 onChange={e => setNewChecklistText(e.target.value)}
                 placeholder="Add a checklist item..."
-                className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
+                className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                 onKeyDown={e => e.key === 'Enter' && addChecklistItem()}
               />
               <Button
                 onClick={addChecklistItem}
-                className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 h-9 flex items-center gap-1.5"
+                className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm px-4 h-9 flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" /> ADD
               </Button>
@@ -3327,12 +3331,12 @@ export default function RunsheetBuilder() {
               )}
             </div>
             {/* Floor plan selector */}
-            <div className="px-5 py-4 border-b border-gold/30">
+            <div className="px-5 py-4 border-b border-gold/20">
               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">LINK A FLOOR PLAN</label>
               <select
                 value={linkedFloorPlanId ?? ""}
                 onChange={e => setLinkedFloorPlanId(e.target.value ? Number(e.target.value) : undefined)}
-                className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
+                className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
               >
                 <option value="">— No floor plan linked —</option>
                 {(floorPlansList ?? []).map((fp: any) => (
@@ -3351,7 +3355,7 @@ export default function RunsheetBuilder() {
               <div className="relative" style={{ height: '520px' }}>
                 <div className="absolute inset-0 flex flex-col">
                   {/* Mini toolbar */}
-                  <div className="flex items-center justify-between px-4 py-2 bg-linen border-b border-gold/30 shrink-0">
+                  <div className="flex items-center justify-between px-4 py-2 bg-linen border-b border-gold/20 shrink-0">
                     <span className="font-bebas tracking-widest text-xs text-ink/60">{linkedFloorPlan.name}</span>
                     <div className="flex items-center gap-3">
                       {linkedFloorPlan.shareToken && (
@@ -3436,7 +3440,7 @@ export default function RunsheetBuilder() {
                   <select
                     value={linkedProposalId ?? ""}
                     onChange={e => setLinkedProposalId(e.target.value ? Number(e.target.value) : undefined)}
-                    className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
+                    className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
                   >
                     <option value="">— No linked proposal —</option>
                     {proposalList.map((p: any) => (
@@ -3445,7 +3449,7 @@ export default function RunsheetBuilder() {
                   </select>
                 </div>
                 {linkedProposal && (
-                  <div className="bg-linen border border-gold/30 p-4 space-y-3">
+                  <div className="bg-linen border border-gold/20 p-4 space-y-3">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
                         <div className="font-bebas text-[10px] text-ink/40 tracking-widest">TOTAL</div>
@@ -3534,7 +3538,7 @@ export default function RunsheetBuilder() {
                 <select
                   value={linkedFloorPlanId ?? ""}
                   onChange={e => setLinkedFloorPlanId(e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
+                  className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
                 >
                   <option value="">— No floor plan —</option>
                   {(floorPlansList ?? []).map((fp: any) => (
@@ -3592,7 +3596,7 @@ export default function RunsheetBuilder() {
                     {(staffLinks ?? []).map((link: any) => {
                       const url = `${window.location.origin}/staff/${link.token}`;
                       return (
-                        <div key={link.id} className="flex items-center gap-2 bg-linen border border-gold/30 px-3 py-2">
+                        <div key={link.id} className="flex items-center gap-2 bg-linen border border-gold/20 px-3 py-2">
                           <Key className="w-3.5 h-3.5 text-gold shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="font-dm text-xs font-semibold text-ink truncate">{link.label}</div>
@@ -3638,20 +3642,20 @@ export default function RunsheetBuilder() {
                       value={newStaffLinkLabel}
                       onChange={e => setNewStaffLinkLabel(e.target.value)}
                       placeholder="Link label (e.g. FOH Team)"
-                      className="border-gold/30 rounded-none font-dm text-sm h-9"
+                      className="border-gold/20 rounded-sm font-dm text-sm h-9"
                     />
                     <div className="flex gap-2">
                       <Button
                         onClick={() => createStaffLinkMutation.mutate({ runsheetId: sheetId!, label: newStaffLinkLabel })}
                         disabled={createStaffLinkMutation.isPending}
-                        className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4 h-8 flex items-center gap-1.5"
+                        className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm px-4 h-8 flex items-center gap-1.5"
                       >
                         <Share2 className="w-3 h-3" /> {createStaffLinkMutation.isPending ? 'CREATING...' : 'CREATE LINK'}
                       </Button>
                       <Button
                         onClick={() => setCreatingStaffLink(false)}
                         variant="outline"
-                        className="font-bebas tracking-widest text-xs rounded-none px-4 h-8"
+                        className="font-bebas tracking-widest text-xs rounded-sm px-4 h-8"
                       >
                         CANCEL
                       </Button>
@@ -3724,12 +3728,12 @@ export default function RunsheetBuilder() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm font-dm">
                 <thead>
-                  <tr className="border-b border-gold/30 bg-linen/50">
-                    <th className="text-left px-4 py-2 font-bebas tracking-widest text-[10px] text-ink/40">DESCRIPTION</th>
-                    <th className="text-left px-4 py-2 font-bebas tracking-widest text-[10px] text-ink/40 w-36">CATEGORY</th>
-                    <th className="text-center px-3 py-2 font-bebas tracking-widest text-[10px] text-ink/40 w-16">QTY</th>
-                    <th className="text-right px-4 py-2 font-bebas tracking-widest text-[10px] text-ink/40 w-28">UNIT PRICE</th>
-                    <th className="text-right px-4 py-2 font-bebas tracking-widest text-[10px] text-ink/40 w-28">TOTAL</th>
+                  <tr className="border-b border-gold/20 bg-linen/30">
+                    <th className="text-left px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40">DESCRIPTION</th>
+                    <th className="text-left px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40 w-36">CATEGORY</th>
+                    <th className="text-center px-3 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40 w-16">QTY</th>
+                    <th className="text-right px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40 w-28">UNIT PRICE</th>
+                    <th className="text-right px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40 w-28">TOTAL</th>
                     <th className="w-8" />
                   </tr>
                 </thead>
@@ -3813,7 +3817,7 @@ export default function RunsheetBuilder() {
               {/* GST toggle */}
               <div className="flex items-center gap-3">
                 <span className="font-bebas tracking-widest text-[10px] text-ink/40">PRICES ARE</span>
-                <div className="flex rounded overflow-hidden border border-gold/30">
+                <div className="flex rounded-sm overflow-hidden border border-gold/20">
                   <button
                     onClick={() => setGstInclusive(false)}
                     className={`font-bebas tracking-widest text-[10px] px-3 py-1.5 transition-colors ${!gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/50 hover:bg-linen'}`}
@@ -3832,7 +3836,7 @@ export default function RunsheetBuilder() {
                   value={paymentNotes}
                   onChange={e => setPaymentNotes(e.target.value)}
                   placeholder="e.g. Final payment of $2,400 due on the day. Deposit of $800 received 12 Apr. Balance outstanding. Payment by bank transfer to 12-3456-7890123-00."
-                  className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-none"
+                  className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-none"
                   rows={3}
                 />
               </div>
@@ -3849,7 +3853,7 @@ export default function RunsheetBuilder() {
                 return acc;
               }, {} as Record<string, number>);
               return (
-                <div className="border-t border-gold/30 px-5 py-4 flex flex-col md:flex-row gap-6 items-start justify-between bg-linen/30">
+                <div className="border-t border-gold/20 px-5 py-4 flex flex-col md:flex-row gap-6 items-start justify-between bg-linen/30">
                   {/* Category breakdown */}
                   <div className="space-y-1">
                     <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-2">BY CATEGORY</div>
@@ -3890,7 +3894,7 @@ export default function RunsheetBuilder() {
         {/* Print footer */}
         <div className="hidden print:block mt-8 border-t-2 border-gold/40 pt-4 space-y-2">
           {footerText && (
-            <div className="font-dm text-sm text-ink/80 bg-linen/60 border border-gold/30 px-4 py-3" dangerouslySetInnerHTML={{ __html: footerText }} />
+            <div className="font-dm text-sm text-ink/80 bg-linen/60 border border-gold/20 px-4 py-3" dangerouslySetInnerHTML={{ __html: footerText }} />
           )}
           <div className="text-xs text-ink/40 font-dm text-center">
             Prepared by VenueFlowHQ — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
@@ -3934,14 +3938,14 @@ export default function RunsheetBuilder() {
                       }}
                       placeholder={`Paste anything — an email, booking notes, a client brief, a Word doc...\n\nExamples of what gets extracted:\n• Event details (date, guests, contact info, space name)\n• Dietary requirements (e.g. "5 vegetarian, 2 gluten free")\n• Menu / F&B items (courses, dishes, quantities)\n• Event timeline (6pm – Guests arrive, 7pm – Dinner service...)`}
                       rows={12}
-                      className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-forest font-dm text-sm p-3 resize-none"
+                      className="w-full rounded-sm border border-gold/20 focus:outline-none focus:border-forest font-dm text-sm p-3 resize-none"
                     />
                   </div>
                   <div className="flex items-center gap-3">
                     <Button
                       onClick={() => parseRunsheetMutation.mutate({ text: pasteText, eventType: eventType || undefined })}
                       disabled={!pasteText.trim() || parseRunsheetMutation.isPending}
-                      className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2.5 flex items-center gap-2"
+                      className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-sm px-6 py-2.5 flex items-center gap-2"
                     >
                       {parseRunsheetMutation.isPending ? (
                         <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> ANALYSING...</>
@@ -4103,7 +4107,7 @@ export default function RunsheetBuilder() {
                 <span className="font-dm text-xs text-ink/50">Selected sections will be applied to the runsheet</span>
                 <div className="flex gap-3">
                   <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
-                  <Button onClick={applyParsedData} className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2">
+                  <Button onClick={applyParsedData} className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-sm px-6 py-2 flex items-center gap-2">
                     <Plus className="w-4 h-4" /> APPLY TO RUNSHEET
                   </Button>
                 </div>
@@ -4143,7 +4147,7 @@ export default function RunsheetBuilder() {
                   value={newDietaryOption}
                   onChange={e => setNewDietaryOption(e.target.value)}
                   placeholder="Add new option..."
-                  className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                  className="flex-1 rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                   onKeyDown={e => {
                     if (e.key === 'Enter' && newDietaryOption.trim()) {
                       setEditingDietaries(prev => [...prev, newDietaryOption.trim()]);
@@ -4153,15 +4157,15 @@ export default function RunsheetBuilder() {
                 />
                 <Button
                   onClick={() => { if (newDietaryOption.trim()) { setEditingDietaries(prev => [...prev, newDietaryOption.trim()]); setNewDietaryOption(''); } }}
-                  className="bg-forest hover:bg-forest/90 text-white rounded-none font-bebas tracking-widest text-xs px-3 gap-1"
+                  className="bg-forest hover:bg-forest/90 text-white rounded-sm font-bebas tracking-widest text-xs px-3 gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> ADD
                 </Button>
               </div>
             </div>
-            <div className="flex gap-2 px-5 py-4 border-t border-gold/30">
-              <Button variant="outline" onClick={() => setShowDietaryManager(false)} className="flex-1 rounded-none border-gold/30 font-bebas tracking-widest text-xs">CANCEL</Button>
-              <Button onClick={saveDietaryOptions} disabled={updateVenueMutation.isPending} className="flex-1 bg-forest hover:bg-forest/90 text-white rounded-none font-bebas tracking-widest text-xs">
+            <div className="flex gap-2 px-5 py-4 border-t border-gold/20">
+              <Button variant="outline" onClick={() => setShowDietaryManager(false)} className="flex-1 rounded-sm border-gold/20 font-bebas tracking-widest text-xs">CANCEL</Button>
+              <Button onClick={saveDietaryOptions} disabled={updateVenueMutation.isPending} className="flex-1 bg-forest hover:bg-forest/90 text-white rounded-sm font-bebas tracking-widest text-xs">
                 {updateVenueMutation.isPending ? 'SAVING...' : 'SAVE OPTIONS'}
               </Button>
             </div>
@@ -4203,14 +4207,14 @@ export default function RunsheetBuilder() {
                   value={newSetupLabel}
                   onChange={e => setNewSetupLabel(e.target.value)}
                   placeholder="Template name (e.g. Cocktail)"
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
                 <Textarea
                   value={newSetupValue}
                   onChange={e => setNewSetupValue(e.target.value)}
                   placeholder="Setup description..."
                   rows={2}
-                  className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm"
                 />
                 <Button
                   onClick={() => {
@@ -4220,15 +4224,15 @@ export default function RunsheetBuilder() {
                       setNewSetupValue('');
                     }
                   }}
-                  className="w-full bg-gold hover:bg-gold/90 text-ink rounded-none font-bebas tracking-widest text-xs gap-1"
+                  className="w-full bg-gold hover:bg-gold/90 text-ink rounded-sm font-bebas tracking-widest text-xs gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> ADD TEMPLATE
                 </Button>
               </div>
             </div>
-            <div className="flex gap-2 px-5 py-4 border-t border-gold/30">
-              <Button variant="outline" onClick={() => setShowSetupManager(false)} className="flex-1 rounded-none border-gold/30 font-bebas tracking-widest text-xs">CANCEL</Button>
-              <Button onClick={saveSetupTemplates} disabled={updateVenueMutation.isPending} className="flex-1 bg-forest hover:bg-forest/90 text-white rounded-none font-bebas tracking-widest text-xs">
+            <div className="flex gap-2 px-5 py-4 border-t border-gold/20">
+              <Button variant="outline" onClick={() => setShowSetupManager(false)} className="flex-1 rounded-sm border-gold/20 font-bebas tracking-widest text-xs">CANCEL</Button>
+              <Button onClick={saveSetupTemplates} disabled={updateVenueMutation.isPending} className="flex-1 bg-forest hover:bg-forest/90 text-white rounded-sm font-bebas tracking-widest text-xs">
                 {updateVenueMutation.isPending ? 'SAVING...' : 'SAVE TEMPLATES'}
               </Button>
             </div>
@@ -4354,7 +4358,7 @@ export default function RunsheetBuilder() {
                                 value={qty}
                                 onClick={e => e.stopPropagation()}
                                 onChange={e => { const v = Math.max(1, parseInt(e.target.value) || 1); setCatalogSelectedItems(prev => { const next = new Map(prev); next.set(item.id, v); return next; }); }}
-                                className="w-10 text-center text-xs font-dm border border-gold/30 focus:border-forest focus:outline-none py-0.5"
+                                className="w-10 text-center text-xs font-dm border border-gold/20 focus:border-forest focus:outline-none py-0.5"
                               />
                               <button
                                 onClick={e => { e.stopPropagation(); setCatalogSelectedItems(prev => { const next = new Map(prev); next.set(item.id, (next.get(item.id) ?? 1) + 1); return next; }); }}
@@ -4389,7 +4393,7 @@ export default function RunsheetBuilder() {
                 <Button
                   onClick={addCatalogItemsToFnb}
                   disabled={catalogSelectedItems.size === 0}
-                  className="bg-forest hover:bg-forest/90 disabled:opacity-40 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2"
+                  className="bg-forest hover:bg-forest/90 disabled:opacity-40 text-white font-bebas tracking-widest text-sm rounded-sm px-6 py-2 flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" /> ADD {catalogSelectedItems.size > 0 ? catalogSelectedItems.size : ''} ITEMS
                 </Button>
@@ -4437,7 +4441,7 @@ export default function RunsheetBuilder() {
                       }}
                       placeholder="Paste menu details, catering brief, or email here..."
                       rows={10}
-                      className="w-full min-h-[220px] border border-gold/30 rounded-none font-dm text-sm resize-none focus:outline-none focus:border-forest p-3"
+                      className="w-full min-h-[220px] border border-gold/20 rounded-sm font-dm text-sm resize-none focus:outline-none focus:border-forest p-3"
                     />
                   </div>
                   <div className="flex items-center gap-3 text-xs font-dm text-ink/40">
@@ -4519,7 +4523,7 @@ export default function RunsheetBuilder() {
                 <Button
                   onClick={runFnbParse}
                   disabled={fnbParsedLoading || !fnbPasteText.trim()}
-                  className="bg-forest hover:bg-forest/90 disabled:opacity-40 text-white font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2"
+                  className="bg-forest hover:bg-forest/90 disabled:opacity-40 text-white font-bebas tracking-widest text-sm rounded-sm px-6 py-2 flex items-center gap-2"
                 >
                   <Sparkles className="w-4 h-4" />
                   {fnbParsedLoading ? 'PARSING...' : 'PARSE WITH AI'}
@@ -4528,7 +4532,7 @@ export default function RunsheetBuilder() {
                 <Button
                   onClick={applyFnbParsed}
                   disabled={fnbParsedItems.filter((it: any) => it._selected).length === 0}
-                  className="bg-gold hover:bg-gold/90 disabled:opacity-40 text-ink font-bebas tracking-widest text-sm rounded-none px-6 py-2 flex items-center gap-2"
+                  className="bg-gold hover:bg-gold/90 disabled:opacity-40 text-ink font-bebas tracking-widest text-sm rounded-sm px-6 py-2 flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" /> ADD {fnbParsedItems.filter((it: any) => it._selected).length} ITEMS TO F&B SHEET
                 </Button>
