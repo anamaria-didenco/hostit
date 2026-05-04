@@ -778,7 +778,7 @@ export default function Dashboard() {
   const [leadDateFilter, setLeadDateFilter] = useState<"all"|"future"|"today"|"weekend"|"month"|"year"|"custom">("all");
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
-  const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("list");
+  const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("table");
   const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
 
   // ── Color-code calendar events by space, so it's easy to see *where* a booking
@@ -2161,14 +2161,6 @@ export default function Dashboard() {
           {tab === "enquiries" && (
             <div className="flex flex-col h-full overflow-hidden">
 
-                {/* Big monthly calendar at the top of the events tab */}
-                {showEventsCalendar && (
-                  <div className="flex-shrink-0 px-3 md:px-6 pt-3 pb-2 border-b border-gold/15 bg-cream">
-                    <div className="h-[420px]">{monthCalendarCard}</div>
-                  </div>
-                )}
-
-
               {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-white border-b border-gold/15">
                 {/* Row 1: Sub-tabs + view modes + actions */}
@@ -2199,9 +2191,8 @@ export default function Dashboard() {
                   {/* View mode toggle */}
                   <div className="flex border border-gold/30 rounded-lg overflow-hidden">
                     {([
-                      { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
                       { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
-                      { mode: "kanban" as const, icon: <Columns className="w-3.5 h-3.5" />, title: "Kanban view" },
+                      { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
                     ]).map(({ mode, icon, title }) => (
                       <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
                         title={title}
@@ -2209,18 +2200,7 @@ export default function Dashboard() {
                         {icon}
                       </button>
                     ))}
-                    <button onClick={() => setTab('calendar' as any)}
-                      title="Calendar view"
-                      className="px-2.5 py-1.5 transition-colors text-ink/50 hover:bg-linen hover:text-ink border-l border-gold/30">
-                      <Calendar className="w-3.5 h-3.5" />
-                    </button>
                   </div>
-
-                  <button onClick={() => setShowEventsCalendar(v => !v)}
-                    title={showEventsCalendar ? "Hide calendar" : "Show calendar"}
-                    className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 border rounded-lg transition-colors ${showEventsCalendar ? 'bg-forest/10 border-forest/40 text-forest' : 'border-gold/30 text-ink/60 hover:border-gold hover:text-ink'}`}>
-                    {showEventsCalendar ? 'HIDE CAL' : 'SHOW CAL'}
-                  </button>
 
                   {/* Actions */}
                   <div className="ml-auto flex items-center gap-2">
