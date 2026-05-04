@@ -83,7 +83,7 @@ function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date |
 
   return (
     <div className="dante-card p-4 mb-4">
-      <h3 className="font-bebas text-xs tracking-widest text-sage mb-3 flex items-center gap-2">
+      <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-3 flex items-center gap-2">
         FOLLOW-UP DATE
         {isOverdue && (
           <span className="bg-red-100 text-red-700 font-bebas text-xs tracking-widest px-2 py-0.5">OVERDUE</span>
@@ -2172,14 +2172,14 @@ export default function Dashboard() {
                   {newEnquiries.length > 0 ? (
                     <div className="flex bg-muted rounded-xl p-0.5 gap-0.5">
                       <button onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
-                        className={`font-inter text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors ${leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"}`}>
-                        New
+                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-ink/40 hover:text-ink"}`}>
+                        NEW
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
                       </button>
                       <button onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
-                        className={`font-inter text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors ${leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-stormy hover:text-ink"}`}>
-                        All Events
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "all" ? "bg-sage-green text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
+                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-ink/40 hover:text-ink"}`}>
+                        ALL EVENTS
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "all" ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
                       </button>
                     </div>
                   ) : (
@@ -2220,11 +2220,11 @@ export default function Dashboard() {
                   {/* Actions */}
                   <div className="ml-auto flex items-center gap-2">
                     <button onClick={() => setShowAddLead(true)}
-                      className="flex items-center gap-1.5 bg-sage-green text-white font-inter font-medium text-xs px-3 py-2 rounded-lg hover:bg-sage-dark transition-colors">
-                      <Plus className="w-3.5 h-3.5" /> Add New
+                      className="flex items-center gap-1.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs px-3 py-2 hover:bg-forest transition-colors">
+                      <Plus className="w-3.5 h-3.5" /> ADD NEW
                     </button>
                     <button onClick={() => setShowCsvImport(true)} title="Import from CSV"
-                      className="px-3 py-2 rounded-lg border border-gold/40 text-ink/60 hover:border-gold hover:text-ink hover:bg-white/60 transition-colors text-xs font-inter font-medium flex items-center gap-1.5">
+                      className="px-3 py-2 border border-gold/30 text-ink/60 hover:border-gold hover:text-ink hover:bg-gold/5 transition-colors text-xs font-bebas tracking-widest flex items-center gap-1.5">
                       <Upload className="w-3.5 h-3.5" /> CSV
                     </button>
                     {leadViewMode !== "kanban" && (
@@ -2235,8 +2235,8 @@ export default function Dashboard() {
                     )}
                     {leadViewMode === "kanban" && (
                       <button onClick={() => setKanbanSettingsOpen(true)}
-                        className="flex items-center gap-1.5 font-inter text-xs font-medium px-3 py-1.5 border border-gold/30 text-ink/60 rounded-lg hover:bg-linen transition-colors">
-                        <SlidersHorizontal className="w-3.5 h-3.5" /> Customise
+                        className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/60 hover:bg-linen transition-colors">
+                        <SlidersHorizontal className="w-3.5 h-3.5" /> CUSTOMISE
                       </button>
                     )}
                   </div>
@@ -2539,12 +2539,12 @@ export default function Dashboard() {
                 {leadViewMode !== "kanban" && (selectedLead ? (
                   <div className="flex-1 overflow-auto p-4 md:p-6">
                   <div className="flex items-center gap-3 mb-4 md:mb-6">
-                    <button onClick={() => setSelectedLead(null)} className="md:hidden font-inter font-medium text-sm text-sage-dark flex items-center gap-1 py-1 pr-2">
-                      <ChevronLeft className="w-4 h-4" /> Back
+                    <button onClick={() => setSelectedLead(null)} className="md:hidden font-bebas tracking-widest text-xs text-ink/60 hover:text-ink flex items-center gap-1 py-1 pr-2">
+                      <ChevronLeft className="w-4 h-4" /> BACK
                     </button>
                     <div className="flex-1">
                       <h2 className="font-cormorant text-ink" style={{ fontSize: '1.8rem', fontWeight: 600 }}>{selectedLead.firstName} {selectedLead.lastName}</h2>
-                      <div className="font-dm text-sm text-sage">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
+                      <div className="font-dm text-sm text-ink/60">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                       {selectedLead.email && !isTeamMember && (
@@ -2552,18 +2552,18 @@ export default function Dashboard() {
                           setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
                           setShowEmailModal(true);
                         }}
-                          className="border border-sage-green text-sage-dark font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-green/10 transition-all">
-                          <Mail className="w-3.5 h-3.5" /> Email
+                          className="border border-forest/30 text-forest font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-forest/10 transition-all">
+                          <Mail className="w-3.5 h-3.5" /> EMAIL
                         </button>
                       )}
                       <button onClick={() => setLocation(`/proposals/new?leadId=${selectedLead.id}`)}
-                        className="bg-sage-green text-white font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-dark transition-all">
-                        <FileText className="w-3.5 h-3.5" /> Create Proposal
+                        className="bg-forest-dark text-cream font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-forest transition-all">
+                        <FileText className="w-3.5 h-3.5" /> CREATE PROPOSAL
                       </button>
                       {selectedLeadRunsheets && selectedLeadRunsheets.length > 0 ? (
                         <button onClick={() => setLocation(`/runsheet?id=${selectedLeadRunsheets[selectedLeadRunsheets.length - 1].id}&leadId=${selectedLead.id}`)}
-                          className="border border-sage-green text-sage-dark font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-green/10 transition-all">
-                          <Clock className="w-3.5 h-3.5" /> Edit Runsheet
+                          className="border border-forest/30 text-forest font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-forest/10 transition-all">
+                          <Clock className="w-3.5 h-3.5" /> EDIT RUNSHEET
                         </button>
                       ) : ['booked','confirmed'].includes(selectedLead.status) ? (
                         <button
@@ -2582,13 +2582,13 @@ export default function Dashboard() {
                             });
                           }}
                           disabled={createRunsheet.isPending}
-                          className="border border-sage-green text-sage-dark font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-sage-green/10 transition-all disabled:opacity-50">
-                          <Clock className="w-3.5 h-3.5" /> {createRunsheet.isPending ? 'Creating...' : 'Generate Runsheet'}
+                          className="border border-forest/30 text-forest font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-forest/10 transition-all disabled:opacity-50">
+                          <Clock className="w-3.5 h-3.5" /> {createRunsheet.isPending ? 'CREATING...' : 'GENERATE RUNSHEET'}
                         </button>
                       ) : (
                         <button onClick={() => setLocation(`/runsheet?leadId=${selectedLead.id}`)}
-                          className="border border-gray-300 text-gray-600 font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-gray-50 transition-all">
-                          <Clock className="w-3.5 h-3.5" /> Runsheet
+                          className="border border-gold/30 text-ink/60 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-gold/10 transition-all">
+                          <Clock className="w-3.5 h-3.5" /> RUNSHEET
                         </button>
                       )}
                       <button
@@ -2597,17 +2597,17 @@ export default function Dashboard() {
                             deleteLead.mutate({ id: selectedLead.id });
                           }
                         }}
-                        className="border border-red-200 text-red-400 font-inter font-medium text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 hover:bg-red-50 transition-all ml-auto">
-                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                        className="border border-red-200 text-red-400 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-red-50 transition-all ml-auto">
+                        <Trash2 className="w-3.5 h-3.5" /> DELETE
                       </button>
                     </div>
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
-                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                    <div className="dante-card p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-inter text-xs font-semibold text-gray-400 uppercase tracking-wider">Event Details</h3>
+                        <h3 className="font-bebas text-xs tracking-widest text-ink/40">EVENT DETAILS</h3>
                         {!editingEventDetails ? (
                           <button onClick={() => {
                             setEventDetailForm({
@@ -2622,12 +2622,12 @@ export default function Dashboard() {
                               budget: selectedLead.budget ?? '',
                             });
                             setEditingEventDetails(true);
-                          }} className="text-xs text-sage hover:text-forest font-dm flex items-center gap-1">
-                            <Edit2 className="w-3 h-3" /> Edit
+                          }} className="text-xs text-ink/50 hover:text-ink font-bebas tracking-widest flex items-center gap-1">
+                            <Edit2 className="w-3 h-3" /> EDIT
                           </button>
                         ) : (
                           <div className="flex gap-2">
-                            <button onClick={() => setEditingEventDetails(false)} className="text-xs text-ink/40 hover:text-ink font-dm">Cancel</button>
+                            <button onClick={() => setEditingEventDetails(false)} className="text-xs text-ink/40 hover:text-ink font-bebas tracking-widest">CANCEL</button>
                             <button onClick={() => {
                               updateLeadDetails.mutate({
                                 id: selectedLead.id,
@@ -2641,8 +2641,8 @@ export default function Dashboard() {
                                 guestCount: eventDetailForm.guestCount !== '' ? Number(eventDetailForm.guestCount) : null,
                                 budget: eventDetailForm.budget !== '' ? Number(eventDetailForm.budget) : null,
                               });
-                            }} disabled={updateLeadDetails.isPending} className="text-xs text-forest hover:text-forest-dark font-dm font-semibold">
-                              {updateLeadDetails.isPending ? 'Saving...' : 'Save'}
+                            }} disabled={updateLeadDetails.isPending} className="text-xs text-forest hover:text-forest-dark font-bebas tracking-widest">
+                              {updateLeadDetails.isPending ? 'SAVING...' : 'SAVE'}
                             </button>
                           </div>
                         )}
@@ -2693,27 +2693,27 @@ export default function Dashboard() {
                     </div>
 
                     {/* Status & Actions */}
-                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-                      <h3 className="font-inter text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Pipeline Status</h3>
+                    <div className="dante-card p-4">
+                      <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-3">PIPELINE STATUS</h3>
                       {/* Confirm Booking CTA */}
                       {!['booked','confirmed'].includes(selectedLead.status) && (
                         <button
                           onClick={() => updateStatus.mutate({ id: selectedLead.id, status: 'booked' as any })}
-                          className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-sage-green text-white rounded-xl font-inter text-sm font-semibold hover:bg-sage-dark transition-colors shadow-sm">
-                          <CheckCircle className="w-4 h-4" />
-                          Confirm Booking → Move to Calendar
+                          className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs hover:bg-forest transition-colors">
+                          <CheckCircle className="w-4 h-4 text-gold" />
+                          CONFIRM BOOKING → MOVE TO CALENDAR
                         </button>
                       )}
                       {['booked','confirmed'].includes(selectedLead.status) && (
                         <div className="w-full mb-3 flex flex-col gap-2">
-                          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-sage-tint border border-sage-green rounded-xl font-inter text-sm font-semibold text-sage-dark">
-                            <CheckCircle className="w-4 h-4 text-sage-green" />
-                            Confirmed Event — visible on Calendar
+                          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 font-bebas tracking-widest text-xs text-forest">
+                            <CheckCircle className="w-4 h-4 text-forest" />
+                            CONFIRMED EVENT — VISIBLE ON CALENDAR
                           </div>
                           <button
                             onClick={() => { setTab('calendar' as any); setSelectedLead(null); }}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-sage-green/40 text-sage-dark rounded-xl font-inter text-xs font-medium hover:bg-sage-tint transition-colors">
-                            <Calendar className="w-3.5 h-3.5" /> View on Calendar
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-forest/30 text-forest font-bebas tracking-widest text-xs hover:bg-forest/10 transition-colors">
+                            <Calendar className="w-3.5 h-3.5" /> VIEW ON CALENDAR
                           </button>
                         </div>
                       )}
@@ -2723,7 +2723,7 @@ export default function Dashboard() {
                           return (
                             <button key={stage.key}
                               onClick={() => updateStatus.mutate({ id: selectedLead.id, status: stage.key as any })}
-                              className="w-full text-left px-3 py-2 border font-inter text-xs font-medium transition-all"
+                              className="w-full text-left px-3 py-2 border font-bebas tracking-widest text-xs transition-all"
                               style={isActive ? {
                                 backgroundColor: stage.swatch + '22',
                                 borderColor: stage.swatch,
@@ -2750,14 +2750,14 @@ export default function Dashboard() {
                   {/* Message */}
                   {selectedLead.message && (
                   <div className="dante-card p-4 mb-6">
-                    <h3 className="font-bebas text-xs tracking-widest text-sage mb-2">CLIENT MESSAGE</h3>
+                    <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-2">CLIENT MESSAGE</h3>
                       <p className="font-dm text-sm text-ink/60 italic">"{selectedLead.message}"</p>
                     </div>
                   )}
 
                   {/* Activity Log */}
                   <div className="dante-card p-4 mb-4">
-                    <h3 className="font-bebas text-xs tracking-widest text-sage mb-3">ACTIVITY LOG</h3>
+                    <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-3">ACTIVITY LOG</h3>
                     <div className="space-y-2 mb-4 max-h-48 overflow-auto">
                       {(selectedLeadActivity ?? []).length === 0 ? (
                         <p className="font-dm text-xs text-ink/60">No activity yet</p>
@@ -2782,7 +2782,7 @@ export default function Dashboard() {
                   </div>
                   {/* Enquiry Source */}
                   <div className="dante-card p-4 mb-4">
-                    <h3 className="font-bebas text-xs tracking-widest text-sage mb-3">ENQUIRY SOURCE</h3>
+                    <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-3">ENQUIRY SOURCE</h3>
                     <Select
                       value={selectedLead.source ?? ""}
                       onValueChange={(v) => updateLeadSource.mutate({ id: selectedLead.id, source: v })}
@@ -2860,7 +2860,7 @@ export default function Dashboard() {
                 <Dialog open={kanbanDetailOpen} onOpenChange={(v) => { setKanbanDetailOpen(v); if (!v) setSelectedLead(null); }}>
                   <DialogContent className="max-w-lg">
                     <DialogHeader>
-                      <DialogTitle className="font-inter text-xl font-bold text-gray-900 leading-tight">
+                      <DialogTitle className="font-cormorant text-xl font-semibold text-ink leading-tight">
                         {selectedLead.firstName} {selectedLead.lastName}
                       </DialogTitle>
                     </DialogHeader>
@@ -2870,7 +2870,7 @@ export default function Dashboard() {
                         {(() => {
                           const stage = pipelineStages.find((s: any) => s.key === selectedLead.status);
                           return stage ? (
-                            <span className={`font-inter text-xs font-bold px-2.5 py-1 rounded-lg border ${stage.color}`}>{stage.label}</span>
+                            <span className={`font-bebas text-xs tracking-widest px-2.5 py-1 border ${stage.color}`}>{stage.label}</span>
                           ) : null;
                         })()}
                       </div>
@@ -2878,45 +2878,45 @@ export default function Dashboard() {
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         {selectedLead.email && (
                           <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Email</p>
-                            <p className="text-gray-900 truncate">{selectedLead.email}</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">EMAIL</p>
+                            <p className="font-dm text-sm text-ink truncate">{selectedLead.email}</p>
                           </div>
                         )}
                         {selectedLead.phone && (
                           <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Phone</p>
-                            <p className="text-gray-900">{selectedLead.phone}</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">PHONE</p>
+                            <p className="font-dm text-sm text-ink">{selectedLead.phone}</p>
                           </div>
                         )}
                         {selectedLead.eventType && (
                           <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Event Type</p>
-                            <p className="text-gray-900">{selectedLead.eventType}</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">EVENT TYPE</p>
+                            <p className="font-dm text-sm text-ink">{selectedLead.eventType}</p>
                           </div>
                         )}
                         {selectedLead.eventDate && (
                           <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Event Date</p>
-                            <p className="text-gray-900">{new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">EVENT DATE</p>
+                            <p className="font-dm text-sm text-ink">{new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
                           </div>
                         )}
                         {selectedLead.guestCount && (
                           <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Guests</p>
-                            <p className="text-gray-900">{selectedLead.guestCount}</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">GUESTS</p>
+                            <p className="font-dm text-sm text-ink">{selectedLead.guestCount}</p>
                           </div>
                         )}
                         {selectedLead.budget && (
                           <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Budget</p>
-                            <p className="text-gray-900">${Number(selectedLead.budget).toLocaleString()}</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">BUDGET</p>
+                            <p className="font-dm text-sm text-ink">${Number(selectedLead.budget).toLocaleString()}</p>
                           </div>
                         )}
                       </div>
                       {selectedLead.message && (
                         <div>
-                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Message</p>
-                          <p className="text-sm text-gray-700 leading-relaxed line-clamp-3">{selectedLead.message}</p>
+                          <p className="font-bebas text-xs tracking-widest text-ink/40 mb-1">MESSAGE</p>
+                          <p className="font-dm text-sm text-ink/70 leading-relaxed line-clamp-3">{selectedLead.message}</p>
                         </div>
                       )}
                       {/* Actions */}
@@ -2928,19 +2928,19 @@ export default function Dashboard() {
                               setShowEmailModal(true);
                               setKanbanDetailOpen(false);
                             }}
-                            className="flex items-center gap-1.5 font-inter text-xs font-medium border border-sage-green text-sage-dark px-3 py-2 rounded-lg hover:bg-sage-green/10 transition-colors">
-                            <Mail className="w-3.5 h-3.5" /> Email
+                            className="flex items-center gap-1.5 font-bebas tracking-widest text-xs border border-forest/30 text-forest px-3 py-2 hover:bg-forest/10 transition-colors">
+                            <Mail className="w-3.5 h-3.5" /> EMAIL
                           </button>
                         )}
                         <button
                           onClick={() => { setKanbanDetailOpen(false); setLocation(`/proposals/new?leadId=${selectedLead.id}`); }}
-                          className="flex items-center gap-1.5 font-inter text-xs font-semibold bg-sage-green text-white px-3 py-2 rounded-lg hover:bg-sage-dark transition-colors">
-                          <FileText className="w-3.5 h-3.5" /> Create Proposal
+                          className="flex items-center gap-1.5 font-bebas tracking-widest text-xs bg-forest-dark text-cream px-3 py-2 hover:bg-forest transition-colors">
+                          <FileText className="w-3.5 h-3.5" /> CREATE PROPOSAL
                         </button>
                         <button
                           onClick={() => { setLeadViewMode("list"); setKanbanDetailOpen(false); }}
-                          className="ml-auto font-inter text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 px-2 py-2">
-                          Full details <ChevronRight className="w-3.5 h-3.5" />
+                          className="ml-auto font-bebas tracking-widest text-xs text-ink/40 hover:text-ink flex items-center gap-1 px-2 py-2">
+                          FULL DETAILS <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -6823,17 +6823,19 @@ export default function Dashboard() {
                       )}
                       <button onClick={() => { const lead = selectedBooking; setSelectedBooking(null); selectLead(lead); setTab('enquiries'); }}
                         className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs col-span-2">
-                        <FileText className="w-3 h-3 text-gold" /> OPEN ENQUIRY
+                        <FileText className="w-3 h-3 text-gold" /> {['confirmed','booked','finished'].includes(selectedBooking.status) ? 'VIEW EVENT DETAILS' : 'OPEN ENQUIRY'}
                       </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete enquiry from ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
-                            deleteLead.mutate({ id: selectedBooking.id });
-                          }
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
-                        <Trash2 className="w-3 h-3" /> DELETE ENQUIRY
-                      </button>
+                      {!['confirmed','booked','finished'].includes(selectedBooking.status) && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete enquiry from ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
+                              deleteLead.mutate({ id: selectedBooking.id });
+                            }
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
+                          <Trash2 className="w-3 h-3" /> DELETE ENQUIRY
+                        </button>
+                      )}
                     </>
                   ) : (
                     <>
