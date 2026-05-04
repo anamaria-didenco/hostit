@@ -6166,15 +6166,18 @@ export default function Dashboard() {
                         return ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'].join('\n');
                       })()}
                       onChange={e => {
-                        const lines = e.target.value.split('\n').map((s: string) => s.trim()).filter(Boolean);
-                        setSettingsForm((f: any) => ({ ...f, customCourses: JSON.stringify(lines) }));
+                        setSettingsForm((f: any) => ({ ...f, customCourses: e.target.value }));
                       }}
                       placeholder={'Canapes\nEntree\nMain\nDessert\nCheese\nDrinks\nOther'}
-                      className="w-full border border-gold/30 rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-y"
+                      className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-y"
                     />
                     <button
                       type="button"
-                      onClick={() => updateSettings.mutate({ customCourses: settingsForm.customCourses })}
+                      onClick={() => {
+                        const raw = settingsForm.customCourses ?? '';
+                        const lines = raw.split('\n').map((s: string) => s.trim()).filter(Boolean);
+                        updateSettings.mutate({ customCourses: JSON.stringify(lines) });
+                      }}
                       disabled={updateSettings.isPending}
                       className="mt-3 btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream disabled:opacity-50">
                       {updateSettings.isPending ? 'SAVING…' : 'SAVE COURSES'}
