@@ -215,6 +215,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
       {showLegend && (
         <div className="flex items-center gap-4 px-4 pt-3 pb-1 flex-wrap">
           <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-forest inline-block" />Confirmed</span>
+          <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-teal-400 inline-block" />Finished</span>
           <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Tentative</span>
           <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-stone-400 inline-block" />Cancelled</span>
           <span className="flex items-center gap-1.5 font-dm text-xs text-ink/60"><span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block" />Enquiry</span>
@@ -235,10 +236,11 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
             const _bookedLeadIds = new Set((monthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
             const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !_bookedLeadIds.has(l.id) && l.status !== 'lost');
             const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
+            const hasFinished = dayBookings.some((b: any) => b.status === 'finished');
             const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
             const hasCancelled = dayBookings.some((b: any) => b.status === 'cancelled');
             const hasEnquiry = dayLeads.length > 0;
-            const cellBg = hasConfirmed ? 'bg-blue-50 border-blue-300' : hasTentative ? 'bg-amber-50 border-amber-300' : hasCancelled ? 'bg-stone-50 border-stone-300' : hasEnquiry ? 'bg-rose-50 border-rose-300' : isToday ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-linen';
+            const cellBg = hasConfirmed ? 'bg-blue-50 border-blue-300' : hasFinished ? 'bg-teal-50 border-teal-300' : hasTentative ? 'bg-amber-50 border-amber-300' : hasCancelled ? 'bg-stone-50 border-stone-300' : hasEnquiry ? 'bg-rose-50 border-rose-300' : isToday ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-linen';
             const isEmpty = dayBookings.length === 0 && dayLeads.length === 0;
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             return (
@@ -262,14 +264,14 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
                 )}
                 <div className="flex flex-wrap gap-0.5 mt-auto">
                   {dayBookings.slice(0, 3).map((b: any) => (
-                    <span key={b.id} className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === 'confirmed' ? 'bg-forest' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'}`} />
+                    <span key={b.id} className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === 'confirmed' ? 'bg-forest' : b.status === 'finished' ? 'bg-teal-400' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'}`} />
                   ))}
                   {dayLeads.slice(0, 2).map((l: any) => (
                     <span key={l.id} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
                   ))}
                 </div>
                 {dayBookings.slice(0, 1).map((b: any) => (
-                  <div key={b.id} className={`text-[9px] leading-tight font-dm truncate w-full mt-0.5 ${b.status === 'confirmed' ? 'text-forest' : b.status === 'tentative' ? 'text-amber-700' : 'text-stone-500'}`}>{b.firstName}</div>
+                  <div key={b.id} className={`text-[9px] leading-tight font-dm truncate w-full mt-0.5 ${b.status === 'confirmed' ? 'text-forest' : b.status === 'finished' ? 'text-teal-600' : b.status === 'tentative' ? 'text-amber-700' : 'text-stone-500'}`}>{b.firstName}</div>
                 ))}
               </div>
             );
@@ -3794,7 +3796,7 @@ export default function Dashboard() {
                             {b.guestCount ? ` · ${b.guestCount} guests` : ""}
                           </div>
                           <div className={`font-bebas text-xs tracking-widest mt-1 ${
-                            b.status === 'confirmed' ? 'text-forest' : b.status === 'tentative' ? 'text-amber-600' : 'text-stone-400'
+                            b.status === 'confirmed' ? 'text-forest' : b.status === 'finished' ? 'text-teal-600' : b.status === 'tentative' ? 'text-amber-600' : 'text-stone-400'
                           }`}>{b.status?.toUpperCase()}</div>
                         </div>
                         <div className="text-right flex flex-col items-end gap-2">
@@ -6737,6 +6739,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${
                   selectedBooking.status === 'confirmed' || selectedBooking.status === 'booked' ? 'text-forest bg-blue-50 border-blue-200'
+                  : selectedBooking.status === 'finished' ? 'text-teal-700 bg-teal-50 border-teal-200'
                   : selectedBooking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
                   : selectedBooking.status === 'new' ? 'text-amber-700 bg-amber-50 border-amber-200'
                   : 'text-stone-500 bg-stone-50 border-stone-200'

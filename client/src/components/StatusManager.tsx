@@ -31,7 +31,7 @@ export const DEFAULT_STATUSES: StatusDef[] = [
   { key: "proposal_sent", label: "Proposal Sent", colorId: "amber"   },
   { key: "negotiating",   label: "Negotiating",   colorId: "orange"  },
   { key: "booked",        label: "Confirmed",     colorId: "emerald" },
-  { key: "finished",      label: "Finished",      colorId: "stone"   },
+  { key: "finished",      label: "Finished",      colorId: "teal"    },
   { key: "lost",          label: "Lost",          colorId: "stone"   },
 ];
 

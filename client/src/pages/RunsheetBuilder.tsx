@@ -2078,7 +2078,7 @@ export default function RunsheetBuilder() {
         </DndContext>
 
         {/* ── Main Tab Navigation ─────────────────────────────────────────── */}
-        <div className="no-print flex border-b border-gold/30 bg-white">
+        <div className="no-print flex border-b border-gold/20 overflow-x-auto">
           {[
             { id: 'timeline', label: 'TIMELINE', icon: <Clock className="w-4 h-4" />, count: items.length },
             { id: 'fnb', label: 'F&B SHEET', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
@@ -2090,15 +2090,15 @@ export default function RunsheetBuilder() {
             <button
               key={tab.id}
               onClick={() => setActiveMainTab(tab.id as any)}
-              className={`flex items-center gap-2 px-5 py-3 font-bebas tracking-widest text-sm border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 px-5 py-3 font-bebas tracking-widest text-xs whitespace-nowrap border-b-2 transition-colors ${
                 activeMainTab === tab.id
-                  ? 'border-forest text-forest bg-white'
-                  : 'border-transparent text-ink/50 hover:text-ink hover:bg-linen'
+                  ? 'border-gold text-amber-700'
+                  : 'border-transparent text-ink/40 hover:text-ink/70'
               }`}
             >
               {tab.icon} {tab.label}
               {tab.count !== undefined && tab.count !== 0 && (
-                <span className={`text-xs font-bebas px-1.5 py-0.5 ${activeMainTab === tab.id ? 'bg-forest/10 text-forest' : 'bg-forest/10 text-ink/60'}`}>
+                <span className={`text-[10px] font-bebas px-1.5 py-0.5 rounded-sm ${activeMainTab === tab.id ? 'bg-gold/15 text-amber-700' : 'bg-ink/5 text-ink/40'}`}>
                   {tab.count}
                 </span>
               )}
@@ -2108,9 +2108,9 @@ export default function RunsheetBuilder() {
 
         {/* ── TIMELINE TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'timeline' && (
-          <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
+          <div className="dante-card border-t-0 print:shadow-none">
             {/* Timeline header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30 no-print">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
               <div className="flex items-center gap-3">
                 <h2 className="font-bebas tracking-widest text-ink/60 text-sm">EVENT TIMELINE</h2>
                 {items.length > 0 && (
@@ -2355,7 +2355,7 @@ export default function RunsheetBuilder() {
 
         {/* ── F&B SHEET TAB ────────────────────────────────────────────────── */}
         <div className={activeMainTab !== 'fnb' ? 'hidden print:block' : ''}>
-          <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
+          <div className="dante-card border-t-0 print:shadow-none">
             {/* F&B unified header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30 no-print">
               <div className="flex items-center gap-2">
@@ -2420,30 +2420,30 @@ export default function RunsheetBuilder() {
             </div>
 
             {/* Sub-tab nav: F&B Items vs Dietaries */}
-            <div className="flex border-b border-gold/30 no-print bg-linen/40">
+            <div className="flex border-b border-gold/20 no-print bg-linen/40">
               <button
                 onClick={() => setFnbSubTab('items')}
                 className={`px-5 py-2.5 font-bebas tracking-widest text-xs transition-colors flex items-center gap-2 ${
                   fnbSubTab === 'items'
-                    ? 'bg-white text-forest border-b-2 border-forest -mb-px'
-                    : 'text-ink/50 hover:text-ink hover:bg-white/50'
+                    ? 'bg-white text-amber-700 border-b-2 border-gold -mb-px'
+                    : 'text-ink/40 hover:text-ink/70 hover:bg-white/50'
                 }`}
               >
                 <UtensilsCrossed className="w-3.5 h-3.5" />
                 MENU & SERVICE
-                <span className={`text-[10px] px-1.5 py-0.5 ${fnbSubTab === 'items' ? 'bg-forest/10 text-forest' : 'bg-ink/5 text-ink/40'}`}>{fnbItems.length}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${fnbSubTab === 'items' ? 'bg-gold/15 text-amber-700' : 'bg-ink/5 text-ink/40'}`}>{fnbItems.length}</span>
               </button>
               <button
                 onClick={() => setFnbSubTab('dietaries')}
                 className={`px-5 py-2.5 font-bebas tracking-widest text-xs transition-colors flex items-center gap-2 ${
                   fnbSubTab === 'dietaries'
-                    ? 'bg-white text-forest border-b-2 border-forest -mb-px'
-                    : 'text-ink/50 hover:text-ink hover:bg-white/50'
+                    ? 'bg-white text-amber-700 border-b-2 border-gold -mb-px'
+                    : 'text-ink/40 hover:text-ink/70 hover:bg-white/50'
                 }`}
               >
                 <Leaf className="w-3.5 h-3.5" />
                 DIETARY REQS
-                <span className={`text-[10px] px-1.5 py-0.5 ${fnbSubTab === 'dietaries' ? 'bg-forest/10 text-forest' : 'bg-ink/5 text-ink/40'}`}>{dietaries.length}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${fnbSubTab === 'dietaries' ? 'bg-gold/15 text-amber-700' : 'bg-ink/5 text-ink/40'}`}>{dietaries.length}</span>
               </button>
             </div>
 
@@ -3100,7 +3100,7 @@ export default function RunsheetBuilder() {
 
         {/* ── DRINKS TAB ───────────────────────────────────────────────────── */}
         {activeMainTab === 'drinks' && (
-          <div className="bg-white border border-gold/30 border-t-0 shadow-sm">
+          <div className="dante-card border-t-0">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
               <div className="flex items-center gap-2">
@@ -3208,8 +3208,8 @@ export default function RunsheetBuilder() {
 
         {/* ── CHECKLIST TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'checklist' && (
-          <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
+          <div className="dante-card border-t-0 print:shadow-none">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-3">
                 <h2 className="font-bebas tracking-widest text-ink/60 text-sm">EVENT CHECKLIST</h2>
                 <span className="font-dm text-xs text-ink/40">{checkedCount} of {checklistItems.length} complete</span>
@@ -3309,8 +3309,8 @@ export default function RunsheetBuilder() {
 
         {/* ── TABLE PLAN TAB ──────────────────────────────────────────────── */}
         {activeMainTab === 'tableplan' && (
-          <div className="bg-white border border-gold/30 border-t-0 shadow-sm print:shadow-none">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
+          <div className="dante-card border-t-0 print:shadow-none">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
                 <LayoutGrid className="w-4 h-4 text-gold" />
                 <span className="font-bebas tracking-widest text-sm text-ink">TABLE PLAN</span>
@@ -3672,9 +3672,9 @@ export default function RunsheetBuilder() {
 
         {/* ── COSTS TAB ────────────────────────────────────────────────────── */}
         {activeMainTab === 'costs' && (
-          <div className="bg-white border border-gold/30 border-t-0 shadow-sm no-print">
+          <div className="dante-card border-t-0 no-print">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-gold" />
                 <span className="font-bebas tracking-widest text-sm text-ink">EVENT COSTS</span>
