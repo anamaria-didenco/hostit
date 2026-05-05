@@ -824,7 +824,7 @@ export default function Dashboard() {
   const [enquiryPasteText, setEnquiryPasteText] = useState('');
   const [enquiryParsing, setEnquiryParsing] = useState(false);
   const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
-  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as const });
+  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string });
 
   const utils = trpc.useUtils();
 
@@ -2169,11 +2169,11 @@ export default function Dashboard() {
                 {([
                   { key: 'calendar', label: 'Calendar', icon: <Calendar className="w-3.5 h-3.5" />, onClick: () => setTab('calendar' as any) },
                   { key: 'table', label: 'View Events Table', icon: <Table2 className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter('all'); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadViewMode === 'table' && leadStatusFilter === 'all' },
-                  { key: 'add_event', label: 'Add Event', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'booked' as any })); setShowAddLead(true); } },
-                  { key: 'add_enquiry', label: 'Add Enquiry', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'new' as any })); setShowAddLead(true); } },
+                  { key: 'add_event', label: 'Add Event', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'booked' })); setEnquiryPasteMode(false); setShowAddLead(true); } },
+                  { key: 'add_enquiry', label: 'Add Enquiry', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'new' })); setEnquiryPasteMode(true); setShowAddLead(true); } },
                   { key: 'add_quote', label: 'Add Quote', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setLocation('/proposals/new') },
                   { key: 'view_enquiries', label: 'View Enquiries', icon: <MessageSquare className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter('new'); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadStatusFilter === 'new' },
-                  { key: 'view_quotes', label: 'View Quotes', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setLocation('/proposals') },
+                  { key: 'view_quotes', label: 'View Quotes', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter('proposal_sent'); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadStatusFilter === 'proposal_sent' },
                 ]).map((item: any) => (
                   <button
                     key={item.key}
