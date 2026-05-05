@@ -2098,7 +2098,7 @@ export default function Dashboard() {
                             const isConfirmed = e.status === 'confirmed' || e.status === 'booked';
                             return (
                               <button key={e.id}
-                                onClick={() => e._type === 'booking' ? setLocation(`/event/${e.id}`) : (setSelectedLead(e), setTab('enquiries'))}
+                                onClick={() => setSelectedBooking(e._type === 'booking' ? e : { ...e, _isLead: true })}
                                 className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                                 <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} />
                                 <div className="flex-1 min-w-0">
