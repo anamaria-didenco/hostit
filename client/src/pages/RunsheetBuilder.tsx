@@ -155,6 +155,19 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
+// Snap a "HH:MM" time string to the nearest whole hour (e.g. "14:35" → "15:00").
+// Returns "" for empty input so the field can still be cleared.
+function roundTimeToHour(value: string): string {
+  if (!value) return "";
+  const [hStr, mStr] = value.split(":");
+  let h = Number(hStr);
+  const m = Number(mStr ?? 0);
+  if (!Number.isFinite(h)) return value;
+  if (m >= 30) h += 1;
+  if (h >= 24) h = 0;
+  return `${String(h).padStart(2, "0")}:00`;
+}
+
 function catStyle(cat: string) {
   return CATEGORIES.find(c => c.value === cat)?.color ?? "bg-cream text-ink/70";
 }
@@ -474,13 +487,22 @@ export default function RunsheetBuilder() {
         _tempId: `cat-${Date.now()}-${i}`,
       }));
     const skipped = eligible.length - toAdd.length;
+    // For drinks, also mirror the selected names into the runsheet-level
+    // "drinks selection" so they appear as chips in the Drinks tab and on
+    // the BEO/live runsheet drink panel.
+    if (catalogSelectorType === 'drink') {
+      const drinkNames = eligible.map((ci: any) => ci.name);
+      setRsSelectedDrinks(prev => Array.from(new Set([...prev, ...drinkNames])));
+    }
     setCatalogSelectedItems(new Map());
     setShowCatalogSelector(false);
     if (toAdd.length > 0) {
       const newItems = [...fnbItems, ...toAdd];
       setFnbItems(newItems);
       saveFnb(undefined, newItems);
-      toast.success(`Added ${toAdd.length} item${toAdd.length > 1 ? 's' : ''} to F&B sheet${skipped > 0 ? ` (${skipped} already present, skipped)` : ''}`);
+      toast.success(`Added ${toAdd.length} ${catalogSelectorType === 'drink' ? 'drink' : 'item'}${toAdd.length > 1 ? 's' : ''}${skipped > 0 ? ` (${skipped} already present, skipped)` : ''}`);
+    } else if (catalogSelectorType === 'drink' && eligible.length > 0) {
+      toast.success(`Added ${eligible.length} drink${eligible.length > 1 ? 's' : ''} to selection`);
     } else {
       toast.warning(`All selected items already in the F&B sheet — nothing added.`);
     }
@@ -980,6 +1002,7 @@ export default function RunsheetBuilder() {
   }, [existing]);
 
   // Pre-fill from lead
+  const { data: spacesForPrefill } = trpc.spaces.list.useQuery(undefined, { enabled: !!leadId });
   useEffect(() => {
     if (!lead) return;
     // Always restore contact info from lead (contact fields are not persisted in DB)
@@ -992,8 +1015,16 @@ export default function RunsheetBuilder() {
       setEventDate(lead.eventDate ? new Date(lead.eventDate).toLocaleDateString("en-CA") : "");
       setGuestCount(lead.guestCount ? String(lead.guestCount) : "");
       setEventType(lead.eventType ?? "");
+      // Map spaceId → space name so the venue/space dropdown is pre-selected
+      if ((lead as any).spaceId && spacesForPrefill) {
+        const sp = spacesForPrefill.find((s: any) => s.id === (lead as any).spaceId);
+        if (sp?.name) setSpaceName(sp.name);
+      }
+      // Seed notes from the enquiry message + internal notes
+      const msgParts = [lead.message, (lead as any).internalNotes].filter(Boolean);
+      if (msgParts.length) setNotes(msgParts.join("\n\n"));
     }
-  }, [lead, sheetId]);
+  }, [lead, sheetId, spacesForPrefill]);
 
   // Auto-populate from linked proposal
   useEffect(() => {
@@ -1757,14 +1788,15 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-dm text-sm font-semibold">{guestCount || "—"}</div>
               </div>
             </div>
-            {/* Event time & venue area row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 pt-3 border-t border-gold/20">
+            {/* Event time row — venue/space lives in the grid above; this is times only */}
+            <div className="grid grid-cols-2 gap-4 mb-4 pt-3 border-t border-gold/20">
               <div>
                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">START TIME</label>
                 <Input
                   type="time"
+                  step={3600}
                   value={eventStartTime}
-                  onChange={e => setEventStartTime(e.target.value)}
+                  onChange={e => setEventStartTime(roundTimeToHour(e.target.value))}
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventStartTime || "—"}</div>
@@ -1773,33 +1805,12 @@ export default function RunsheetBuilder() {
                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">END TIME</label>
                 <Input
                   type="time"
+                  step={3600}
                   value={eventEndTime}
-                  onChange={e => setEventEndTime(e.target.value)}
+                  onChange={e => setEventEndTime(roundTimeToHour(e.target.value))}
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventEndTime || "—"}</div>
-              </div>
-              <div className="md:col-span-2">
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">VENUE AREA</label>
-                <div className="flex gap-1 no-print">
-                  {([
-                    { value: "bar", label: "Bar" },
-                    { value: "restaurant", label: "Restaurant" },
-                    { value: "full_venue", label: "Both" },
-                  ] as const).map(opt => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setVenueArea(v => v === opt.value ? "" : opt.value)}
-                      className={`flex-1 font-bebas tracking-widest text-xs h-9 border rounded-sm transition-colors ${venueArea === opt.value ? "bg-forest text-cream border-forest" : "border-gold/20 text-ink/50 hover:border-forest/50 hover:text-ink"}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="hidden print:block font-dm text-sm font-semibold">
-                  {venueArea === "bar" ? "Bar" : venueArea === "restaurant" ? "Restaurant" : venueArea === "full_venue" ? "Both" : "—"}
-                </div>
               </div>
             </div>
 
@@ -3169,7 +3180,41 @@ export default function RunsheetBuilder() {
                 )}
               </div>
 
-              {/* Drinks / Bar Notes — single notes field replaces the old picker UI */}
+              {/* Pick from saved drinks menu */}
+              <div className="border-t border-gold/20 pt-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-bebas tracking-widest text-xs text-ink/40">DRINKS SELECTION (FROM MENU)</div>
+                  <button
+                    type="button"
+                    onClick={() => { setCatalogSelectorType('drink'); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); setShowCatalogSelector(true); }}
+                    className="font-bebas tracking-widest text-[10px] bg-forest text-cream px-3 py-1.5 hover:bg-forest/90"
+                  >
+                    + PICK DRINKS
+                  </button>
+                </div>
+                {rsSelectedDrinks.length === 0 && rsCustomDrinks.length === 0 ? (
+                  <div className="border border-dashed border-gold/30 px-3 py-4 text-center font-dm text-xs text-ink/50">
+                    No drinks selected yet. Click <span className="font-bebas tracking-widest text-forest">+ PICK DRINKS</span> to choose from your saved drinks menu.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {rsSelectedDrinks.map(k => (
+                      <span key={k} className="inline-flex items-center gap-1.5 bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
+                        {k}
+                        <button type="button" onClick={() => setRsSelectedDrinks(prev => prev.filter(x => x !== k))} className="text-ink/40 hover:text-red-600">×</button>
+                      </span>
+                    ))}
+                    {rsCustomDrinks.map((d, i) => (
+                      <span key={`c${i}`} className="inline-flex items-center gap-1.5 bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
+                        {d.name}
+                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/40 hover:text-red-600">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Drinks / Bar Notes */}
               <div className="border-t border-gold/20 pt-5">
                 <div className="font-bebas tracking-widest text-xs text-ink/40 mb-3">DRINKS / BAR NOTES</div>
                 <Textarea
