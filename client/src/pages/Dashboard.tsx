@@ -1144,6 +1144,35 @@ export default function Dashboard() {
     },
     onError: () => toast.error('Failed to create runsheet'),
   });
+  const ensureBookingForLead = trpc.bookings.ensureForLead.useMutation({
+    onSuccess: (booking: any) => {
+      if (booking) {
+        setSelectedBooking(booking);
+        utils.bookings.list.invalidate();
+        utils.bookings.byMonth.invalidate();
+        utils.leads.eventsByMonth.invalidate();
+      }
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to open event'),
+  });
+  /**
+   * Open the rich event drawer for any calendar item. If the item is a real
+   * booking, just show it. If it's a lead with status booked/confirmed/finished,
+   * resolve (or auto-create) the matching booking row so the drawer renders the
+   * full quick-actions set (OPEN EVENT, BEO PDF, FLOOR PLAN, etc.). Otherwise
+   * fall back to the lead drawer.
+   */
+  function openEventDrawer(item: any) {
+    if (!item) return;
+    const isBookingType = item._type === 'booking' || (!('_type' in item) && 'leadId' in item && !item._isLead);
+    if (isBookingType) { setSelectedBooking(item); return; }
+    if (['booked', 'confirmed', 'finished'].includes(item.status)) {
+      setSelectedBooking({ ...item, _isLead: true });
+      ensureBookingForLead.mutate({ leadId: item.id });
+      return;
+    }
+    setSelectedBooking({ ...item, _isLead: true });
+  }
   const deleteBooking = trpc.bookings.delete.useMutation({
     onSuccess: () => {
       setSelectedBooking(null);
@@ -1869,7 +1898,7 @@ export default function Dashboard() {
                                   <button key={l.id}
                                     draggable
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
-                                    onClick={() => { setSelectedBooking({ ...l, _isLead: true }); }}
+                                    onClick={() => { openEventDrawer({ ...l, _isLead: true }); }}
                                     style={spaceColor(l.spaceName) ? { borderLeft: `3px solid ${spaceColor(l.spaceName)}` } : undefined}
                                     className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
@@ -2098,7 +2127,7 @@ export default function Dashboard() {
                             const isConfirmed = e.status === 'confirmed' || e.status === 'booked';
                             return (
                               <button key={e.id}
-                                onClick={() => setSelectedBooking(e._type === 'booking' ? e : { ...e, _isLead: true })}
+                                onClick={() => openEventDrawer(e._type === 'booking' ? e : { ...e, _isLead: true })}
                                 className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                                 <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} />
                                 <div className="flex-1 min-w-0">
@@ -3308,7 +3337,7 @@ export default function Dashboard() {
                                 <button
                                   draggable
                                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
-                                  onClick={() => setSelectedBooking({ ...l, _isLead: true })}
+                                  onClick={() => openEventDrawer({ ...l, _isLead: true })}
                                   style={spaceColor(l.spaceName) ? { borderLeft: `4px solid ${spaceColor(l.spaceName)}` } : undefined}
                                   className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move`}
                                   title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
@@ -3555,7 +3584,7 @@ export default function Dashboard() {
                           ))}
                           {dayLeads.map((l: any) => (
                             <button key={l.id}
-                              onClick={() => setSelectedBooking({ ...l, _isLead: true })}
+                              onClick={() => openEventDrawer({ ...l, _isLead: true })}
                               className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}>
                               <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                               {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
@@ -3680,7 +3709,7 @@ export default function Dashboard() {
                         ))}
                         {dayLeads.map((l: any) => (
                           <button key={l.id}
-                            onClick={() => setSelectedBooking({ ...l, _isLead: true })}
+                            onClick={() => openEventDrawer({ ...l, _isLead: true })}
                             className={`w-full text-left p-4 ${statusCard(l.status)} hover:opacity-90 transition-opacity`}>
                             <div className="flex items-start gap-3">
                               <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${statusDot(l.status)}`} />

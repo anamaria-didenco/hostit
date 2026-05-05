@@ -1282,6 +1282,37 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     }),
 
     /**
+     * Returns the booking row for a given leadId. If the lead has status
+     * "booked"/"confirmed" but no booking row exists yet (legacy leads), one
+     * is auto-created so the rich event drawer can show full quick actions.
+     */
+    ensureForLead: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const existing = await getBookings(ctx.user.id);
+        const found = existing.find((b: any) => b.leadId === input.leadId);
+        if (found) return found;
+        const lead = await getLeadById(input.leadId);
+        if (!lead) throw new Error('Lead not found');
+        if (!['booked', 'confirmed', 'finished'].includes(lead.status ?? '')) {
+          throw new Error('Lead is not booked yet');
+        }
+        const created = await createBooking({
+          ownerId: ctx.user.id,
+          leadId: input.leadId,
+          firstName: lead.firstName,
+          lastName: lead.lastName ?? undefined,
+          email: lead.email,
+          eventType: lead.eventType ?? undefined,
+          eventDate: lead.eventDate ?? new Date(),
+          eventEndDate: lead.eventEndDate ?? undefined,
+          guestCount: lead.guestCount ?? undefined,
+          status: lead.status === 'finished' ? 'finished' : 'confirmed',
+        } as any);
+        return created;
+      }),
+
+    /**
      * Bookings whose event ended ≥2 days ago and have no actualSpend recorded
      * yet — surfaced as a prompt on the Overview so the user records what was
      * actually spent. Dismissible per-booking via spendPromptDismissedAt.
