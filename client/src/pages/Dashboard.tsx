@@ -1228,7 +1228,7 @@ export default function Dashboard() {
       refetchLeads();
       refetchMonthLeadEvents();
       setQuickCreateDate(null);
-      setQuickCreateForm({ firstName: '', lastName: '', eventType: '', guestCount: '', notes: '', status: 'new' });
+      setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' });
       toast.success('Event added to calendar!');
     },
     onError: () => toast.error('Failed to create event'),
