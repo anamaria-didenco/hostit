@@ -4310,6 +4310,36 @@ Return ONLY valid JSON. Example structure:
         ));
       }),
 
+    // Protected: list every staff portal link for the current owner with the
+    // joined runsheet info, so users can find a link even when they don't
+    // remember which runsheet it was attached to.
+    listAll: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { staffPortalLinks, runsheets } = await import('../drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select({
+          id: staffPortalLinks.id,
+          token: staffPortalLinks.token,
+          label: staffPortalLinks.label,
+          createdAt: staffPortalLinks.createdAt,
+          lastAccessedAt: staffPortalLinks.lastAccessedAt,
+          expiresAt: staffPortalLinks.expiresAt,
+          runsheetId: staffPortalLinks.runsheetId,
+          runsheetTitle: runsheets.title,
+          eventDate: runsheets.eventDate,
+          venueName: runsheets.venueName,
+          spaceName: runsheets.spaceName,
+        })
+        .from(staffPortalLinks)
+        .leftJoin(runsheets, eq(runsheets.id, staffPortalLinks.runsheetId))
+        .where(eq(staffPortalLinks.ownerId, ctx.user.id))
+        .orderBy(desc(staffPortalLinks.createdAt));
+      return rows;
+    }),
+
     // Protected: delete a link
     deleteLink: protectedProcedure
       .input(z.object({ id: z.number() }))

@@ -155,17 +155,18 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
-// Snap a "HH:MM" time string to the nearest whole hour (e.g. "14:35" → "15:00").
+// Snap a "HH:MM" time string to the nearest 15 minutes (e.g. "14:23" → "14:30").
 // Returns "" for empty input so the field can still be cleared.
-function roundTimeToHour(value: string): string {
+function roundTimeToQuarter(value: string): string {
   if (!value) return "";
   const [hStr, mStr] = value.split(":");
   let h = Number(hStr);
   const m = Number(mStr ?? 0);
-  if (!Number.isFinite(h)) return value;
-  if (m >= 30) h += 1;
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return value;
+  let rounded = Math.round(m / 15) * 15;
+  if (rounded === 60) { rounded = 0; h += 1; }
   if (h >= 24) h = 0;
-  return `${String(h).padStart(2, "0")}:00`;
+  return `${String(h).padStart(2, "0")}:${String(rounded).padStart(2, "0")}`;
 }
 
 function catStyle(cat: string) {
@@ -1794,9 +1795,9 @@ export default function RunsheetBuilder() {
                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">START TIME</label>
                 <Input
                   type="time"
-                  step={3600}
+                  step={900}
                   value={eventStartTime}
-                  onChange={e => setEventStartTime(roundTimeToHour(e.target.value))}
+                  onChange={e => setEventStartTime(roundTimeToQuarter(e.target.value))}
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventStartTime || "—"}</div>
@@ -1805,9 +1806,9 @@ export default function RunsheetBuilder() {
                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">END TIME</label>
                 <Input
                   type="time"
-                  step={3600}
+                  step={900}
                   value={eventEndTime}
-                  onChange={e => setEventEndTime(roundTimeToHour(e.target.value))}
+                  onChange={e => setEventEndTime(roundTimeToQuarter(e.target.value))}
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventEndTime || "—"}</div>

@@ -24,6 +24,7 @@ import StaffChecklist from "./pages/StaffChecklist";
 import DailyChecklists from "./pages/DailyChecklists";
 import DailyChecklistLive from "./pages/DailyChecklistLive";
 import ShiftRunsheetLive from "./pages/ShiftRunsheetLive";
+import StaffLinks from "./pages/StaffLinks";
 
 function Router() {
   return (
@@ -52,6 +53,7 @@ function Router() {
       <Route path="/daily-checklists" component={DailyChecklists} />
       <Route path="/daily/:token" component={DailyChecklistLive} />
       <Route path="/shift/:token" component={ShiftRunsheetLive} />
+      <Route path="/staff-links" component={StaffLinks} />
       <Route path="/menu"><Redirect to="/dashboard?tab=settings&sub=menu" /></Route>
 
       <Route path="/404" component={NotFound} />

@@ -619,6 +619,13 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
             <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
           </a>
           <a
+            href="/staff-links"
+            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
+          >
+            Staff Portal Links
+            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+          </a>
+          <a
             href="/eon-report.html"
             target="_blank"
             rel="noopener noreferrer"
