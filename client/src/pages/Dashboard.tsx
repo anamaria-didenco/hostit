@@ -1260,12 +1260,20 @@ export default function Dashboard() {
     onError: () => toast.error('Failed to add record'),
   });
   const createEnquiryFromCalendar = trpc.leads.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (created: any, vars: any) => {
+      // If user picked "Confirmed", materialise a real booking row so it's
+      // a true Event (not a pending enquiry) — server already sets the lead's
+      // status to 'booked'; we just need the matching booking record so it
+      // shows on the calendar and BEO/Runsheet are unlocked.
+      if (vars?.status === 'booked' && created?.id) {
+        ensureBookingForLead.mutate({ leadId: created.id });
+      }
       refetchLeads();
       refetchMonthLeadEvents();
+      utils.bookings.byMonth.invalidate();
       setQuickCreateDate(null);
       setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' });
-      toast.success('Event added to calendar!');
+      toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Event added to calendar!');
     },
     onError: () => toast.error('Failed to create event'),
   });
@@ -2119,6 +2127,7 @@ export default function Dashboard() {
                     </div>
                     {(() => {
                       const upcoming = [...(monthBookings ?? []), ...(monthLeadEvents ?? []).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id))]
+                        .filter((e: any) => !['cancelled','lost','declined'].includes(e.status))
                         .filter((e: any) => new Date(e.eventDate) >= new Date())
                         .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
                         .slice(0, 8);
@@ -2372,7 +2381,7 @@ export default function Dashboard() {
 
                 {/* ── TABLE VIEW ─────────────────────────────────────── */}
                 {leadViewMode === "table" && (
-                  <div className={`${selectedLead ? "w-[55%] border-r border-gold/15" : "flex-1"} overflow-auto`}>
+                  <div className="flex-1 overflow-auto">
                     {filteredLeads.length === 0 ? (
                       <div className="p-12 text-center">
                         <MessageSquare className="w-10 h-10 text-sage/30 mx-auto mb-3" />
@@ -2406,8 +2415,8 @@ export default function Dashboard() {
                             const statusStage = pipelineStages.find(s => s.key === lead.status);
                             return (
                               <tr key={lead.id}
-                                onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                                className={`hover:bg-linen/60 transition-colors cursor-pointer ${selectedLead?.id === lead.id ? "bg-forest/5" : ""} ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}
+                                onClick={() => { if (!bulkSelectMode) { if (lead && !lead.readAt) markRead.mutate({ id: lead.id }); openEventDrawer({ ...lead, _isLead: true }); } }}
+                                className={`hover:bg-linen/60 transition-colors cursor-pointer ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}
                                 style={{ borderLeft: `3px solid ${statusStage?.swatch ?? '#d4c5a9'}` }}>
                                 {bulkSelectMode && (
                                   <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
@@ -2584,8 +2593,8 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                {/* Lead Detail — shared between list + table modes */}
-                {leadViewMode !== "kanban" && (selectedLead ? (
+                {/* Lead Detail — only used in list mode (table mode opens event drawer instead) */}
+                {leadViewMode === "list" && (selectedLead ? (
                   <div className="flex-1 overflow-auto p-4 md:p-6">
                   <div className="flex items-center gap-3 mb-4 md:mb-6">
                     <button onClick={() => setSelectedLead(null)} className="md:hidden font-bebas tracking-widest text-xs text-ink/60 hover:text-ink flex items-center gap-1 py-1 pr-2">
@@ -6796,7 +6805,7 @@ export default function Dashboard() {
             {/* Body */}
             <div className="p-5 space-y-5 flex-1">
               {/* Status + Type */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${
                   selectedBooking.status === 'confirmed' || selectedBooking.status === 'booked' ? 'text-forest bg-blue-50 border-blue-200'
                   : selectedBooking.status === 'finished' ? 'text-teal-700 bg-teal-50 border-teal-200'
@@ -6805,6 +6814,48 @@ export default function Dashboard() {
                   : 'text-stone-500 bg-stone-50 border-stone-200'
                 }`}>{selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status) ? 'ENQUIRY' : (selectedBooking.status?.toUpperCase() ?? 'EVENT')}</span>
                 {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60">{selectedBooking.eventType}</span>}
+              </div>
+              {/* Quick Status Changer — works for both leads and bookings */}
+              <div>
+                <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1.5">CHANGE STATUS</div>
+                <Select
+                  value={selectedBooking.status ?? ''}
+                  onValueChange={(newStatus) => {
+                    const prevStatus = selectedBooking.status;
+                    if (newStatus === prevStatus) return;
+                    if (selectedBooking._isLead) {
+                      // Lead row → use leads.updateStatus (also auto-creates a booking when → booked)
+                      updateStatus.mutate({ id: selectedBooking.id, status: newStatus as any });
+                      setSelectedBooking((prev: any) => prev ? { ...prev, status: newStatus } : prev);
+                      utils.leads.eventsByMonth.invalidate();
+                    } else {
+                      // Real booking row — bookings.update only accepts confirmed/tentative/cancelled
+                      const allowed = ['confirmed','tentative','cancelled'];
+                      if (!allowed.includes(newStatus)) { toast.error('Use the enquiry pipeline for that status'); return; }
+                      rescheduleBooking.mutate({ id: selectedBooking.id, status: newStatus as any });
+                      setSelectedBooking((prev: any) => prev ? { ...prev, status: newStatus } : prev);
+                      utils.bookings.byMonth.invalidate();
+                      utils.bookings.list.invalidate();
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs rounded-sm border-gold/30">
+                    <SelectValue placeholder="Set status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedBooking._isLead
+                      ? pipelineStages.map(s => (
+                          <SelectItem key={s.key} value={s.key} className="text-xs">{s.label}</SelectItem>
+                        ))
+                      : (
+                        <>
+                          <SelectItem value="confirmed" className="text-xs">Confirmed</SelectItem>
+                          <SelectItem value="tentative" className="text-xs">Tentative</SelectItem>
+                          <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
+                        </>
+                      )}
+                  </SelectContent>
+                </Select>
               </div>
               {/* Key Details */}
               <div className="space-y-3">
