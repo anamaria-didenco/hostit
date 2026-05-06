@@ -122,10 +122,25 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     }
     if (!leadEmail) leadEmail = booking.email || "";
 
-    // Linked runsheet
-    const [runsheet] = await db.select().from(runsheets)
+    // Linked runsheet — match by bookingId first; fall back to leadId
+    // (runsheets created via the unified event drawer / lead pipeline have
+    // bookingId=NULL but leadId set, so without this fallback the BEO would
+    // miss all F&B, drinks and event-time data)
+    let [runsheet] = await db.select().from(runsheets)
       .where(and(eq(runsheets.bookingId, bookingId), eq(runsheets.ownerId, userId)))
       .limit(1);
+    if (!runsheet && booking.leadId) {
+      const { isNull, desc } = await import("drizzle-orm");
+      const [rsByLead] = await db.select().from(runsheets)
+        .where(and(
+          eq(runsheets.leadId, booking.leadId),
+          eq(runsheets.ownerId, userId),
+          isNull(runsheets.bookingId),
+        ))
+        .orderBy(desc(runsheets.updatedAt))
+        .limit(1);
+      runsheet = rsByLead;
+    }
 
     const timelineItems = runsheet
       ? await db.select().from(runsheetItems)
