@@ -5,7 +5,7 @@
 import { useState, useRef, useEffect } from "react";
 import { trpc } from "../lib/trpc";
 import { toast } from "sonner";
-import { Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronRight, Camera, X, Edit2, Check, RotateCcw, CopyPlus, Save, Pencil, Settings, ArrowUp, ArrowDown, Image } from "lucide-react";
+import { Plus, Trash2, ExternalLink, Copy, ChevronDown, ChevronRight, Camera, X, Edit2, Check, RotateCcw, CopyPlus, Save, Pencil, Settings, ArrowUp, ArrowDown, Image, Sparkles } from "lucide-react";
 
 const CATEGORIES = [
   { value: "general", label: "General", color: "bg-gray-100 text-gray-700" },
@@ -93,6 +93,32 @@ export default function DailyChecklists() {
     onSuccess: () => { refetch(); toast.success("Checklist duplicated!"); },
     onError: () => toast.error("Failed to duplicate checklist"),
   });
+
+  // ─── AI Smart Paste (paste a to-do list, AI turns it into a new checklist) ──
+  const [showAiPaste, setShowAiPaste] = useState(false);
+  const [aiPasteText, setAiPasteText] = useState("");
+  const [aiParsed, setAiParsed] = useState<{ name: string; category: string; items: { text: string; note?: string; _selected?: boolean }[] } | null>(null);
+  const parseChecklistMut = trpc.menuCatalog.parseChecklistText.useMutation({
+    onSuccess: (data) => {
+      if (!data.success || data.items.length === 0) { toast.error("Couldn't extract any tasks. Try clearer text."); return; }
+      setAiParsed({ name: data.name, category: data.category, items: data.items.map((it: { text: string; note?: string }) => ({ ...it, _selected: true })) });
+    },
+    onError: () => toast.error("AI parse failed"),
+  });
+  const createWithItemsMut = trpc.dailyChecklists.createWithItems.useMutation({
+    onSuccess: () => { refetch(); setShowAiPaste(false); setAiPasteText(""); setAiParsed(null); toast.success("Checklist created from paste!"); },
+    onError: () => toast.error("Failed to create checklist"),
+  });
+  function applyAiParsed() {
+    if (!aiParsed) return;
+    const selected = aiParsed.items.filter(it => it._selected !== false && it.text.trim());
+    if (selected.length === 0) { toast.error("Select at least one item"); return; }
+    createWithItemsMut.mutate({
+      name: aiParsed.name.trim() || "Pasted Checklist",
+      category: aiParsed.category,
+      items: selected.map(it => ({ text: it.text.trim(), note: it.note?.trim() || undefined })),
+    });
+  }
 
   function getLiveLink(token: string) { return `${window.location.origin}/daily/${token}`; }
   function copyLink(token: string) { navigator.clipboard.writeText(getLiveLink(token)); toast.success("Link copied!"); }
@@ -193,6 +219,16 @@ export default function DailyChecklists() {
             >
               <Settings className="w-4 h-4" />
             </button>
+            {activeTab === "checklists" && (
+              <button
+                onClick={() => { setShowAiPaste(true); setAiParsed(null); setAiPasteText(""); }}
+                className="flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 active:bg-white/40 transition-colors text-white font-bebas tracking-wider text-sm px-3 md:px-4 py-2.5 rounded min-h-[44px]"
+                title="Paste a to-do list and AI builds a checklist"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span className="hidden md:inline">AI PASTE</span>
+              </button>
+            )}
             <button
               onClick={() => activeTab === "checklists" ? setShowCreate(true) : setShowShiftCreate(true)}
               className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 active:bg-white/40 transition-colors text-white font-bebas tracking-wider text-sm px-4 md:px-5 py-2.5 rounded min-h-[44px]"
@@ -435,6 +471,145 @@ export default function DailyChecklists() {
           </>
         )}
       </div>
+
+      {/* ── AI SMART PASTE MODAL ─────────────────────────────────────────── */}
+      {showAiPaste && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl rounded">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#c9a84c]/30 bg-[#6b98e7]">
+              <div>
+                <div className="font-bebas tracking-widest text-white text-lg flex items-center gap-2">
+                  <Sparkles className="w-5 h-5" /> AI SMART PASTE
+                </div>
+                <div className="font-dm text-white/70 text-xs mt-0.5">Paste a to-do list and AI turns it into a new checklist</div>
+              </div>
+              <button onClick={() => setShowAiPaste(false)} className="text-white/70 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {!aiParsed ? (
+                <div className="p-5 space-y-3">
+                  <label className="font-bebas tracking-widest text-[10px] text-[#8a7a60] block">PASTE YOUR LIST</label>
+                  <textarea
+                    autoFocus
+                    value={aiPasteText}
+                    onChange={e => setAiPasteText(e.target.value)}
+                    placeholder={"e.g.\n- Wipe down bar tops\n- Restock garnish trays\n- Polish wine glasses\n- Check ice machine\n- Set float to $200"}
+                    rows={12}
+                    className="w-full border border-[#c9a84c]/30 rounded font-dm text-sm focus:outline-none focus:border-[#6b98e7] p-3 resize-none"
+                  />
+                  <p className="font-dm text-xs text-[#8a7a60]">Bullet points, numbered lists, or just plain lines all work.</p>
+                </div>
+              ) : (
+                <div className="p-5 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-1">CHECKLIST NAME</label>
+                      <input
+                        value={aiParsed.name}
+                        onChange={e => setAiParsed(p => p ? { ...p, name: e.target.value } : p)}
+                        className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7]"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-1">CATEGORY</label>
+                      <select
+                        value={aiParsed.category}
+                        onChange={e => setAiParsed(p => p ? { ...p, category: e.target.value } : p)}
+                        className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] bg-white"
+                      >
+                        {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="font-bebas tracking-widest text-xs text-[#1a1209]">
+                      {aiParsed.items.filter(i => i._selected !== false).length} of {aiParsed.items.length} TASKS SELECTED
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setAiParsed(p => p ? { ...p, items: p.items.map(i => ({ ...i, _selected: true })) } : p)}
+                        className="font-bebas tracking-widest text-[10px] text-[#6b98e7] hover:underline">SELECT ALL</button>
+                      <button
+                        onClick={() => setAiParsed(p => p ? { ...p, items: p.items.map(i => ({ ...i, _selected: false })) } : p)}
+                        className="font-bebas tracking-widest text-[10px] text-[#8a7a60] hover:underline">NONE</button>
+                    </div>
+                  </div>
+
+                  <div className="border border-[#c9a84c]/30 rounded divide-y divide-[#c9a84c]/15 max-h-[40vh] overflow-y-auto">
+                    {aiParsed.items.map((it, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-3 hover:bg-[#f9f5ef]/50">
+                        <input
+                          type="checkbox"
+                          checked={it._selected !== false}
+                          onChange={e => setAiParsed(p => p ? { ...p, items: p.items.map((x, i) => i === idx ? { ...x, _selected: e.target.checked } : x) } : p)}
+                          className="mt-1.5 w-4 h-4 accent-[#6b98e7] flex-shrink-0"
+                        />
+                        <div className="flex-1 space-y-1">
+                          <input
+                            value={it.text}
+                            onChange={e => setAiParsed(p => p ? { ...p, items: p.items.map((x, i) => i === idx ? { ...x, text: e.target.value } : x) } : p)}
+                            className="w-full font-dm text-sm border-0 border-b border-transparent hover:border-[#c9a84c]/30 focus:border-[#6b98e7] focus:outline-none bg-transparent py-0.5"
+                          />
+                          <input
+                            value={it.note ?? ""}
+                            onChange={e => setAiParsed(p => p ? { ...p, items: p.items.map((x, i) => i === idx ? { ...x, note: e.target.value } : x) } : p)}
+                            placeholder="Note (optional)"
+                            className="w-full font-dm text-xs text-[#8a7a60] border-0 border-b border-transparent hover:border-[#c9a84c]/30 focus:border-[#6b98e7] focus:outline-none bg-transparent py-0.5"
+                          />
+                        </div>
+                        <button
+                          onClick={() => setAiParsed(p => p ? { ...p, items: p.items.filter((_, i) => i !== idx) } : p)}
+                          className="text-[#8a7a60] hover:text-red-500 flex-shrink-0"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => { setAiParsed(null); }}
+                    className="font-bebas tracking-widest text-[10px] text-[#8a7a60] hover:text-[#1a1209]"
+                  >
+                    ← PASTE DIFFERENT TEXT
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between px-5 py-4 border-t border-[#c9a84c]/30 bg-[#f9f5ef]">
+              <button
+                onClick={() => setShowAiPaste(false)}
+                className="font-bebas tracking-widest text-sm text-[#8a7a60] hover:text-[#1a1209]"
+              >CANCEL</button>
+              {!aiParsed ? (
+                <button
+                  onClick={() => parseChecklistMut.mutate({ text: aiPasteText.trim() })}
+                  disabled={!aiPasteText.trim() || parseChecklistMut.isPending}
+                  className="font-bebas tracking-widest text-sm bg-[#6b98e7] hover:bg-[#5a87d6] disabled:opacity-40 text-white rounded px-6 py-2 flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  {parseChecklistMut.isPending ? "PARSING..." : "PARSE WITH AI"}
+                </button>
+              ) : (
+                <button
+                  onClick={applyAiParsed}
+                  disabled={createWithItemsMut.isPending || aiParsed.items.filter(i => i._selected !== false).length === 0}
+                  className="font-bebas tracking-widest text-sm bg-[#c9a84c] hover:bg-[#b8973b] disabled:opacity-40 text-white rounded px-6 py-2 flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  {createWithItemsMut.isPending ? "CREATING..." : `CREATE CHECKLIST`}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3684,6 +3684,59 @@ Return ONLY valid JSON. Example structure:
           return { timelineItems: [], fnbItems: [], dietaries: [], eventDetails: null, success: false, error: 'Failed to parse response' };
         }
       }),
+    // ── AI Checklist Parse ──
+    parseChecklistText: protectedProcedure
+      .input(z.object({ text: z.string().min(1) }))
+      .mutation(async ({ input }) => {
+        const { invokeLLM } = await import('./_core/llm');
+        const prompt = `You are a venue operations assistant. Convert the following pasted text (a to-do list, brief, email or notes) into a structured staff CHECKLIST.
+
+Return a JSON object:
+{
+  "name": short checklist title (e.g. "Bar Opening Checklist"),
+  "category": one of: general, bar, restaurant, kitchen, opening, closing, cleaning,
+  "items": array of { "text": short imperative task (max ~120 chars), "note": optional clarifying detail or "" }
+}
+
+Rules:
+- One row per discrete task. Split combined tasks ("wipe tables and chairs" → 2 items) only when clearly separate.
+- Strip bullet characters, numbering, and emojis from the start of each task.
+- Pick the most specific category from the list (default "general").
+- Infer a sensible short name from the content if no title is given.
+- Keep tasks in the original order.
+- Max 80 items.
+
+Text to parse:
+${input.text}
+
+Return ONLY valid JSON.`;
+        const response = await invokeLLM({
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant that outputs valid JSON only.' },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' } as any,
+        });
+        const rawContent = response.choices?.[0]?.message?.content ?? '{}';
+        const raw = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
+        try {
+          const parsed = JSON.parse(raw);
+          const items = Array.isArray(parsed.items) ? parsed.items : (Array.isArray(parsed) ? parsed : []);
+          const allowed = new Set(['general','bar','restaurant','kitchen','opening','closing','cleaning']);
+          const cat = typeof parsed.category === 'string' && allowed.has(parsed.category) ? parsed.category : 'general';
+          return {
+            name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim().slice(0, 120) : 'Pasted Checklist',
+            category: cat,
+            items: items.slice(0, 80).map((it: any) => ({
+              text: String(it.text ?? it.title ?? '').trim().slice(0, 200),
+              note: String(it.note ?? it.description ?? '').trim().slice(0, 400),
+            })).filter((it: any) => it.text),
+            success: true,
+          };
+        } catch {
+          return { name: '', category: 'general', items: [], success: false, error: 'Failed to parse AI response' };
+        }
+      }),
   }),
 
 
@@ -4521,6 +4574,53 @@ Return ONLY valid JSON. Example structure:
           createdAt: now,
           updatedAt: now,
         }).returning();
+        return created;
+      }),
+
+    createWithItems: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        category: z.string().optional(),
+        assignedDate: z.string().optional(),
+        items: z.array(z.object({ text: z.string().min(1), note: z.string().optional() })).max(200),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
+        const crypto = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const token = crypto.randomBytes(24).toString('hex');
+        const now = Date.now();
+        const created = await db.transaction(async (tx) => {
+          const [cl] = await tx.insert(dailyChecklists).values({
+            ownerId: ctx.user.id,
+            name: input.name,
+            description: input.description ?? null,
+            category: input.category ?? 'general',
+            assignedDate: input.assignedDate ?? null,
+            token,
+            sortOrder: 0,
+            createdAt: now,
+            updatedAt: now,
+          }).returning();
+          if (input.items.length > 0) {
+            await tx.insert(dailyChecklistItems).values(
+              input.items.map((it, i) => ({
+                checklistId: cl.id,
+                ownerId: ctx.user.id,
+                text: it.text,
+                note: it.note ?? null,
+                photoUrl: null,
+                sortOrder: i,
+                checked: 0,
+                createdAt: now + i,
+              }))
+            );
+          }
+          return cl;
+        });
         return created;
       }),
 
