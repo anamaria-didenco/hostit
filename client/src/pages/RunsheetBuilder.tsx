@@ -595,6 +595,38 @@ export default function RunsheetBuilder() {
   });
 
   const saveChecklistItems = trpc.checklists.saveItemsForRunsheet.useMutation();
+
+  // ─── AI Smart Paste for Event Checklist ──────────────────────────────────
+  const [showChecklistPaste, setShowChecklistPaste] = useState(false);
+  const [checklistPasteText, setChecklistPasteText] = useState("");
+  const [checklistParsed, setChecklistParsed] = useState<{ items: { text: string; category: string; _selected: boolean }[] } | null>(null);
+  const parseChecklistTextMut = trpc.menuCatalog.parseChecklistText.useMutation({
+    onSuccess: (data: any) => {
+      if (!data.success || !data.items?.length) { toast.error("Couldn't extract any tasks. Try clearer text."); return; }
+      const map: Record<string, string> = { general: 'other', bar: 'bar', restaurant: 'staff', kitchen: 'kitchen', opening: 'setup', closing: 'setup', cleaning: 'setup' };
+      const cat = map[data.category] || 'other';
+      setChecklistParsed({ items: data.items.map((it: any) => ({ text: it.note ? `${it.text} — ${it.note}` : it.text, category: cat, _selected: true })) });
+    },
+    onError: () => toast.error("AI parse failed"),
+  });
+  function applyChecklistParsed() {
+    if (!checklistParsed) return;
+    const selected = checklistParsed.items.filter(i => i._selected && i.text.trim());
+    if (selected.length === 0) { toast.error("Select at least one item"); return; }
+    const additions = selected.map((it, i) => ({
+      id: `c-${Date.now()}-${i}`,
+      text: it.text.trim(),
+      checked: false,
+      category: it.category || 'other',
+    }));
+    const updated = [...checklistItems, ...additions];
+    setChecklistItems(updated);
+    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+    setShowChecklistPaste(false);
+    setChecklistPasteText("");
+    setChecklistParsed(null);
+    toast.success(`Added ${additions.length} item${additions.length !== 1 ? 's' : ''} to the checklist`);
+  }
   const toggleByToken = trpc.checklists.toggleItemByToken.useMutation({
     onSuccess: (data) => {
       if (data?.items) setChecklistItems(data.items as any);
@@ -3270,6 +3302,13 @@ export default function RunsheetBuilder() {
                     <CheckSquare className="w-3.5 h-3.5" /> ALL DONE
                   </span>
                 )}
+                <button
+                  onClick={() => { setShowChecklistPaste(true); setChecklistParsed(null); setChecklistPasteText(""); }}
+                  className="font-bebas tracking-widest text-xs text-gold hover:text-forest flex items-center gap-1.5 transition-colors border border-gold/40 px-3 py-1.5 hover:bg-gold/5"
+                  title="Paste a to-do list and AI will turn it into checklist items"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> AI PASTE
+                </button>
                 {fnbItems.some(i => i.course === 'Drinks' && i.dishName?.trim()) && (
                   <button
                     onClick={pullDrinksFromFnb}
@@ -4584,6 +4623,70 @@ export default function RunsheetBuilder() {
                 </Button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {showChecklistPaste && (
+        <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 no-print" onClick={() => setShowChecklistPaste(false)}>
+          <div className="bg-linen w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-gold" />
+                <h3 className="font-bebas tracking-widest text-sm">AI SMART PASTE — EVENT CHECKLIST</h3>
+              </div>
+              <button onClick={() => setShowChecklistPaste(false)} className="text-ink/40 hover:text-ink"><X className="w-4 h-4" /></button>
+            </div>
+            {!checklistParsed ? (
+              <>
+                <div className="p-5 flex-1 overflow-auto">
+                  <p className="font-dm text-sm text-ink/60 mb-3">Paste any to-do list, brief, or notes. AI will turn each task into a checklist item.</p>
+                  <Textarea
+                    value={checklistPasteText}
+                    onChange={e => setChecklistPasteText(e.target.value)}
+                    placeholder={"e.g.\n- Confirm final headcount with client\n- Brief floor staff at 4pm\n- Set up bar with house pours\n- Polish glassware"}
+                    className="min-h-[260px] font-dm text-sm rounded-sm border border-gold/30 focus-visible:ring-0 focus-visible:border-forest"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gold/20">
+                  <Button variant="outline" onClick={() => setShowChecklistPaste(false)} className="font-bebas tracking-widest text-xs rounded-sm">CANCEL</Button>
+                  <Button
+                    disabled={!checklistPasteText.trim() || parseChecklistTextMut.isPending}
+                    onClick={() => parseChecklistTextMut.mutate({ text: checklistPasteText })}
+                    className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" /> {parseChecklistTextMut.isPending ? 'PARSING…' : 'PARSE WITH AI'}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-5 flex-1 overflow-auto space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-dm text-xs text-ink/60">{checklistParsed.items.filter(i => i._selected).length} of {checklistParsed.items.length} selected</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => setChecklistParsed(p => p && ({ ...p, items: p.items.map(i => ({ ...i, _selected: true })) }))} className="font-bebas tracking-widest text-[10px] text-ink/60 hover:text-forest">ALL</button>
+                      <button onClick={() => setChecklistParsed(p => p && ({ ...p, items: p.items.map(i => ({ ...i, _selected: false })) }))} className="font-bebas tracking-widest text-[10px] text-ink/60 hover:text-forest">NONE</button>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-gold/20 border border-gold/20">
+                    {checklistParsed.items.map((it, i) => (
+                      <div key={i} className="flex items-center gap-2 px-3 py-2">
+                        <input type="checkbox" checked={it._selected} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, _selected: e.target.checked } : x) }))} />
+                        <Input value={it.text} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, text: e.target.value } : x) }))} className="flex-1 h-8 text-sm rounded-sm border-gold/20" />
+                        <select value={it.category} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, category: e.target.value } : x) }))} className="font-bebas text-[11px] tracking-widest border border-gold/20 px-1 py-1 bg-white">
+                          {['admin','staff','setup','bar','kitchen','guest','other'].map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <button onClick={() => setChecklistParsed(p => p && ({ ...p, items: p.items.filter((_, j) => j !== i) }))} className="text-ink/30 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-gold/20">
+                  <Button variant="outline" onClick={() => setChecklistParsed(null)} className="font-bebas tracking-widest text-xs rounded-sm">BACK</Button>
+                  <Button onClick={applyChecklistParsed} className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm">ADD TO CHECKLIST</Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
