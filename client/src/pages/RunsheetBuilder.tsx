@@ -1212,6 +1212,21 @@ export default function RunsheetBuilder() {
     } as any);
   }, [showDietaryCol, showTimeCol, showStaffCol, showPrepPlatingCol, showQtyCol]);
 
+  // Auto-save dietaries (debounced) so they persist without requiring an explicit Save click.
+  // Without this, dietaries added in the builder never make it to the live/staff link.
+  const dietariesInitialized = React.useRef(false);
+  useEffect(() => {
+    if (!dietariesInitialized.current) { dietariesInitialized.current = true; return; }
+    if (!sheetId) return;
+    const t = setTimeout(() => {
+      silentUpdateMutation.mutate({
+        id: sheetId,
+        dietaries: dietaries,
+      } as any);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [dietaries, sheetId]);
+
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
   useEffect(() => {
