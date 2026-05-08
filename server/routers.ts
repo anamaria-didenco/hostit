@@ -5115,5 +5115,58 @@ Return ONLY valid JSON.`;
         return { member, ownerOpenId: owner.openId, ownerName: owner.name };
       }),
   }),
+  apiTokens: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { apiTokens } = await import('../drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db.select({
+        id: apiTokens.id,
+        name: apiTokens.name,
+        prefix: apiTokens.prefix,
+        scopes: apiTokens.scopes,
+        lastUsedAt: apiTokens.lastUsedAt,
+        revokedAt: apiTokens.revokedAt,
+        createdAt: apiTokens.createdAt,
+      }).from(apiTokens).where(eq(apiTokens.ownerId, ctx.user.id)).orderBy(desc(apiTokens.createdAt));
+      return rows;
+    }),
+    create: protectedProcedure
+      .input(z.object({ name: z.string().min(1).max(120) }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { apiTokens } = await import('../drizzle/schema');
+        const cryptoMod = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const raw = cryptoMod.randomBytes(32).toString('base64url');
+        const token = `vfk_${raw}`;
+        const prefix = token.slice(0, 12);
+        const tokenHash = cryptoMod.createHash('sha256').update(token).digest('hex');
+        const [created] = await db.insert(apiTokens).values({
+          ownerId: ctx.user.id,
+          name: input.name,
+          prefix,
+          tokenHash,
+          scopes: [],
+          createdAt: Date.now(),
+        }).returning({ id: apiTokens.id, name: apiTokens.name, prefix: apiTokens.prefix, createdAt: apiTokens.createdAt });
+        return { ...created, token };
+      }),
+    revoke: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { apiTokens } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.update(apiTokens).set({ revokedAt: Date.now() })
+          .where(and(eq(apiTokens.id, input.id), eq(apiTokens.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;

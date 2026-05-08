@@ -944,3 +944,17 @@ export const teamMembers = pgTable("team_members", {
 });
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type InsertTeamMember = typeof teamMembers.$inferInsert;
+
+// ─── API Tokens (for MCP / Claude / external integrations) ───────────────────
+export const apiTokens = pgTable("api_tokens", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  prefix: varchar("prefix", { length: 12 }).notNull(),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  scopes: json("scopes").$type<string[]>().default([]),
+  lastUsedAt: bigint("last_used_at", { mode: "number" }),
+  revokedAt: bigint("revoked_at", { mode: "number" }),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+export type ApiToken = typeof apiTokens.$inferSelect;

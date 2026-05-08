@@ -234,6 +234,18 @@ async function startServer() {
     }
   });
 
+  // MCP (Model Context Protocol) endpoint — for Claude / external AI integrations.
+  // Token auth via `Authorization: Bearer vfk_...`. See server/mcp.ts.
+  app.post("/mcp", (req, res) => {
+    import("../mcp").then(({ handleMcp }) => handleMcp(req, res)).catch(err => {
+      console.error("[MCP] mount error:", err);
+      if (!res.headersSent) res.status(500).json({ error: "mcp_unavailable" });
+    });
+  });
+  app.get("/mcp", (_req, res) => {
+    res.status(405).json({ error: "Use POST for MCP requests" });
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

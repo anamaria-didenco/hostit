@@ -468,6 +468,94 @@ function MenuTabRedirect({ setTab, setSettingsSubTab }: {
   return null;
 }
 
+// ── API Tokens (Claude / MCP integration) ────────────────────────────────
+function ApiTokensSection() {
+  const [newName, setNewName] = React.useState("");
+  const [newToken, setNewToken] = React.useState<string | null>(null);
+  const { data: tokens, refetch } = trpc.apiTokens.list.useQuery();
+  const createMutation = trpc.apiTokens.create.useMutation({
+    onSuccess: (r: any) => { setNewToken(r.token); setNewName(""); refetch(); },
+    onError: (e: any) => toast.error(e?.message || "Failed to create token"),
+  });
+  const revokeMutation = trpc.apiTokens.revoke.useMutation({
+    onSuccess: () => { toast.success("Token revoked"); refetch(); },
+  });
+  const mcpUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://venueflowhq.com'}/mcp`;
+
+  return (
+    <div className="dante-card overflow-hidden">
+      <div className="p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded bg-[#f3eee2] flex items-center justify-center flex-shrink-0">
+            <span className="font-bebas text-[#c97b29] text-sm tracking-wider">AI</span>
+          </div>
+          <div>
+            <div className="font-cormorant font-semibold text-base text-ink">Claude / MCP Connector</div>
+            <div className="font-dm text-xs text-ink/60">Let Claude read and update your leads, bookings, runsheets and dietaries via the Model Context Protocol.</div>
+          </div>
+        </div>
+      </div>
+      <div className="border-t border-gold/20 bg-cream/40 p-5 space-y-4">
+        <div>
+          <div className="font-bebas text-xs tracking-widest text-sage mb-1">MCP SERVER URL</div>
+          <div className="flex items-center gap-2">
+            <code className="font-mono text-xs bg-white border border-gold/30 px-3 py-2 flex-1 truncate">{mcpUrl}</code>
+            <button onClick={() => { navigator.clipboard.writeText(mcpUrl); toast.success("Copied"); }}
+              className="font-bebas tracking-widest text-xs px-3 py-2 border border-gold/30 hover:bg-gold/10">COPY</button>
+          </div>
+          <p className="font-dm text-[11px] text-ink/50 mt-1">In Claude Desktop or Claude.ai, add this as a custom MCP connector with HTTP transport. Use a token below as the bearer auth header.</p>
+        </div>
+
+        <div className="border-t border-gold/20 pt-4">
+          <div className="font-bebas text-xs tracking-widest text-forest mb-2">CREATE NEW TOKEN</div>
+          <div className="flex items-center gap-2">
+            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Claude Desktop"
+              className="flex-1 font-dm text-sm border border-gold/30 px-3 py-2 bg-white focus:outline-none focus:border-forest" />
+            <button onClick={() => newName.trim() && createMutation.mutate({ name: newName.trim() })}
+              disabled={!newName.trim() || createMutation.isPending}
+              className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream disabled:opacity-50">
+              {createMutation.isPending ? 'CREATING…' : 'CREATE TOKEN'}
+            </button>
+          </div>
+          {newToken && (
+            <div className="mt-3 bg-amber-50 border border-amber-300 p-3">
+              <div className="font-bebas text-xs tracking-widest text-amber-800 mb-1">COPY THIS TOKEN NOW — IT WON'T BE SHOWN AGAIN</div>
+              <div className="flex items-center gap-2">
+                <code className="font-mono text-[11px] bg-white border border-amber-300 px-2 py-1.5 flex-1 break-all">{newToken}</code>
+                <button onClick={() => { navigator.clipboard.writeText(newToken); toast.success("Copied"); }}
+                  className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-amber-400 bg-white hover:bg-amber-100">COPY</button>
+                <button onClick={() => setNewToken(null)} className="font-bebas tracking-widest text-xs px-2 py-1.5 text-amber-800 hover:underline">DISMISS</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-gold/20 pt-4">
+          <div className="font-bebas text-xs tracking-widest text-forest mb-2">ACTIVE TOKENS</div>
+          {(!tokens || tokens.length === 0) ? (
+            <div className="font-dm text-xs text-ink/50 italic">No tokens yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {tokens.map((t: any) => (
+                <div key={t.id} className="flex items-center justify-between bg-white border border-gold/20 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="font-dm text-sm text-ink truncate">{t.name} {t.revokedAt ? <span className="text-red-600 text-xs">(revoked)</span> : null}</div>
+                    <div className="font-mono text-[11px] text-ink/40">{t.prefix}…{t.lastUsedAt ? ` · last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : ''}</div>
+                  </div>
+                  {!t.revokedAt && (
+                    <button onClick={() => { if (confirm(`Revoke "${t.name}"?`)) revokeMutation.mutate({ id: t.id }); }}
+                      className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-red-300 text-red-700 hover:bg-red-50">REVOKE</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Settings Sidebar (Perfect Venue style) ─────────────────────────────────
 function WaitlistPanel() {
   const waitlistData = trpc.waitlist.list.useQuery();
@@ -5315,6 +5403,9 @@ export default function Dashboard() {
                 <h1 className="font-cormorant text-3xl font-semibold text-ink mb-2">Integrations</h1>
                 <p className="font-dm text-sm text-ink/50 mb-6">Connect VenueFlowHQ with your other tools. When a booking is confirmed, synced integrations update automatically.</p>
                 <div className="space-y-4">
+
+                  {/* ── Claude / MCP ── */}
+                  <ApiTokensSection />
 
                   {/* ── NowBookIt ── */}
                   <div className="dante-card overflow-hidden">
