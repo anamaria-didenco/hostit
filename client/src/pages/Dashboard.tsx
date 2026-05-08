@@ -863,7 +863,7 @@ export default function Dashboard() {
   const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("catalogue");
   const [showCatalogAiPanel, setShowCatalogAiPanel] = useState(false);
   const [catalogAiText, setCatalogAiText] = useState("");
-  const [catalogAiPreview, setCatalogAiPreview] = useState<Array<{ name: string; description?: string; price?: number; pricingType?: 'per_person'|'per_item'; allergens?: string }>>([]);
+  const [catalogAiPreview, setCatalogAiPreview] = useState<Array<{ name: string; description?: string; price?: number; pricingType?: 'per_person'|'per_item'; unit?: string; allergens?: string }>>([]);
   const parseFnbForCatalog = trpc.menuCatalog.parseFnbText.useMutation();
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("all");
@@ -6611,7 +6611,7 @@ export default function Dashboard() {
                                         <div className="font-dm text-sm text-ink truncate">{it.name}</div>
                                         {it.description && <div className="font-dm text-[11px] text-ink/50 truncate">{it.description}</div>}
                                       </div>
-                                      <span className="font-dm text-xs text-ink/70 whitespace-nowrap">${(it.price ?? 0).toFixed(2)} <span className="text-ink/40">/ {it.pricingType === 'per_item' ? 'item' : 'person'}</span></span>
+                                      <span className="font-dm text-xs text-ink/70 whitespace-nowrap">${(it.price ?? 0).toFixed(2)} <span className="text-ink/40">/ {it.unit ?? (it.pricingType === 'per_item' ? 'item' : 'person')}</span></span>
                                       <button onClick={() => setCatalogAiPreview(p => p.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                                     </div>
                                   ))}
@@ -6624,17 +6624,27 @@ export default function Dashboard() {
                                   if (!catalogAiText.trim() || !catalogActiveCategoryId) return;
                                   try {
                                     const res = await parseFnbForCatalog.mutateAsync({ text: catalogAiText });
+                                    const isBeverageCategory = catalogActiveType !== 'food';
                                     const parsed = (res.fnbItems ?? []).map((x: any) => {
                                       const raw = String(x.dishName ?? x.name ?? '').trim();
                                       const priceMatch = raw.match(/\$?\s*(\d+(?:\.\d+)?)/);
-                                      const cleanName = raw.replace(/[-–—:|]?\s*\$?\s*\d+(?:\.\d+)?\s*(?:pp|per\s*person|per\s*item|each)?\s*$/i, '').trim() || raw;
+                                      const cleanName = raw.replace(/[-–—:|]?\s*\$?\s*\d+(?:\.\d+)?\s*(?:pp|per\s*person|per\s*item|each|per\s*bottle|per\s*glass)?\s*$/i, '').trim() || raw;
                                       const desc = String(x.description ?? '').trim();
+                                      // Prefer AI-supplied price; fall back to scraping the name/description.
+                                      const aiPrice = typeof x.price === 'number' ? x.price : (typeof x.price === 'string' ? parseFloat(x.price) : NaN);
                                       const descPriceMatch = !priceMatch ? desc.match(/\$?\s*(\d+(?:\.\d+)?)/) : null;
-                                      const priceStr = priceMatch?.[1] ?? descPriceMatch?.[1];
-                                      const price = priceStr ? parseFloat(priceStr) : 0;
+                                      const fallbackPriceStr = priceMatch?.[1] ?? descPriceMatch?.[1];
+                                      const price = Number.isFinite(aiPrice) && aiPrice > 0
+                                        ? aiPrice
+                                        : (fallbackPriceStr ? parseFloat(fallbackPriceStr) : 0);
+                                      // Prefer AI-supplied pricingType; fall back to keyword check; default to per_item for drinks.
                                       const lower = (raw + ' ' + desc).toLowerCase();
-                                      const pricingType: 'per_person'|'per_item' = /(\bper\s*item\b|\beach\b|\bpiece\b|\bbottle\b|\bglass\b|\bcocktail\b)/.test(lower) ? 'per_item' : 'per_person';
-                                      return { name: cleanName, description: desc || undefined, price, pricingType, allergens: x.dietary || undefined };
+                                      const aiPricingType = x.pricingType === 'per_item' || x.pricingType === 'per_person' ? x.pricingType : null;
+                                      const keywordPerItem = /(\bper\s*item\b|\beach\b|\bpiece\b|\bbottle\b|\bglass\b|\bcocktail\b|\bdrink\b|\bcan\b|\btap\b|\bpint\b|\bschooner\b)/.test(lower);
+                                      const pricingType: 'per_person'|'per_item' = aiPricingType
+                                        ?? (keywordPerItem ? 'per_item' : (isBeverageCategory ? 'per_item' : 'per_person'));
+                                      const unit = (typeof x.unit === 'string' && x.unit.trim()) ? x.unit.trim() : (pricingType === 'per_item' ? 'piece' : 'person');
+                                      return { name: cleanName, description: desc || undefined, price, pricingType, unit, allergens: x.dietary || undefined };
                                     }).filter((x: any) => x.name);
                                     setCatalogAiPreview(parsed);
                                     if (!parsed.length) toast.error("AI couldn't find any items in that text");
@@ -6647,7 +6657,7 @@ export default function Dashboard() {
                                 <>
                                   <button onClick={() => {
                                     if (!catalogActiveCategoryId) return;
-                                    const rows = catalogAiPreview.map(it => ({ categoryId: catalogActiveCategoryId, name: it.name, description: it.description, pricingType: it.pricingType ?? 'per_person', price: it.price ?? 0, unit: it.pricingType === 'per_item' ? 'piece' : 'person', allergens: it.allergens }));
+                                    const rows = catalogAiPreview.map(it => ({ categoryId: catalogActiveCategoryId, name: it.name, description: it.description, pricingType: it.pricingType ?? 'per_person', price: it.price ?? 0, unit: it.unit ?? (it.pricingType === 'per_item' ? 'piece' : 'person'), allergens: it.allergens }));
                                     bulkCreateCatalogItems.mutate(rows, { onSuccess: () => { setCatalogAiPreview([]); setCatalogAiText(''); setShowCatalogAiPanel(false); } });
                                   }} disabled={bulkCreateCatalogItems.isPending}
                                     className="btn-forest text-cream font-bebas tracking-widest text-xs px-4 py-1.5">ADD {catalogAiPreview.length} ITEMS</button>
