@@ -3350,7 +3350,7 @@ export default function Dashboard() {
 
               {/* Month View */}
               {calendarView === "month" && (
-              <div className="flex-1 overflow-auto">
+              <div className="flex-1 overflow-auto" style={{ minHeight: '600px' }}>
                 {/* Day headers - Mon to Sun like Function Tracker */}
                 <div className="grid grid-cols-7 border-b border-gold/15">
                   {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
@@ -3936,8 +3936,9 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Upcoming bookings list */}
-              <div className="mt-6 max-w-2xl">
+              {/* Upcoming bookings list — only shown in LIST view (the calendar grid views already display these) */}
+              {calendarView === "list" && (
+              <div className="mt-6 max-w-2xl px-6">
                 <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Bookings</h2>
                 {(monthBookings ?? []).length === 0 ? (
                   <div className="border border-dashed border-gold/20 p-6 text-center">
@@ -3985,10 +3986,11 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* This month's follow-ups */}
-              {(monthFollowUps ?? []).length > 0 && (
-                <div className="mt-6 max-w-2xl">
+              {calendarView === "list" && (monthFollowUps ?? []).length > 0 && (
+                <div className="mt-6 max-w-2xl px-6">
                   <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Follow-Ups</h2>
                   <div className="space-y-2">
                     {(monthFollowUps ?? []).map((lead: any) => {
@@ -4017,8 +4019,8 @@ export default function Dashboard() {
                 </div>
               )}
               {/* This month's lead events */}
-              {(monthLeadEvents ?? []).length > 0 && (
-                <div className="mt-6 max-w-2xl">
+              {calendarView === "list" && (monthLeadEvents ?? []).length > 0 && (
+                <div className="mt-6 max-w-2xl px-6">
                   <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Enquiries &amp; Leads</h2>
                   <div className="space-y-2">
                     {(monthLeadEvents ?? []).map((lead: any) => {
