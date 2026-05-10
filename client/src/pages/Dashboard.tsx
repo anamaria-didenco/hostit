@@ -3308,7 +3308,7 @@ export default function Dashboard() {
                     else setCalDate(new Date(year, month + 1, 1));
                   }}
                   className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
-                <button onClick={() => setCalDate(new Date())} className="hidden sm:block font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
+                <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
                 <button onClick={() => setTab('enquiries')} className="hidden sm:flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors" title="Back to events list">
                   <List className="w-3 h-3" /> EVENTS
                 </button>
@@ -3322,12 +3322,12 @@ export default function Dashboard() {
                     ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
                     : `${MONTHS[month]} ${year}`}
                 </h2>
-                {/* View switcher — hidden on mobile */}
-                <div className="hidden sm:flex border border-gold/30">
+                {/* View switcher */}
+                <div className="flex border border-gold/30">
                   {(["month","week","day","list"] as const).map(v => (
                     <button key={v}
                       onClick={() => setCalendarView(v)}
-                      className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors ${
+                      className={`font-bebas tracking-widest text-[10px] sm:text-xs px-1.5 sm:px-3 py-1.5 transition-colors ${
                         calendarView === v ? 'bg-forest-dark text-cream' : 'text-ink/60 hover:bg-linen'
                       }`}>{v.toUpperCase()}</button>
                   ))}
@@ -3348,9 +3348,9 @@ export default function Dashboard() {
                 ))}
               </div>
 
-              {/* Month View */}
+              {/* Month View — desktop grid */}
               {calendarView === "month" && (
-              <div className="flex-1 overflow-auto" style={{ minHeight: '600px' }}>
+              <div className="hidden md:block flex-1 overflow-auto" style={{ minHeight: '600px' }}>
                 {/* Day headers - Mon to Sun like Function Tracker */}
                 <div className="grid grid-cols-7 border-b border-gold/15">
                   {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
@@ -3478,6 +3478,72 @@ export default function Dashboard() {
                   ));
                 })()}
               </div>
+              )}
+
+              {/* Month View — mobile agenda (grouped by day, only days with events) */}
+              {calendarView === "month" && (
+                <div className="md:hidden flex-1 overflow-auto p-3 space-y-3">
+                  {(() => {
+                    const allEvents = [
+                      ...((monthBookings ?? []) as any[]).map((b: any) => ({ ...b, _kind: 'booking' as const })),
+                      ...((monthLeadEvents ?? []) as any[]).filter((l: any) => !bookedLeadIds.has(l.id) && l.status !== 'lost').map((l: any) => ({ ...l, _kind: 'lead' as const })),
+                    ].filter(e => e.eventDate)
+                      .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
+                    if (allEvents.length === 0) {
+                      return (
+                        <div className="border border-dashed border-gold/30 p-8 text-center bg-white">
+                          <Calendar className="w-8 h-8 text-sage/40 mx-auto mb-2" />
+                          <p className="font-dm text-sm text-sage">No events in {MONTHS[month]}</p>
+                          <button onClick={() => setShowAddLead(true)} className="mt-3 font-bebas tracking-widest text-xs text-forest border border-forest/30 px-3 py-1.5">+ ADD EVENT</button>
+                        </div>
+                      );
+                    }
+                    // Group by yyyy-mm-dd
+                    const grouped: Record<string, any[]> = {};
+                    allEvents.forEach((e: any) => {
+                      const d = new Date(e.eventDate);
+                      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                      (grouped[key] ||= []).push(e);
+                    });
+                    const todayKey = (() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })();
+                    return Object.entries(grouped).map(([key, events]) => {
+                      const d = new Date(key + 'T00:00:00');
+                      const isToday = key === todayKey;
+                      return (
+                        <div key={key} className="bg-white border border-gold/20 overflow-hidden">
+                          <div className={`px-3 py-2 border-b border-gold/15 flex items-center justify-between ${isToday ? 'bg-forest text-cream' : 'bg-linen/50'}`}>
+                            <div className="font-bebas tracking-widest text-xs">
+                              {d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()}
+                              {isToday && <span className="ml-2 opacity-80">· TODAY</span>}
+                            </div>
+                            <div className={`text-[10px] font-dm ${isToday ? 'opacity-80' : 'text-ink/40'}`}>{events.length} event{events.length !== 1 ? 's' : ''}</div>
+                          </div>
+                          <div className="divide-y divide-gold/10">
+                            {events.map((e: any) => (
+                              <button key={`${e._kind}-${e.id}`}
+                                onClick={() => e._kind === 'booking' ? setSelectedBooking(e) : openEventDrawer({ ...e, _isLead: true })}
+                                className="w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-linen/40 active:bg-linen/60 transition-colors"
+                                style={{ borderLeft: `3px solid ${getStatusInfo(e.status).swatch}` }}>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-cormorant font-semibold text-base text-ink truncate">{e.firstName} {e.lastName}</div>
+                                  <div className="font-dm text-xs text-ink/60 truncate">
+                                    {e.eventType ?? (e._kind === 'lead' ? 'Enquiry' : 'Event')}
+                                    {fmtEventTime(e.eventDate) && ` · ${fmtEventTime(e.eventDate)}`}
+                                    {e.guestCount ? ` · ${e.guestCount} guests` : ''}
+                                    {e.spaceName ? ` · ${e.spaceName}` : ''}
+                                  </div>
+                                </div>
+                                <span className={`font-bebas text-[9px] tracking-widest px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(e.status).calClasses}`}>
+                                  {getStatusInfo(e.status).label.toUpperCase()}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               )}
 
               {/* List View */}
@@ -3633,6 +3699,7 @@ export default function Dashboard() {
                 const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []), ...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])].filter((l: any) => !allBookedLeadIds.has(l.id) && l.status !== 'lost');
                 return (
                 <div className="flex-1 overflow-auto">
+                  <div className="md:min-w-0 min-w-[700px]">
                   {/* Day column headers */}
                   <div className="grid grid-cols-7 border-b border-gold/15 sticky top-0 bg-cream z-10">
                     {days.map((d, i) => {
@@ -3707,6 +3774,7 @@ export default function Dashboard() {
                         </div>
                       );
                     })}
+                  </div>
                   </div>
                 </div>
                 );
