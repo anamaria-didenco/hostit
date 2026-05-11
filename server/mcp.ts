@@ -268,6 +268,109 @@ function buildServer(ctx: { ownerId: number }): McpServer {
   );
 
   server.tool(
+    "update_runsheet",
+    "Update editable fields on a runsheet (title, eventDate ISO string, venueName, spaceName, guestCount, eventType, notes, eventStartTime HH:MM, eventEndTime HH:MM). Only provided fields are changed.",
+    {
+      id: z.number(),
+      title: z.string().optional(),
+      eventDate: z.string().optional(),
+      venueName: z.string().optional(),
+      spaceName: z.string().optional(),
+      guestCount: z.number().optional(),
+      eventType: z.string().optional(),
+      notes: z.string().optional(),
+      eventStartTime: z.string().optional(),
+      eventEndTime: z.string().optional(),
+    },
+    async ({ id, eventDate, ...rest }) => {
+      const { getDb } = await import("./db");
+      const { runsheets } = await import("../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const patch: any = { ...rest, updatedAt: new Date() };
+      if (eventDate !== undefined) patch.eventDate = new Date(eventDate);
+      // Strip undefined keys so we don't overwrite with null
+      Object.keys(patch).forEach(k => patch[k] === undefined && delete patch[k]);
+      await db.update(runsheets).set(patch)
+        .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId)));
+      const [updated] = await db.select().from(runsheets)
+        .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId)));
+      return ok(updated ?? { success: false, error: "Runsheet not found" });
+    }
+  );
+
+  server.tool(
+    "delete_runsheet",
+    "Permanently delete a runsheet and all of its timeline items and F&B items. Use carefully — irreversible. Useful for cleaning up duplicates or orphaned drafts.",
+    { id: z.number() },
+    async ({ id }) => {
+      const { getDb } = await import("./db");
+      const { runsheets, runsheetItems, fnbItems, staffPortalLinks } = await import("../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      // Verify ownership first
+      const [rs] = await db.select().from(runsheets)
+        .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId))).limit(1);
+      if (!rs) return ok({ success: false, error: "Runsheet not found or not owned by you" });
+      // Delete dependents then runsheet — ownerId-scoped on every statement (defense in depth)
+      await db.delete(runsheetItems)
+        .where(and(eq(runsheetItems.runsheetId, id), eq(runsheetItems.ownerId, ctx.ownerId)));
+      await db.delete(fnbItems)
+        .where(and(eq(fnbItems.runsheetId, id), eq(fnbItems.ownerId, ctx.ownerId)));
+      await db.delete(staffPortalLinks)
+        .where(and(eq(staffPortalLinks.runsheetId, id), eq(staffPortalLinks.ownerId, ctx.ownerId)));
+      await db.delete(runsheets)
+        .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.ownerId)));
+      return ok({ success: true, deletedId: id, deletedTitle: rs.title });
+    }
+  );
+
+  server.tool(
+    "link_runsheet_to_booking",
+    "Attach a runsheet to a booking (or to a lead). Pass bookingId or leadId — pass null to unlink. Owner-checked on both sides.",
+    {
+      runsheetId: z.number(),
+      bookingId: z.number().nullable().optional(),
+      leadId: z.number().nullable().optional(),
+    },
+    async ({ runsheetId, bookingId, leadId }) => {
+      const { getDb } = await import("./db");
+      const { runsheets, bookings, leads } = await import("../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      // Verify the runsheet is ours
+      const [rs] = await db.select().from(runsheets)
+        .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ctx.ownerId))).limit(1);
+      if (!rs) return ok({ success: false, error: "Runsheet not found or not owned by you" });
+      const patch: any = { updatedAt: new Date() };
+      if (bookingId !== undefined) {
+        if (bookingId !== null) {
+          const [b] = await db.select().from(bookings)
+            .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ctx.ownerId))).limit(1);
+          if (!b) return ok({ success: false, error: `Booking ${bookingId} not found or not owned by you` });
+        }
+        patch.bookingId = bookingId;
+      }
+      if (leadId !== undefined) {
+        if (leadId !== null) {
+          const [l] = await db.select().from(leads)
+            .where(and(eq(leads.id, leadId), eq(leads.ownerId, ctx.ownerId))).limit(1);
+          if (!l) return ok({ success: false, error: `Lead ${leadId} not found or not owned by you` });
+        }
+        patch.leadId = leadId;
+      }
+      await db.update(runsheets).set(patch)
+        .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ctx.ownerId)));
+      const [updated] = await db.select().from(runsheets)
+        .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ctx.ownerId)));
+      return ok(updated);
+    }
+  );
+
+  server.tool(
     "list_staff_portal_links",
     "List staff portal share links for a runsheet (public live link tokens).",
     { runsheetId: z.number() },
