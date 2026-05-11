@@ -268,6 +268,95 @@ function buildServer(ctx: { ownerId: number }): McpServer {
   );
 
   server.tool(
+    "create_runsheet",
+    "Create a new runsheet. Title is required; everything else is optional. Pass bookingId or leadId to link it on creation. eventDate is an ISO string (e.g. '2026-05-14T18:00:00Z'). Times are HH:MM strings. Returns the created runsheet with its new id.",
+    {
+      title: z.string().min(1),
+      bookingId: z.number().optional(),
+      leadId: z.number().optional(),
+      eventDate: z.string().optional(),
+      venueName: z.string().optional(),
+      spaceName: z.string().optional(),
+      guestCount: z.number().optional(),
+      eventType: z.string().optional(),
+      notes: z.string().optional(),
+      eventStartTime: z.string().optional(),
+      eventEndTime: z.string().optional(),
+    },
+    async ({ bookingId, leadId, eventDate, ...rest }) => {
+      const { getDb } = await import("./db");
+      const { runsheets, bookings, leads } = await import("../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      // Validate booking/lead ownership if provided
+      if (bookingId !== undefined) {
+        const [b] = await db.select().from(bookings)
+          .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ctx.ownerId))).limit(1);
+        if (!b) return ok({ success: false, error: `Booking ${bookingId} not found or not owned by you` });
+      }
+      if (leadId !== undefined) {
+        const [l] = await db.select().from(leads)
+          .where(and(eq(leads.id, leadId), eq(leads.ownerId, ctx.ownerId))).limit(1);
+        if (!l) return ok({ success: false, error: `Lead ${leadId} not found or not owned by you` });
+      }
+      const insertData: any = {
+        ownerId: ctx.ownerId,
+        ...rest,
+      };
+      if (bookingId !== undefined) insertData.bookingId = bookingId;
+      if (leadId !== undefined) insertData.leadId = leadId;
+      if (eventDate !== undefined) insertData.eventDate = new Date(eventDate);
+      const [{ id: newId }] = await db.insert(runsheets).values(insertData).returning({ id: runsheets.id });
+      const [created] = await db.select().from(runsheets)
+        .where(and(eq(runsheets.id, newId), eq(runsheets.ownerId, ctx.ownerId)));
+      return ok(created);
+    }
+  );
+
+  server.tool(
+    "add_runsheet_item",
+    "Add a single timeline item to a runsheet (a row in the schedule). time is HH:MM (24h). category one of: setup, arrival, food, beverage, speech, music, photo, ceremony, packdown, other. Returns the new item.",
+    {
+      runsheetId: z.number(),
+      time: z.string(),
+      title: z.string().min(1),
+      duration: z.number().optional(),
+      description: z.string().optional(),
+      assignedTo: z.string().optional(),
+      category: z.string().optional(),
+    },
+    async ({ runsheetId, time, title, duration, description, assignedTo, category }) => {
+      const { getDb } = await import("./db");
+      const { runsheets, runsheetItems } = await import("../drizzle/schema");
+      const { eq, and, desc } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const [rs] = await db.select().from(runsheets)
+        .where(and(eq(runsheets.id, runsheetId), eq(runsheets.ownerId, ctx.ownerId))).limit(1);
+      if (!rs) return ok({ success: false, error: "Runsheet not found or not owned by you" });
+      // Compute next sortOrder
+      const [last] = await db.select({ sortOrder: runsheetItems.sortOrder }).from(runsheetItems)
+        .where(eq(runsheetItems.runsheetId, runsheetId))
+        .orderBy(desc(runsheetItems.sortOrder)).limit(1);
+      const sortOrder = (last?.sortOrder ?? -1) + 1;
+      const [{ id: newId }] = await db.insert(runsheetItems).values({
+        runsheetId,
+        ownerId: ctx.ownerId,
+        time,
+        title,
+        duration: duration ?? 0,
+        description: description ?? null,
+        assignedTo: assignedTo ?? null,
+        category: category ?? "other",
+        sortOrder,
+      } as any).returning({ id: runsheetItems.id });
+      const [created] = await db.select().from(runsheetItems).where(eq(runsheetItems.id, newId));
+      return ok(created);
+    }
+  );
+
+  server.tool(
     "update_runsheet",
     "Update editable fields on a runsheet (title, eventDate ISO string, venueName, spaceName, guestCount, eventType, notes, eventStartTime HH:MM, eventEndTime HH:MM). Only provided fields are changed.",
     {
