@@ -3293,49 +3293,85 @@ export default function Dashboard() {
           {tab === "calendar" && (
             <div className="flex flex-col h-full overflow-hidden">
               {/* Calendar Toolbar */}
-              <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-gold/15 bg-cream flex-shrink-0">
-                <button
-                  onClick={() => {
-                    if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() - 7); setCalDate(d); }
-                    else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() - 1); setCalDate(d); }
-                    else setCalDate(new Date(year, month - 1, 1));
-                  }}
-                  className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-                <button
-                  onClick={() => {
-                    if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() + 7); setCalDate(d); }
-                    else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() + 1); setCalDate(d); }
-                    else setCalDate(new Date(year, month + 1, 1));
-                  }}
-                  className="p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
-                <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
-                <button onClick={() => setTab('enquiries')} className="hidden sm:flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors" title="Back to events list">
-                  <List className="w-3 h-3" /> EVENTS
-                </button>
-                <h2 className="font-cormorant text-base md:text-xl font-semibold text-ink flex-1">
-                  {calendarView === 'week' ? (() => {
-                    const dow = (calDate.getDay() + 6) % 7;
-                    const ws = new Date(calDate); ws.setDate(calDate.getDate() - dow);
-                    const we = new Date(ws); we.setDate(ws.getDate() + 6);
-                    return `${ws.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-                  })() : calendarView === 'day'
-                    ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-                    : `${MONTHS[month]} ${year}`}
-                </h2>
-                {/* View switcher */}
-                <div className="flex border border-gold/30">
+              <div className="border-b border-gold/15 bg-cream flex-shrink-0">
+                {/* Row 1 (mobile): Title + Add. Desktop: everything in one row */}
+                <div className="flex items-center gap-2 px-3 md:px-6 py-3">
+                  {/* Desktop-only prev/next/today on row 1 */}
+                  <button
+                    onClick={() => {
+                      if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() - 7); setCalDate(d); }
+                      else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() - 1); setCalDate(d); }
+                      else setCalDate(new Date(year, month - 1, 1));
+                    }}
+                    className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+                  <button
+                    onClick={() => {
+                      if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() + 7); setCalDate(d); }
+                      else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() + 1); setCalDate(d); }
+                      else setCalDate(new Date(year, month + 1, 1));
+                    }}
+                    className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
+                  <button onClick={() => setCalDate(new Date())} className="hidden md:inline-flex font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
+                  <button onClick={() => setTab('enquiries')} className="hidden sm:flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors" title="Back to events list">
+                    <List className="w-3 h-3" /> EVENTS
+                  </button>
+                  <h2 className="font-cormorant text-base md:text-xl font-semibold text-ink flex-1 truncate">
+                    {calendarView === 'week' ? (() => {
+                      const dow = (calDate.getDay() + 6) % 7;
+                      const ws = new Date(calDate); ws.setDate(calDate.getDate() - dow);
+                      const we = new Date(ws); we.setDate(ws.getDate() + 6);
+                      return `${ws.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+                    })() : calendarView === 'day'
+                      ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                      : `${MONTHS[month]} ${year}`}
+                  </h2>
+                  {/* Desktop-only view switcher on row 1 */}
+                  <div className="hidden md:flex border border-gold/30">
+                    {(["month","week","day","list"] as const).map(v => (
+                      <button key={v}
+                        onClick={() => setCalendarView(v)}
+                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors ${
+                          calendarView === v ? 'bg-forest-dark text-cream' : 'text-ink/60 hover:bg-linen'
+                        }`}>{v.toUpperCase()}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => setShowAddLead(true)}
+                    className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 md:px-4 py-2 flex items-center gap-1 flex-shrink-0">
+                    <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD EVENT</span><span className="sm:hidden">ADD</span>
+                  </button>
+                </div>
+                {/* Row 2 (mobile only): Big tap-friendly nav controls */}
+                <div className="md:hidden flex items-center gap-2 px-3 pb-3">
+                  <button
+                    onClick={() => {
+                      if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() - 7); setCalDate(d); }
+                      else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() - 1); setCalDate(d); }
+                      else setCalDate(new Date(year, month - 1, 1));
+                    }}
+                    aria-label="Previous"
+                    className="flex-1 flex items-center justify-center py-2.5 hover:bg-linen border border-gold/30 text-forest transition-colors"><ChevronLeft className="w-5 h-5" /></button>
+                  <button
+                    onClick={() => setCalDate(new Date())}
+                    className="flex-1 font-bebas tracking-widest text-xs py-2.5 border border-gold/30 text-ink/80 hover:bg-linen transition-colors">TODAY</button>
+                  <button
+                    onClick={() => {
+                      if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() + 7); setCalDate(d); }
+                      else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() + 1); setCalDate(d); }
+                      else setCalDate(new Date(year, month + 1, 1));
+                    }}
+                    aria-label="Next"
+                    className="flex-1 flex items-center justify-center py-2.5 hover:bg-linen border border-gold/30 text-forest transition-colors"><ChevronRight className="w-5 h-5" /></button>
+                </div>
+                {/* Row 3 (mobile only): View switcher full-width */}
+                <div className="md:hidden grid grid-cols-4 px-3 pb-3 gap-0 border-0">
                   {(["month","week","day","list"] as const).map(v => (
                     <button key={v}
                       onClick={() => setCalendarView(v)}
-                      className={`font-bebas tracking-widest text-[10px] sm:text-xs px-1.5 sm:px-3 py-1.5 transition-colors ${
-                        calendarView === v ? 'bg-forest-dark text-cream' : 'text-ink/60 hover:bg-linen'
+                      className={`font-bebas tracking-widest text-xs py-2 border border-gold/30 -ml-px first:ml-0 transition-colors ${
+                        calendarView === v ? 'bg-forest-dark text-cream border-forest-dark' : 'text-ink/70 hover:bg-linen'
                       }`}>{v.toUpperCase()}</button>
                   ))}
                 </div>
-                <button onClick={() => setShowAddLead(true)}
-                  className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 md:px-4 py-1.5 flex items-center gap-1">
-                  <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD EVENT</span><span className="sm:hidden">ADD</span>
-                </button>
               </div>
 
               {/* Legend */}
