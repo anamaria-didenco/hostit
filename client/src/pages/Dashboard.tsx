@@ -232,9 +232,9 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
           {[...Array(daysInMonth)].map((_, i) => {
             const day = i + 1;
             const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
-            const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
-            const _bookedLeadIds = new Set((monthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
-            const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !_bookedLeadIds.has(l.id) && l.status !== 'lost');
+            const dayBookings = (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
+            const _bookedLeadIds = new Set((monthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
+            const dayLeads = (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !_bookedLeadIds.has(l.id) && l.status !== 'lost');
             const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
             const hasFinished = dayBookings.some((b: any) => b.status === 'finished');
             const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
@@ -430,9 +430,9 @@ function PipelineSnapshotWidget({ allLeads, onViewLeads, stages }: { allLeads: a
   const stageList = stages ?? PIPELINE_STAGES;
   const counts = stageList.map(s => ({
     ...s,
-    count: (allLeads ?? []).filter((l: any) => l.status === s.key).length,
+    count: (allLeads ?? []).filter(Boolean).filter((l: any) => l.status === s.key).length,
   }));
-  const total = (allLeads ?? []).length;
+  const total = (allLeads ?? []).filter(Boolean).length;
   return (
     <div className="dante-card shadow-sm p-4">
       <div className="flex items-center justify-between mb-4">
@@ -1054,13 +1054,15 @@ export default function Dashboard() {
   }, []);
   useEffect(() => {
     if (!allLeads || allLeads.length === 0) return;
-    const maxId = Math.max(...allLeads.map((l: any) => l.id));
+    const safeLeads = allLeads.filter((l: any) => l && l.id != null);
+    if (safeLeads.length === 0) return;
+    const maxId = Math.max(...safeLeads.map((l: any) => l.id));
     if (knownMaxLeadId.current === null) {
       knownMaxLeadId.current = maxId;
       return;
     }
     if (maxId > knownMaxLeadId.current) {
-      const newest = allLeads.find((l: any) => l.id === maxId);
+      const newest = safeLeads.find((l: any) => l.id === maxId);
       const name = [newest?.firstName, newest?.lastName].filter(Boolean).join(" ") || "Someone";
       toast.success(`New enquiry from ${name}!`, {
         description: newest?.email ?? "",
@@ -1085,7 +1087,7 @@ export default function Dashboard() {
     const idStr = qp.get('leadId');
     if (!idStr) { leadIdParamApplied.current = true; return; }
     const id = parseInt(idStr, 10);
-    const lead = allLeads.find((l: any) => l.id === id);
+    const lead = allLeads.find((l: any) => l && l.id === id);
     if (lead) setSelectedLead(lead);
     leadIdParamApplied.current = true;
   }, [allLeads]);
@@ -1888,9 +1890,12 @@ export default function Dashboard() {
     } catch { /* ignore */ }
   }, [user?.id]);
 
-  // Confirmed statuses are treated as Events (shown on Calendar), not Enquiries
+  // Confirmed statuses are treated as Events (shown on Calendar), not Enquiries.
+  // Filter out any null/undefined entries defensively — a single bad row from
+  // the API would otherwise crash every downstream `.map(l => l.id)` and
+  // break the whole dashboard render.
   const CONFIRMED_STATUSES = ['booked', 'confirmed'];
-  const allEnquiries = (allLeads ?? []);
+  const allEnquiries = (allLeads ?? []).filter(Boolean).filter((l: any) => l && typeof l === 'object' && l.id != null);
   const activeEnquiries = allEnquiries.filter((l: any) => !CONFIRMED_STATUSES.includes(l.status));
   const newEnquiries = activeEnquiries
     .filter((l: any) => l.status === "new")
@@ -1975,11 +1980,13 @@ export default function Dashboard() {
   const month = calDate.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
-  const bookingDays = new Set((monthBookings ?? []).map((b: any) => new Date(b.eventDate).getUTCDate()));
-  const followUpDays = new Set((monthFollowUps ?? []).map((l: any) => new Date(l.followUpDate).getUTCDate()));
-  const leadEventDays = new Set((monthLeadEvents ?? []).map((l: any) => new Date(l.eventDate).getUTCDate()));
+  const safeMonthBookings = (monthBookings ?? []).filter(Boolean).filter((b: any) => b && b.id != null && b.eventDate);
+  const safeMonthLeadEvents = (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => l && l.id != null && l.eventDate);
+  const bookingDays = new Set(safeMonthBookings.map((b: any) => new Date(b.eventDate).getUTCDate()));
+  const followUpDays = new Set((monthFollowUps ?? []).filter(Boolean).map((l: any) => new Date(l.followUpDate).getUTCDate()));
+  const leadEventDays = new Set((monthLeadEvents ?? []).filter(Boolean).map((l: any) => new Date(l.eventDate).getUTCDate()));
   // Deduplicate: leads that already have a booking record should not show as separate lead cards
-  const bookedLeadIds = new Set((monthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
+  const bookedLeadIds = new Set((monthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
 
   const leadFormUrl = venueSettings?.slug
     ? `${window.location.origin}/enquire/${venueSettings.slug}`
@@ -2089,7 +2096,7 @@ export default function Dashboard() {
                       const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
                       const nxtYear = adjNextMonthDate.getFullYear();
                       const nxtMonth = adjNextMonthDate.getMonth();
-                      const adjBLIds = new Set((adjMonthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
+                      const adjBLIds = new Set((adjMonthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
                       const cells = Array.from({ length: totalCells }, (_, i) => {
                         const dayNum = i - mondayOffset + 1;
                         if (dayNum >= 1 && dayNum <= daysInMonth) return { day: dayNum, isOverflow: false };
@@ -2109,11 +2116,11 @@ export default function Dashboard() {
                             const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
                             const isWeekend = di >= 5;
                             const dayBookings = isOverflow
-                              ? (adjMonthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day)
-                              : (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
+                              ? (adjMonthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getUTCDate() === day)
+                              : (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
                             const dayLeads = isOverflow
-                              ? (adjMonthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
-                              : (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                              ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
+                              : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                             const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                             return (
                               <div key={di}
@@ -2372,7 +2379,7 @@ export default function Dashboard() {
                       <button onClick={() => setTab('calendar')} className="font-dm text-xs text-forest hover:text-forest-dark transition-colors">View all</button>
                     </div>
                     {(() => {
-                      const upcoming = [...(monthBookings ?? []), ...(monthLeadEvents ?? []).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id))]
+                      const upcoming = [...(monthBookings ?? []).filter(Boolean), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id))]
                         .filter((e: any) => !['cancelled','lost','declined'].includes(e.status))
                         .filter((e: any) => new Date(e.eventDate) >= new Date())
                         .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
@@ -3434,7 +3441,7 @@ export default function Dashboard() {
               <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Pipeline</h1>
               <div className="flex gap-4 min-w-max">
                 {pipelineStages.slice(0, 5).map(stage => {
-                  const stageLeads = (allLeads ?? []).filter((l: any) => l.status === stage.key);
+                  const stageLeads = (allLeads ?? []).filter(Boolean).filter((l: any) => l.status === stage.key);
                   return (
                     <div key={stage.key} className="w-64 flex-shrink-0">
                       <div className={`font-bebas text-xs tracking-widest px-3 py-2 border mb-2 ${stage.color}`}>
@@ -3612,7 +3619,7 @@ export default function Dashboard() {
                   const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
                   const nextYear = adjNextMonthDate.getFullYear();
                   const nextMonth = adjNextMonthDate.getMonth();
-                  const adjBookedLeadIds = new Set((adjMonthBookings ?? []).map((b: any) => b.leadId).filter(Boolean));
+                  const adjBookedLeadIds = new Set((adjMonthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
                   // Each cell: { day, isOverflow } — overflow = belongs to next month
                   const cells = Array.from({ length: totalCells }, (_, i) => {
                     const dayNum = i - mondayOffset + 1;
@@ -3633,11 +3640,11 @@ export default function Dashboard() {
                         const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
                         const isWeekend = di >= 5;
                         const dayBookings = isOverflow
-                          ? (adjMonthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day)
-                          : (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
+                          ? (adjMonthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day)
+                          : (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day);
                         const dayLeads = isOverflow
-                          ? (adjMonthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBookedLeadIds.has(l.id) && l.status !== 'lost')
-                          : (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                          ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBookedLeadIds.has(l.id) && l.status !== 'lost')
+                          : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                         const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                         return (
                           <div key={di} className={`border-r border-gold/10 last:border-r-0 p-1 flex flex-col gap-0.5 ${
@@ -3730,8 +3737,8 @@ export default function Dashboard() {
                 <div className="md:hidden flex-1 overflow-auto p-3 space-y-3">
                   {(() => {
                     const allEvents = [
-                      ...((monthBookings ?? []) as any[]).map((b: any) => ({ ...b, _kind: 'booking' as const })),
-                      ...((monthLeadEvents ?? []) as any[]).filter((l: any) => !bookedLeadIds.has(l.id) && l.status !== 'lost').map((l: any) => ({ ...l, _kind: 'lead' as const })),
+                      ...((monthBookings ?? []).filter(Boolean) as any[]).map((b: any) => ({ ...b, _kind: 'booking' as const })),
+                      ...((monthLeadEvents ?? []).filter(Boolean) as any[]).filter((l: any) => !bookedLeadIds.has(l.id) && l.status !== 'lost').map((l: any) => ({ ...l, _kind: 'lead' as const })),
                     ].filter(e => e.eventDate)
                       .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
                     if (allEvents.length === 0) {
@@ -3817,8 +3824,8 @@ export default function Dashboard() {
                     <button
                       onClick={() => {
                         const rows = [
-                          ...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })),
-                          ...(monthLeadEvents ?? []).filter((l: any) => !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' })),
+                          ...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })),
+                          ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' })),
                         ].sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
                         const header = ['Type','First Name','Last Name','Email','Phone','Event Type','Event Date','Guests','Status','Company','Space','Notes','Created'];
                         const csvRows = [header, ...rows.map((r: any) => [
@@ -3855,7 +3862,7 @@ export default function Dashboard() {
                     </button>
                   </div>
                 </div>
-                {(monthBookings ?? []).length === 0 && (monthLeadEvents ?? []).length === 0 ? (
+                {(monthBookings ?? []).filter(Boolean).length === 0 && (monthLeadEvents ?? []).filter(Boolean).length === 0 ? (
                   <div className="border border-dashed border-sage-green/20 rounded-xl p-8 text-center">
                     <Calendar className="w-10 h-10 text-sage-green/30 mx-auto mb-3" />
                     <p className="font-inter text-sm text-gray-400">No events this month</p>
@@ -3863,7 +3870,7 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {[...(monthBookings ?? []).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter((l: any) => !bookedLeadIds.has(l.id) && l.status !== 'lost').map((l: any) => ({ ...l, _type: 'lead' }))]
+                    {[...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => !bookedLeadIds.has(l.id) && l.status !== 'lost').map((l: any) => ({ ...l, _type: 'lead' }))]
                       .sort((a: any, b: any) => {
                         let cmp = 0;
                         if (eventSortBy === 'event_date') {
@@ -3939,9 +3946,9 @@ export default function Dashboard() {
                 const statusCard = (status: string) => getStatusInfo(status).calClasses;
                 const statusLabel = (s: string) => getStatusInfo(s).label.toUpperCase();
                 // Combine prev + current + next month for full week boundary support
-                const allBookings: any[] = [...(adjPrevMonthBookings ?? []), ...(monthBookings ?? []), ...(adjMonthBookings ?? [])];
+                const allBookings: any[] = [...(adjPrevMonthBookings ?? []).filter(Boolean), ...(monthBookings ?? []).filter(Boolean), ...(adjMonthBookings ?? []).filter(Boolean)];
                 const allBookedLeadIds = new Set(allBookings.map((b: any) => b.leadId).filter(Boolean));
-                const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []), ...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])].filter((l: any) => !allBookedLeadIds.has(l.id) && l.status !== 'lost');
+                const allLeads: any[] = [...(adjPrevMonthLeadEvents ?? []).filter(Boolean), ...(monthLeadEvents ?? []).filter(Boolean), ...(adjMonthLeadEvents ?? []).filter(Boolean)].filter((l: any) => !allBookedLeadIds.has(l.id) && l.status !== 'lost');
                 return (
                 <div className="flex-1 overflow-auto">
                   <div className="md:min-w-0 min-w-[700px]">
@@ -4033,8 +4040,8 @@ export default function Dashboard() {
                 const statusDot = (s: string) => {
                   return getStatusInfo(s).barClasses;
                 };
-                const allBookings: any[] = [...(monthBookings ?? []), ...(adjMonthBookings ?? [])];
-                const allLeads: any[] = [...(monthLeadEvents ?? []), ...(adjMonthLeadEvents ?? [])];
+                const allBookings: any[] = [...(monthBookings ?? []).filter(Boolean), ...(adjMonthBookings ?? []).filter(Boolean)];
+                const allLeads: any[] = [...(monthLeadEvents ?? []).filter(Boolean), ...(adjMonthLeadEvents ?? []).filter(Boolean)];
                 const dayBookings = allBookings.filter((b: any) => {
                   if (!b.eventDate) return false;
                   const bd = new Date(b.eventDate);
@@ -4183,8 +4190,8 @@ export default function Dashboard() {
                     const hasLeadEvent = leadEventDays.has(day);
                     const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
                     // Find bookings and lead events for this day
-                    const dayBookings = (monthBookings ?? []).filter((b: any) => new Date(b.eventDate).getDate() === day);
-                    const dayLeads = (monthLeadEvents ?? []).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                    const dayBookings = (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day);
+                    const dayLeads = (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                     const bgClass = hasBooking
                       ? "bg-forest/10 border-forest"
                       : hasLeadEvent
@@ -4253,13 +4260,13 @@ export default function Dashboard() {
               {calendarView === "list" && (
               <div className="mt-6 max-w-2xl px-6">
                 <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Bookings</h2>
-                {(monthBookings ?? []).length === 0 ? (
+                {(monthBookings ?? []).filter(Boolean).length === 0 ? (
                   <div className="border border-dashed border-gold/20 p-6 text-center">
                     <p className="font-dm text-sage text-sm">No bookings this month</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {(monthBookings ?? []).map((b: any) => (
+                    {(monthBookings ?? []).filter(Boolean).map((b: any) => (
                       <div id={`booking-${b.id}`} key={b.id} className="dante-card p-4 flex items-center justify-between hover:bg-gold/5 transition-colors cursor-pointer"
                         onClick={() => setSelectedBooking(b)}>
                         <div>
@@ -4302,11 +4309,11 @@ export default function Dashboard() {
               )}
 
               {/* This month's follow-ups */}
-              {calendarView === "list" && (monthFollowUps ?? []).length > 0 && (
+              {calendarView === "list" && (monthFollowUps ?? []).filter(Boolean).length > 0 && (
                 <div className="mt-6 max-w-2xl px-6">
                   <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Follow-Ups</h2>
                   <div className="space-y-2">
-                    {(monthFollowUps ?? []).map((lead: any) => {
+                    {(monthFollowUps ?? []).filter(Boolean).map((lead: any) => {
                       const followDate = new Date(lead.followUpDate);
                       const isPast = followDate <= new Date();
                       return (
@@ -4332,11 +4339,11 @@ export default function Dashboard() {
                 </div>
               )}
               {/* This month's lead events */}
-              {calendarView === "list" && (monthLeadEvents ?? []).length > 0 && (
+              {calendarView === "list" && (monthLeadEvents ?? []).filter(Boolean).length > 0 && (
                 <div className="mt-6 max-w-2xl px-6">
                   <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Enquiries &amp; Leads</h2>
                   <div className="space-y-2">
-                    {(monthLeadEvents ?? []).map((lead: any) => {
+                    {(monthLeadEvents ?? []).filter(Boolean).map((lead: any) => {
                       const eventDate = new Date(lead.eventDate);
                       const statusColors: Record<string, string> = {
                         new: 'text-amber-700', contacted: 'text-sky-700', proposal_sent: 'text-forest',
