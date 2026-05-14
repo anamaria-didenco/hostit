@@ -863,6 +863,49 @@ export default function Dashboard() {
   const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("catalogue");
   const [showCatalogAiPanel, setShowCatalogAiPanel] = useState(false);
   const [catalogAiText, setCatalogAiText] = useState("");
+  const [catalogPdfLoading, setCatalogPdfLoading] = useState(false);
+  const extractTextFromPdf = async (file: File): Promise<string> => {
+    const pdfjs: any = await import("pdfjs-dist");
+    // Use the bundled worker so it works in production without external CDNs.
+    const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
+    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: buf }).promise;
+    const totalPages = pdf.numPages;
+    const pageCount = Math.min(totalPages, 50);
+    const pages: string[] = [];
+    try {
+      for (let i = 1; i <= pageCount; i++) {
+        const page = await pdf.getPage(i);
+        try {
+          const content = await page.getTextContent();
+          // Group text items by approximate line (y position) so prices stay with names.
+          const items = (content.items as any[]).filter(it => typeof it.str === "string");
+          const lines = new Map<number, Array<{ x: number; str: string }>>();
+          for (const it of items) {
+            const y = Math.round((it.transform?.[5] ?? 0) * 2) / 2;
+            const x = it.transform?.[4] ?? 0;
+            if (!lines.has(y)) lines.set(y, []);
+            lines.get(y)!.push({ x, str: it.str });
+          }
+          const sortedYs = [...lines.keys()].sort((a, b) => b - a);
+          for (const y of sortedYs) {
+            const row = lines.get(y)!.sort((a, b) => a.x - b.x).map(p => p.str).join(" ").replace(/\s+/g, " ").trim();
+            if (row) pages.push(row);
+          }
+        } finally {
+          try { page.cleanup?.(); } catch {}
+        }
+      }
+    } finally {
+      try { pdf.cleanup?.(); } catch {}
+      try { await pdf.destroy?.(); } catch {}
+    }
+    if (totalPages > 50) {
+      toast.info(`PDF has ${totalPages} pages — only the first 50 were processed.`);
+    }
+    return pages.join("\n");
+  };
   const [catalogAiPreview, setCatalogAiPreview] = useState<Array<{ name: string; description?: string; price?: number; pricingType?: 'per_person'|'per_item'; unit?: string; allergens?: string }>>([]);
   const parseFnbForCatalog = trpc.menuCatalog.parseFnbText.useMutation();
   const [leadSearch, setLeadSearch] = useState("");
@@ -6855,6 +6898,49 @@ export default function Dashboard() {
                             </div>
                             <button onClick={() => { setShowCatalogAiPanel(v => !v); setShowCatalogCsvImport(false); }}
                               className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors border ${showCatalogAiPanel ? 'bg-forest text-cream border-forest' : 'border-forest/40 text-forest hover:bg-forest/10'}`}>✨ AI ADD</button>
+                            <label className={`font-bebas tracking-widest text-xs px-3 py-1.5 transition-colors border cursor-pointer ${catalogPdfLoading ? 'bg-forest/40 text-cream border-forest cursor-wait' : 'border-forest/40 text-forest hover:bg-forest/10'}`}>
+                              {catalogPdfLoading ? 'READING…' : '📄 UPLOAD PDF'}
+                              <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={catalogPdfLoading}
+                                onChange={async e => {
+                                  const file = e.target.files?.[0];
+                                  e.target.value = "";
+                                  if (!file || !catalogActiveCategoryId) return;
+                                  if (file.size > 25 * 1024 * 1024) { toast.error("PDF is too large (max 25 MB)"); return; }
+                                  setCatalogPdfLoading(true);
+                                  try {
+                                    const text = await extractTextFromPdf(file);
+                                    if (!text.trim()) { toast.error("Couldn't read any text from that PDF — it may be scanned/image-only."); return; }
+                                    setShowCatalogAiPanel(true);
+                                    setShowCatalogCsvImport(false);
+                                    setCatalogAiText(text);
+                                    const res = await parseFnbForCatalog.mutateAsync({ text });
+                                    const isBeverageCategory = catalogActiveType !== 'food';
+                                    const parsed = (res.fnbItems ?? []).map((x: any) => {
+                                      const raw = String(x.dishName ?? x.name ?? '').trim();
+                                      const priceMatch = raw.match(/\$?\s*(\d+(?:\.\d+)?)/);
+                                      const cleanName = raw.replace(/[-–—:|]?\s*\$?\s*\d+(?:\.\d+)?\s*(?:pp|per\s*person|per\s*item|each|per\s*bottle|per\s*glass)?\s*$/i, '').trim() || raw;
+                                      const desc = String(x.description ?? '').trim();
+                                      const aiPrice = typeof x.price === 'number' ? x.price : (typeof x.price === 'string' ? parseFloat(x.price) : NaN);
+                                      const descPriceMatch = !priceMatch ? desc.match(/\$?\s*(\d+(?:\.\d+)?)/) : null;
+                                      const fallbackPriceStr = priceMatch?.[1] ?? descPriceMatch?.[1];
+                                      const price = Number.isFinite(aiPrice) && aiPrice > 0 ? aiPrice : (fallbackPriceStr ? parseFloat(fallbackPriceStr) : 0);
+                                      const lower = (raw + ' ' + desc).toLowerCase();
+                                      const aiPricingType = x.pricingType === 'per_item' || x.pricingType === 'per_person' ? x.pricingType : null;
+                                      const keywordPerItem = /(\bper\s*item\b|\beach\b|\bpiece\b|\bbottle\b|\bglass\b|\bcocktail\b|\bdrink\b|\bcan\b|\btap\b|\bpint\b|\bschooner\b)/.test(lower);
+                                      const pricingType: 'per_person'|'per_item' = aiPricingType ?? (keywordPerItem ? 'per_item' : (isBeverageCategory ? 'per_item' : 'per_person'));
+                                      const unit = (typeof x.unit === 'string' && x.unit.trim()) ? x.unit.trim() : (pricingType === 'per_item' ? 'piece' : 'person');
+                                      return { name: cleanName, description: desc || undefined, price, pricingType, unit, allergens: x.dietary || undefined };
+                                    }).filter((x: any) => x.name);
+                                    setCatalogAiPreview(parsed);
+                                    if (!parsed.length) toast.error("AI couldn't find any items in that PDF");
+                                    else toast.success(`Found ${parsed.length} items — review and confirm below`);
+                                  } catch (err: any) {
+                                    toast.error('PDF parse failed: ' + (err?.message ?? 'unknown error'));
+                                  } finally {
+                                    setCatalogPdfLoading(false);
+                                  }
+                                }} />
+                            </label>
                             <button onClick={() => { setShowCatalogCsvImport(v => !v); setShowCatalogAiPanel(false); }}
                               className="border border-gold/30 text-ink/60 font-bebas tracking-widest text-xs px-3 py-1.5 hover:border-forest hover:text-forest transition-colors">CSV / PASTE</button>
                             <button onClick={() => { setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); setShowCatalogItemForm(true); }}
