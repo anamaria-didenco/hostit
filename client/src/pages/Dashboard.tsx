@@ -908,6 +908,10 @@ export default function Dashboard() {
   };
   const navCalendarToday = () => setCalDate(new Date());
 
+  // Close any open jump-to-date popover whenever the user switches tabs (prevents
+  // the overview mini-calendar and full calendar from leaking popover state into each other).
+  useEffect(() => { setShowJumpDate(false); }, [tab]);
+
   // Keyboard shortcuts when on Calendar tab (desktop): ←/→ prev/next, T today, M/W/D/L view switch.
   // Also closes the jump-to-date popover on Escape.
   useEffect(() => {
@@ -1244,8 +1248,8 @@ export default function Dashboard() {
   const updateStatus = trpc.leads.updateStatus.useMutation({
     onSuccess: (_data, variables) => {
       refetchLeads();
-      setSelectedLead((prev: any) => prev ? { ...prev, status: variables.status } : prev);
-      if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
+      setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status } : prev);
+      if (selectedLead?.id === variables.id) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
       if (suppressStatusToast.current) {
         suppressStatusToast.current = false;
         return;
@@ -1974,10 +1978,57 @@ export default function Dashboard() {
 
   const monthCalendarCard = (
                   <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
-                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0">
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0 relative">
                     <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
                     <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
-                    <h2 className="font-cormorant text-lg font-semibold text-ink flex-1">{MONTHS[month]} {year}</h2>
+                    <div className="flex-1 min-w-0 relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowJumpDate(v => !v)}
+                        title="Click to jump to a different month"
+                        aria-haspopup="dialog"
+                        aria-expanded={showJumpDate}
+                        className="font-cormorant text-lg font-semibold text-ink hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
+                        <span className="truncate">{MONTHS[month]} {year}</span>
+                        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showJumpDate && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowJumpDate(false)} />
+                          <div role="dialog" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
+                            <div className="flex items-center justify-between mb-3">
+                              <button onClick={() => setCalDate(new Date(year - 1, month, 1))}
+                                className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
+                              <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
+                              <button onClick={() => setCalDate(new Date(year + 1, month, 1))}
+                                className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1 mb-3">
+                              {MONTHS.map((m, i) => {
+                                const isCurrent = i === month;
+                                const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
+                                return (
+                                  <button key={m}
+                                    onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
+                                    className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
+                                      isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
+                                      : isThisMonth ? 'border-gold text-forest hover:bg-linen'
+                                      : 'border-gold/20 text-ink/70 hover:bg-linen'
+                                    }`}>{m.slice(0, 3).toUpperCase()}</button>
+                                );
+                              })}
+                            </div>
+                            <div className="flex gap-2 pt-2 border-t border-gold/15">
+                              <button onClick={() => { setCalDate(new Date()); setShowJumpDate(false); }}
+                                className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
+                              <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
+                                onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
+                                className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
                     <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
                     <button onClick={() => setTab('calendar' as any)} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors">FULL VIEW</button>
                   </div>
@@ -2581,10 +2632,26 @@ export default function Dashboard() {
                                 <td className="px-4 py-3 font-dm text-xs text-ink/70 max-w-[160px] truncate">{lead.eventType || "—"}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : "—"}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
-                                <td className="px-4 py-3">
-                                  <span className={`font-bebas text-[10px] tracking-widest px-2 py-0.5 border ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}>
-                                    {statusStage?.label ?? lead.status.replace(/_/g, " ")}
-                                  </span>
+                                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                  <div className="relative inline-block">
+                                    <span className={`font-bebas text-[10px] tracking-widest px-2 py-0.5 border inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}>
+                                      {statusStage?.label ?? lead.status.replace(/_/g, " ")}
+                                      <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                                    </span>
+                                    <select
+                                      value={lead.status}
+                                      onChange={e => {
+                                        const newStatus = e.target.value;
+                                        if (newStatus === lead.status) return;
+                                        updateStatus.mutate({ id: lead.id, status: newStatus as any });
+                                      }}
+                                      title="Change status"
+                                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                                      {pipelineStages.map(s => (
+                                        <option key={s.key} value={s.key}>{s.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/50 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
                               </tr>
@@ -7234,7 +7301,16 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-2">
                   {selectedBooking._isLead ? (
                     <>
-                      <button onClick={() => { const lead = selectedBooking; setSelectedBooking(null); selectLead(lead); setTab('enquiries'); }}
+                      <button onClick={() => {
+                          const lead = selectedBooking;
+                          setSelectedBooking(null);
+                          // Make sure the enquiries tab is in a state that actually shows this lead's detail
+                          setLeadViewMode('list');
+                          setLeadStatusFilter('all');
+                          setLeadsSubTab('all');
+                          selectLead(lead);
+                          setTab('enquiries');
+                        }}
                         className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
                         <FileText className="w-3 h-3 text-gold" /> {['confirmed','booked','finished'].includes(selectedBooking.status) ? 'VIEW DETAILS' : 'OPEN ENQUIRY'}
                       </button>
