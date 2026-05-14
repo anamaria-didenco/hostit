@@ -897,6 +897,70 @@ export default function Dashboard() {
   const [noteText, setNoteText] = useState("");
   const [calDate, setCalDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'month'|'week'|'day'|'list'>('month');
+  const [showJumpDate, setShowJumpDate] = useState(false);
+  const calSwipeStart = useRef<{ x: number; y: number; t: number } | null>(null);
+
+  // Calendar navigation helpers — used by toolbar buttons, keyboard, and swipe.
+  const navCalendar = (dir: -1 | 1) => {
+    if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() + 7 * dir); setCalDate(d); }
+    else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() + dir); setCalDate(d); }
+    else setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() + dir, 1));
+  };
+  const navCalendarToday = () => setCalDate(new Date());
+
+  // Keyboard shortcuts when on Calendar tab (desktop): ←/→ prev/next, T today, M/W/D/L view switch.
+  // Also closes the jump-to-date popover on Escape.
+  useEffect(() => {
+    if (tab !== 'calendar') return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'Escape' && showJumpDate) { e.preventDefault(); setShowJumpDate(false); return; }
+      if (showJumpDate || showAddLead || selectedBooking) return;
+      switch (e.key) {
+        case 'ArrowLeft': e.preventDefault(); navCalendar(-1); break;
+        case 'ArrowRight': e.preventDefault(); navCalendar(1); break;
+        case 't': case 'T': e.preventDefault(); navCalendarToday(); break;
+        case 'm': case 'M': e.preventDefault(); setCalendarView('month'); break;
+        case 'w': case 'W': e.preventDefault(); setCalendarView('week'); break;
+        case 'd': case 'D': e.preventDefault(); setCalendarView('day'); break;
+        case 'l': case 'L': e.preventDefault(); setCalendarView('list'); break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  // Swipe handlers for mobile calendar nav (horizontal only).
+  // Skips when the touch starts inside a horizontally-scrollable ancestor (e.g. week view at min-w-[700px])
+  // so that intentional content panning never triggers prev/next.
+  const onCalTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]; if (!t) return;
+    let el: HTMLElement | null = e.target as HTMLElement | null;
+    let scrollableAncestor = false;
+    while (el && el !== e.currentTarget) {
+      const cs = window.getComputedStyle(el);
+      const ox = cs.overflowX;
+      if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 1) {
+        scrollableAncestor = true; break;
+      }
+      el = el.parentElement;
+    }
+    if (scrollableAncestor) { calSwipeStart.current = null; return; }
+    calSwipeStart.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  };
+  const onCalTouchEnd = (e: React.TouchEvent) => {
+    const start = calSwipeStart.current; calSwipeStart.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0]; if (!t) return;
+    const dx = t.clientX - start.x; const dy = t.clientY - start.y;
+    const dt = Date.now() - start.t;
+    if (dt > 600) return;
+    if (Math.abs(dx) < 60) return;
+    if (Math.abs(dy) > Math.abs(dx) * 0.7) return; // mostly vertical → ignore
+    navCalendar(dx > 0 ? -1 : 1);
+  };
   const [showAddSpace, setShowAddSpace] = useState(false);
   const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
   const [showEditSpace, setShowEditSpace] = useState(false);
@@ -3297,34 +3361,79 @@ export default function Dashboard() {
                 {/* Row 1 (mobile): Title + Add. Desktop: everything in one row */}
                 <div className="flex items-center gap-2 px-3 md:px-6 py-3">
                   {/* Desktop-only prev/next/today on row 1 */}
-                  <button
-                    onClick={() => {
-                      if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() - 7); setCalDate(d); }
-                      else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() - 1); setCalDate(d); }
-                      else setCalDate(new Date(year, month - 1, 1));
-                    }}
+                  <button onClick={() => navCalendar(-1)} aria-label="Previous" title="Previous (←)"
                     className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-                  <button
-                    onClick={() => {
-                      if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() + 7); setCalDate(d); }
-                      else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() + 1); setCalDate(d); }
-                      else setCalDate(new Date(year, month + 1, 1));
-                    }}
+                  <button onClick={() => navCalendar(1)} aria-label="Next" title="Next (→)"
                     className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
-                  <button onClick={() => setCalDate(new Date())} className="hidden md:inline-flex font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
+                  <button onClick={navCalendarToday} title="Today (T)"
+                    className="hidden md:inline-flex font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
                   <button onClick={() => setTab('enquiries')} className="hidden sm:flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors" title="Back to events list">
                     <List className="w-3 h-3" /> EVENTS
                   </button>
-                  <h2 className="font-cormorant text-base md:text-xl font-semibold text-ink flex-1 truncate">
-                    {calendarView === 'week' ? (() => {
-                      const dow = (calDate.getDay() + 6) % 7;
-                      const ws = new Date(calDate); ws.setDate(calDate.getDate() - dow);
-                      const we = new Date(ws); we.setDate(ws.getDate() + 6);
-                      return `${ws.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-                    })() : calendarView === 'day'
-                      ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-                      : `${MONTHS[month]} ${year}`}
-                  </h2>
+                  <div className="flex-1 min-w-0 relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowJumpDate(v => !v)}
+                      title="Click to jump to a different month"
+                      aria-haspopup="dialog"
+                      aria-expanded={showJumpDate}
+                      aria-controls="cal-jump-popover"
+                      className="font-cormorant text-base md:text-xl font-semibold text-ink truncate hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
+                      <span className="truncate">
+                        {calendarView === 'week' ? (() => {
+                          const dow = (calDate.getDay() + 6) % 7;
+                          const ws = new Date(calDate); ws.setDate(calDate.getDate() - dow);
+                          const we = new Date(ws); we.setDate(ws.getDate() + 6);
+                          return `${ws.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+                        })() : calendarView === 'day'
+                          ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                          : `${MONTHS[month]} ${year}`}
+                      </span>
+                      <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showJumpDate && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowJumpDate(false)} />
+                        <div id="cal-jump-popover" role="dialog" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
+                          {/* Year stepper */}
+                          <div className="flex items-center justify-between mb-3">
+                            <button onClick={() => setCalDate(new Date(year - 1, month, 1))}
+                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
+                            <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
+                            <button onClick={() => setCalDate(new Date(year + 1, month, 1))}
+                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
+                          </div>
+                          {/* Month grid */}
+                          <div className="grid grid-cols-3 gap-1 mb-3">
+                            {MONTHS.map((m, i) => {
+                              const isCurrent = i === month;
+                              const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
+                              return (
+                                <button key={m}
+                                  onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
+                                  className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
+                                    isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
+                                    : isThisMonth ? 'border-gold text-forest hover:bg-linen'
+                                    : 'border-gold/20 text-ink/70 hover:bg-linen'
+                                  }`}>{m.slice(0, 3).toUpperCase()}</button>
+                              );
+                            })}
+                          </div>
+                          {/* Quick actions */}
+                          <div className="flex gap-2 pt-2 border-t border-gold/15">
+                            <button onClick={() => { navCalendarToday(); setShowJumpDate(false); }}
+                              className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
+                            <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
+                              onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
+                              className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
+                          </div>
+                          <p className="hidden md:block font-dm text-[10px] text-sage/60 mt-3 leading-snug">
+                            Tip: use <kbd className="px-1 border border-gold/30 bg-linen">←</kbd> <kbd className="px-1 border border-gold/30 bg-linen">→</kbd> to navigate, <kbd className="px-1 border border-gold/30 bg-linen">T</kbd> for today, <kbd className="px-1 border border-gold/30 bg-linen">M/W/D/L</kbd> to switch views.
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
                   {/* Desktop-only view switcher on row 1 */}
                   <div className="hidden md:flex border border-gold/30">
                     {(["month","week","day","list"] as const).map(v => (
@@ -3342,24 +3451,11 @@ export default function Dashboard() {
                 </div>
                 {/* Row 2 (mobile only): Big tap-friendly nav controls */}
                 <div className="md:hidden flex items-center gap-2 px-3 pb-3">
-                  <button
-                    onClick={() => {
-                      if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() - 7); setCalDate(d); }
-                      else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() - 1); setCalDate(d); }
-                      else setCalDate(new Date(year, month - 1, 1));
-                    }}
-                    aria-label="Previous"
+                  <button onClick={() => navCalendar(-1)} aria-label="Previous"
                     className="flex-1 flex items-center justify-center py-2.5 hover:bg-linen border border-gold/30 text-forest transition-colors"><ChevronLeft className="w-5 h-5" /></button>
-                  <button
-                    onClick={() => setCalDate(new Date())}
+                  <button onClick={navCalendarToday}
                     className="flex-1 font-bebas tracking-widest text-xs py-2.5 border border-gold/30 text-ink/80 hover:bg-linen transition-colors">TODAY</button>
-                  <button
-                    onClick={() => {
-                      if (calendarView === 'week') { const d = new Date(calDate); d.setDate(d.getDate() + 7); setCalDate(d); }
-                      else if (calendarView === 'day') { const d = new Date(calDate); d.setDate(d.getDate() + 1); setCalDate(d); }
-                      else setCalDate(new Date(year, month + 1, 1));
-                    }}
-                    aria-label="Next"
+                  <button onClick={() => navCalendar(1)} aria-label="Next"
                     className="flex-1 flex items-center justify-center py-2.5 hover:bg-linen border border-gold/30 text-forest transition-colors"><ChevronRight className="w-5 h-5" /></button>
                 </div>
                 {/* Row 3 (mobile only): View switcher full-width */}
@@ -3383,6 +3479,9 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+
+              {/* Swipe-enabled views wrapper (mobile gestures, desktop unaffected) */}
+              <div className="flex-1 flex flex-col overflow-hidden" onTouchStart={onCalTouchStart} onTouchEnd={onCalTouchEnd}>
 
               {/* Month View — desktop grid */}
               {calendarView === "month" && (
@@ -4155,6 +4254,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+              </div>{/* end swipe wrapper */}
             </div>
           )}
           {/* ── CONTACTS ─────────────────────────────────────────────────────── */}
