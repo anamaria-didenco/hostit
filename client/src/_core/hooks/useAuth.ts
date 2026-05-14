@@ -45,10 +45,15 @@ export function useAuth(options?: UseAuthOptions) {
     const data = meQuery.data;
     const user = data?.user ?? null;
     const isTeamMember = data?.isTeamMember ?? false;
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(user)
-    );
+    try {
+      localStorage.setItem(
+        "manus-runtime-user-info",
+        JSON.stringify(user)
+      );
+    } catch {
+      // Safari private mode / storage-disabled environments throw on access.
+      // Cached user info is best-effort only; tRPC remains the source of truth.
+    }
     return {
       user,
       isTeamMember,

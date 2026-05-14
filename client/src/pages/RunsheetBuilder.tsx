@@ -127,6 +127,7 @@ const BAR_OPTIONS = [
 ];
 
 function SpacePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [, navigate] = useLocation();
   const { data: spaces, isLoading } = trpc.spaces.list.useQuery();
   const matchesSaved = !!value && !!spaces && spaces.some((s: any) => s.name === value);
   const noSpacesYet = !isLoading && (!spaces || spaces.length === 0);
@@ -134,7 +135,7 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
     return (
       <div className="border border-dashed border-gold/40 bg-linen/40 px-2.5 py-2 flex items-center justify-between gap-2 no-print">
         <span className="font-dm text-xs text-ink/50">No spaces saved yet — add them in Settings → Venue → Spaces.</span>
-        <a href="/dashboard?tab=settings&sub=venue" className="font-bebas tracking-widest text-[10px] text-forest hover:underline whitespace-nowrap">+ ADD SPACES</a>
+        <button type="button" onClick={() => navigate("/dashboard?tab=settings&sub=venue")} className="font-bebas tracking-widest text-[10px] text-forest hover:underline whitespace-nowrap bg-transparent border-0 cursor-pointer">+ ADD SPACES</button>
       </div>
     );
   }

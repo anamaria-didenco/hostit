@@ -40,11 +40,21 @@ function Dialog({
         }
         endTimerRef.current = setTimeout(() => {
           justEndedRef.current = false;
+          endTimerRef.current = null;
         }, 150);
       },
     }),
     []
   );
+
+  // Clear any pending composition-end timer when the dialog unmounts so we
+  // don't update refs on a torn-down component or leak the timer.
+  React.useEffect(() => () => {
+    if (endTimerRef.current) {
+      clearTimeout(endTimerRef.current);
+      endTimerRef.current = null;
+    }
+  }, []);
 
   return (
     <DialogCompositionContext.Provider value={contextValue}>

@@ -410,23 +410,52 @@ export const appRouter = router({
         return getLeadById(input.id);
       }),
 
-    // Public: submit from lead form
+    // Public: submit from lead form. Rate-limited per (IP, ownerId) to prevent
+    // spam/abuse since this endpoint is public and accepts ownerId from the client.
     submit: publicProcedure
       .input(z.object({
         ownerId: z.number(),
-        firstName: z.string().min(1),
-        lastName: z.string().optional(),
-        email: z.string().email(),
-        phone: z.string().optional(),
-        company: z.string().optional(),
-        eventType: z.string().optional(),
-        eventDate: z.string().optional(),
-        guestCount: z.number().optional(),
-        budget: z.number().optional(),
-        message: z.string().optional(),
-        source: z.string().optional(),
+        firstName: z.string().min(1).max(120),
+        lastName: z.string().max(120).optional(),
+        email: z.string().email().max(254),
+        phone: z.string().max(40).optional(),
+        company: z.string().max(200).optional(),
+        eventType: z.string().max(120).optional(),
+        eventDate: z.string().max(40).optional(),
+        guestCount: z.number().int().min(0).max(100000).optional(),
+        budget: z.number().min(0).max(10_000_000).optional(),
+        message: z.string().max(5000).optional(),
+        source: z.string().max(120).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // Anti-spam: 5 submissions / 10 min per (IP, ownerId)
+        const ip = (ctx as any)?.req?.ip || "unknown";
+        const key = `${ip}::${input.ownerId}`;
+        const now = Date.now();
+        const WINDOW_MS = 10 * 60 * 1000;
+        const MAX = 5;
+        const g: any = globalThis as any;
+        if (!g.__leadSubmitRate) g.__leadSubmitRate = new Map<string, { count: number; resetAt: number }>();
+        const bucket: Map<string, { count: number; resetAt: number }> = g.__leadSubmitRate;
+        // Lazy prune: every ~100 writes, sweep expired entries; also enforce a hard
+        // cap so a flood of unique IPs can't grow the map without bound.
+        if (bucket.size > 5000) {
+          for (const [k, v] of bucket) { if (v.resetAt < now) bucket.delete(k); }
+          if (bucket.size > 10000) {
+            // Hard cap: drop oldest-resetting entries to keep memory bounded.
+            const sorted = [...bucket.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
+            for (let i = 0; i < sorted.length - 5000; i++) bucket.delete(sorted[i][0]);
+          }
+        }
+        const entry = bucket.get(key);
+        if (!entry || entry.resetAt < now) {
+          bucket.set(key, { count: 1, resetAt: now + WINDOW_MS });
+        } else {
+          entry.count += 1;
+          if (entry.count > MAX) {
+            throw new Error("Too many submissions. Please wait a few minutes and try again.");
+          }
+        }
         const lead = await createLead({
           ownerId: input.ownerId,
           firstName: input.firstName,
