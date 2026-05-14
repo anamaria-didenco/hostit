@@ -125,9 +125,9 @@ export default function Analytics() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 md:py-8 space-y-4 md:space-y-6">
         {/* KPI cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <StatCard
             icon={<DollarSign className="w-5 h-5" />}
             label="TOTAL REVENUE"
@@ -277,13 +277,16 @@ export default function Analytics() {
                 { label: "Bookings Confirmed", value: analyticsData?.totalBookings ?? 0, color: "bg-burgundy",
                   pct: analyticsData?.totalLeads ? Math.round((analyticsData.totalBookings / analyticsData.totalLeads) * 100) : 0 },
               ].map((row, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-36 font-dm text-sm text-ink/70 shrink-0">{row.label}</div>
-                  <div className="flex-1 h-7 bg-cream border border-border overflow-hidden">
+                <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                  <div className="w-full sm:w-36 font-dm text-xs sm:text-sm text-ink/70 shrink-0 flex items-center justify-between sm:block">
+                    <span>{row.label}</span>
+                    <span className="sm:hidden font-dm text-xs text-ink/50">{row.value} · {row.pct}%</span>
+                  </div>
+                  <div className="flex-1 h-6 sm:h-7 bg-cream border border-border overflow-hidden">
                     <div className={`h-full ${row.color} transition-all`} style={{ width: `${row.pct}%` }} />
                   </div>
-                  <div className="w-10 text-right font-dm text-sm font-semibold text-ink">{row.value}</div>
-                  <div className="w-8 text-right font-dm text-xs text-ink/50">{row.pct}%</div>
+                  <div className="hidden sm:block w-10 text-right font-dm text-sm font-semibold text-ink">{row.value}</div>
+                  <div className="hidden sm:block w-8 text-right font-dm text-xs text-ink/50">{row.pct}%</div>
                 </div>
               ))}
             </div>

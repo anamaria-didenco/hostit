@@ -220,7 +220,8 @@ export default function Reports() {
             <div className="px-5 py-3 border-b border-border bg-linen flex items-center justify-between">
               <h2 className="font-cormorant text-lg font-semibold text-ink">All Enquiries & Events</h2>
             </div>
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px]">
               <thead>
                 <tr className="border-b border-border bg-linen/60">
                   {["Name", "Event", "Date", "Type", "Guests", "Budget", "Status", "Source"].map(h => (
@@ -272,6 +273,7 @@ export default function Reports() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Bookings table */}

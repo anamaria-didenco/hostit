@@ -442,9 +442,9 @@ export default function ProposalBuilder() {
           </div>
 
           {/* Event Details */}
-          <div className="bg-cream-card border border-border p-5 shadow-sm">
+          <div className="bg-cream-card border border-border p-4 md:p-5 shadow-sm">
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">EVENT DETAILS</h2>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT DATE</label>
                 <Input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}

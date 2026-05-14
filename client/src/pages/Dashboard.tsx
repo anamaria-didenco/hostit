@@ -2166,7 +2166,7 @@ export default function Dashboard() {
 
               {/* KPI Cards — clickable, route to relevant tab */}
               {visibleStats.length > 0 && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                   {visibleStats.map(s => {
                     const target: DashTab = (
                       s.id === 'active_enquiries' ? 'enquiries' :
@@ -2184,12 +2184,12 @@ export default function Dashboard() {
                         type="button"
                         onClick={() => setTab(target)}
                         aria-label={`Open ${s.label}`}
-                        className="dante-card p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
-                        <div className="mb-3">{s.icon}</div>
-                        <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
-                        <div className="font-bebas text-xs tracking-widest text-sage">{s.label}</div>
-                        <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
+                        <div className="mb-2 md:mb-3">{s.icon}</div>
+                        <div className="font-cormorant text-2xl md:text-4xl font-semibold text-ink mb-1 leading-tight">{s.value}</div>
+                        <div className="font-bebas text-[10px] md:text-xs tracking-widest text-sage leading-snug">{s.label}</div>
+                        <div className="font-dm text-[10px] md:text-xs text-sage/60 mt-0.5 leading-tight">{s.sub}</div>
                       </button>
                     );
                   })}
@@ -2325,7 +2325,7 @@ export default function Dashboard() {
               {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-white border-b border-gold/15">
                 {/* Row 1: Sub-tabs + view modes + actions */}
-                <div className="flex items-center gap-2 px-4 py-3 flex-wrap gap-y-2">
+                <div className="flex items-center gap-2 px-3 md:px-4 py-3 flex-wrap gap-y-2">
                   {/* Sub-tabs or heading */}
                   {newEnquiries.length > 0 ? (
                     <div className="flex bg-muted rounded-xl p-0.5 gap-0.5">
@@ -4250,14 +4250,14 @@ export default function Dashboard() {
               <h1 className="font-cormorant text-3xl font-semibold text-ink mb-4">Venue Settings</h1>
 
               {/* Section tabs */}
-              <div className="flex gap-0 mb-6 border-b border-gold/20">
+              <div className="flex gap-0 mb-6 border-b border-gold/20 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
                 {([
                   { id: 'details', label: 'Basic Details' },
                   { id: 'profile', label: 'Profile & Branding' },
                   { id: 'spaces', label: 'Spaces' },
                 ] as const).map(s => (
                   <button key={s.id} onClick={() => setVenueSettingsSection(s.id)}
-                    className={`font-bebas tracking-widest text-sm px-5 py-2.5 border-b-2 transition-colors ${
+                    className={`font-bebas tracking-widest text-sm px-4 md:px-5 py-2.5 border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
                       venueSettingsSection === s.id ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink/70'
                     }`}>
                     {s.label}
@@ -4270,9 +4270,9 @@ export default function Dashboard() {
                 <form onSubmit={e => { e.preventDefault(); updateSettings.mutate(settingsForm); }} className="space-y-6">
 
                   {/* ── Venue Details ── */}
-                  <div className="dante-card p-6">
+                  <div className="dante-card p-4 md:p-6">
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE DETAILS</h2>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-500">*</span></label>
                         <Input value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
@@ -4298,9 +4298,9 @@ export default function Dashboard() {
                   </div>
 
                   {/* ── Venue Address ── */}
-                  <div className="dante-card p-6">
+                  <div className="dante-card p-4 md:p-6">
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE ADDRESS</h2>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 1</label>
                         <Input value={settingsForm.addressLine1} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine1: e.target.value }))}
@@ -4335,9 +4335,9 @@ export default function Dashboard() {
                   </div>
 
                   {/* ── Event Settings ── */}
-                  <div className="dante-card p-6">
+                  <div className="dante-card p-4 md:p-6">
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">EVENT SETTINGS</h2>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TIME ZONE</label>
                         <select value={settingsForm.timezone} onChange={e => setSettingsForm((f: any) => ({ ...f, timezone: e.target.value }))}
@@ -7000,7 +7000,7 @@ export default function Dashboard() {
           {/* Drawer */}
           <div className="w-full md:max-w-md bg-cream md:border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl">
             {/* Header */}
-            <div className="bg-forest-dark px-5 py-4 flex items-center justify-between">
+            <div className="bg-forest-dark px-4 md:px-5 py-4 flex items-center justify-between">
               <div>
                 <div className="font-bebas tracking-widest text-xs text-gold mb-0.5">EVENT DETAILS</div>
                 <div className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</div>
@@ -7010,7 +7010,7 @@ export default function Dashboard() {
               </button>
             </div>
             {/* Body */}
-            <div className="p-5 space-y-5 flex-1">
+            <div className="p-4 md:p-5 space-y-5 flex-1">
               {/* Status + Type */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${

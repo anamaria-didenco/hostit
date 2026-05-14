@@ -1596,7 +1596,7 @@ export default function RunsheetBuilder() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowTemplates(v => !v)}
-            className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 transition-colors px-3 py-1.5 border ${
+            className={`font-bebas tracking-widest text-xs hidden md:flex items-center gap-1.5 transition-colors px-3 py-1.5 border ${
               showTemplates ? 'border-gold text-gold bg-gold/10' : 'border-cream/20 text-cream/70 hover:text-gold hover:border-gold/40'
             }`}
           >
@@ -1611,9 +1611,10 @@ export default function RunsheetBuilder() {
           </button>
           <button
             onClick={() => window.print()}
-            className="font-bebas tracking-widest text-xs text-cream/70 hover:text-gold flex items-center gap-1.5 transition-colors px-2 py-1.5"
+            className="font-bebas tracking-widest text-xs text-cream/70 hover:text-gold hidden md:flex items-center gap-1.5 transition-colors px-2 py-1.5"
+            title="Print runsheet"
           >
-            <Printer className="w-4 h-4" /> PRINT
+            <Printer className="w-4 h-4" /> <span>PRINT</span>
           </button>
           {sheetId ? (
             <a
