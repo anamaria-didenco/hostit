@@ -2633,25 +2633,25 @@ export default function Dashboard() {
                                 <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : "—"}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
                                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                                  <div className="relative inline-block">
-                                    <span className={`font-bebas text-[10px] tracking-widest px-2 py-0.5 border inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}>
-                                      {statusStage?.label ?? lead.status.replace(/_/g, " ")}
-                                      <ChevronDown className="w-2.5 h-2.5 opacity-60" />
-                                    </span>
-                                    <select
-                                      value={lead.status}
-                                      onChange={e => {
-                                        const newStatus = e.target.value;
-                                        if (newStatus === lead.status) return;
-                                        updateStatus.mutate({ id: lead.id, status: newStatus as any });
-                                      }}
-                                      title="Change status"
-                                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
-                                      {pipelineStages.map(s => (
-                                        <option key={s.key} value={s.key}>{s.label}</option>
-                                      ))}
-                                    </select>
-                                  </div>
+                                  <select
+                                    value={lead.status}
+                                    onClick={e => e.stopPropagation()}
+                                    onChange={e => {
+                                      const newStatus = e.target.value;
+                                      if (newStatus === lead.status) return;
+                                      updateStatus.mutate({ id: lead.id, status: newStatus as any });
+                                    }}
+                                    title="Change status"
+                                    className={`font-bebas text-[10px] tracking-widest pl-2 pr-6 py-0.5 border cursor-pointer hover:opacity-80 transition-opacity appearance-none bg-no-repeat ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}
+                                    style={{
+                                      backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
+                                      backgroundPosition: "right 6px center",
+                                      backgroundSize: "10px",
+                                    }}>
+                                    {pipelineStages.map(s => (
+                                      <option key={s.key} value={s.key}>{s.label}</option>
+                                    ))}
+                                  </select>
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/50 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
                               </tr>
