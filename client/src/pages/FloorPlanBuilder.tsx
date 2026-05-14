@@ -129,8 +129,32 @@ export default function FloorPlanBuilder() {
     if (existingPlan) {
       setPlanName(existingPlan.name);
       if (existingPlan.canvasData) {
-        const data = existingPlan.canvasData as any;
-        if (data.elements) setElements(data.elements);
+        try {
+          const data = typeof existingPlan.canvasData === "string"
+            ? JSON.parse(existingPlan.canvasData)
+            : (existingPlan.canvasData as any);
+          // Defensive normalisation — bad data from older saves shouldn't crash the render.
+          if (data && Array.isArray(data.elements)) {
+            const safe = data.elements
+              .filter((el: any) => el && typeof el === "object")
+              .map((el: any) => ({
+                id: String(el.id ?? generateId()),
+                type: el.type ?? "rect_table",
+                x: Number.isFinite(el.x) ? el.x : 50,
+                y: Number.isFinite(el.y) ? el.y : 50,
+                w: Number.isFinite(el.w) && el.w > 0 ? el.w : 80,
+                h: Number.isFinite(el.h) && el.h > 0 ? el.h : 80,
+                color: el.color ?? "#d4a574",
+                label: el.label ?? "",
+                seats: typeof el.seats === "number" ? el.seats : undefined,
+                rotation: typeof el.rotation === "number" ? el.rotation : undefined,
+              }));
+            setElements(safe);
+          }
+        } catch (err) {
+          console.error("[FloorPlan] Failed to load canvas data:", err);
+          toast.error("Couldn't fully load this plan — some elements may be missing.");
+        }
       }
     }
   }, [existingPlan]);
@@ -199,15 +223,15 @@ export default function FloorPlanBuilder() {
   const onMouseDown = useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     const el = elements.find(el => el.id === id);
-    if (!el) return;
+    if (!el || !canvasRef.current) return;
     setSelectedId(id);
-    const rect = canvasRef.current!.getBoundingClientRect();
+    const rect = canvasRef.current.getBoundingClientRect();
     setDragging({ id, offsetX: (e.clientX - rect.left) / zoom - el.x, offsetY: (e.clientY - rect.top) / zoom - el.y });
   }, [elements, zoom]);
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging) return;
-    const rect = canvasRef.current!.getBoundingClientRect();
+    if (!dragging || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
     const x = Math.max(0, (e.clientX - rect.left) / zoom - dragging.offsetX);
     const y = Math.max(0, (e.clientY - rect.top) / zoom - dragging.offsetY);
     setElements(prev => prev.map(el => el.id === dragging.id ? { ...el, x, y } : el));
@@ -275,8 +299,14 @@ export default function FloorPlanBuilder() {
     setInvForm(BLANK_FORM);
   };
 
+  // Redirect unauthenticated users via effect — calling setLocation during
+  // render throws "Cannot update a component while rendering a different component".
+  useEffect(() => {
+    if (!loading && !isAuthenticated) setLocation("/");
+  }, [loading, isAuthenticated, setLocation]);
+
   if (loading) return <div className="min-h-screen bg-cream flex items-center justify-center"><div className="font-bebas text-xl tracking-widest text-muted-foreground">LOADING...</div></div>;
-  if (!isAuthenticated) { setLocation("/"); return null; }
+  if (!isAuthenticated) return <div className="min-h-screen bg-cream flex items-center justify-center"><div className="font-bebas text-xl tracking-widest text-muted-foreground">REDIRECTING...</div></div>;
 
   const isFormOpen = showAddForm || editingId !== null;
 
@@ -628,7 +658,11 @@ export default function FloorPlanBuilder() {
             >
               {elements.map(el => {
                 const isSelected = el.id === selectedId;
-                const def = ELEMENT_DEFS.find(d => d.type === el.type)!;
+                // Fall back to a generic def if an old saved plan contains an
+                // element type that's since been renamed/removed — without this
+                // the whole canvas crashes on render.
+                const def = ELEMENT_DEFS.find(d => d.type === el.type)
+                  ?? { type: el.type, label: el.label ?? "Item", emoji: "▢", defaultW: el.w, defaultH: el.h, defaultColor: el.color ?? "#999", defaultSeats: undefined } as any;
                 const isRound = el.type === "round_table";
                 return (
                   <div
@@ -667,7 +701,7 @@ export default function FloorPlanBuilder() {
           {/* Legend */}
           <div className="mt-4 mx-auto flex flex-wrap gap-3 print:mt-2" style={{ maxWidth: canvasSize.w * zoom }}>
             {Array.from(new Set(elements.map(e => e.type))).map(type => {
-              const def = ELEMENT_DEFS.find(d => d.type === type)!;
+              const def = ELEMENT_DEFS.find(d => d.type === type) ?? { label: type, emoji: "▢" } as any;
               const count = elements.filter(e => e.type === type).length;
               const seats = elements.filter(e => e.type === type && e.seats).reduce((s, e) => s + (e.seats ?? 0), 0);
               return (
