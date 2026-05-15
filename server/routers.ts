@@ -1858,6 +1858,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         subject: z.string().min(1),
         body: z.string().min(1),
         leadId: z.number().optional(),
+        bookingId: z.number().optional(),
         attachments: z.array(z.object({
           filename: z.string(),
           content: z.string(),
@@ -1867,7 +1868,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .mutation(async ({ input, ctx }) => {
         if (ctx.isTeamMember) throw new Error('Team members cannot send emails. Contact your venue manager.');
         const { getDb } = await import('./db');
-        const { venueSettings, leadActivity } = await import('../drizzle/schema');
+        const { venueSettings, leadActivity, bookings: bookingsTable } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
         const nodemailer = await import('nodemailer');
         const db = await getDb();
@@ -1921,10 +1922,23 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           attachments,
         });
 
-        // Log as lead activity if leadId provided
-        if (input.leadId) {
+        // Resolve a leadId for activity logging — accept it directly, or look
+        // it up from the bookingId so emails sent from a confirmed booking
+        // (where the user may only have a bookingId in scope) still log to
+        // the originating enquiry's timeline.
+        let activityLeadId: number | undefined = input.leadId;
+        if (!activityLeadId && input.bookingId) {
+          const { and } = await import('drizzle-orm');
+          const [b] = await db.select({ leadId: bookingsTable.leadId })
+            .from(bookingsTable)
+            .where(and(eq(bookingsTable.id, input.bookingId), eq(bookingsTable.ownerId, ctx.user.id)))
+            .limit(1);
+          if (b?.leadId) activityLeadId = b.leadId;
+        }
+        // Log as lead activity if we have a leadId
+        if (activityLeadId) {
           await db.insert(leadActivity).values({
-            leadId: input.leadId,
+            leadId: activityLeadId,
             ownerId: ctx.user.id,
             type: 'email',
             content: `Email sent to ${input.to}\n\nSubject: ${input.subject}\n\n${input.body}`,
@@ -1932,7 +1946,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           // Auto-advance: if lead is still "new", move it to "contacted"
           const { leads } = await import('../drizzle/schema');
           const [currentLead] = await db.select({ status: leads.status, followUpDate: leads.followUpDate })
-            .from(leads).where(eq(leads.id, input.leadId)).limit(1);
+            .from(leads).where(eq(leads.id, activityLeadId)).limit(1);
           if (currentLead?.status === 'new') {
             // Set status to contacted and set a default follow-up in 3 days if none set
             const followUpDate = currentLead.followUpDate ?? (() => {
@@ -1942,9 +1956,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             })();
             await db.update(leads)
               .set({ status: 'contacted', followUpDate })
-              .where(eq(leads.id, input.leadId));
+              .where(eq(leads.id, activityLeadId));
             await db.insert(leadActivity).values({
-              leadId: input.leadId,
+              leadId: activityLeadId,
               ownerId: ctx.user.id,
               type: 'status_change',
               content: `Status auto-advanced to contacted after email reply. Follow-up set for ${followUpDate.toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}.`,

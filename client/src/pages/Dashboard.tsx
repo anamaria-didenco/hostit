@@ -1295,6 +1295,10 @@ export default function Dashboard() {
       refetchLeads();
       setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status } : prev);
       if (selectedLead?.id === variables.id) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
+      // Status changes (especially → 'booked') affect bookings list, calendar, and dashboard tiles.
+      utils.bookings.invalidate();
+      utils.dashboard.invalidate();
+      utils.leads.eventsByMonth.invalidate();
       if (suppressStatusToast.current) {
         suppressStatusToast.current = false;
         return;
@@ -3420,6 +3424,7 @@ export default function Dashboard() {
                         subject: emailForm.subject,
                         body: emailForm.body,
                         leadId: selectedLead.id,
+                        bookingId: (selectedLead as any)._fromBookingId,
                         attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
                       })}
                       disabled={sendEmail.isPending || !emailForm.subject || !emailForm.body}
@@ -7439,6 +7444,16 @@ export default function Dashboard() {
                       {selectedBooking.email && !isTeamMember && (
                         <button
                           onClick={() => {
+                            // Synthesise a lead-shape so the email modal (which expects selectedLead)
+                            // renders. Carry the booking id forward so the server can log this email
+                            // back to the originating enquiry's activity timeline.
+                            setSelectedLead({
+                              id: selectedBooking._isLead ? selectedBooking.id : (selectedBooking.leadId ?? undefined),
+                              _fromBookingId: selectedBooking._isLead ? undefined : selectedBooking.id,
+                              firstName: selectedBooking.firstName,
+                              lastName: selectedBooking.lastName,
+                              email: selectedBooking.email,
+                            } as any);
                             setEmailForm({ subject: `Re: Your event enquiry — ${selectedBooking.eventType || 'Event'}`, body: `Hi ${selectedBooking.firstName},\n\nThank you for your enquiry. ` });
                             setShowEmailModal(true);
                             setSelectedBooking(null);
