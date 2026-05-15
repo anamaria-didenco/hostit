@@ -1,0 +1,163 @@
+I need you to perform a comprehensive production-readiness audit on my VenueFlow web application (an event enquiry and proposal platform for NZ venues). The site is at venueflowhq.com with a dashboard at /dashboard. Please conduct a thorough check across all critical areas and fix any issues found before launch.
+
+## SCOPE: Full Website & Application Audit
+
+Please systematically review and address the following areas:
+
+### 1. CODE QUALITY & STRUCTURE
+- Scan the entire codebase for unused imports, dead code, and commented-out blocks
+- Remove all console.log(), debugger statements, and TODO comments
+- Check for proper error handling (try/catch blocks, error boundaries in React)
+- Verify all async functions have proper error handling
+- Look for hardcoded values that should be environment variables
+- Check for any exposed API keys, secrets, or credentials in the code
+- Ensure consistent code formatting (run Prettier/ESLint)
+- Identify and refactor any duplicated code
+
+### 2. SECURITY AUDIT
+- Verify HTTPS is enforced site-wide (no HTTP fallbacks)
+- Check that all environment variables (.env) are in .gitignore
+- Confirm no secrets are committed to the repo
+- Validate all user inputs are sanitised (XSS, SQL injection prevention)
+- Check authentication flows: login, logout, session timeout, password reset
+- Verify CSRF protection on state-changing requests
+- Add security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options
+- Ensure password fields use type="password" and have autocomplete attributes
+- Check for proper rate limiting on auth endpoints and APIs
+- Validate file upload restrictions (size, type, sanitisation)
+
+### 3. PERFORMANCE OPTIMISATION
+- Run Lighthouse audit and report scores for Performance, Accessibility, Best Practices, SEO
+- Optimise all images: convert to WebP/AVIF, add lazy loading, set proper dimensions
+- Minify CSS, JavaScript, and HTML for production
+- Enable code splitting and lazy loading for routes/components
+- Check for render-blocking resources
+- Implement proper caching headers
+- Reduce bundle size (analyse with webpack-bundle-analyzer if applicable)
+- Ensure Core Web Vitals targets: LCP < 2.5s, FID < 100ms, CLS < 0.1
+- Test page load times on slow 3G connection
+
+### 4. MOBILE RESPONSIVENESS
+- Test all pages at 320px, 375px, 768px, 1024px, 1440px, 1920px viewports
+- Verify touch targets are minimum 48x48px
+- Check for horizontal scroll issues on mobile
+- Test forms on mobile devices (input zoom, keyboard behaviour)
+- Verify the dashboard is fully usable on mobile
+- Test in portrait and landscape orientations
+- Check viewport meta tag is set correctly
+
+### 5. ACCESSIBILITY (WCAG 2.1 AA)
+- Run axe-core or WAVE audit and fix all violations
+- Verify proper heading hierarchy (h1 → h2 → h3, no skips)
+- Ensure all images have meaningful alt text
+- Check all form inputs have associated labels
+- Verify keyboard navigation works for all interactive elements
+- Confirm visible focus indicators on all focusable elements
+- Test colour contrast ratios (minimum 4.5:1 for text)
+- Add ARIA labels where needed
+- Ensure error messages are announced to screen readers
+- Test with a screen reader (VoiceOver or NVDA)
+
+### 6. SEO & METADATA
+- Verify unique <title> on every page (50-60 chars)
+- Check meta descriptions on every page (150-160 chars)
+- Add Open Graph tags (og:title, og:description, og:image, og:url)
+- Add Twitter Card metadata
+- Create/verify robots.txt
+- Create/verify sitemap.xml
+- Add Schema.org structured data (Organization, LocalBusiness for venues)
+- Set canonical URLs
+- Verify proper use of semantic HTML
+
+### 7. FUNCTIONALITY & USER FLOWS
+- Test the complete enquiry submission flow end-to-end
+- Test the proposal creation/sending flow
+- Verify all dashboard features work correctly
+- Test email notifications (do they send? formatted correctly?)
+- Check all CRUD operations (Create, Read, Update, Delete)
+- Test form validations (client-side AND server-side)
+- Verify error states show helpful messages
+- Test loading states and skeleton screens
+- Check empty states (no data scenarios)
+- Test pagination, filtering, and sorting if present
+
+### 8. ERROR HANDLING & EDGE CASES
+- Add a custom 404 page with helpful navigation
+- Add a 500 error page
+- Implement error boundaries (React) or global error handlers
+- Test what happens when API calls fail
+- Test offline behaviour
+- Handle session expiration gracefully
+- Verify proper logging of errors (Sentry, LogRocket, etc.)
+- Test with slow/unreliable network connections
+
+### 9. DATABASE & BACKEND
+- Verify database migrations are up to date
+- Check for missing indexes on frequently queried fields
+- Test database connection pooling
+- Verify backup strategy is in place
+- Check API rate limiting
+- Validate API response times
+- Ensure proper error responses (correct HTTP status codes)
+- Verify CORS configuration
+
+### 10. BROWSER COMPATIBILITY
+- Test on Chrome (latest)
+- Test on Firefox (latest)
+- Test on Safari (latest, including iOS Safari)
+- Test on Edge (latest)
+- Check for any browser-specific CSS issues
+- Verify all JavaScript features work cross-browser
+
+### 11. CONTENT & UX POLISH
+- Proofread all copy for typos and grammar
+- Verify brand consistency (logo, colours, typography)
+- Check that all dates, times, and currencies display correctly (NZD, NZ date format)
+- Ensure consistent tone of voice throughout
+- Remove any Lorem ipsum or placeholder content
+- Verify all CTAs are clear and action-oriented
+- Check that legal pages exist: Privacy Policy, Terms of Service, Cookie Policy
+- Verify contact information is accurate
+
+### 12. DEPLOYMENT & INFRASTRUCTURE
+- Confirm production environment variables are set
+- Verify domain DNS is configured correctly (A records, CNAME)
+- Check SSL certificate is valid and auto-renewing
+- Set up monitoring/uptime checks (UptimeRobot, Pingdom)
+- Configure error tracking (Sentry)
+- Set up analytics (Google Analytics, Plausible, or similar)
+- Verify CDN configuration (if applicable)
+- Test deployment rollback procedure
+- Document the deployment process
+
+## DELIVERABLES
+
+Please provide:
+
+1. **Audit Report**: A detailed report listing every issue found, organised by:
+   - 🔴 Critical (must fix before launch)
+   - 🟠 High Priority (should fix before launch)
+   - 🟡 Medium Priority (fix soon after launch)
+   - 🔵 Low Priority (nice to have)
+
+2. **Fixed Code**: Actually fix the critical and high-priority issues directly in the codebase
+
+3. **Pre-Launch Checklist**: A final checklist I can review before going live
+
+4. **Performance Metrics**: Before/after comparison of Lighthouse scores
+
+5. **Production Deployment Guide**: Step-by-step instructions for launching, including:
+   - Final pre-launch checks
+   - Deployment commands
+   - Post-deployment verification steps
+   - Rollback procedure if issues arise
+
+6. **Monitoring Setup**: Recommendations for ongoing monitoring after launch
+
+## CONTEXT
+- This is a SaaS platform for NZ hospitality venues
+- Users: venue owners/managers handling event enquiries
+- Critical features: enquiry intake, proposal sending, dashboard
+- Production launch is imminent — needs to be rock solid
+
+Start by giving me a high-level summary of the current state of the codebase, then proceed through the audit systematically. Show me what you find as you go, and fix issues as you encounter them. Ask me before making any major architectural changes.
