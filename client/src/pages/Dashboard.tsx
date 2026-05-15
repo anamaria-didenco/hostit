@@ -7839,7 +7839,7 @@ export default function Dashboard() {
       {showCsvImport && (
         <CsvImportModal
           onClose={() => setShowCsvImport(false)}
-          onImported={() => { refetchLeads(); }}
+          onImported={() => { refetchLeads(); utils.bookings.invalidate(); utils.dashboard.invalidate(); utils.leads.invalidate(); }}
         />
       )}
 

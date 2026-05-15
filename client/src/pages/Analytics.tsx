@@ -103,7 +103,7 @@ export default function Analytics() {
       {/* Header */}
       <div className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/")} className="text-cream/60 hover:text-cream transition-colors">
+          <button onClick={() => navigate("/dashboard")} className="text-cream/60 hover:text-cream transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <span className="font-bebas tracking-widest text-amber text-sm">ANALYTICS</span>

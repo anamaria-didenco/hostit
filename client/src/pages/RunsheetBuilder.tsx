@@ -1482,7 +1482,7 @@ export default function RunsheetBuilder() {
       <div className="min-h-screen bg-cream">
         <div className="bg-forest border-b border-white/10 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate("/")} className="text-white/50 hover:text-white transition-colors">
+            <button onClick={() => navigate("/dashboard")} className="text-white/50 hover:text-white transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <span className="font-bebas tracking-widest text-gold text-sm">RUNSHEET BUILDER</span>
@@ -1582,7 +1582,7 @@ export default function RunsheetBuilder() {
         <button
           onClick={() => {
             if (bookingId) navigate(`/event/${bookingId}`);
-            else if (leadId) navigate("/");
+            else if (leadId) navigate("/dashboard");
             else navigate("/runsheet");
           }}
           className="text-cream/70 hover:text-cream flex items-center gap-1.5 font-bebas tracking-widest text-xs"

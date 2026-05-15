@@ -100,7 +100,7 @@ export default function PaymentTracker() {
     <div className="min-h-screen bg-cream flex items-center justify-center">
       <div className="text-center">
         <p className="font-dm text-ink/60 mb-4">No booking selected.</p>
-        <Button onClick={() => navigate("/")} className="bg-burgundy text-cream rounded-none font-bebas tracking-widest">
+        <Button onClick={() => navigate("/dashboard")} className="bg-burgundy text-cream rounded-none font-bebas tracking-widest">
           Back to Dashboard
         </Button>
       </div>
