@@ -60,6 +60,22 @@ async function startServer() {
   // Trust the first proxy hop (Replit's edge) so req.ip reflects the real
   // client and X-Forwarded-For cannot be spoofed by random clients.
   app.set("trust proxy", 1);
+
+  // Baseline security response headers. We deliberately stop short of a full
+  // Content-Security-Policy here because the app loads Google Fonts, inline
+  // styles from Tailwind v4, and a handful of third-party scripts that need
+  // their own audited allow-list before CSP can be turned on without breakage.
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    if (process.env.NODE_ENV === "production") {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+    next();
+  });
+
   const server = createServer(app);
   // GitHub webhook — must capture raw body BEFORE json middleware for HMAC verification
   app.post("/api/webhook/github", express.raw({ type: "application/json" }), (req, res) => {
