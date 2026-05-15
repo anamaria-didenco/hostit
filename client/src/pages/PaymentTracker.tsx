@@ -55,6 +55,11 @@ export default function PaymentTracker() {
   });
   const [adding, setAdding] = useState(false);
 
+  const utils = trpc.useUtils();
+  const { data: booking } = trpc.bookings.getById.useQuery(
+    { id: bookingId! },
+    { enabled: !!bookingId }
+  );
   const { data: payments, refetch } = trpc.payments.list.useQuery(
     { bookingId: bookingId! },
     { enabled: !!bookingId }
@@ -64,11 +69,17 @@ export default function PaymentTracker() {
     { enabled: !!bookingId }
   );
 
+  const refreshAll = async () => {
+    await Promise.all([refetch(), refetchSummary()]);
+    // Booking row's depositPaid flag is auto-synced server-side — refresh
+    // any cached view of it so EventDetail/Dashboard pick up the change.
+    if (bookingId) await utils.bookings.getById.invalidate({ id: bookingId });
+  };
+
   const addMutation = trpc.payments.add.useMutation({
     onSuccess: async () => {
       toast.success("Payment recorded");
-      await refetch();
-      await refetchSummary();
+      await refreshAll();
       setNewPayment({ amount: "", type: "deposit", method: "bank_transfer", paidAt: new Date().toISOString().split("T")[0], notes: "" });
       setAdding(false);
     },
@@ -78,8 +89,7 @@ export default function PaymentTracker() {
   const deleteMutation = trpc.payments.delete.useMutation({
     onSuccess: async () => {
       toast.success("Payment removed");
-      await refetch();
-      await refetchSummary();
+      await refreshAll();
     },
     onError: () => toast.error("Failed to remove payment"),
   });
@@ -119,11 +129,25 @@ export default function PaymentTracker() {
     <div className="min-h-screen bg-cream">
       {/* Header */}
       <div className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/")} className="text-cream/60 hover:text-cream transition-colors">
+        <div className="flex items-center gap-4 min-w-0">
+          <button
+            onClick={() => navigate(bookingId ? `/event/${bookingId}` : "/")}
+            className="text-cream/60 hover:text-cream transition-colors flex items-center gap-1.5"
+            title={bookingId ? "Back to event" : "Back to dashboard"}
+          >
             <ArrowLeft className="w-5 h-5" />
+            <span className="font-bebas tracking-widest text-xs hidden sm:inline">
+              {bookingId ? "BACK TO EVENT" : "BACK"}
+            </span>
           </button>
+          <div className="w-px h-4 bg-cream/20" />
           <span className="font-bebas tracking-widest text-amber text-sm">PAYMENT TRACKER</span>
+          {booking && (
+            <span className="font-dm text-xs text-cream/60 truncate hidden md:inline">
+              · {booking.firstName} {booking.lastName}
+              {booking.eventDate && ` · ${new Date(booking.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}`}
+            </span>
+          )}
         </div>
       </div>
 

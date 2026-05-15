@@ -306,7 +306,11 @@ export async function getDashboardStats(ownerId: number) {
   // Pending payments (bookings with outstanding balance)
   const allPayments = await db.select().from(payments).where(eq(payments.ownerId, ownerId));
   const paidByBooking: Record<number, number> = {};
-  allPayments.forEach(p => { paidByBooking[p.bookingId] = (paidByBooking[p.bookingId] ?? 0) + Number(p.amount); });
+  // Net paid = payments minus refunds, matches payments.summary route.
+  allPayments.forEach(p => {
+    const sign = p.type === 'refund' ? -1 : 1;
+    paidByBooking[p.bookingId] = (paidByBooking[p.bookingId] ?? 0) + sign * Number(p.amount);
+  });
   const pendingPayments = allBookings.filter(b => (b.status === 'confirmed' || b.status === 'finished') && Number(b.totalNzd ?? 0) > (paidByBooking[b.id] ?? 0)).length;
   return {
     newLeads,

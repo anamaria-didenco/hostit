@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { COLOR_PRESETS, parseCustomStatuses } from "@/components/StatusManager";
 import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput, combineLocalDateTime } from "@/lib/dateTime";
+import EventSpendSection from "@/components/EventSpendSection";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
@@ -40,6 +41,12 @@ export default function EventDetail() {
   );
   const { data: spaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: payments } = trpc.payments.list.useQuery(
+    { bookingId },
+    { enabled: !!user?.id && bookingId > 0 }
+  );
+  // Use the server-side summary so refunds, deposit status and outstanding
+  // are computed exactly the same way as the Payment Tracker page.
+  const { data: paymentSummary } = trpc.payments.summary.useQuery(
     { bookingId },
     { enabled: !!user?.id && bookingId > 0 }
   );
@@ -129,8 +136,12 @@ export default function EventDetail() {
     );
   }
 
-  const totalPaid = (payments ?? []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-  const outstanding = Number(booking.totalNzd ?? 0) - totalPaid;
+  // Prefer the canonical server summary (handles refunds correctly).
+  // Falls back to a refund-aware client calc until the query lands.
+  const totalPaid = paymentSummary?.totalPaid ?? (payments ?? []).reduce(
+    (s: number, p: any) => s + (p.type === 'refund' ? -1 : 1) * Number(p.amount), 0
+  );
+  const outstanding = paymentSummary?.outstanding ?? Math.max(0, Number(booking.totalNzd ?? 0) - totalPaid);
 
   const handleSave = () => {
     updateBooking.mutate({
@@ -390,6 +401,12 @@ export default function EventDetail() {
                 </button>
               </Link>
             </div>
+          </div>
+
+          {/* Event spend & profitability tracking */}
+          <div className="dante-card p-6">
+            <div className="gold-rule max-w-xs mb-4"><span>BUDGET &amp; SPEND</span></div>
+            <EventSpendSection bookingId={bookingId} />
           </div>
 
           {/* Payment history */}

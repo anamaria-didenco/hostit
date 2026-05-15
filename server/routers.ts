@@ -28,6 +28,35 @@ function formatVenueDateTime(eventDate: Date | string, timeZone: string = "Pacif
   return { dateStr, timeStr };
 }
 
+// Recalculates and persists `bookings.depositPaid` based on net payments
+// (sum minus refunds) vs the booking's deposit amount. Called whenever
+// payments are added or removed so the deposit badge stays in sync without
+// the user having to tick a checkbox manually.
+async function syncDepositPaidFlag(bookingId: number, ownerId: number) {
+  try {
+    const { getDb } = await import('./db');
+    const { bookings, payments } = await import('../drizzle/schema');
+    const { eq, and } = await import('drizzle-orm');
+    const db = await getDb();
+    if (!db) return;
+    const [booking] = await db.select().from(bookings)
+      .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ownerId)));
+    if (!booking) return;
+    const pmts = await db.select().from(payments)
+      .where(and(eq(payments.bookingId, bookingId), eq(payments.ownerId, ownerId)));
+    const net = pmts.reduce((s, p) => s + (p.type === 'refund' ? -1 : 1) * Number(p.amount), 0);
+    const depositRequired = Number(booking.depositNzd ?? 0);
+    const shouldBePaid = depositRequired > 0 && net >= depositRequired;
+    if (Boolean(booking.depositPaid) !== shouldBePaid) {
+      await db.update(bookings)
+        .set({ depositPaid: shouldBePaid })
+        .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ownerId)));
+    }
+  } catch (err) {
+    console.error('[syncDepositPaidFlag] failed', err);
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
 
@@ -1487,6 +1516,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.status !== undefined) updates.status = rest.status;
         if (rest.notes !== undefined) updates.notes = rest.notes;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        // Re-sync depositPaid whenever the deposit amount or flag is touched,
+        // so the badge can never drift out of step with recorded payments.
+        if (rest.depositNzd !== undefined || rest.depositPaid !== undefined) {
+          await syncDepositPaidFlag(id, ctx.user.id);
+        }
         // ── NowBookIt sync — fires when the booking transitions into 'confirmed' ──
         if (rest.status === 'confirmed') {
           const { pushBookingToNbi } = await import('./nowbookit');
@@ -2753,6 +2787,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           paidAt: new Date(input.paidAt),
           notes: input.notes,
         }).returning({ id: payments.id });
+        await syncDepositPaidFlag(input.bookingId, ctx.user.id);
         return { id: result.id, success: true };
       }),
     delete: protectedProcedure
@@ -2763,7 +2798,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        // Capture bookingId before delete so we can re-sync the flag.
+        const [pmt] = await db.select({ bookingId: payments.bookingId })
+          .from(payments)
+          .where(and(eq(payments.id, input.id), eq(payments.ownerId, ctx.user.id)));
         await db.delete(payments).where(and(eq(payments.id, input.id), eq(payments.ownerId, ctx.user.id)));
+        if (pmt) await syncDepositPaidFlag(pmt.bookingId, ctx.user.id);
         return { success: true };
       }),
     summary: protectedProcedure
