@@ -224,6 +224,13 @@
       "when": 1777807800000,
       "tag": "0031_finished_status",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1778841999999,
+      "tag": "0032_sample_menu",
+      "breakpoints": true
     }
   ]
 }

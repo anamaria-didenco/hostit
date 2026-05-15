@@ -122,6 +122,28 @@ export default function ProposalView() {
     { enabled: !!token }
   );
 
+  const SAMPLE_MENU_SECTIONS: { category: string; note: string; items: { key: string; name: string }[] }[] = [
+    { category: "Antipasto", note: "To share", items: [
+      { key: "antipasto_focaccia", name: "Focaccia with rosemary and olive oil" },
+      { key: "antipasto_olives", name: "Citrus-thyme olives" },
+      { key: "antipasto_salumi", name: "Salumi selection" },
+      { key: "antipasto_ricotta", name: "Ricotta montata with pickled tomato and basil oil" },
+    ]},
+    { category: "Secondi", note: "To share", items: [
+      { key: "secondi_spaghetti", name: "Spaghetti al Ragù Toscano with free farmed pork" },
+      { key: "secondi_risotto", name: "Cavolo Nero risotto with parmigiano cream and grilled kale" },
+      { key: "secondi_milanese", name: "Chicken Milanese with tomato sugo and grilled peppers" },
+    ]},
+    { category: "Contorno", note: "To share", items: [
+      { key: "contorno_greens", name: "Mixed greens with mint and almond" },
+      { key: "contorno_cos", name: "Fresh cos salad with citrus and pecorino" },
+      { key: "contorno_potatoes", name: "Triple cooked potatoes with parsley mayonnaise" },
+    ]},
+    { category: "Dolce", note: "", items: [
+      { key: "dolce_tiramisu", name: "Tiramisu with Amaretto, coffee, mascarpone" },
+    ]},
+  ];
+
   const DRINKS_MENU_MAP: Record<string, { name: string; description?: string; price?: number; priceGlass?: number; priceBottle?: number }> = {
     aperol_spritz: { name: "Aperol Spritz", description: "Aperol, Prosecco, Soda", price: 20 },
     campari_spritz: { name: "Campari Spritz", description: "Campari, Prosecco, Soda", price: 20 },
@@ -407,6 +429,34 @@ export default function ProposalView() {
                   </div>
                 </div>
               )}
+
+              {(drinksData as any).selectedSampleItems && ((drinksData as any).selectedSampleItems as string[]).length > 0 && (() => {
+                const selected = new Set((drinksData as any).selectedSampleItems as string[]);
+                const sectionsWithItems = SAMPLE_MENU_SECTIONS
+                  .map(s => ({ ...s, items: s.items.filter(i => selected.has(i.key)) }))
+                  .filter(s => s.items.length > 0);
+                if (sectionsWithItems.length === 0) return null;
+                return (
+                  <div>
+                    <div className="font-bebas text-xs tracking-widest mb-3" style={{ color: T.stone }}>SHARED MENU</div>
+                    {sectionsWithItems.map(sec => (
+                      <div key={sec.category} className="mb-4">
+                        <div className="font-playfair italic text-sm mb-2 pb-1 border-b" style={{ color: T.accent ?? T.ink, borderColor: T.border }}>
+                          {sec.category}
+                          {sec.note && <span className="font-inter not-italic text-xs ml-2" style={{ color: T.stone }}>({sec.note})</span>}
+                        </div>
+                        <div className="space-y-1.5">
+                          {sec.items.map(item => (
+                            <div key={item.key} className="py-1.5 border-b border-dashed last:border-0" style={{ borderColor: T.border }}>
+                              <div className="font-playfair text-sm font-medium" style={{ color: T.ink }}>{item.name}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {drinksData.customDrinks && (drinksData.customDrinks as any[]).length > 0 && (
                 <div>

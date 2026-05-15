@@ -1213,6 +1213,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           description: z.string().optional(),
           price: z.number().optional(),
         })),
+        selectedSampleItems: z.array(z.string()).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1234,6 +1235,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               tabAmount: input.tabAmount?.toString() as any,
               selectedDrinks: input.selectedDrinks,
               customDrinks: input.customDrinks,
+              selectedSampleItems: input.selectedSampleItems ?? [],
             })
             .where(eq(proposalDrinks.proposalId, input.proposalId));
         } else {
@@ -1244,6 +1246,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             tabAmount: input.tabAmount?.toString() as any,
             selectedDrinks: input.selectedDrinks,
             customDrinks: input.customDrinks,
+            selectedSampleItems: input.selectedSampleItems ?? [],
           });
         }
         return { success: true };

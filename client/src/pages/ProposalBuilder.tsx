@@ -124,6 +124,34 @@ export default function ProposalBuilder() {
   const [selectedDrinks, setSelectedDrinks] = useState<string[]>([]);
   const [customDrinks, setCustomDrinks] = useState<{ name: string; description?: string; price?: number }[]>([]);
   const [newCustomDrink, setNewCustomDrink] = useState({ name: "", description: "", price: "" });
+  const [selectedSampleItems, setSelectedSampleItems] = useState<string[]>([]);
+
+  // ── Sample Shared Menu (food, all "to share" except Dolce) ────────────────
+  const SAMPLE_MENU = [
+    { category: "Antipasto", note: "To share", items: [
+      { key: "antipasto_focaccia", name: "Focaccia with rosemary and olive oil" },
+      { key: "antipasto_olives", name: "Citrus-thyme olives" },
+      { key: "antipasto_salumi", name: "Salumi selection" },
+      { key: "antipasto_ricotta", name: "Ricotta montata with pickled tomato and basil oil" },
+    ]},
+    { category: "Secondi", note: "To share", items: [
+      { key: "secondi_spaghetti", name: "Spaghetti al Ragù Toscano with free farmed pork" },
+      { key: "secondi_risotto", name: "Cavolo Nero risotto with parmigiano cream and grilled kale" },
+      { key: "secondi_milanese", name: "Chicken Milanese with tomato sugo and grilled peppers" },
+    ]},
+    { category: "Contorno", note: "To share", items: [
+      { key: "contorno_greens", name: "Mixed greens with mint and almond" },
+      { key: "contorno_cos", name: "Fresh cos salad with citrus and pecorino" },
+      { key: "contorno_potatoes", name: "Triple cooked potatoes with parsley mayonnaise" },
+    ]},
+    { category: "Dolce", note: "", items: [
+      { key: "dolce_tiramisu", name: "Tiramisu with Amaretto, coffee, mascarpone" },
+    ]},
+  ] as const;
+
+  const toggleSampleItem = (key: string) => {
+    setSelectedSampleItems(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  };
 
   const DRINKS_MENU = [
     { category: "Aperitivo", items: [
@@ -203,6 +231,7 @@ export default function ProposalBuilder() {
       tabAmount: tabAmount ? parseFloat(tabAmount) : undefined,
       selectedDrinks: [...selectedDrinks],
       customDrinks,
+      selectedSampleItems: [...selectedSampleItems],
     });
   };
 
@@ -853,6 +882,40 @@ export default function ProposalBuilder() {
                     </div>
                   </div>
                 ))}
+
+                {/* Sample Shared Menu (Food) */}
+                <div className="pt-4 mt-2 border-t-2 border-primary/20">
+                  <div className="font-bebas text-sm tracking-widest text-ink mb-1">SAMPLE SHARED MENU</div>
+                  <div className="font-dm text-xs text-muted-foreground mb-3">Tick any food items to include on the proposal.</div>
+                  {SAMPLE_MENU.map(cat => (
+                    <div key={cat.category} className="mb-4">
+                      <div className="font-playfair italic text-sm text-primary mb-2 border-b border-primary/20 pb-1">
+                        {cat.category}
+                        {cat.note && <span className="font-dm not-italic text-xs text-muted-foreground ml-2">({cat.note})</span>}
+                      </div>
+                      <div className="space-y-1.5">
+                        {cat.items.map(item => (
+                          <label
+                            key={item.key}
+                            className={`flex items-start gap-3 p-2 cursor-pointer rounded-sm transition-colors ${
+                              selectedSampleItems.includes(item.key) ? 'bg-primary/5 border border-primary/20' : 'hover:bg-black/5 border border-transparent'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedSampleItems.includes(item.key)}
+                              onChange={() => toggleSampleItem(item.key)}
+                              className="mt-0.5 accent-primary"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-dm text-sm text-ink">{item.name}</div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                 {/* Custom Drinks */}
                 <div>

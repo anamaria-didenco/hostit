@@ -76,6 +76,59 @@ function buildHtml(data: {
   const venueLogoUrl = venue?.logoUrl ?? "";
   const primaryColor = venue?.primaryColor ?? "#350513";
 
+  // Sample shared menu (food)
+  const SAMPLE_MENU_SECTIONS: { category: string; note: string; items: { key: string; name: string }[] }[] = [
+    { category: "Antipasto", note: "To share", items: [
+      { key: "antipasto_focaccia", name: "Focaccia with rosemary and olive oil" },
+      { key: "antipasto_olives", name: "Citrus-thyme olives" },
+      { key: "antipasto_salumi", name: "Salumi selection" },
+      { key: "antipasto_ricotta", name: "Ricotta montata with pickled tomato and basil oil" },
+    ]},
+    { category: "Secondi", note: "To share", items: [
+      { key: "secondi_spaghetti", name: "Spaghetti al Ragù Toscano with free farmed pork" },
+      { key: "secondi_risotto", name: "Cavolo Nero risotto with parmigiano cream and grilled kale" },
+      { key: "secondi_milanese", name: "Chicken Milanese with tomato sugo and grilled peppers" },
+    ]},
+    { category: "Contorno", note: "To share", items: [
+      { key: "contorno_greens", name: "Mixed greens with mint and almond" },
+      { key: "contorno_cos", name: "Fresh cos salad with citrus and pecorino" },
+      { key: "contorno_potatoes", name: "Triple cooked potatoes with parsley mayonnaise" },
+    ]},
+    { category: "Dolce", note: "", items: [
+      { key: "dolce_tiramisu", name: "Tiramisu with Amaretto, coffee, mascarpone" },
+    ]},
+  ];
+
+  let sampleMenuHtml = "";
+  const sampleSelected: string[] = (drinks as any)?.selectedSampleItems ?? [];
+  if (sampleSelected.length > 0) {
+    const selectedSet = new Set(sampleSelected);
+    const sectionsHtml = SAMPLE_MENU_SECTIONS
+      .map(sec => {
+        const picked = sec.items.filter(i => selectedSet.has(i.key));
+        if (picked.length === 0) return "";
+        const rows = picked
+          .map(i => `<tr><td class="item-name">${i.name}</td><td class="item-desc">${sec.note ? `<em>${sec.note}</em>` : ""}</td></tr>`)
+          .join("");
+        return `
+          <div style="margin-top:12px;">
+            <div style="font-style:italic; font-size:13px; color:${primaryColor}; border-bottom:1px solid #ddd; padding-bottom:4px; margin-bottom:6px;">
+              ${sec.category}${sec.note ? ` <span style="font-style:normal; font-size:11px; color:#777;">(${sec.note})</span>` : ""}
+            </div>
+            <table class="items-table"><tbody>${rows}</tbody></table>
+          </div>`;
+      })
+      .filter(Boolean)
+      .join("");
+    if (sectionsHtml) {
+      sampleMenuHtml = `
+        <div class="section">
+          <h2 class="section-title">Shared Menu</h2>
+          ${sectionsHtml}
+        </div>`;
+    }
+  }
+
   // Drinks section HTML
   let drinksHtml = "";
   if (drinks) {
@@ -294,6 +347,7 @@ function buildHtml(data: {
 
   <!-- Drinks -->
   ${drinksHtml}
+  ${sampleMenuHtml}
 
   <!-- Quote / Min Spend -->
   ${quoteHtml}

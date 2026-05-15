@@ -372,6 +372,7 @@ export const proposalDrinks = pgTable("proposal_drinks", {
   tabAmount: decimal("tabAmount", { precision: 10, scale: 2 }),
   selectedDrinks: json("selectedDrinks").$type<string[]>().notNull(),
   customDrinks: json("customDrinks").$type<{ name: string; description?: string; price?: number }[]>().notNull(),
+  selectedSampleItems: json("selectedSampleItems").$type<string[]>().default([]),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
