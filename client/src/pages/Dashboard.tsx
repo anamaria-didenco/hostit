@@ -1281,6 +1281,48 @@ export default function Dashboard() {
 
   const [editingEventDetails, setEditingEventDetails] = useState(false);
   const [eventDetailForm, setEventDetailForm] = useState<any>({});
+  // Inline edit state for the booking slide-out panel: only one field at a time.
+  // `value` is held as a string while editing (forms only deal in strings) and
+  // coerced to the right type at save.
+  const [drawerEdit, setDrawerEdit] = useState<{ field: string; value: string } | null>(null);
+  function saveDrawerField(field: string, raw: string) {
+    if (!selectedBooking) return;
+    // Email and eventDate are non-nullable on the server schemas — silently
+    // ignore "clear to empty" attempts rather than firing a request that will
+    // fail validation and leave the optimistic state out of sync.
+    if ((field === "email" || field === "eventDate") && raw.trim() === "") {
+      setDrawerEdit(null);
+      return;
+    }
+    let mutValue: any = raw;
+    if (field === "guestCount") mutValue = raw === "" ? null : Number(raw);
+    else if (field === "totalNzd" || field === "depositNzd") mutValue = raw === "" ? null : Number(raw);
+    else if (field === "eventDate") mutValue = new Date(raw).toISOString();
+    else if (field === "spaceName") mutValue = raw === "" ? null : raw;
+    else mutValue = raw; // email and any other string field
+    // Optimistic local update — keep the prior value so we can roll back if the
+    // server rejects the mutation.
+    const prevValue = (selectedBooking as any)[field];
+    setSelectedBooking((prev: any) => prev ? { ...prev, [field]: field === "eventDate" ? mutValue : mutValue } : prev);
+    const onErr = () => {
+      setSelectedBooking((prev: any) => (prev && prev.id === selectedBooking.id) ? { ...prev, [field]: prevValue } : prev);
+      toast.error("Failed to save change — reverted");
+    };
+    if (selectedBooking._isLead) {
+      rescheduleLead.mutate({ id: selectedBooking.id, [field]: mutValue } as any, { onError: onErr });
+    } else {
+      rescheduleBooking.mutate({ id: selectedBooking.id, [field]: mutValue } as any, { onError: onErr });
+    }
+    setDrawerEdit(null);
+  }
+  // ISO datetime → value for <input type="datetime-local"> (yyyy-MM-ddTHH:mm in LOCAL time).
+  function toDatetimeLocal(iso: string | null | undefined): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
   const updateLeadDetails = trpc.leads.update.useMutation({
     onSuccess: (_data, vars) => {
       refetchLeads();
@@ -7329,68 +7371,215 @@ export default function Dashboard() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Key Details */}
+              {/* Key Details — every row is click-to-edit. Pencil reveals an
+                  inline input; Save commits via bookings.update or leads.update,
+                  Cancel/Esc/blur reverts. */}
               <div className="space-y-3">
+                {/* DATE */}
                 <div className="flex items-start gap-3">
                   <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                  <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/40">DATE</div>
-                    <div className="font-dm text-sm text-ink">
-                      {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="font-bebas text-xs tracking-widest text-ink/40">DATE</div>
+                      {drawerEdit?.field !== "eventDate" && (
+                        <button onClick={() => setDrawerEdit({ field: "eventDate", value: toDatetimeLocal(selectedBooking.eventDate) })}
+                          className="text-ink/30 hover:text-forest" aria-label="Edit date">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
-                    {(fmtEventTime(selectedBooking.eventDate) || selectedBooking.eventEndDate) && (
-                      <div className="font-dm text-xs text-forest mt-0.5">
-                        {fmtEventTime(selectedBooking.eventDate)}
-                        {selectedBooking.eventEndDate && fmtEventTime(selectedBooking.eventEndDate) && (
-                          <> – {fmtEventTime(selectedBooking.eventEndDate)}</>
-                        )}
+                    {drawerEdit?.field === "eventDate" ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <Input type="datetime-local" value={drawerEdit.value}
+                          onChange={e => setDrawerEdit({ field: "eventDate", value: e.target.value })}
+                          className="h-8 text-xs" autoFocus />
+                        <button onClick={() => saveDrawerField("eventDate", drawerEdit.value)}
+                          className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                        <button onClick={() => setDrawerEdit(null)}
+                          className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
                       </div>
+                    ) : (
+                      <>
+                        <div className="font-dm text-sm text-ink">
+                          {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
+                        </div>
+                        {(fmtEventTime(selectedBooking.eventDate) || selectedBooking.eventEndDate) && (
+                          <div className="font-dm text-xs text-forest mt-0.5">
+                            {fmtEventTime(selectedBooking.eventDate)}
+                            {selectedBooking.eventEndDate && fmtEventTime(selectedBooking.eventEndDate) && (
+                              <> – {fmtEventTime(selectedBooking.eventEndDate)}</>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
-                {selectedBooking.guestCount && (
-                  <div className="flex items-start gap-3">
-                    <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                    <div>
+                {/* GUESTS */}
+                <div className="flex items-start gap-3">
+                  <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
                       <div className="font-bebas text-xs tracking-widest text-ink/40">GUESTS</div>
-                      <div className="font-dm text-sm text-ink">{selectedBooking.guestCount}</div>
+                      {drawerEdit?.field !== "guestCount" && (
+                        <button onClick={() => setDrawerEdit({ field: "guestCount", value: selectedBooking.guestCount?.toString() ?? "" })}
+                          className="text-ink/30 hover:text-forest" aria-label="Edit guests">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
+                    {drawerEdit?.field === "guestCount" ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <Input type="number" min="0" value={drawerEdit.value}
+                          onChange={e => setDrawerEdit({ field: "guestCount", value: e.target.value })}
+                          className="h-8 text-xs w-24" autoFocus />
+                        <button onClick={() => saveDrawerField("guestCount", drawerEdit.value)}
+                          className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                        <button onClick={() => setDrawerEdit(null)}
+                          className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
+                      </div>
+                    ) : (
+                      <div className="font-dm text-sm text-ink">{selectedBooking.guestCount ?? '—'}</div>
+                    )}
                   </div>
-                )}
-                {selectedBooking.spaceName && (
+                </div>
+                {/* SPACE — bookings only (leads.update has no spaceName field) */}
+                {!selectedBooking._isLead && (
                   <div className="flex items-start gap-3">
                     <MapPin className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                    <div>
-                      <div className="font-bebas text-xs tracking-widest text-ink/40">SPACE</div>
-                      <div className="font-dm text-sm text-ink">{selectedBooking.spaceName}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bebas text-xs tracking-widest text-ink/40">SPACE</div>
+                        {drawerEdit?.field !== "spaceName" && (
+                          <button onClick={() => setDrawerEdit({ field: "spaceName", value: selectedBooking.spaceName ?? "" })}
+                            className="text-ink/30 hover:text-forest" aria-label="Edit space">
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                      {drawerEdit?.field === "spaceName" ? (
+                        <div className="flex items-center gap-1 mt-1">
+                          {spaces && spaces.length > 0 ? (
+                            <Select value={drawerEdit.value || "__clear__"}
+                              onValueChange={v => saveDrawerField("spaceName", v === "__clear__" ? "" : v)}>
+                              <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Pick a space" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__clear__" className="text-xs italic text-ink/50">— None —</SelectItem>
+                                {spaces.map((s: any) => (
+                                  <SelectItem key={s.id} value={s.name} className="text-xs">{s.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input value={drawerEdit.value}
+                              onChange={e => setDrawerEdit({ field: "spaceName", value: e.target.value })}
+                              className="h-8 text-xs flex-1" autoFocus />
+                          )}
+                          <button onClick={() => saveDrawerField("spaceName", drawerEdit.value)}
+                            className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                          <button onClick={() => setDrawerEdit(null)}
+                            className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="font-dm text-sm text-ink">{selectedBooking.spaceName || '—'}</div>
+                      )}
                     </div>
                   </div>
                 )}
+                {/* EMAIL */}
                 <div className="flex items-start gap-3">
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                  <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/40">EMAIL</div>
-                    <div className="font-dm text-sm text-ink">{selectedBooking.email}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="font-bebas text-xs tracking-widest text-ink/40">EMAIL</div>
+                      {drawerEdit?.field !== "email" && (
+                        <button onClick={() => setDrawerEdit({ field: "email", value: selectedBooking.email ?? "" })}
+                          className="text-ink/30 hover:text-forest" aria-label="Edit email">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    {drawerEdit?.field === "email" ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <Input type="email" value={drawerEdit.value}
+                          onChange={e => setDrawerEdit({ field: "email", value: e.target.value })}
+                          className="h-8 text-xs flex-1" autoFocus />
+                        <button onClick={() => saveDrawerField("email", drawerEdit.value)}
+                          className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                        <button onClick={() => setDrawerEdit(null)}
+                          className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
+                      </div>
+                    ) : (
+                      <div className="font-dm text-sm text-ink truncate">{selectedBooking.email || '—'}</div>
+                    )}
                   </div>
                 </div>
               </div>
-              {/* Financials — bookings only */}
+              {/* Financials — bookings only. Total/Deposit are click-to-edit;
+                  the deposit-paid badge toggles on click. */}
               {!selectedBooking._isLead && (
                 <div className="bg-forest-dark/5 border border-gold/20 p-4">
                   <div className="font-bebas text-xs tracking-widest text-ink/40 mb-3">FINANCIALS</div>
                   <div className="grid grid-cols-2 gap-3">
+                    {/* TOTAL */}
                     <div>
-                      <div className="font-bebas text-xs tracking-widest text-ink/40">TOTAL</div>
-                      <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                      <div className="flex items-center justify-between">
+                        <div className="font-bebas text-xs tracking-widest text-ink/40">TOTAL</div>
+                        {drawerEdit?.field !== "totalNzd" && (
+                          <button onClick={() => setDrawerEdit({ field: "totalNzd", value: selectedBooking.totalNzd != null ? String(selectedBooking.totalNzd) : "" })}
+                            className="text-ink/30 hover:text-forest" aria-label="Edit total">
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                      {drawerEdit?.field === "totalNzd" ? (
+                        <div className="flex items-center gap-1 mt-1">
+                          <Input type="number" min="0" step="0.01" value={drawerEdit.value}
+                            onChange={e => setDrawerEdit({ field: "totalNzd", value: e.target.value })}
+                            className="h-8 text-sm" autoFocus />
+                          <button onClick={() => saveDrawerField("totalNzd", drawerEdit.value)}
+                            className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                        </div>
+                      ) : (
+                        <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                      )}
                     </div>
+                    {/* DEPOSIT */}
                     <div>
-                      <div className="font-bebas text-xs tracking-widest text-ink/40">DEPOSIT</div>
-                      <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.depositNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                      <div className="flex items-center justify-between">
+                        <div className="font-bebas text-xs tracking-widest text-ink/40">DEPOSIT</div>
+                        {drawerEdit?.field !== "depositNzd" && (
+                          <button onClick={() => setDrawerEdit({ field: "depositNzd", value: selectedBooking.depositNzd != null ? String(selectedBooking.depositNzd) : "" })}
+                            className="text-ink/30 hover:text-forest" aria-label="Edit deposit">
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                      {drawerEdit?.field === "depositNzd" ? (
+                        <div className="flex items-center gap-1 mt-1">
+                          <Input type="number" min="0" step="0.01" value={drawerEdit.value}
+                            onChange={e => setDrawerEdit({ field: "depositNzd", value: e.target.value })}
+                            className="h-8 text-sm" autoFocus />
+                          <button onClick={() => saveDrawerField("depositNzd", drawerEdit.value)}
+                            className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                        </div>
+                      ) : (
+                        <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.depositNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                      )}
                     </div>
                   </div>
-                  <div className={`mt-2 font-bebas text-xs tracking-widest ${
-                    selectedBooking.depositPaid ? 'text-forest' : 'text-amber-600'
-                  }`}>{selectedBooking.depositPaid ? '✓ DEPOSIT PAID' : '⚠ DEPOSIT PENDING'}</div>
+                  <button
+                    onClick={() => {
+                      const next = !selectedBooking.depositPaid;
+                      setSelectedBooking((prev: any) => prev ? { ...prev, depositPaid: next } : prev);
+                      rescheduleBooking.mutate({ id: selectedBooking.id, depositPaid: next } as any);
+                    }}
+                    className={`mt-2 font-bebas text-xs tracking-widest cursor-pointer hover:opacity-80 ${
+                      selectedBooking.depositPaid ? 'text-forest' : 'text-amber-600'
+                    }`}
+                    title="Click to toggle">
+                    {selectedBooking.depositPaid ? '✓ DEPOSIT PAID — click to mark unpaid' : '⚠ DEPOSIT PENDING — click to mark paid'}
+                  </button>
                 </div>
               )}
               {/* Quick Actions */}
