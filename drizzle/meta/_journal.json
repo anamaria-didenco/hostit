@@ -231,6 +231,13 @@
       "when": 1778841999999,
       "tag": "0032_sample_menu",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1778900000000,
+      "tag": "0033_minimum_spend",
+      "breakpoints": true
     }
   ]
 }

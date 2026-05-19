@@ -1296,7 +1296,7 @@ export default function Dashboard() {
     }
     let mutValue: any = raw;
     if (field === "guestCount") mutValue = raw === "" ? null : Number(raw);
-    else if (field === "totalNzd" || field === "depositNzd") mutValue = raw === "" ? null : Number(raw);
+    else if (field === "totalNzd" || field === "depositNzd" || field === "minimumSpend") mutValue = raw === "" ? null : Number(raw);
     else if (field === "eventDate") mutValue = new Date(raw).toISOString();
     else if (field === "spaceName") mutValue = raw === "" ? null : raw;
     else mutValue = raw; // email and any other string field
@@ -7440,6 +7440,38 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       <div className="font-dm text-sm text-ink">{selectedBooking.guestCount ?? '—'}</div>
+                    )}
+                  </div>
+                </div>
+                {/* MINIMUM SPEND — customisable; hidden when empty unless editing */}
+                <div className="flex items-start gap-3">
+                  <DollarSign className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="font-bebas text-xs tracking-widest text-ink/40">MINIMUM SPEND</div>
+                      {drawerEdit?.field !== "minimumSpend" && (
+                        <button onClick={() => setDrawerEdit({ field: "minimumSpend", value: selectedBooking.minimumSpend != null ? String(selectedBooking.minimumSpend) : "" })}
+                          className="text-ink/30 hover:text-forest" aria-label="Edit minimum spend">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    {drawerEdit?.field === "minimumSpend" ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <Input type="number" min="0" step="0.01" value={drawerEdit.value}
+                          onChange={e => setDrawerEdit({ field: "minimumSpend", value: e.target.value })}
+                          placeholder="e.g. 2500" className="h-8 text-xs flex-1" autoFocus />
+                        <button onClick={() => saveDrawerField("minimumSpend", drawerEdit.value)}
+                          className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                        <button onClick={() => setDrawerEdit(null)}
+                          className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
+                      </div>
+                    ) : (
+                      <div className="font-dm text-sm text-ink">
+                        {selectedBooking.minimumSpend != null && selectedBooking.minimumSpend !== ""
+                          ? `$${Number(selectedBooking.minimumSpend).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}`
+                          : <span className="text-ink/30 italic">Not set</span>}
+                      </div>
                     )}
                   </div>
                 </div>

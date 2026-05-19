@@ -305,6 +305,7 @@ export default function RunsheetBuilder() {
   // user clears them.
   const [rsSelectedDrinks, setRsSelectedDrinks] = useState<string[]>([]);
   const [rsCustomDrinks, setRsCustomDrinks] = useState<{ name: string; description?: string; price?: number }[]>([]);
+  const [newRsCustomDrink, setNewRsCustomDrink] = useState({ name: "", description: "" });
   const [drinksSaving, setDrinksSaving] = useState(false);
 
   function clearLegacyDrinkSelections() {
@@ -957,6 +958,9 @@ export default function RunsheetBuilder() {
     onSuccess: () => { toast.success('Link deleted'); refetchStaffLinks(); },
     onError: () => toast.error('Failed to delete link'),
   });
+  // Used by the per-link "Email staff briefing" button — sends the runsheet
+  // share link plus the freshly rendered staff PDF via the operator's SMTP.
+  const emailSendMutation = trpc.email.send.useMutation();
   // AI F&B parse mutation
   const parseFnbMutation = trpc.menuCatalog.parseFnbText.useMutation({
     onSuccess: (data: any) => {
@@ -1227,6 +1231,32 @@ export default function RunsheetBuilder() {
     }, 600);
     return () => clearTimeout(t);
   }, [dietaries, sheetId]);
+
+  // Auto-save notes / drinks / payment notes / event header fields (debounced).
+  // Means the user no longer has to remember to click Save after every tweak —
+  // changes hit the server within ~1s and are reflected on the staff/live link.
+  const autosaveInitialized = React.useRef(false);
+  useEffect(() => {
+    if (!autosaveInitialized.current) { autosaveInitialized.current = true; return; }
+    if (!sheetId) return;
+    const t = setTimeout(() => {
+      silentUpdateMutation.mutate({
+        id: sheetId,
+        notes: notes || undefined,
+        paymentNotes: paymentNotes || undefined,
+        spaceName: spaceName || undefined,
+        venueArea: venueArea || undefined,
+        eventStartTime: eventStartTime || null,
+        eventEndTime: eventEndTime || null,
+        guestCount: guestCount ? Number(guestCount) : undefined,
+        eventType: eventType || undefined,
+        venueSetup: venueSetup || undefined,
+        gstInclusive,
+        drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined },
+      } as any);
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [sheetId, notes, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, gstInclusive, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks]);
 
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
@@ -2205,9 +2235,9 @@ export default function RunsheetBuilder() {
               <span className="font-bebas tracking-widest text-sm text-white">EVENT TIMELINE</span>
             </div>
 
-            {/* General notes — at top */}
+            {/* Event notes — at top */}
             <div className="px-5 py-3 border-b border-gold/20 bg-linen/30">
-              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1.5">GENERAL NOTES</label>
+              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1.5">EVENT NOTES</label>
               <RichTextarea
                 value={notes}
                 onChange={setNotes}
@@ -2640,6 +2670,37 @@ export default function RunsheetBuilder() {
 
             {/* Items sub-tab wrapper */}
             <div className={fnbSubTab === 'items' ? '' : 'hidden print:block'}>
+            {/* ── BAR ARRANGEMENT (moved above F&B selections per user request) ─ */}
+            {(rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length) ? (
+              <div className="px-5 py-4 border-b border-gold/20 print:avoid-break bg-blue-50/30">
+                <div className="font-bebas tracking-widest text-xs text-forest mb-2">BAR ARRANGEMENT</div>
+                <div className="text-sm font-dm text-ink/80 capitalize mb-2">
+                  <span className="font-semibold">{rsBarOption.replace(/_/g, ' ')}</span>
+                  {rsTabAmount && (rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash')
+                    ? ` — Bar tab: $${Number(rsTabAmount).toLocaleString('en-NZ')}` : ''}
+                </div>
+                {rsBarNotes && (
+                  <div className="text-sm font-dm text-ink/70 whitespace-pre-wrap mb-2 bg-white border-l-2 border-blue-300 pl-2 py-1">
+                    {rsBarNotes}
+                  </div>
+                )}
+                {(rsSelectedDrinks.length > 0 || rsCustomDrinks.length > 0) && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {rsSelectedDrinks.map(k => {
+                      const found = DRINKS_MENU.flatMap((c: any) => c.items as any[]).find((i: any) => i.key === k);
+                      return (
+                        <span key={k} className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 font-dm border border-blue-200">
+                          {found ? found.name : k.replace(/_/g, ' ')}
+                        </span>
+                      );
+                    })}
+                    {rsCustomDrinks.map((d, i) => (
+                      <span key={i} className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 font-dm border border-amber-200">{d.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
 
             {/* ── PROPOSAL F&B SUMMARY ─────────────────────────────────── */}
             {linkedProposalId && (proposalDrinks || (proposalQuote?.items && proposalQuote.items.length > 0) || (linkedProposal?.lineItems)) && (
@@ -2985,10 +3046,10 @@ export default function RunsheetBuilder() {
                             {showQtyCol && (
                               <div className={item.course === 'Drinks' ? 'print:hidden' : ''}>
                                 {item.course !== 'Drinks' && item.qty > 1 && (
-                                  <input type="number" min={1} value={item.qty} onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))} className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center" />
+                                  <input type="number" min={1} value={item.qty || ''} placeholder="1" onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))} className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center" />
                                 )}
                                 {item.course !== 'Drinks' && item.qty <= 1 && (
-                                  <input type="number" min={1} value={item.qty} onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))} className="w-12 font-dm text-sm text-ink/20 bg-transparent border-0 focus:outline-none text-center opacity-0 group-hover:opacity-100 transition-opacity" title="Qty (default 1)" />
+                                  <input type="number" min={1} value={item.qty || ''} placeholder="1" onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))} className="w-12 font-dm text-sm text-ink/20 bg-transparent border-0 focus:outline-none text-center opacity-0 group-hover:opacity-100 transition-opacity" title="Qty (default 1)" />
                                 )}
                               </div>
                             )}
@@ -3041,7 +3102,7 @@ export default function RunsheetBuilder() {
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
-                                <input type="number" min={1} value={item.qty ?? 1} onChange={e => updateFnbItem(originalIdx, 'qty', Number(e.target.value))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <input type="number" min={1} value={item.qty || ''} placeholder="1" onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY / ALLERGEN</label>
@@ -3121,35 +3182,39 @@ export default function RunsheetBuilder() {
                 </div>
               </div>
             )}
-            {/* ── BAR ARRANGEMENT (print + screen) ───────────────────────────── */}
-            {(rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length) ? (
-              <div className="px-5 py-4 border-t border-gold/20 print:avoid-break">
-                <div className="font-bebas tracking-widest text-xs text-forest mb-2">BAR ARRANGEMENT</div>
-                <div className="text-sm font-dm text-ink/80 capitalize mb-2">
-                  <span className="font-semibold">{rsBarOption.replace(/_/g, ' ')}</span>
-                  {rsTabAmount && (rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash')
-                    ? ` — Bar tab: $${Number(rsTabAmount).toLocaleString('en-NZ')}` : ''}
+            {/* ── RUNNING TOTALS (bottom of runsheet) ────────────────────────── */}
+            {(booking?.minimumSpend || rsTabAmount || costItems.length > 0 || booking?.depositNzd) ? (
+              <div className="px-5 py-4 border-t-2 border-forest/20 bg-linen/30 print:avoid-break">
+                <div className="font-bebas tracking-widest text-xs text-forest mb-3">RUNNING TOTALS</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {booking?.minimumSpend != null && Number(booking.minimumSpend) > 0 && (
+                    <div className="bg-white border border-gold/20 px-3 py-2">
+                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">MINIMUM SPEND</div>
+                      <div className="font-cormorant text-lg font-semibold text-ink">${Number(booking.minimumSpend).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                  )}
+                  {rsTabAmount && Number(rsTabAmount) > 0 && (
+                    <div className="bg-white border border-gold/20 px-3 py-2">
+                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">BAR TAB</div>
+                      <div className="font-cormorant text-lg font-semibold text-ink">${Number(rsTabAmount).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                  )}
+                  {costItems.length > 0 && (() => {
+                    const food = costItems.filter(ci => (ci.category || '').toLowerCase().includes('food') || (ci.category || '').toLowerCase().includes('beverage')).reduce((s, ci) => s + Number(ci.qty) * Number(ci.unitPrice), 0);
+                    return food > 0 ? (
+                      <div className="bg-white border border-gold/20 px-3 py-2">
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">FOOD &amp; BEVERAGE</div>
+                        <div className="font-cormorant text-lg font-semibold text-ink">${food.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    ) : null;
+                  })()}
+                  {booking?.depositNzd != null && Number(booking.depositNzd) > 0 && (
+                    <div className={`border px-3 py-2 ${booking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-200'}`}>
+                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
+                      <div className="font-cormorant text-lg font-semibold text-ink">${Number(booking.depositNzd).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                  )}
                 </div>
-                {rsBarNotes && (
-                  <div className="text-sm font-dm text-ink/70 whitespace-pre-wrap mb-2 bg-blue-50/40 border-l-2 border-blue-300 pl-2 py-1">
-                    {rsBarNotes}
-                  </div>
-                )}
-                {(rsSelectedDrinks.length > 0 || rsCustomDrinks.length > 0) && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {rsSelectedDrinks.map(k => {
-                      const found = DRINKS_MENU.flatMap((c: any) => c.items as any[]).find((i: any) => i.key === k);
-                      return (
-                        <span key={k} className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 font-dm border border-blue-200">
-                          {found ? found.name : k.replace(/_/g, ' ')}
-                        </span>
-                      );
-                    })}
-                    {rsCustomDrinks.map((d, i) => (
-                      <span key={i} className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 font-dm border border-amber-200">{d.name}</span>
-                    ))}
-                  </div>
-                )}
               </div>
             ) : null}
             {/* ── EVENT SPEND / BUDGET ───────────────────────────────────────── */}
@@ -3257,6 +3322,52 @@ export default function RunsheetBuilder() {
                     {rsCustomDrinks.map((d, i) => (
                       <span key={`c${i}`} className="inline-flex items-center gap-1.5 bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
                         {d.name}
+                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/40 hover:text-red-600">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Add a custom drink (selected by us) */}
+              <div className="border-t border-gold/20 pt-5">
+                <div className="font-bebas tracking-widest text-xs text-ink/40 mb-2">ADD A CUSTOM DRINK</div>
+                <div className="font-dm text-[11px] text-ink/40 mb-3">Anything not in your saved menu — bespoke cocktails, client-requested wines, signature drinks, etc.</div>
+                <div className="grid grid-cols-12 gap-2">
+                  <input
+                    type="text"
+                    value={newRsCustomDrink.name}
+                    onChange={e => setNewRsCustomDrink((p: any) => ({ ...p, name: e.target.value }))}
+                    placeholder="Drink name (e.g. Signature Espresso Martini)"
+                    className="col-span-5 border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                  />
+                  <input
+                    type="text"
+                    value={newRsCustomDrink.description}
+                    onChange={e => setNewRsCustomDrink((p: any) => ({ ...p, description: e.target.value }))}
+                    placeholder="Description (optional)"
+                    className="col-span-5 border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newRsCustomDrink.name.trim()) return;
+                      setRsCustomDrinks(prev => [...prev, {
+                        name: newRsCustomDrink.name.trim(),
+                        description: newRsCustomDrink.description.trim() || undefined,
+                      }]);
+                      setNewRsCustomDrink({ name: "", description: "" });
+                    }}
+                    className="col-span-2 bg-forest text-cream font-bebas tracking-widest text-xs hover:bg-forest/90 h-9"
+                  >
+                    + ADD
+                  </button>
+                </div>
+                {rsCustomDrinks.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {rsCustomDrinks.map((d, i) => (
+                      <span key={`cd${i}`} className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 text-xs px-2 py-1 font-dm border border-amber-200">
+                        {d.name}{d.description ? ` — ${d.description}` : ''}
                         <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/40 hover:text-red-600">×</button>
                       </span>
                     ))}
@@ -3725,6 +3836,52 @@ export default function RunsheetBuilder() {
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
                           </a>
+                          <button
+                            onClick={async () => {
+                              const to = window.prompt('Email this runsheet + staff PDF to which address?');
+                              if (!to) return;
+                              if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { toast.error('That email looks invalid'); return; }
+                              const tId = toast.loading('Preparing staff briefing...');
+                              try {
+                                // Fetch the staff sheet PDF as a blob, then base64-encode for attachment.
+                                const pdfRes = await fetch(`/api/staff-sheet-pdf/${sheetId}`, { credentials: 'include' });
+                                if (!pdfRes.ok) throw new Error('Could not generate the staff PDF');
+                                const blob = await pdfRes.blob();
+                                const base64: string = await new Promise((resolve, reject) => {
+                                  const r = new FileReader();
+                                  r.onloadend = () => resolve(String(r.result || ''));
+                                  r.onerror = reject;
+                                  r.readAsDataURL(blob);
+                                });
+                                const safeTitle = (title || 'Event').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event';
+                                const filename = `${safeTitle} — Staff Sheet.pdf`;
+                                const lines = [
+                                  `Hi team,`,
+                                  ``,
+                                  `Here's the staff briefing for ${title || 'the event'}${eventDate ? ` on ${new Date(eventDate as any).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}.`,
+                                  ``,
+                                  `Live runsheet (updates as we edit): ${url}`,
+                                  ``,
+                                  `The full staff sheet is attached as a PDF for printing or offline reference.`,
+                                  ``,
+                                  `Thanks!`,
+                                ].join('\n');
+                                await emailSendMutation.mutateAsync({
+                                  to,
+                                  subject: `Staff Briefing — ${title || 'Event'}`,
+                                  body: lines,
+                                  attachments: [{ filename, content: base64, contentType: 'application/pdf' }],
+                                });
+                                toast.success('Staff briefing emailed', { id: tId });
+                              } catch (err: any) {
+                                toast.error(err?.message || 'Could not email staff', { id: tId });
+                              }
+                            }}
+                            className="p-1 hover:text-forest transition-colors text-ink/40"
+                            title="Email staff briefing (runsheet link + PDF)"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={() => deleteStaffLinkMutation.mutate({ id: link.id })}
                             className="p-1 hover:text-red-500 transition-colors text-ink/30"

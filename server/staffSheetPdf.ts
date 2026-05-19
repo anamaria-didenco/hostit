@@ -52,6 +52,17 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     if (!rsRows.length) return res.status(404).send("Runsheet not found");
     const rs = rsRows[0] as any;
 
+    // Pull brand assets from venue settings so the staff PDF carries the
+    // operator's logo + primary colour (matches the BEO/proposal styling).
+    let venueLogoUrl = "";
+    let venuePrimaryColor = "#6b98e7";
+    try {
+      const { getVenueSettings } = await import("./db");
+      const vs = await getVenueSettings(user.id);
+      if (vs?.logoUrl) venueLogoUrl = vs.logoUrl;
+      if (vs?.primaryColor) venuePrimaryColor = vs.primaryColor;
+    } catch {}
+
     const items = await db.select().from(runsheetItems)
       .where(eq(runsheetItems.runsheetId, runsheetId))
       .orderBy(runsheetItems.sortOrder);
@@ -228,7 +239,7 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
 </div>`;
     }
 
-    const fohSection = renderFnbSection("FRONT OF HOUSE — F&amp;B SERVICE", fohItems);
+    const fohSection = renderFnbSection("FOOD &amp; BEVERAGE SELECTION", fohItems);
     const kitchenSection = renderFnbSection("KITCHEN — PREP &amp; PLATING", kitchenItems);
 
     // ── Build HTML ───────────────────────────────────────────────────────────
@@ -253,15 +264,16 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
 
   /* ── Header ── */
   .doc-header {
-    background: #6b98e7;
+    background: ${venuePrimaryColor};
     color: white;
     padding: 14px 20px;
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     margin-bottom: 14px;
   }
-  .doc-header-left {}
+  .doc-header-left { display: flex; align-items: center; gap: 14px; }
+  .doc-logo { height: 36px; width: auto; max-width: 120px; object-fit: contain; background: white; padding: 4px 6px; border-radius: 3px; }
   .doc-type {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 9px;
@@ -507,9 +519,12 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
 
 <div class="doc-header">
   <div class="doc-header-left">
-    <div class="doc-type">FUNCTION RUNSHEET — STAFF COPY</div>
-    <div class="doc-title">${title}</div>
-    ${venueName ? `<div class="doc-venue">${venueName}${spaceName ? ` · ${spaceName}` : ""}</div>` : ""}
+    ${venueLogoUrl ? `<img class="doc-logo" src="${venueLogoUrl}" alt="${venueName || "Venue"}" />` : ""}
+    <div>
+      <div class="doc-type">FUNCTION RUNSHEET — STAFF COPY</div>
+      <div class="doc-title">${title}</div>
+      ${venueName ? `<div class="doc-venue">${venueName}${spaceName ? ` · ${spaceName}` : ""}</div>` : ""}
+    </div>
   </div>
   <div class="doc-header-right">
     <div class="doc-badge">STAFF ONLY</div>

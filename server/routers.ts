@@ -755,14 +755,16 @@ export const appRouter = router({
         eventDate: z.string().nullable().optional(),
         guestCount: z.coerce.number().nullable().optional(),
         budget: z.coerce.number().nullable().optional(),
+        minimumSpend: z.coerce.number().nullable().optional(),
         message: z.string().nullable().optional(),
       }))
       .mutation(async ({ input }) => {
-        const { id, followUpDate, eventDate, ...rest } = input;
+        const { id, followUpDate, eventDate, minimumSpend, ...rest } = input;
         await updateLead(id, {
           ...rest,
           followUpDate: followUpDate ? new Date(followUpDate) : undefined,
           eventDate: eventDate ? new Date(eventDate) : eventDate === null ? null : undefined,
+          minimumSpend: minimumSpend !== undefined ? (minimumSpend !== null ? String(minimumSpend) : null) : undefined,
         } as any);
         return { success: true };
       }),
@@ -1494,6 +1496,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         totalNzd: z.number().nullable().optional(),
         depositNzd: z.number().nullable().optional(),
         depositPaid: z.boolean().optional(),
+        minimumSpend: z.number().nullable().optional(),
         status: z.enum(['confirmed', 'tentative', 'cancelled']).optional(),
         notes: z.string().nullable().optional(),
       }))
@@ -1516,6 +1519,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.totalNzd !== undefined) updates.totalNzd = rest.totalNzd !== null ? String(rest.totalNzd) : null;
         if (rest.depositNzd !== undefined) updates.depositNzd = rest.depositNzd !== null ? String(rest.depositNzd) : null;
         if (rest.depositPaid !== undefined) updates.depositPaid = rest.depositPaid;
+        if (rest.minimumSpend !== undefined) updates.minimumSpend = rest.minimumSpend !== null ? String(rest.minimumSpend) : null;
         if (rest.status !== undefined) updates.status = rest.status;
         if (rest.notes !== undefined) updates.notes = rest.notes;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
@@ -1774,6 +1778,50 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!db) throw new Error('DB not available');
         await db.delete(menuItems).where(and(eq(menuItems.id, input.id), eq(menuItems.ownerId, ctx.user.id)));
         return { success: true };
+      }),
+    // Bulk update or delete multiple items at once. Each entry may include any
+    // subset of editable fields; `delete: true` removes the item entirely.
+    // Used by the Settings → Menu UI for select-multiple bulk actions.
+    bulkUpdateItems: protectedProcedure
+      .input(z.object({
+        items: z.array(z.object({
+          id: z.number(),
+          delete: z.boolean().optional(),
+          name: z.string().optional(),
+          description: z.string().optional(),
+          dietaryNotes: z.string().optional(),
+          category: z.string().optional(),
+          portionSize: z.string().optional(),
+          sortOrder: z.number().optional(),
+        })).min(1).max(500),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuItems } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        let updated = 0;
+        let deleted = 0;
+        for (const it of input.items) {
+          const guard = and(eq(menuItems.id, it.id), eq(menuItems.ownerId, ctx.user.id));
+          if (it.delete) {
+            await db.delete(menuItems).where(guard);
+            deleted++;
+            continue;
+          }
+          const updates: Record<string, unknown> = {};
+          if (it.name !== undefined) updates.name = it.name;
+          if (it.description !== undefined) updates.description = it.description;
+          if (it.dietaryNotes !== undefined) updates.dietaryNotes = it.dietaryNotes;
+          if (it.category !== undefined) updates.category = it.category;
+          if (it.portionSize !== undefined) updates.portionSize = it.portionSize;
+          if (it.sortOrder !== undefined) updates.sortOrder = it.sortOrder;
+          if (Object.keys(updates).length === 0) continue;
+          await db.update(menuItems).set(updates).where(guard);
+          updated++;
+        }
+        return { success: true, updated, deleted };
       }),
   }),
   // ─── Bar Menu Items ──────────────────────────────────────────────────────

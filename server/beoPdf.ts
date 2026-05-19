@@ -734,7 +734,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   ${setupSection}
   ${dietarySection}
   ${timelineSection}
-  ${renderFnbSection("FRONT OF HOUSE — F&amp;B SERVICE", fohItems, false)}
+  ${renderFnbSection("FOOD &amp; BEVERAGE SELECTION", fohItems, false)}
   ${renderFnbSection("KITCHEN — PREP &amp; PRODUCTION", kitchenItemsArr, true)}
   ${barSection}
   ${financialsSection}
