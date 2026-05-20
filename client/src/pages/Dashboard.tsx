@@ -909,7 +909,25 @@ export default function Dashboard() {
   const [catalogAiPreview, setCatalogAiPreview] = useState<Array<{ name: string; description?: string; price?: number; pricingType?: 'per_person'|'per_item'; unit?: string; allergens?: string }>>([]);
   const parseFnbForCatalog = trpc.menuCatalog.parseFnbText.useMutation();
   const [leadSearch, setLeadSearch] = useState("");
-  const [leadStatusFilter, setLeadStatusFilter] = useState("all");
+  // Multi-select status filter — empty array means "All Statuses". The
+  // sentinel "overdue_followup" is virtual (filters client-side by followUpDate).
+  const [leadStatusFilter, setLeadStatusFilter] = useState<string[]>([]);
+  const [statusFilterOpen, setStatusFilterOpen] = useState(false);
+  const statusFilterRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!statusFilterOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (statusFilterRef.current && !statusFilterRef.current.contains(e.target as Node)) {
+        setStatusFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [statusFilterOpen]);
+  const toggleLeadStatus = (key: string) => {
+    setLeadStatusFilter(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+    setLeadsSubTab("all");
+  };
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
   const [leadSortBy, setLeadSortBy] = useState<"enquiry_date"|"event_date"|"status">("enquiry_date");
   const [leadSortDir, setLeadSortDir] = useState<"desc"|"asc">("desc");
@@ -1037,7 +1055,9 @@ export default function Dashboard() {
   const { data: stats } = trpc.dashboard.stats.useQuery(undefined, { enabled: !!user?.id });
   const { data: overdueLeads, refetch: refetchOverdue } = trpc.leads.overdue.useQuery(undefined, { enabled: !!user?.id });
   const { data: allLeads, refetch: refetchLeads } = trpc.leads.list.useQuery(
-    { status: (leadStatusFilter === "all" || leadStatusFilter === "overdue_followup") ? undefined : leadStatusFilter },
+    // Server filters by a single status; for multi-select or virtual filters
+    // (overdue_followup) we fetch all and filter client-side below.
+    { status: (leadStatusFilter.length === 1 && leadStatusFilter[0] !== "overdue_followup") ? leadStatusFilter[0] : undefined },
     { enabled: !!user?.id, refetchInterval: 30_000 }
   );
 
@@ -2014,10 +2034,17 @@ export default function Dashboard() {
     });
   }
 
-  const leadsToShow = leadStatusFilter === "overdue_followup"
-    ? applyDateFilter(allEnquiries).filter((l: any) => l.followUpDate && new Date(l.followUpDate) < new Date())
-    : leadStatusFilter !== "all"
-    ? applyDateFilter(allEnquiries)
+  // When the user has picked one or more statuses, fetch+filter from the full
+  // enquiry set. "overdue_followup" is virtual — matches any lead whose follow-up
+  // date has passed. Multiple selections OR together.
+  const hasOverdueFilter = leadStatusFilter.includes("overdue_followup");
+  const realStatuses = leadStatusFilter.filter(s => s !== "overdue_followup");
+  const leadsToShow = leadStatusFilter.length > 0
+    ? applyDateFilter(allEnquiries).filter((l: any) => {
+        const matchesStatus = realStatuses.length > 0 && realStatuses.includes(l.status);
+        const matchesOverdue = hasOverdueFilter && l.followUpDate && new Date(l.followUpDate) < new Date();
+        return matchesStatus || matchesOverdue;
+      })
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const filteredLeads = leadsToShow
     .filter((l: any) =>
@@ -2530,12 +2557,12 @@ export default function Dashboard() {
                 </div>
                 {([
                   { key: 'calendar', label: 'Calendar', icon: <Calendar className="w-3.5 h-3.5" />, onClick: () => setTab('calendar' as any) },
-                  { key: 'table', label: 'View Events Table', icon: <Table2 className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter('all'); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadViewMode === 'table' && leadStatusFilter === 'all' },
+                  { key: 'table', label: 'View Events Table', icon: <Table2 className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter([]); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadViewMode === 'table' && leadStatusFilter.length === 0 },
                   { key: 'add_event', label: 'Add Event', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'booked' })); setEnquiryPasteMode(false); setShowAddLead(true); } },
                   { key: 'add_enquiry', label: 'Add Enquiry', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'new' })); setEnquiryPasteMode(true); setShowAddLead(true); } },
                   { key: 'add_quote', label: 'Add Quote', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setLocation('/proposals/new') },
-                  { key: 'view_enquiries', label: 'View Enquiries', icon: <MessageSquare className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter('new'); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadStatusFilter === 'new' },
-                  { key: 'view_quotes', label: 'View Quotes', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter('proposal_sent'); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadStatusFilter === 'proposal_sent' },
+                  { key: 'view_enquiries', label: 'View Enquiries', icon: <MessageSquare className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter(['new']); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadStatusFilter.length === 1 && leadStatusFilter[0] === 'new' },
+                  { key: 'view_quotes', label: 'View Quotes', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter(['proposal_sent']); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadStatusFilter.length === 1 && leadStatusFilter[0] === 'proposal_sent' },
                 ]).map((item: any) => (
                   <button
                     key={item.key}
@@ -2625,18 +2652,59 @@ export default function Dashboard() {
                       <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
                         placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
                     </div>
-                    <Select value={leadStatusFilter} onValueChange={(v) => { setLeadStatusFilter(v); if (v !== "all") setLeadsSubTab("all"); }}>
-                      <SelectTrigger className={`h-8 w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadStatusFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all" className="font-inter text-xs">All Statuses</SelectItem>
-                        <SelectItem value="overdue_followup" className="font-inter text-xs text-red-600">⚠ Overdue Follow-ups</SelectItem>
-                        {pipelineStages.map(s => (
-                          <SelectItem key={s.key} value={s.key} className="font-inter text-xs">{s.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {/* Multi-select status filter — checkboxes let the user
+                        view multiple statuses at once or hide ones they don't
+                        care about. Empty selection means "All Statuses". */}
+                    <div className="relative" ref={statusFilterRef}>
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilterOpen(o => !o)}
+                        className={`h-8 w-44 px-3 text-xs font-inter rounded-lg border flex items-center justify-between gap-2 ${leadStatusFilter.length > 0 ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
+                        <span className="truncate">
+                          {leadStatusFilter.length === 0
+                            ? "All Statuses"
+                            : leadStatusFilter.length === 1
+                            ? (leadStatusFilter[0] === "overdue_followup"
+                                ? "Overdue Follow-ups"
+                                : (pipelineStages.find(s => s.key === leadStatusFilter[0])?.label ?? leadStatusFilter[0]))
+                            : `${leadStatusFilter.length} statuses`}
+                        </span>
+                        <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
+                      </button>
+                      {statusFilterOpen && (
+                        <div className="absolute z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
+                          <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">FILTER BY STATUS</span>
+                            {leadStatusFilter.length > 0 && (
+                              <button
+                                onClick={() => setLeadStatusFilter([])}
+                                className="text-[10px] font-dm text-forest hover:underline">
+                                CLEAR
+                              </button>
+                            )}
+                          </div>
+                          <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={leadStatusFilter.includes("overdue_followup")}
+                              onChange={() => toggleLeadStatus("overdue_followup")}
+                              className="cursor-pointer" />
+                            <span className="text-xs font-inter text-red-600">⚠ Overdue Follow-ups</span>
+                          </label>
+                          <div className="border-t border-gray-100 my-1" />
+                          {pipelineStages.map(s => (
+                            <label key={s.key} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={leadStatusFilter.includes(s.key)}
+                                onChange={() => toggleLeadStatus(s.key)}
+                                className="cursor-pointer" />
+                              <span className="text-xs font-inter text-ink">{s.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <Select value={leadDateFilter} onValueChange={(v: any) => { setLeadDateFilter(v); if (v !== "custom") { setCustomDateFrom(""); setCustomDateTo(""); } }}>
                       <SelectTrigger className={`h-8 w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadDateFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
                         <SelectValue />
