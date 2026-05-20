@@ -47,12 +47,12 @@ function InfoCard({ icon: Icon, label, value, accent = false }: {
   icon: React.ElementType; label: string; value: string; accent?: boolean;
 }) {
   return (
-    <div className={`rounded p-4 ${accent ? "bg-[#6b98e7]/10 border border-[#6b98e7]/20" : "bg-white border border-stone-200"}`}>
+    <div className={`rounded p-4 ${accent ? "bg-[var(--brand)]/10 border border-[var(--brand)]/20" : "bg-white border border-stone-200"}`}>
       <div className="flex items-center gap-2 mb-1.5">
-        <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${accent ? "text-[#6b98e7]" : "text-stone-400"}`} />
+        <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${accent ? "text-[var(--brand)]" : "text-stone-400"}`} />
         <span className="font-bebas tracking-widest text-[10px] text-stone-400 uppercase">{label}</span>
       </div>
-      <p className={`font-dm text-sm leading-relaxed whitespace-pre-wrap ${accent ? "text-[#6b98e7] font-medium" : "text-stone-800"}`}>{value}</p>
+      <p className={`font-dm text-sm leading-relaxed whitespace-pre-wrap ${accent ? "text-[var(--brand)] font-medium" : "text-stone-800"}`}>{value}</p>
     </div>
   );
 }
@@ -121,7 +121,7 @@ export default function ShiftRunsheetLive() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-linen flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-[#6b98e7] animate-spin" />
+        <Loader2 className="w-6 h-6 text-[var(--brand)] animate-spin" />
       </div>
     );
   }
@@ -149,6 +149,20 @@ export default function ShiftRunsheetLive() {
   const sectionDefs = parseSectionDefs((sr as any).shiftSections);
   const venueLogoUrl = (sr as any).venueLogoUrl as string | null | undefined;
   const venueName = (sr as any).venueName as string | null | undefined;
+  // White-label the live shift page to the operator's brand colour. Tailwind
+  // arbitrary `[var(--brand)]` classes pull this from a CSS variable set on
+  // the wrapper below. Falls back to VenueFlow's default brand blue.
+  const venuePrimaryColor = ((sr as any).venuePrimaryColor as string | null | undefined) || "#6b98e7";
+  const brandDark = (() => {
+    // Derive a slightly darker shade for hover states (approx -12% lightness)
+    const m = /^#([0-9a-f]{6})$/i.exec(venuePrimaryColor);
+    if (!m) return venuePrimaryColor;
+    const n = parseInt(m[1], 16);
+    const r = Math.max(0, ((n >> 16) & 0xff) - 24);
+    const g = Math.max(0, ((n >> 8) & 0xff) - 24);
+    const b = Math.max(0, (n & 0xff) - 24);
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+  })();
 
   const dateDisplay = sr.date
     ? new Date(sr.date + "T00:00:00").toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
@@ -173,7 +187,7 @@ export default function ShiftRunsheetLive() {
   ].filter(Boolean) as any[];
 
   return (
-    <div className="min-h-screen bg-linen pb-32">
+    <div className="min-h-screen bg-linen pb-32" style={{ ['--brand' as any]: venuePrimaryColor, ['--brand-dark' as any]: brandDark }}>
       {/* Venue logo */}
       {venueLogoUrl && (
         <div className="bg-white border-b border-stone-100 px-4 py-3 flex items-center justify-center">
@@ -182,7 +196,7 @@ export default function ShiftRunsheetLive() {
       )}
 
       {/* Sticky header */}
-      <div className="bg-[#6b98e7] sticky top-0 z-10 shadow-md">
+      <div className="bg-[var(--brand)] sticky top-0 z-10 shadow-md">
         <div className="max-w-2xl mx-auto px-5 py-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="font-bebas tracking-widest text-[10px] text-white/60 mb-0.5">DAILY SHIFT RUNSHEET</div>
@@ -235,13 +249,13 @@ export default function ShiftRunsheetLive() {
         {activeSections.length > 0 && (
           <div className="bg-white border border-stone-200 rounded overflow-hidden">
             <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5 flex items-center gap-2">
-              <Users className="w-3.5 h-3.5 text-[#6b98e7]" />
+              <Users className="w-3.5 h-3.5 text-[var(--brand)]" />
               <span className="font-bebas tracking-widest text-xs text-stone-600">SECTIONS</span>
             </div>
             <div className="divide-y divide-stone-100">
               {activeSections.map(({ key, label }) => (
                 <div key={key} className="flex items-start gap-4 px-4 py-3">
-                  <span className="font-bebas tracking-widest text-xs text-[#6b98e7] w-24 flex-shrink-0 pt-0.5">{label}</span>
+                  <span className="font-bebas tracking-widest text-xs text-[var(--brand)] w-24 flex-shrink-0 pt-0.5">{label}</span>
                   <span className="font-dm text-sm text-stone-800">{sections![key]}</span>
                 </div>
               ))}
@@ -262,7 +276,7 @@ export default function ShiftRunsheetLive() {
         {events.length > 0 && (
           <div className="bg-white border border-stone-200 rounded overflow-hidden">
             <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5 flex items-center gap-2">
-              <Utensils className="w-3.5 h-3.5 text-[#6b98e7]" />
+              <Utensils className="w-3.5 h-3.5 text-[var(--brand)]" />
               <span className="font-bebas tracking-widest text-xs text-stone-600">EVENTS TODAY</span>
               <span className="font-dm text-xs text-stone-400">· {events.length}</span>
             </div>
@@ -300,7 +314,7 @@ export default function ShiftRunsheetLive() {
                       {(venueAreaLabel || ev.spaceName) && (
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
                           {venueAreaLabel && (
-                            <span className="bg-[#6b98e7] text-white font-bebas tracking-widest text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5 shadow-sm">
+                            <span className="bg-[var(--brand)] text-white font-bebas tracking-widest text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5 shadow-sm">
                               <MapPin className="w-4 h-4" />{venueAreaLabel.toUpperCase()}
                             </span>
                           )}
@@ -346,7 +360,7 @@ export default function ShiftRunsheetLive() {
 
                     {/* Drinks (cool blue tone) */}
                     {(drinkItems.length > 0 || ev.drinksData?.barNotes || (ev.drinksData?.selectedDrinks?.length ?? 0) > 0 || (ev.drinksData?.customDrinks?.length ?? 0) > 0) && (
-                      <div className="bg-[#eef3fb] border-l-4 border-[#6b98e7] rounded-r overflow-hidden">
+                      <div className="bg-[#eef3fb] border-l-4 border-[var(--brand)] rounded-r overflow-hidden">
                         <div className="px-3 py-1.5 flex items-center gap-1.5 bg-[#dde7f7]">
                           <Wine className="w-3 h-3 text-[#3a5ab0]" />
                           <span className="font-bebas tracking-widest text-[10px] text-[#3a5ab0]">DRINKS</span>
@@ -372,12 +386,12 @@ export default function ShiftRunsheetLive() {
                           {((ev.drinksData?.selectedDrinks?.length ?? 0) > 0 || (ev.drinksData?.customDrinks?.length ?? 0) > 0) && (
                             <div className="flex flex-wrap gap-1 pt-1">
                               {ev.drinksData?.selectedDrinks?.map((d, i) => (
-                                <span key={i} className="bg-white border border-[#6b98e7]/30 text-[#3a5ab0] text-[10px] font-dm px-2 py-0.5 rounded">
+                                <span key={i} className="bg-white border border-[var(--brand)]/30 text-[#3a5ab0] text-[10px] font-dm px-2 py-0.5 rounded">
                                   {d.replace(/_/g, ' ')}
                                 </span>
                               ))}
                               {ev.drinksData?.customDrinks?.map((d, i) => (
-                                <span key={`c${i}`} className="bg-white border border-[#6b98e7]/30 text-[#3a5ab0] text-[10px] font-dm px-2 py-0.5 rounded">
+                                <span key={`c${i}`} className="bg-white border border-[var(--brand)]/30 text-[#3a5ab0] text-[10px] font-dm px-2 py-0.5 rounded">
                                   {d.name}
                                 </span>
                               ))}
@@ -410,7 +424,7 @@ export default function ShiftRunsheetLive() {
             <div key={cl.id} className="bg-white border border-stone-200 rounded overflow-hidden">
               <div className="border-b border-stone-200 px-4 py-2.5 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Utensils className="w-3.5 h-3.5 text-[#6b98e7] flex-shrink-0" />
+                  <Utensils className="w-3.5 h-3.5 text-[var(--brand)] flex-shrink-0" />
                   <span className="font-bebas tracking-widest text-sm text-stone-700">{cl.name}</span>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
@@ -424,7 +438,7 @@ export default function ShiftRunsheetLive() {
                 </div>
               </div>
               <div className="h-1 bg-stone-100">
-                <div className="h-1 bg-[#6b98e7] transition-all duration-500" style={{ width: items.length > 0 ? `${(checkedCount / items.length) * 100}%` : "0%" }} />
+                <div className="h-1 bg-[var(--brand)] transition-all duration-500" style={{ width: items.length > 0 ? `${(checkedCount / items.length) * 100}%` : "0%" }} />
               </div>
               {allDone && (
                 <div className="bg-green-50 border-b border-green-100 px-4 py-2 flex items-center gap-2">
@@ -486,13 +500,13 @@ export default function ShiftRunsheetLive() {
                   onChange={e => setNameInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") saveName(); }}
                   placeholder="e.g. Sarah"
-                  className="w-full border border-stone-300 px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] rounded"
+                  className="w-full border border-stone-300 px-3 py-2 font-dm text-sm focus:outline-none focus:border-[var(--brand)] rounded"
                 />
               </div>
               <button
                 onClick={saveName}
                 disabled={!nameInput.trim()}
-                className="bg-[#6b98e7] text-white font-bebas tracking-widest text-sm px-5 py-2 hover:bg-[#5a87d6] disabled:opacity-40 transition-colors self-end rounded"
+                className="bg-[var(--brand)] text-white font-bebas tracking-widest text-sm px-5 py-2 hover:bg-[var(--brand-dark)] disabled:opacity-40 transition-colors self-end rounded"
               >
                 SAVE
               </button>
@@ -505,7 +519,7 @@ export default function ShiftRunsheetLive() {
               </div>
               <button
                 onClick={() => { setNameInput(staffName); setEditingName(true); }}
-                className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-stone-400 hover:text-[#6b98e7] transition-colors"
+                className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-stone-400 hover:text-[var(--brand)] transition-colors"
               >
                 <Pencil className="w-3 h-3" /> CHANGE
               </button>

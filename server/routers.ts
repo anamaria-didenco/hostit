@@ -5109,7 +5109,7 @@ Return ONLY valid JSON.`;
           }
         }
 
-        return { ...sr, checklists, events, venueLogoUrl: venue?.logoUrl ?? null, venueName: venue?.name ?? null, shiftSections: venue?.shiftSections ?? null };
+        return { ...sr, checklists, events, venueLogoUrl: venue?.logoUrl ?? null, venuePrimaryColor: (venue as any)?.primaryColor ?? null, venueName: venue?.name ?? null, shiftSections: venue?.shiftSections ?? null };
       }),
 
     create: protectedProcedure

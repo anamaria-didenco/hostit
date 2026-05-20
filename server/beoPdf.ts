@@ -185,6 +185,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const venueName = venue?.name ?? "Venue";
     const venueAddress = [venue?.addressLine1, venue?.city].filter(Boolean).join(", ");
     const venueLogoUrl = venue?.logoUrl ?? "";
+    // White-label the BEO header / accents to the operator's brand colour.
+    // Falls back to VenueFlow's default brand blue when none is configured.
+    const venuePrimaryColor = (venue as any)?.primaryColor ?? "#6b98e7";
     const clientName = `${booking.firstName}${booking.lastName ? " " + booking.lastName : ""}`;
     const eventDate = fmtDate(booking.eventDate);
     const eventTime = booking.eventDate ? fmt12(new Date(booking.eventDate).toTimeString().slice(0,5)) : "";
@@ -343,7 +346,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     <div class="detail-row"><span class="detail-label">Bar Arrangement</span><span class="detail-value">${BAR_LABELS[drinks.barOption] ?? drinks.barOption}</span></div>
     ${drinks.tabAmount ? `<div class="detail-row"><span class="detail-label">Bar Tab Amount</span><span class="detail-value">${fmtCurrency(drinks.tabAmount)}</span></div>` : ""}
     ${barNotes ? `
-    <div style="margin-top:8px;padding:8px 10px;background:#eef3fb;border-left:3px solid #6b98e7">
+    <div style="margin-top:8px;padding:8px 10px;background:#eef3fb;border-left:3px solid ${venuePrimaryColor}">
       <div class="detail-label" style="margin-bottom:4px;color:#3a5ab0">Bar Notes</div>
       <div style="font-size:9.5px;line-height:1.55;color:#1a1209;white-space:pre-wrap">${(barNotes as string).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>
     </div>` : ""}
@@ -411,7 +414,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 
   /* ── Header ── */
   .doc-header {
-    background: #6b98e7;
+    background: ${venuePrimaryColor};
     color: white;
     padding: 14px 20px;
     display: flex;
@@ -506,7 +509,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .venue-area-chip {
     display: inline-block;
     background: #ffffff;
-    color: #6b98e7;
+    color: ${venuePrimaryColor};
     font-family: 'Bebas Neue', sans-serif;
     font-size: 14px;
     letter-spacing: 0.16em;
@@ -530,7 +533,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     font-size: 9px;
     letter-spacing: 0.16em;
     color: white;
-    background: #6b98e7;
+    background: ${venuePrimaryColor};
     padding: 5px 12px;
   }
   .card-header-dark { background: #4a73c9; }
@@ -580,7 +583,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .dietary-badge {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 14px;
-    color: #6b98e7;
+    color: ${venuePrimaryColor};
     line-height: 1;
   }
   .dietary-name { font-size: 9px; font-weight: 600; }
@@ -610,7 +613,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .tl-row:last-child { border-bottom: none; }
   .tl-time { font-weight: 700; font-size: 9.5px; }
   .tl-dur { font-size: 8px; color: rgba(26,18,9,0.4); }
-  .tl-staff { font-size: 8.5px; color: #6b98e7; }
+  .tl-staff { font-size: 8.5px; color: ${venuePrimaryColor}; }
   .item-title { font-weight: 600; font-size: 9.5px; }
   .item-desc { font-size: 8px; color: rgba(26,18,9,0.5); margin-top: 1px; }
 
