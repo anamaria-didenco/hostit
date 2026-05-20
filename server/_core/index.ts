@@ -24,10 +24,30 @@ import { handleNbiWebhook } from "../nbiWebhook";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 
+// Given the schema version Drizzle records in __drizzle_migrations, return
+// the tag (filename without extension) of the next migration the migrator
+// would try to apply — i.e. the one that just failed. Used purely for log
+// context so we know *which* migration tripped a benign duplicate error.
+async function identifyFailingMigration(pgDb: any): Promise<string | null> {
+  try {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const journalRaw = await fs.readFile(path.resolve('drizzle/meta/_journal.json'), 'utf8');
+    const journal = JSON.parse(journalRaw) as { entries: Array<{ idx: number; tag: string }> };
+    // Drizzle stores one row per applied migration; row count == next idx.
+    const res = await pgDb.execute(`SELECT COUNT(*)::int AS n FROM drizzle.__drizzle_migrations`);
+    const appliedCount = Number(res?.rows?.[0]?.n ?? 0);
+    const next = journal.entries.find(e => e.idx === appliedCount);
+    return next?.tag ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function runMigrations() {
   if (!process.env.DATABASE_URL) return;
+  const db = drizzle(process.env.DATABASE_URL);
   try {
-    const db = drizzle(process.env.DATABASE_URL);
     await migrate(db, { migrationsFolder: "drizzle" });
     console.log("[DB] Migrations applied successfully");
   } catch (err: any) {
@@ -39,7 +59,10 @@ async function runMigrations() {
     const pgCode = err?.cause?.code ?? err?.code;
     const benign = ['42P07', '42710', '42701']; // duplicate_table, duplicate_object, duplicate_column
     if (pgCode && benign.includes(pgCode)) {
-      console.log(`[DB] Migration skipped (object already exists, code ${pgCode}):`, err?.cause?.message ?? err?.message);
+      const failingTag = await identifyFailingMigration(db);
+      const where = failingTag ? `migration ${failingTag}` : 'unknown migration';
+      const detail = err?.cause?.message ?? err?.message ?? '';
+      console.log(`[DB] Migration skipped (${where}, object already exists, code ${pgCode}): ${detail}`);
     } else {
       console.error("[DB] Migration error (non-fatal):", err);
     }
