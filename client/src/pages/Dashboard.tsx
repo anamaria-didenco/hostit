@@ -3769,8 +3769,15 @@ export default function Dashboard() {
                                   <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
                                   {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
                                   {b.startTime && <div className="opacity-70">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
-                                  {(b.guestCount || b.spaceName) && (
-                                    <div className="opacity-70 truncate">{b.guestCount ? `${b.guestCount} guests` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                  {b.guestCount ? <div className="opacity-70 truncate">{b.guestCount} guests</div> : null}
+                                  {b.spaceName && (
+                                    <div className="mt-0.5">
+                                      <span
+                                        className="inline-block px-1 py-px rounded text-[9px] font-bebas tracking-wider text-white truncate max-w-full"
+                                        style={{ background: spaceColor(b.spaceName) ?? '#8b6914' }}>
+                                        {b.spaceName.toUpperCase()}
+                                      </span>
+                                    </div>
                                   )}
                                   <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                 </button>
@@ -3796,8 +3803,15 @@ export default function Dashboard() {
                                   title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
                                   <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                                   {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
-                                  {(l.guestCount || l.spaceId) && (
-                                    <div className="opacity-70 truncate">{l.guestCount ? `${l.guestCount} guests` : ''}{l.guestCount && l.spaceName ? ' · ' : ''}{l.spaceName ?? ''}</div>
+                                  {l.guestCount ? <div className="opacity-70 truncate">{l.guestCount} guests</div> : null}
+                                  {l.spaceName && (
+                                    <div className="mt-0.5">
+                                      <span
+                                        className="inline-block px-1 py-px rounded text-[9px] font-bebas tracking-wider text-white truncate max-w-full"
+                                        style={{ background: spaceColor(l.spaceName) ?? '#8b6914' }}>
+                                        {l.spaceName.toUpperCase()}
+                                      </span>
+                                    </div>
                                   )}
                                   <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                 </button>
