@@ -30,8 +30,19 @@ async function runMigrations() {
     const db = drizzle(process.env.DATABASE_URL);
     await migrate(db, { migrationsFolder: "drizzle" });
     console.log("[DB] Migrations applied successfully");
-  } catch (err) {
-    console.error("[DB] Migration error (non-fatal):", err);
+  } catch (err: any) {
+    // Drizzle has no built-in "IF NOT EXISTS" for CREATE TYPE/TABLE/COLUMN,
+    // so re-running a migration whose objects already exist in the DB raises
+    // a duplicate_object / duplicate_table / duplicate_column error. Those
+    // are safe to ignore — the schema is already in the desired state. Any
+    // other migration error still surfaces loudly so we can act on it.
+    const pgCode = err?.cause?.code ?? err?.code;
+    const benign = ['42P07', '42710', '42701']; // duplicate_table, duplicate_object, duplicate_column
+    if (pgCode && benign.includes(pgCode)) {
+      console.log(`[DB] Migration skipped (object already exists, code ${pgCode}):`, err?.cause?.message ?? err?.message);
+    } else {
+      console.error("[DB] Migration error (non-fatal):", err);
+    }
   }
 }
 

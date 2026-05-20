@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -7,7 +7,20 @@ import { ArrowLeft, Copy, ExternalLink, Trash2, Link2, Calendar, MapPin, Eye } f
 export default function StaffLinks() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
-  const { data: links, isLoading } = trpc.staffPortal.listAll.useQuery();
+  const { data: links, isLoading, error } = trpc.staffPortal.listAll.useQuery(undefined, {
+    // Auth errors won't recover from retrying — bounce to sign-in instead.
+    retry: false,
+  });
+
+  // If the user lands here signed out, the listAll query 401s. Redirect to
+  // login rather than leaving them on an indefinite "Loading…" spinner.
+  const isUnauthorized = !!error && (error.data?.code === 'UNAUTHORIZED' || error.data?.httpStatus === 401);
+  useEffect(() => {
+    if (isUnauthorized) setLocation('/login');
+  }, [isUnauthorized, setLocation]);
+  // Don't render the page chrome at all while we're bouncing to /login —
+  // avoids a brief flash of the empty "Staff portal links" header.
+  if (isUnauthorized) return null;
   const deleteLink = trpc.staffPortal.deleteLink.useMutation({
     onSuccess: () => { toast.success("Link deleted"); utils.staffPortal.listAll.invalidate(); },
     onError: () => toast.error("Failed to delete link"),
