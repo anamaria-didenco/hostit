@@ -1253,7 +1253,19 @@ export default function Dashboard() {
     onError: () => toast.error("Failed to reschedule"),
   });
   const rescheduleBooking = trpc.bookings.update.useMutation({
-    onSuccess: () => { utils.bookings.list.invalidate(); utils.bookings.byMonth.invalidate(); refetchLeads(); toast.success("Event rescheduled"); },
+    // Booking edits cascade to the parent lead on the server, so we also
+    // need to refresh the lead-driven queries (events table, calendar
+    // enquiry layer, dashboard tiles) — otherwise the table keeps the
+    // stale row even after a successful save.
+    onSuccess: () => {
+      utils.bookings.list.invalidate();
+      utils.bookings.byMonth.invalidate();
+      utils.leads.list.invalidate();
+      utils.leads.eventsByMonth.invalidate();
+      utils.dashboard.invalidate();
+      refetchLeads();
+      toast.success("Event rescheduled");
+    },
     onError: () => toast.error("Failed to reschedule"),
   });
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);

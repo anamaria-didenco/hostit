@@ -972,7 +972,15 @@ export const appRouter = router({
       .input(z.object({ text: z.string().min(1) }))
       .mutation(async ({ input }) => {
         const { invokeLLM } = await import('./_core/llm');
+        // Inject today's date so the LLM resolves vague dates ("13 May",
+        // "next Saturday") into the next FUTURE occurrence rather than
+        // defaulting to its training-cutoff year (which was giving us 2023).
+        const today = new Date();
+        const todayIso = today.toISOString().slice(0, 10);
+        const todayYear = today.getFullYear();
         const prompt = `You are a venue event coordinator assistant. Parse the following text (an email, message, or event brief) and extract all relevant enquiry details.
+
+Today's date is ${todayIso} (year ${todayYear}). Use this when resolving dates.
 
 Return a JSON object with any of the following fields that are present in the text:
 - "firstName": string — client's first name
@@ -990,13 +998,15 @@ Return a JSON object with any of the following fields that are present in the te
 Rules:
 - Only include fields that are clearly stated or strongly implied in the text
 - For eventDate, convert any written date to YYYY-MM-DD format
+- If the text gives a day/month but NO year, choose the NEXT future occurrence on or after today (${todayIso}). Never pick a past date unless the text explicitly states a past year.
+- If a year is explicitly given (e.g. "May 2027"), use that year as-is.
 - For guestCount, use the number mentioned (e.g. "80 guests" → 80)
 - Do not invent or guess information not present in the text
 
 Text to parse:
 ${input.text}
 
-Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":"jane@example.com","eventType":"Wedding","eventDate":"2026-09-14","guestCount":80,"message":"Jane is enquiring about a Saturday wedding reception for 80 guests in September."}`;
+Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":"jane@example.com","eventType":"Wedding","eventDate":"${todayYear}-09-14","guestCount":80,"message":"Jane is enquiring about a Saturday wedding reception for 80 guests in September."}`;
 
         const response = await invokeLLM({
           messages: [
@@ -1523,6 +1533,32 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.status !== undefined) updates.status = rest.status;
         if (rest.notes !== undefined) updates.notes = rest.notes;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        // Cascade key shared fields back to the parent lead so the Events
+        // table (which reads from leads.list) stays in sync with the
+        // booking drawer. Without this, editing a booking's date would
+        // leave the lead's date stale and the table would keep showing
+        // the original (often year-off) value.
+        const [bookingRow] = await db.select({ leadId: bookings.leadId })
+          .from(bookings)
+          .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)))
+          .limit(1);
+        if (bookingRow?.leadId) {
+          const { leads } = await import('../drizzle/schema');
+          const leadUpdates: Record<string, unknown> = {};
+          if (rest.eventDate !== undefined) leadUpdates.eventDate = new Date(rest.eventDate);
+          if (rest.eventEndDate !== undefined) leadUpdates.eventEndDate = rest.eventEndDate ? new Date(rest.eventEndDate) : null;
+          if (rest.guestCount !== undefined) leadUpdates.guestCount = rest.guestCount;
+          if (rest.minimumSpend !== undefined) leadUpdates.minimumSpend = rest.minimumSpend !== null ? String(rest.minimumSpend) : null;
+          if (rest.firstName !== undefined) leadUpdates.firstName = rest.firstName;
+          if (rest.lastName !== undefined) leadUpdates.lastName = rest.lastName;
+          if (rest.email !== undefined) leadUpdates.email = rest.email;
+          if (rest.eventType !== undefined) leadUpdates.eventType = rest.eventType;
+          if (Object.keys(leadUpdates).length > 0) {
+            leadUpdates.updatedAt = new Date();
+            await db.update(leads).set(leadUpdates)
+              .where(and(eq(leads.id, bookingRow.leadId), eq(leads.ownerId, ctx.user.id)));
+          }
+        }
         // Re-sync depositPaid whenever the deposit amount or flag is touched,
         // so the badge can never drift out of step with recorded payments.
         if (rest.depositNzd !== undefined || rest.depositPaid !== undefined) {
