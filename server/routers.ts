@@ -4,6 +4,22 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { enforceRateLimit, getRequestIp } from "./_core/rateLimit";
+
+// Fields on venueSettings that MUST NOT leak through any publicProcedure.
+// SMTP creds, NBI keys + webhook secret, notification email, internal name,
+// emailSignature*, autoCancelTentative, automatedTaskRules are owner-only.
+const VENUE_SECRET_FIELDS = [
+  "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFromName", "smtpFromEmail", "smtpSecure",
+  "notificationEmail", "internalName",
+  "nbiApiKey", "nbiVenueId", "nbiAccountId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret",
+  "automatedTaskRules", "emailSignature", "emailSignatureLogo", "autoCancelTentative",
+] as const;
+function stripVenueSecrets<T extends Record<string, any>>(row: T): T {
+  const safe: any = { ...row };
+  for (const k of VENUE_SECRET_FIELDS) delete safe[k];
+  return safe as T;
+}
 import {
   getVenueSettings, upsertVenueSettings,
   getEventSpaces, createEventSpace,
@@ -1013,8 +1029,10 @@ export const appRouter = router({
       }),
 
     parseEnquiryText: protectedProcedure
-      .input(z.object({ text: z.string().min(1) }))
-      .mutation(async ({ input }) => {
+      .input(z.object({ text: z.string().min(1).max(10_000) }))
+      .mutation(async ({ input, ctx }) => {
+        // Cap LLM spend per user — 30 parses / 5 min is plenty for real use.
+        enforceRateLimit('ai:parseEnquiry', String(ctx.user.id), 30, 5 * 60_000);
         const { invokeLLM } = await import('./_core/llm');
         // Inject today's date so the LLM resolves vague dates ("13 May",
         // "next Saturday") into the next FUTURE occurrence rather than
@@ -1089,7 +1107,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     // Public: client views proposal by token
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('proposal:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const proposal = await getProposalByToken(input.token);
         if (!proposal) return null;
         // Mark as viewed if sent
@@ -1097,9 +1116,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           // Public token IS the auth — use the proposal's own ownerId.
           await updateProposal(proposal.id, proposal.ownerId, { status: "viewed", viewedAt: new Date() });
         }
-        // Also fetch venue settings for branding
+        // Also fetch venue settings for branding — STRIP secrets first since
+        // this endpoint is reachable by anyone with a proposal token.
         const venue = await getVenueSettings(proposal.ownerId);
-        return { proposal, venue };
+        return { proposal, venue: venue ? stripVenueSecrets(venue) : null };
       }),
 
     create: protectedProcedure
@@ -1345,7 +1365,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         action: z.enum(["accepted", "declined"]),
         clientMessage: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('proposal:respond', getRequestIp(ctx.req), 20, 5 * 60_000);
         const proposal = await getProposalByToken(input.token);
         if (!proposal) throw new Error("Proposal not found");
         if (!["sent", "viewed"].includes(proposal.status)) throw new Error("Proposal cannot be responded to");
@@ -2238,7 +2259,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
     getByToken: publicProcedure
       .input(z.object({ token: z.string(), proposalId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('quote:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { quoteSettings, quoteItems, proposals } = await import('../drizzle/schema');
         const { eq, asc } = await import('drizzle-orm');
@@ -2325,7 +2347,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('floorPlan:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { floorPlans } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
@@ -2594,7 +2617,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
 
     getByShareToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('checklistInstance:getByShareToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { checklistInstances } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
@@ -2606,7 +2630,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
 
     toggleItemByToken: publicProcedure
       .input(z.object({ token: z.string(), itemId: z.string(), checked: z.boolean() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('checklistInstance:toggle', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { checklistInstances } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
@@ -3915,11 +3940,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     // ── AI F&B Parse ──
     parseFnbText: protectedProcedure
       .input(z.object({
-        text: z.string().min(1),
+        text: z.string().min(1).max(10_000),
         eventType: z.string().optional(),
         guestCount: z.number().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('ai:parseFnb', String(ctx.user.id), 30, 5 * 60_000);
         const { invokeLLM } = await import('./_core/llm');
         const guestHint = input.guestCount ? ` The event has ${input.guestCount} guests.` : '';
         const typeHint = input.eventType ? ` Event type: ${input.eventType}.` : '';
@@ -3943,8 +3969,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
     // ── AI Runsheet Parse ──
     parseRunsheetText: protectedProcedure
-      .input(z.object({ text: z.string().min(1), eventType: z.string().optional() }))
-      .mutation(async ({ input }) => {
+      .input(z.object({ text: z.string().min(1).max(10_000), eventType: z.string().optional() }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('ai:parseRunsheet', String(ctx.user.id), 30, 5 * 60_000);
         const { invokeLLM } = await import('./_core/llm');
         const prompt = `You are a venue event coordinator assistant. Parse the following text and extract ALL available event information into structured sections.
 
@@ -3991,8 +4018,9 @@ Return ONLY valid JSON. Example structure:
       }),
     // ── AI Checklist Parse ──
     parseChecklistText: protectedProcedure
-      .input(z.object({ text: z.string().min(1) }))
-      .mutation(async ({ input }) => {
+      .input(z.object({ text: z.string().min(1).max(10_000) }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('ai:parseChecklist', String(ctx.user.id), 30, 5 * 60_000);
         const { invokeLLM } = await import('./_core/llm');
         const prompt = `You are a venue operations assistant. Convert the following pasted text (a to-do list, brief, email or notes) into a structured staff CHECKLIST.
 
@@ -4074,7 +4102,8 @@ Return ONLY valid JSON.`;
       }),
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('contract:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { contracts } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
@@ -4535,7 +4564,8 @@ Return ONLY valid JSON.`;
       }),
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('clientPortal:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { clientPortalTokens, bookings, leads, proposals } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
@@ -4585,7 +4615,8 @@ Return ONLY valid JSON.`;
     // Public: fetch runsheet data by token (no auth required)
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('staffPortal:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { staffPortalLinks, runsheets, runsheetItems, fnbItems } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
@@ -4862,7 +4893,8 @@ Return ONLY valid JSON.`;
 
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('checklist:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { dailyChecklists, dailyChecklistItems, venueSettings } = await import('../drizzle/schema');
         const { eq, asc } = await import('drizzle-orm');
@@ -5105,8 +5137,9 @@ Return ONLY valid JSON.`;
       }),
 
     addItemByToken: publicProcedure
-      .input(z.object({ token: z.string(), text: z.string().min(1), note: z.string().optional() }))
-      .mutation(async ({ input }) => {
+      .input(z.object({ token: z.string(), text: z.string().min(1).max(500), note: z.string().max(2000).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('checklist:token', getRequestIp(ctx.req), 60, 60_000);
         const { getDb } = await import('./db');
         const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
         const { eq, count } = await import('drizzle-orm');
@@ -5129,7 +5162,8 @@ Return ONLY valid JSON.`;
 
     deleteItemByToken: publicProcedure
       .input(z.object({ token: z.string(), itemId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('checklist:token', getRequestIp(ctx.req), 60, 60_000);
         const { getDb } = await import('./db');
         const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -5143,8 +5177,9 @@ Return ONLY valid JSON.`;
       }),
 
     editItemByToken: publicProcedure
-      .input(z.object({ token: z.string(), itemId: z.number(), text: z.string().min(1), note: z.string().optional() }))
-      .mutation(async ({ input }) => {
+      .input(z.object({ token: z.string(), itemId: z.number(), text: z.string().min(1).max(500), note: z.string().max(2000).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('checklist:token', getRequestIp(ctx.req), 60, 60_000);
         const { getDb } = await import('./db');
         const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -5163,9 +5198,10 @@ Return ONLY valid JSON.`;
         token: z.string(),
         itemId: z.number(),
         checked: z.boolean(),
-        checkedBy: z.string().optional(),
+        checkedBy: z.string().max(120).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('checklist:token', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -5189,7 +5225,8 @@ Return ONLY valid JSON.`;
 
     resetByToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('checklist:token', getRequestIp(ctx.req), 20, 60_000);
         const { getDb } = await import('./db');
         const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');

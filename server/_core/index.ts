@@ -189,14 +189,21 @@ async function startServer() {
     }
   });
 
+  // PDF endpoints are expensive (puppeteer/pdfkit + DB fan-out) and the
+  // public ones are auth'd only by an unguessable token in the URL. Rate-
+  // limit per IP to blunt brute-force token guessing and runaway-cost abuse.
+  const { expressRateLimit } = await import("./rateLimit");
+  const pdfPublicLimit = expressRateLimit("pdf:public", 30, 60_000);
+  const pdfAuthLimit = expressRateLimit("pdf:auth", 60, 60_000);
+
   // Proposal PDF download (public — uses publicToken for auth)
-  app.get("/api/proposal-pdf/:token", handleProposalPdf);
+  app.get("/api/proposal-pdf/:token", pdfPublicLimit, handleProposalPdf);
 
   // Floor Plan PDF download (public — share token acts as auth)
-  app.get("/api/floor-plan-pdf/:token", handleFloorPlanPdf);
+  app.get("/api/floor-plan-pdf/:token", pdfPublicLimit, handleFloorPlanPdf);
 
   // BEO PDF download (requires session auth)
-  app.get("/api/beo/:bookingId", (req, res, next) => {
+  app.get("/api/beo/:bookingId", pdfAuthLimit, (req, res, next) => {
     createContext({ req: req as any, res: res as any, info: {} as any }).then(ctx => {
       (req as any).user = ctx.user;
       handleBeoPdf(req, res);
@@ -204,10 +211,10 @@ async function startServer() {
   });
 
   // BEO Live Link — public, token-gated. Used as the customer-facing event pack.
-  app.get("/api/beo/public/:token", handleBeoPdfPublic);
+  app.get("/api/beo/public/:token", pdfPublicLimit, handleBeoPdfPublic);
 
   // Staff Sheet PDF download (requires session auth)
-  app.get("/api/staff-sheet/:runsheetId", (req, res, next) => {
+  app.get("/api/staff-sheet/:runsheetId", pdfAuthLimit, (req, res, next) => {
     createContext({ req: req as any, res: res as any, info: {} as any }).then(ctx => {
       (req as any).user = ctx.user;
       handleStaffSheetPdf(req, res);
