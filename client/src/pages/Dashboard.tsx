@@ -3724,6 +3724,38 @@ export default function Dashboard() {
                             <span className={`text-xs font-dm leading-none mb-0.5 self-start px-1 rounded ${
                               isToday ? 'bg-forest-dark text-cream font-bold px-1.5 py-0.5' : isOverflow ? 'text-ink/30' : isWeekend ? 'text-forest/70 font-semibold' : 'text-ink/70'
                             }`}>{day}</span>
+                            {/* Space-split stripe — one coloured segment per distinct space
+                                booked that day (bookings + live leads), widths proportional
+                                to the event count. So a day with 1 bar event and 1 restaurant
+                                event renders as a literal half-and-half bar. */}
+                            {(() => {
+                              const counts = new Map<string, number>();
+                              for (const b of dayBookings) {
+                                const n = b.spaceName || 'Unassigned';
+                                counts.set(n, (counts.get(n) ?? 0) + 1);
+                              }
+                              for (const l of dayLeads) {
+                                const n = l.spaceName || 'Unassigned';
+                                counts.set(n, (counts.get(n) ?? 0) + 1);
+                              }
+                              if (counts.size === 0) return null;
+                              const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
+                              const segs = Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+                              return (
+                                <div
+                                  className="flex w-full h-1.5 rounded-sm overflow-hidden mb-0.5"
+                                  title={segs.map(([n, c]) => `${n}: ${c}`).join(' · ')}>
+                                  {segs.map(([name, c]) => (
+                                    <div
+                                      key={name}
+                                      style={{
+                                        width: `${(c / total) * 100}%`,
+                                        background: spaceColor(name) ?? '#c9a84c',
+                                      }} />
+                                  ))}
+                                </div>
+                              );
+                            })()}
                             {/* Booking cards */}
                             {dayBookings.map((b: any) => (
                               <div key={b.id} className="relative group/card w-full">
