@@ -172,6 +172,7 @@ export const leads = pgTable("leads", {
   eventEndDate: timestamp("eventEndDate"),
   guestCount: integer("guestCount"),
   spaceId: integer("spaceId"),
+  spaceName: varchar("spaceName", { length: 255 }),
   budget: decimal("budget", { precision: 10, scale: 2 }),
   minimumSpend: decimal("minimumSpend", { precision: 10, scale: 2 }),
   message: text("message"),

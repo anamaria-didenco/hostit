@@ -1033,7 +1033,7 @@ export default function Dashboard() {
   const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
-  const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked' });
+  const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked', spaceName: '' });
   const [widgetEditMode, setWidgetEditMode] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
@@ -1048,7 +1048,7 @@ export default function Dashboard() {
   const [enquiryPasteText, setEnquiryPasteText] = useState('');
   const [enquiryParsing, setEnquiryParsing] = useState(false);
   const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
-  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string });
+  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '' });
 
   const utils = trpc.useUtils();
 
@@ -1547,7 +1547,7 @@ export default function Dashboard() {
       utils.bookings.byMonth.invalidate();
       utils.leads.eventsByMonth.invalidate();
       setShowAddLead(false);
-      setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' });
+      setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new', spaceName: '' });
       setEnquiryPasteText('');
       setEnquiryPasteMode(true);
       toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Added successfully!');
@@ -1567,7 +1567,7 @@ export default function Dashboard() {
       refetchMonthLeadEvents();
       utils.bookings.byMonth.invalidate();
       setQuickCreateDate(null);
-      setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' });
+      setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' });
       toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Event added to calendar!');
     },
     onError: () => toast.error('Failed to create event'),
@@ -2259,7 +2259,7 @@ export default function Dashboard() {
                                   }`}>{day}</span>
                                   {!isOverflow && (
                                     <button
-                                      onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' }); }}
+                                      onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' }); }}
                                       className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
                                       title="Add event">
                                       <Plus className="w-3 h-3 text-forest" />
@@ -2459,14 +2459,24 @@ export default function Dashboard() {
                       s.id === 'conversion_rate' ? 'reports' :
                       s.id === 'revenue_month' ? 'reports' :
                       s.id === 'overdue_tasks' ? 'tasks' :
-                      s.id === 'overdue_followups' ? 'tasks' :
+                      s.id === 'overdue_followups' ? 'enquiries' :
                       'overview'
                     );
                     return (
                       <button
                         key={s.id}
                         type="button"
-                        onClick={() => setTab(target)}
+                        onClick={() => {
+                          // Overdue follow-ups live in the enquiries pipeline —
+                          // route there and pre-apply the "overdue" filter so the
+                          // user lands on exactly the rows that need action.
+                          if (s.id === 'overdue_followups') {
+                            setLeadStatusFilter(['overdue_followup']);
+                            setLeadsSubTab('all');
+                            setLeadViewMode('table');
+                          }
+                          setTab(target);
+                        }}
                         aria-label={`Open ${s.label}`}
                         className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
@@ -2849,6 +2859,10 @@ export default function Dashboard() {
                                     onChange={e => {
                                       const newStatus = e.target.value;
                                       if (newStatus === lead.status) return;
+                                      if (['booked','confirmed','tentative'].includes(newStatus) && !lead.spaceName?.trim()) {
+                                        toast.error('Pick an event space on this enquiry first.');
+                                        return;
+                                      }
                                       updateStatus.mutate({ id: lead.id, status: newStatus as any });
                                     }}
                                     title="Change status"
@@ -3185,7 +3199,13 @@ export default function Dashboard() {
                       {/* Confirm Booking CTA */}
                       {!['booked','confirmed'].includes(selectedLead.status) && (
                         <button
-                          onClick={() => updateStatus.mutate({ id: selectedLead.id, status: 'booked' as any })}
+                          onClick={() => {
+                            if (!selectedLead.spaceName?.trim()) {
+                              toast.error('Pick an event space on this enquiry before confirming.');
+                              return;
+                            }
+                            updateStatus.mutate({ id: selectedLead.id, status: 'booked' as any });
+                          }}
                           className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs hover:bg-forest transition-colors">
                           <CheckCircle className="w-4 h-4 text-gold" />
                           CONFIRM BOOKING → MOVE TO CALENDAR
@@ -3209,7 +3229,13 @@ export default function Dashboard() {
                           const isActive = selectedLead.status === stage.key;
                           return (
                             <button key={stage.key}
-                              onClick={() => updateStatus.mutate({ id: selectedLead.id, status: stage.key as any })}
+                              onClick={() => {
+                                if (['booked','confirmed','tentative'].includes(stage.key) && !selectedLead.spaceName?.trim()) {
+                                  toast.error('Pick an event space on this enquiry first.');
+                                  return;
+                                }
+                                updateStatus.mutate({ id: selectedLead.id, status: stage.key as any });
+                              }}
                               className="w-full text-left px-3 py-2 border font-bebas tracking-widest text-xs transition-all"
                               style={isActive ? {
                                 backgroundColor: stage.swatch + '22',
@@ -3311,7 +3337,17 @@ export default function Dashboard() {
                   <div className="flex items-center gap-1.5">
                     {pipelineStages.map(s => (
                       <button key={s.key}
-                        onClick={() => bulkUpdateStatus.mutate({ ids: Array.from(selectedLeadIds), status: s.key as any })}
+                        onClick={() => {
+                          if (['booked','confirmed','tentative'].includes(s.key)) {
+                            const ids = Array.from(selectedLeadIds);
+                            const missing = (allLeads ?? []).filter((l: any) => ids.includes(l.id) && !l.spaceName?.trim()).length;
+                            if (missing > 0) {
+                              toast.error(`${missing} of these enquiries have no space set — fix those first.`);
+                              return;
+                            }
+                          }
+                          bulkUpdateStatus.mutate({ ids: Array.from(selectedLeadIds), status: s.key as any });
+                        }}
                         disabled={bulkUpdateStatus.isPending}
                         className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border transition-colors hover:bg-gold hover:text-ink hover:border-gold disabled:opacity-50`}
                         style={{ borderColor: s.swatch ?? '#d4c5a9', color: s.swatch ?? '#d4c5a9' }}>
@@ -7582,6 +7618,13 @@ export default function Dashboard() {
                   onValueChange={(newStatus) => {
                     const prevStatus = selectedBooking.status;
                     if (newStatus === prevStatus) return;
+                    // Rule: every event must have a space selected before it
+                    // can move into a live state (booked/confirmed/tentative).
+                    const needsSpace = ['booked', 'confirmed', 'tentative'].includes(newStatus);
+                    if (needsSpace && !selectedBooking.spaceName?.trim()) {
+                      toast.error('Please set a space on this event first.');
+                      return;
+                    }
                     if (selectedBooking._isLead) {
                       // Lead row → use leads.updateStatus (also auto-creates a booking when → booked)
                       updateStatus.mutate({ id: selectedBooking.id, status: newStatus as any });
@@ -8210,6 +8253,7 @@ export default function Dashboard() {
           <form onSubmit={e => {
             e.preventDefault();
             if (!quickCreateDate) return;
+            if (!quickCreateForm.spaceName.trim()) { toast.error('Please pick an event space.'); return; }
             createEnquiryFromCalendar.mutate({
               firstName: quickCreateForm.firstName,
               lastName: quickCreateForm.lastName || undefined,
@@ -8219,6 +8263,7 @@ export default function Dashboard() {
               message: quickCreateForm.notes || undefined,
               status: quickCreateForm.status,
               source: 'manual',
+              spaceName: quickCreateForm.spaceName,
             });
           }} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -8269,6 +8314,24 @@ export default function Dashboard() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div>
+              <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-500">*</span></label>
+              {spaces && spaces.length > 0 ? (
+                <Select value={quickCreateForm.spaceName} onValueChange={v => setQuickCreateForm(f => ({ ...f, spaceName: v }))}>
+                  <SelectTrigger className="rounded-xl border-gray-200 text-sm"><SelectValue placeholder="Pick a space" /></SelectTrigger>
+                  <SelectContent>
+                    {spaces.map((s: any) => (
+                      <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={quickCreateForm.spaceName}
+                  onChange={e => setQuickCreateForm(f => ({ ...f, spaceName: e.target.value }))}
+                  placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
+                  className="rounded-xl border-gray-200 text-sm" />
+              )}
             </div>
             <div>
               <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Notes</label>
@@ -8385,6 +8448,7 @@ export default function Dashboard() {
           ) : (
             <form onSubmit={e => {
               e.preventDefault();
+              if (!addEnquiryForm.spaceName.trim()) { toast.error('Please pick an event space.'); return; }
               createEnquiry.mutate({
                 firstName: addEnquiryForm.firstName,
                 lastName: addEnquiryForm.lastName || undefined,
@@ -8398,6 +8462,7 @@ export default function Dashboard() {
                 message: addEnquiryForm.message || undefined,
                 status: addEnquiryForm.status,
                 source: 'manual',
+                spaceName: addEnquiryForm.spaceName,
               });
             }} className="space-y-3">
               {enquiryPasteText && (
@@ -8478,6 +8543,24 @@ export default function Dashboard() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div>
+                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE <span className="text-red-500">*</span></label>
+                {spaces && spaces.length > 0 ? (
+                  <Select value={addEnquiryForm.spaceName} onValueChange={v => setAddEnquiryForm(f => ({ ...f, spaceName: v }))}>
+                    <SelectTrigger className="rounded-none border border-gold/30 focus:ring-0"><SelectValue placeholder="Pick a space" /></SelectTrigger>
+                    <SelectContent>
+                      {spaces.map((s: any) => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={addEnquiryForm.spaceName}
+                    onChange={e => setAddEnquiryForm(f => ({ ...f, spaceName: e.target.value }))}
+                    placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
+                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                )}
               </div>
               <div>
                 <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTES</label>

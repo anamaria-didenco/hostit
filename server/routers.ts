@@ -427,8 +427,16 @@ export const appRouter = router({
         message: z.string().optional(),
         status: z.string().optional(),
         source: z.string().optional(),
+        spaceName: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        // Rule: every event must have a space selected. If this lead is being
+        // created already in a booked-like state, a space is required (since a
+        // booking row will be auto-created downstream).
+        const incomingStatus = input.status ?? "new";
+        if (['booked', 'confirmed', 'tentative', 'finished'].includes(incomingStatus) && !input.spaceName?.trim()) {
+          throw new Error('Please select an event space before saving this event.');
+        }
         return createLead({
           ownerId: ctx.user.id,
           firstName: input.firstName,
@@ -442,7 +450,8 @@ export const appRouter = router({
           budget: input.budget?.toString() as any,
           message: input.message,
           source: input.source ?? "manual",
-          status: input.status ?? "new",
+          status: incomingStatus,
+          spaceName: input.spaceName?.trim() || undefined,
         });
       }),
 
@@ -693,6 +702,13 @@ export const appRouter = router({
         const wasBooked = ['booked', 'confirmed', 'finished'].includes(priorLead.status ?? '');
         const isBooked = ['booked', 'confirmed', 'finished'].includes(input.status);
 
+        // Rule: every event must have a space selected. Validate BEFORE
+        // persisting the status change so we never leave the lead in a
+        // booked-like state without a backing booking row.
+        if (['booked', 'confirmed', 'tentative'].includes(input.status) && !priorLead.spaceName?.trim()) {
+          throw new Error('Please set an event space on this enquiry before changing its status to ' + input.status + '.');
+        }
+
         await updateLeadStatus(input.id, ctx.user.id, input.status, undefined);
         await addLeadActivity({
           leadId: input.id,
@@ -728,6 +744,10 @@ export const appRouter = router({
             const existingBookings = await getBookings(ctx.user.id);
             const alreadyBooked = existingBookings.some((b: any) => b.leadId === input.id);
             if (!alreadyBooked) {
+              // Rule: every event must have a space selected.
+              if (!lead.spaceName?.trim()) {
+                throw new Error('Please set an event space on this enquiry before marking it as booked.');
+              }
               const created = await createBooking({
                 ownerId: ctx.user.id,
                 leadId: input.id,
@@ -737,6 +757,7 @@ export const appRouter = router({
                 eventType: lead.eventType ?? undefined,
                 eventDate: lead.eventDate ?? new Date(),
                 guestCount: lead.guestCount ?? undefined,
+                spaceName: lead.spaceName,
                 status: "confirmed",
               });
               // Push to NBI immediately so confirmed bookings created via
@@ -806,14 +827,24 @@ export const appRouter = router({
         budget: z.coerce.number().nullable().optional(),
         minimumSpend: z.coerce.number().nullable().optional(),
         message: z.string().nullable().optional(),
+        spaceName: z.string().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const { id, followUpDate, eventDate, minimumSpend, ...rest } = input;
+        const { id, followUpDate, eventDate, minimumSpend, spaceName, ...rest } = input;
+        // Rule: every event must have a space selected. If the lead is already
+        // in a live state, block clearing the space.
+        if (spaceName !== undefined && !spaceName?.trim()) {
+          const existing = await getLeadById(id, ctx.user.id);
+          if (existing && ['booked', 'confirmed', 'tentative', 'finished'].includes(existing.status ?? '')) {
+            throw new Error('This event is live — pick a different space instead of clearing it.');
+          }
+        }
         await updateLead(id, ctx.user.id, {
           ...rest,
           followUpDate: followUpDate ? new Date(followUpDate) : undefined,
           eventDate: eventDate ? new Date(eventDate) : eventDate === null ? null : undefined,
           minimumSpend: minimumSpend !== undefined ? (minimumSpend !== null ? String(minimumSpend) : null) : undefined,
+          spaceName: spaceName !== undefined ? (spaceName?.trim() || null) : undefined,
         } as any);
         return { success: true };
       }),
@@ -940,6 +971,19 @@ export const appRouter = router({
         const { eq, and, inArray } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return { updated: 0 };
+        // Rule: every event must have a space selected. For bulk transitions
+        // into a live state, reject the whole batch if any selected lead is
+        // missing a space — better to ask the user to fix the gaps than to
+        // silently skip rows.
+        if (['booked', 'confirmed', 'tentative'].includes(input.status)) {
+          const rows = await db.select({ id: leads.id, spaceName: leads.spaceName })
+            .from(leads)
+            .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
+          const missing = rows.filter((r: any) => !r.spaceName?.trim()).map((r: any) => r.id);
+          if (missing.length > 0) {
+            throw new Error(`Please set an event space on ${missing.length} enquir${missing.length === 1 ? 'y' : 'ies'} before bulk-changing status to ${input.status}.`);
+          }
+        }
         // Only update leads owned by this user
         await db.update(leads)
           .set({ status: input.status })
@@ -1380,6 +1424,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (input.action === "accepted") {
           const lead = await getLeadById(proposal.leadId, proposal.ownerId);
           if (lead) {
+            // Rule: every event must have a space selected.
+            const resolvedSpace = (proposal.spaceName ?? lead.spaceName ?? '').trim();
+            if (!resolvedSpace) {
+              throw new Error('This proposal has no event space set — please assign a space before the client can accept.');
+            }
             const created = await createBooking({
               ownerId: proposal.ownerId,
               leadId: proposal.leadId,
@@ -1391,7 +1440,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               eventDate: proposal.eventDate ?? lead.eventDate ?? new Date(),
               eventEndDate: proposal.eventEndDate ?? undefined,
               guestCount: proposal.guestCount ?? lead.guestCount ?? undefined,
-              spaceName: proposal.spaceName ?? undefined,
+              spaceName: resolvedSpace,
               totalNzd: proposal.totalNzd as any,
               depositNzd: proposal.depositNzd as any,
               status: "confirmed",
@@ -1437,6 +1486,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!['booked', 'confirmed', 'finished'].includes(lead.status ?? '')) {
           throw new Error('Lead is not booked yet');
         }
+        // Rule: every event must have a space selected.
+        if (!lead.spaceName?.trim()) {
+          throw new Error('Please set an event space on this enquiry before opening the event.');
+        }
         const created = await createBooking({
           ownerId: ctx.user.id,
           leadId: input.leadId,
@@ -1447,6 +1500,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           eventDate: lead.eventDate ?? new Date(),
           eventEndDate: lead.eventEndDate ?? undefined,
           guestCount: lead.guestCount ?? undefined,
+          spaceName: lead.spaceName,
           status: lead.status === 'finished' ? 'finished' : 'confirmed',
         } as any);
         return created;
@@ -1584,6 +1638,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const { id, ...rest } = input;
+        // Rule: every event must have a space selected. Block any update that
+        // would either clear the space or set the booking to a live status
+        // (confirmed/tentative) while no space is set on the row.
+        if (rest.spaceName !== undefined && !rest.spaceName?.trim()) {
+          throw new Error('Every event must have a space — pick one instead of clearing it.');
+        }
+        if (rest.status === 'confirmed' || rest.status === 'tentative') {
+          const [current] = await db.select({ spaceName: bookings.spaceName })
+            .from(bookings)
+            .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)))
+            .limit(1);
+          const finalSpace = rest.spaceName !== undefined ? rest.spaceName : current?.spaceName;
+          if (!finalSpace?.trim()) {
+            throw new Error('Please select an event space before changing this event to ' + rest.status + '.');
+          }
+        }
         const updates: Record<string, unknown> = {};
         if (rest.firstName !== undefined) updates.firstName = rest.firstName;
         if (rest.lastName !== undefined) updates.lastName = rest.lastName;
