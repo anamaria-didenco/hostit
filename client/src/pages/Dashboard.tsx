@@ -1757,6 +1757,24 @@ export default function Dashboard() {
   const bulkCreateCatalogItems = trpc.menuCatalog.bulkCreateItems.useMutation({
     onSuccess: (data) => { refetchCatalogItems(); setShowCatalogCsvImport(false); setCatalogCsvText(''); toast.success(`Imported ${data.count} items!`); }
   });
+  // Bulk select / edit / delete state for the catalogue items list. The set
+  // is reset whenever the active category changes so selections never leak
+  // across categories.
+  const [catalogSelectedIds, setCatalogSelectedIds] = useState<Set<number>>(new Set());
+  React.useEffect(() => { setCatalogSelectedIds(new Set()); }, [catalogActiveCategoryId]);
+  const toggleCatalogSelected = (id: number) => setCatalogSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const bulkDeleteCatalogItems = trpc.menuCatalog.bulkDeleteItems.useMutation({
+    onSuccess: (d) => { refetchCatalogItems(); setCatalogSelectedIds(new Set()); toast.success(`Deleted ${d.count} item${d.count !== 1 ? 's' : ''}`); },
+    onError: () => toast.error('Bulk delete failed'),
+  });
+  const bulkUpdateCatalogItems = trpc.menuCatalog.bulkUpdateItems.useMutation({
+    onSuccess: (d) => { refetchCatalogItems(); setCatalogSelectedIds(new Set()); toast.success(`Updated ${d.count} item${d.count !== 1 ? 's' : ''}`); },
+    onError: () => toast.error('Bulk update failed'),
+  });
 
   // Bar menu state
   const { data: barMenuItemsList, refetch: refetchBarMenu } = trpc.barMenu.list.useQuery(undefined, { enabled: isAuthenticated });
@@ -7176,8 +7194,86 @@ export default function Dashboard() {
                             if (item.price <= 0) return sum;
                             return sum + (item.pricingType === 'per_person' ? (item.price / 100) * guests : item.price / 100);
                           }, 0);
+                          const selectedCount = catalogSelectedIds.size;
+                          const allSelected = items.length > 0 && items.every((i: any) => catalogSelectedIds.has(i.id));
                           return (
                           <div>
+                            {/* Bulk action bar — appears whenever 1+ rows are selected. */}
+                            {selectedCount > 0 && (
+                              <div className="flex items-center justify-between px-4 py-2.5 bg-forest/10 border-b border-forest/20">
+                                <span className="font-bebas tracking-widest text-xs text-forest">
+                                  {selectedCount} SELECTED
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => bulkUpdateCatalogItems.mutate({ ids: Array.from(catalogSelectedIds), patch: { pricingType: 'per_person' } })}
+                                    disabled={bulkUpdateCatalogItems.isPending}
+                                    className="font-bebas tracking-widest text-[11px] px-2.5 py-1 border border-forest/40 text-forest hover:bg-forest/15">
+                                    SET PER PERSON
+                                  </button>
+                                  <button
+                                    onClick={() => bulkUpdateCatalogItems.mutate({ ids: Array.from(catalogSelectedIds), patch: { pricingType: 'per_item' } })}
+                                    disabled={bulkUpdateCatalogItems.isPending}
+                                    className="font-bebas tracking-widest text-[11px] px-2.5 py-1 border border-forest/40 text-forest hover:bg-forest/15">
+                                    SET PER ITEM
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const raw = window.prompt('Set price for all selected items (in dollars, e.g. 12.50). Leave blank to cancel.');
+                                      if (!raw) return;
+                                      const n = Number(raw);
+                                      if (!Number.isFinite(n) || n < 0) { toast.error('Invalid price'); return; }
+                                      bulkUpdateCatalogItems.mutate({ ids: Array.from(catalogSelectedIds), patch: { price: n } });
+                                    }}
+                                    disabled={bulkUpdateCatalogItems.isPending}
+                                    className="font-bebas tracking-widest text-[11px] px-2.5 py-1 border border-forest/40 text-forest hover:bg-forest/15">
+                                    SET PRICE…
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const target = (catalogCategories ?? []).filter((c: any) => c.type === catalogActiveType && c.id !== catalogActiveCategoryId);
+                                      if (target.length === 0) { toast.error('No other categories to move to'); return; }
+                                      const choice = window.prompt(`Move ${selectedCount} item${selectedCount !== 1 ? 's' : ''} to which category?\n\n${target.map((c: any, i: number) => `${i + 1}. ${c.name}`).join('\n')}\n\nEnter a number:`);
+                                      if (!choice) return;
+                                      const idx = parseInt(choice, 10) - 1;
+                                      if (Number.isNaN(idx) || idx < 0 || idx >= target.length) { toast.error('Invalid choice'); return; }
+                                      bulkUpdateCatalogItems.mutate({ ids: Array.from(catalogSelectedIds), patch: { categoryId: target[idx].id } });
+                                    }}
+                                    disabled={bulkUpdateCatalogItems.isPending}
+                                    className="font-bebas tracking-widest text-[11px] px-2.5 py-1 border border-forest/40 text-forest hover:bg-forest/15">
+                                    MOVE TO…
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (!confirm(`Delete ${selectedCount} item${selectedCount !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+                                      bulkDeleteCatalogItems.mutate({ ids: Array.from(catalogSelectedIds) });
+                                    }}
+                                    disabled={bulkDeleteCatalogItems.isPending}
+                                    className="font-bebas tracking-widest text-[11px] px-2.5 py-1 border border-red-400 text-red-600 hover:bg-red-50">
+                                    DELETE
+                                  </button>
+                                  <button
+                                    onClick={() => setCatalogSelectedIds(new Set())}
+                                    className="font-bebas tracking-widest text-[11px] px-2 py-1 text-ink/40 hover:text-ink/70">
+                                    CLEAR
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {/* Select-all row */}
+                            {items.length > 0 && (
+                              <div className="flex items-center gap-2 px-4 py-2 border-b border-gold/10 bg-linen/30">
+                                <input
+                                  type="checkbox"
+                                  checked={allSelected}
+                                  onChange={() => {
+                                    setCatalogSelectedIds(allSelected ? new Set() : new Set(items.map((i: any) => i.id)));
+                                  }}
+                                  className="cursor-pointer"
+                                />
+                                <span className="font-bebas tracking-widest text-[10px] text-ink/40">{allSelected ? 'DESELECT ALL' : 'SELECT ALL'}</span>
+                              </div>
+                            )}
                             <div className="divide-y divide-gold/10">
                               {items.length === 0 && !showCatalogItemForm && (
                                 <p className="p-6 text-center text-sm text-ink/40">No items yet. Click + Add Item to get started, or use CSV Import.</p>
@@ -7187,8 +7283,15 @@ export default function Dashboard() {
                                 const lineTotal = item.price > 0 && guests > 0
                                   ? (item.pricingType === 'per_person' ? unitPrice * guests : unitPrice)
                                   : null;
+                                const isSelected = catalogSelectedIds.has(item.id);
                                 return (
-                                <div key={item.id} className="flex items-start justify-between px-4 py-3 hover:bg-linen/30 group">
+                                <div key={item.id} className={`flex items-start justify-between px-4 py-3 group ${isSelected ? 'bg-forest/5' : 'hover:bg-linen/30'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleCatalogSelected(item.id)}
+                                    className="mt-1 mr-3 cursor-pointer flex-shrink-0"
+                                  />
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="font-dm text-sm font-medium text-ink">{item.name}</span>

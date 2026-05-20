@@ -3709,6 +3709,53 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         await db.delete(menuCategoryItems).where(and(eq(menuCategoryItems.id, input.id), eq(menuCategoryItems.ownerId, ctx.user.id)));
         return { success: true };
       }),
+    // Bulk delete catalogue items by id. Owner-scoped per row so a client
+    // can't delete another tenant's items by guessing ids.
+    bulkDeleteItems: protectedProcedure
+      .input(z.object({ ids: z.array(z.number()).min(1).max(500) }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategoryItems } = await import('../drizzle/schema');
+        const { inArray, and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const result = await db.delete(menuCategoryItems)
+          .where(and(inArray(menuCategoryItems.id, input.ids), eq(menuCategoryItems.ownerId, ctx.user.id)));
+        return { success: true, count: input.ids.length, result };
+      }),
+    // Bulk update catalogue items. Apply a partial patch (categoryId/price/
+    // pricingType/allergens) to many items at once — used for "move to
+    // category", "set price", "mark allergen" select-multiple actions.
+    bulkUpdateItems: protectedProcedure
+      .input(z.object({
+        ids: z.array(z.number()).min(1).max(500),
+        patch: z.object({
+          categoryId: z.number().optional(),
+          pricingType: z.enum(['per_person', 'per_item']).optional(),
+          price: z.number().min(0).optional(),
+          unit: z.string().optional(),
+          allergens: z.string().nullable().optional(),
+          available: z.boolean().optional(),
+        }),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { menuCategoryItems } = await import('../drizzle/schema');
+        const { inArray, and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const updates: Record<string, unknown> = {};
+        if (input.patch.categoryId !== undefined) updates.categoryId = input.patch.categoryId;
+        if (input.patch.pricingType !== undefined) updates.pricingType = input.patch.pricingType;
+        if (input.patch.price !== undefined) updates.price = Math.round(input.patch.price * 100);
+        if (input.patch.unit !== undefined) updates.unit = input.patch.unit;
+        if (input.patch.allergens !== undefined) updates.allergens = input.patch.allergens;
+        if (input.patch.available !== undefined) updates.available = input.patch.available;
+        if (Object.keys(updates).length === 0) return { success: true, count: 0 };
+        await db.update(menuCategoryItems).set(updates)
+          .where(and(inArray(menuCategoryItems.id, input.ids), eq(menuCategoryItems.ownerId, ctx.user.id)));
+        return { success: true, count: input.ids.length };
+      }),
     bulkCreateItems: protectedProcedure
       .input(z.array(z.object({
         categoryId: z.number(),
