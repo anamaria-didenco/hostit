@@ -1249,7 +1249,13 @@ export default function Dashboard() {
   }
 
   const rescheduleLead = trpc.leads.update.useMutation({
-    onSuccess: () => { refetchLeads(); utils.bookings.byMonth.invalidate(); toast.success("Event rescheduled"); },
+    onSuccess: () => {
+      refetchLeads();
+      utils.leads.eventsByMonth.invalidate();
+      utils.bookings.byMonth.invalidate();
+      utils.dashboard.invalidate();
+      toast.success("Event rescheduled");
+    },
     onError: () => toast.error("Failed to reschedule"),
   });
   const rescheduleBooking = trpc.bookings.update.useMutation({
@@ -1528,13 +1534,23 @@ export default function Dashboard() {
   });
 
   const createEnquiry = trpc.leads.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (created: any, vars: any) => {
+      // Mirror the calendar quick-create: if the user added the enquiry
+      // already marked as Booked/Confirmed, materialise a booking row so
+      // it actually becomes a real event (calendar, BEO, runsheet).
+      // Without this, "Add Enquiry → Booked" left the row stuck as an
+      // enquiry forever even though the status said booked.
+      if (vars?.status === 'booked' && created?.id) {
+        ensureBookingForLead.mutate({ leadId: created.id });
+      }
       refetchLeads();
+      utils.bookings.byMonth.invalidate();
+      utils.leads.eventsByMonth.invalidate();
       setShowAddLead(false);
       setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' });
       setEnquiryPasteText('');
       setEnquiryPasteMode(true);
-      toast.success('Added successfully!');
+      toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Added successfully!');
     },
     onError: () => toast.error('Failed to add record'),
   });

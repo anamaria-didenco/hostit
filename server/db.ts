@@ -134,10 +134,15 @@ export async function getLeads(ownerId: number, status?: string) {
   return db.select().from(leads).where(and(...conditions)).orderBy(desc(leads.createdAt));
 }
 
-export async function getLeadById(id: number) {
+// All lead read/write helpers below require ownerId to prevent cross-tenant
+// IDOR — a logged-in user must never be able to read or mutate another
+// venue's lead by guessing an ID. Callers in routers.ts pass ctx.user.id.
+export async function getLeadById(id: number, ownerId: number) {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.select().from(leads).where(eq(leads.id, id)).limit(1);
+  const result = await db.select().from(leads)
+    .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)))
+    .limit(1);
   return result[0] ?? null;
 }
 
@@ -151,18 +156,20 @@ export async function createLead(data: InsertLead) {
   return result[0] ?? null;
 }
 
-export async function updateLeadStatus(id: number, status: string, internalNotes?: string) {
+export async function updateLeadStatus(id: number, ownerId: number, status: string, internalNotes?: string) {
   const db = await getDb();
   if (!db) return;
   const updateData: Record<string, any> = { status };
   if (internalNotes !== undefined) updateData.internalNotes = internalNotes;
-  await db.update(leads).set(updateData).where(eq(leads.id, id));
+  await db.update(leads).set(updateData)
+    .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
 }
 
-export async function updateLead(id: number, data: Partial<InsertLead>) {
+export async function updateLead(id: number, ownerId: number, data: Partial<InsertLead>) {
   const db = await getDb();
   if (!db) return;
-  await db.update(leads).set(data).where(eq(leads.id, id));
+  await db.update(leads).set(data)
+    .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
 }
 
 // ─── Lead Activity ────────────────────────────────────────────────────────────

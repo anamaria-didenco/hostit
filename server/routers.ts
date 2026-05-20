@@ -435,8 +435,8 @@ export const appRouter = router({
 
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return getLeadById(input.id);
+      .query(async ({ input, ctx }) => {
+        return getLeadById(input.id, ctx.user.id);
       }),
 
     // Public: submit from lead form. Rate-limited per (IP, ownerId) to prevent
@@ -665,16 +665,46 @@ export const appRouter = router({
         note: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        await updateLeadStatus(input.id, input.status, undefined);
+        // Capture the prior status so we can react to transitions (e.g. moving
+        // AWAY from booked needs to cancel the linked booking — otherwise the
+        // calendar keeps showing a confirmed event for a lead that's actually
+        // lost/cancelled).
+        const priorLead = await getLeadById(input.id, ctx.user.id);
+        if (!priorLead) throw new Error('Lead not found');
+        const wasBooked = ['booked', 'confirmed', 'finished'].includes(priorLead.status ?? '');
+        const isBooked = ['booked', 'confirmed', 'finished'].includes(input.status);
+
+        await updateLeadStatus(input.id, ctx.user.id, input.status, undefined);
         await addLeadActivity({
           leadId: input.id,
           ownerId: ctx.user.id,
           type: "status_change",
           content: `Status changed to ${input.status}${input.note ? ": " + input.note : ""}`,
         });
+
+        // Inverse cascade: if the lead is moving AWAY from a booked-like state
+        // into lost/cancelled/etc., cancel any linked booking so calendars,
+        // BEOs and the events table reflect reality. We mark as 'cancelled'
+        // rather than delete to preserve the audit trail and any payments.
+        if (wasBooked && !isBooked) {
+          const { getDb } = await import('./db');
+          const { bookings } = await import('../drizzle/schema');
+          const { eq, and, ne } = await import('drizzle-orm');
+          const db = await getDb();
+          if (db) {
+            await db.update(bookings)
+              .set({ status: 'cancelled' })
+              .where(and(
+                eq(bookings.leadId, input.id),
+                eq(bookings.ownerId, ctx.user.id),
+                ne(bookings.status, 'cancelled'),
+              ));
+          }
+        }
+
         // When marking as booked, auto-create a booking record if one doesn't exist
         if (input.status === "booked") {
-          const lead = await getLeadById(input.id);
+          const lead = await getLeadById(input.id, ctx.user.id);
           if (lead) {
             const existingBookings = await getBookings(ctx.user.id);
             const alreadyBooked = existingBookings.some((b: any) => b.leadId === input.id);
@@ -706,7 +736,7 @@ export const appRouter = router({
           const { tasks } = await import('../drizzle/schema');
           const db = await getDb();
           if (db) {
-            const lead = await getLeadById(input.id);
+            const lead = await getLeadById(input.id, ctx.user.id);
             const leadName = lead ? `${lead.firstName}${lead.lastName ? ' ' + lead.lastName : ''}` : 'client';
             const fiveDaysFromNow = Date.now() + 5 * 24 * 60 * 60 * 1000;
             const now = Date.now();
@@ -758,9 +788,9 @@ export const appRouter = router({
         minimumSpend: z.coerce.number().nullable().optional(),
         message: z.string().nullable().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, followUpDate, eventDate, minimumSpend, ...rest } = input;
-        await updateLead(id, {
+        await updateLead(id, ctx.user.id, {
           ...rest,
           followUpDate: followUpDate ? new Date(followUpDate) : undefined,
           eventDate: eventDate ? new Date(eventDate) : eventDate === null ? null : undefined,
@@ -809,7 +839,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const { updateLead, addLeadActivity } = await import('./db');
-        await updateLead(input.id, {
+        await updateLead(input.id, ctx.user.id, {
           followUpDate: input.followUpDate ? new Date(input.followUpDate) : null as any,
         });
         await addLeadActivity({
@@ -1115,7 +1145,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         await updateProposal(input.id, { status: "sent", sentAt: new Date() });
         const proposal = await getProposalById(input.id);
         if (proposal) {
-          await updateLeadStatus(proposal.leadId, "proposal_sent");
+          await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
           await addLeadActivity({
             leadId: proposal.leadId,
             ownerId: ctx.user.id,
@@ -1311,7 +1341,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         });
         // If accepted, create a booking
         if (input.action === "accepted") {
-          const lead = await getLeadById(proposal.leadId);
+          const lead = await getLeadById(proposal.leadId, proposal.ownerId);
           if (lead) {
             const created = await createBooking({
               ownerId: proposal.ownerId,
@@ -1335,7 +1365,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               const { pushBookingToNbi } = await import('./nowbookit');
               await pushBookingToNbi(newId, proposal.ownerId, { source: 'proposals.respond→accepted' });
             }
-            await updateLeadStatus(proposal.leadId, "booked");
+            await updateLeadStatus(proposal.leadId, proposal.ownerId, "booked");
             await addLeadActivity({
               leadId: proposal.leadId,
               ownerId: proposal.ownerId,
@@ -1365,7 +1395,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const existing = await getBookings(ctx.user.id);
         const found = existing.find((b: any) => b.leadId === input.leadId);
         if (found) return found;
-        const lead = await getLeadById(input.leadId);
+        const lead = await getLeadById(input.leadId, ctx.user.id);
         if (!lead) throw new Error('Lead not found');
         if (!['booked', 'confirmed', 'finished'].includes(lead.status ?? '')) {
           throw new Error('Lead is not booked yet');
@@ -1553,6 +1583,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           if (rest.lastName !== undefined) leadUpdates.lastName = rest.lastName;
           if (rest.email !== undefined) leadUpdates.email = rest.email;
           if (rest.eventType !== undefined) leadUpdates.eventType = rest.eventType;
+          // Cascade status too: if a booking is cancelled, the lead should
+          // become 'lost'; confirmed/tentative map back to booked/tentative
+          // so the Events table doesn't show a "Confirmed" pill for a row
+          // whose booking has actually been cancelled.
+          if (rest.status !== undefined) {
+            const statusMap: Record<string, string> = {
+              confirmed: 'booked',
+              tentative: 'tentative',
+              cancelled: 'lost',
+            };
+            const mapped = statusMap[rest.status];
+            if (mapped) leadUpdates.status = mapped;
+          }
           if (Object.keys(leadUpdates).length > 0) {
             leadUpdates.updatedAt = new Date();
             await db.update(leads).set(leadUpdates)
