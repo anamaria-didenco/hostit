@@ -110,10 +110,12 @@ export async function getContacts(ownerId: number) {
   return db.select().from(contacts).where(eq(contacts.ownerId, ownerId)).orderBy(desc(contacts.createdAt));
 }
 
-export async function getContactById(id: number) {
+export async function getContactById(id: number, ownerId: number) {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
+  const result = await db.select().from(contacts)
+    .where(and(eq(contacts.id, id), eq(contacts.ownerId, ownerId)))
+    .limit(1);
   return result[0] ?? null;
 }
 
@@ -192,10 +194,15 @@ export async function getProposals(ownerId: number) {
   return db.select().from(proposals).where(eq(proposals.ownerId, ownerId)).orderBy(desc(proposals.createdAt));
 }
 
-export async function getProposalById(id: number) {
+// Proposal helpers are owner-scoped (except the public-token lookup which is
+// the auth itself). Callers in routers.ts MUST pass ctx.user.id — or, for
+// flows initiated by a public token, must pass the proposal's own ownerId.
+export async function getProposalById(id: number, ownerId: number) {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.select().from(proposals).where(eq(proposals.id, id)).limit(1);
+  const result = await db.select().from(proposals)
+    .where(and(eq(proposals.id, id), eq(proposals.ownerId, ownerId)))
+    .limit(1);
   return result[0] ?? null;
 }
 
@@ -206,10 +213,12 @@ export async function getProposalByToken(token: string) {
   return result[0] ?? null;
 }
 
-export async function getProposalsByLead(leadId: number) {
+export async function getProposalsByLead(leadId: number, ownerId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(proposals).where(eq(proposals.leadId, leadId)).orderBy(desc(proposals.createdAt));
+  return db.select().from(proposals)
+    .where(and(eq(proposals.leadId, leadId), eq(proposals.ownerId, ownerId)))
+    .orderBy(desc(proposals.createdAt));
 }
 
 export async function createProposal(data: InsertProposal) {
@@ -220,10 +229,11 @@ export async function createProposal(data: InsertProposal) {
   return result[0] ?? null;
 }
 
-export async function updateProposal(id: number, data: Partial<InsertProposal>) {
+export async function updateProposal(id: number, ownerId: number, data: Partial<InsertProposal>) {
   const db = await getDb();
   if (!db) return;
-  await db.update(proposals).set(data).where(eq(proposals.id, id));
+  await db.update(proposals).set(data)
+    .where(and(eq(proposals.id, id), eq(proposals.ownerId, ownerId)));
 }
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────

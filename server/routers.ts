@@ -212,14 +212,17 @@ export const appRouter = router({
     getBySlug: publicProcedure
       .input(z.object({ slug: z.string() }))
       .query(async ({ input }) => {
-        // Find venue by slug for public lead form
+        // Find venue by slug for public lead form. Strip server secrets
+        // (SMTP creds, NBI keys/webhook secret, notification email) before
+        // returning — anything reachable here is visible to the entire
+        // internet.
         const { getDb } = await import("./db");
         const { venueSettings } = await import("../drizzle/schema");
         const { eq } = await import("drizzle-orm");
         const db = await getDb();
         if (!db) return null;
         const result = await db.select().from(venueSettings).where(eq(venueSettings.slug, input.slug)).limit(1);
-        return result[0] ?? null;
+        return result[0] ? stripVenueSecrets(result[0]) : null;
       }),
     getDefault: publicProcedure.query(async () => {
       // Returns the first venue (single-venue system) for use on /enquire without a slug
@@ -228,7 +231,7 @@ export const appRouter = router({
       const db = await getDb();
       if (!db) return null;
       const result = await db.select().from(venueSettings).limit(1);
-      return result[0] ?? null;
+      return result[0] ? stripVenueSecrets(result[0]) : null;
     }),
 
     testEmail: protectedProcedure
@@ -374,8 +377,8 @@ export const appRouter = router({
 
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return getContactById(input.id);
+      .query(async ({ input, ctx }) => {
+        return getContactById(input.id, ctx.user.id);
       }),
 
     create: protectedProcedure
@@ -992,10 +995,21 @@ export const appRouter = router({
         const { eq, and, inArray } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return { deleted: 0 };
-        await db.delete(leadActivity).where(inArray(leadActivity.leadId, input.ids));
-        const result = await db.delete(leads)
+        // Only delete leadActivity for leads this owner actually owns —
+        // otherwise a user could wipe another tenant's activity log by
+        // passing their lead IDs. We confirm ownership first, then delete
+        // activity + leads in the same owner-scoped set.
+        const owned = await db.select({ id: leads.id }).from(leads)
           .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
-        return { deleted: input.ids.length };
+        const ownedIds = owned.map(r => r.id);
+        if (ownedIds.length === 0) return { deleted: 0 };
+        await db.delete(leadActivity).where(and(
+          inArray(leadActivity.leadId, ownedIds),
+          eq(leadActivity.ownerId, ctx.user.id),
+        ));
+        await db.delete(leads)
+          .where(and(inArray(leads.id, ownedIds), eq(leads.ownerId, ctx.user.id)));
+        return { deleted: ownedIds.length };
       }),
 
     parseEnquiryText: protectedProcedure
@@ -1062,14 +1076,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
 
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return getProposalById(input.id);
+      .query(async ({ input, ctx }) => {
+        return getProposalById(input.id, ctx.user.id);
       }),
 
     byLead: protectedProcedure
       .input(z.object({ leadId: z.number() }))
-      .query(async ({ input }) => {
-        return getProposalsByLead(input.leadId);
+      .query(async ({ input, ctx }) => {
+        return getProposalsByLead(input.leadId, ctx.user.id);
       }),
 
     // Public: client views proposal by token
@@ -1080,7 +1094,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!proposal) return null;
         // Mark as viewed if sent
         if (proposal.status === "sent") {
-          await updateProposal(proposal.id, { status: "viewed", viewedAt: new Date() });
+          // Public token IS the auth — use the proposal's own ownerId.
+          await updateProposal(proposal.id, proposal.ownerId, { status: "viewed", viewedAt: new Date() });
         }
         // Also fetch venue settings for branding
         const venue = await getVenueSettings(proposal.ownerId);
@@ -1142,8 +1157,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     send: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        await updateProposal(input.id, { status: "sent", sentAt: new Date() });
-        const proposal = await getProposalById(input.id);
+        await updateProposal(input.id, ctx.user.id, { status: "sent", sentAt: new Date() });
+        const proposal = await getProposalById(input.id, ctx.user.id);
         if (proposal) {
           await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
           await addLeadActivity({
@@ -1215,9 +1230,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         guestCount: z.number().optional(),
         eventDate: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, lineItems, eventDate, subtotalNzd, taxPercent, taxNzd, totalNzd, depositPercent, depositNzd, ...rest } = input;
-        await updateProposal(id, {
+        await updateProposal(id, ctx.user.id, {
           ...rest,
           lineItems: lineItems ? JSON.stringify(lineItems) : undefined,
           eventDate: eventDate ? new Date(eventDate) : undefined,
@@ -1264,8 +1279,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) throw new Error('DB unavailable');
         // Verify proposal belongs to owner
-        const proposal = await getProposalById(input.proposalId);
-        if (!proposal || proposal.ownerId !== ctx.user.id) throw new Error('Not found');
+        const proposal = await getProposalById(input.proposalId, ctx.user.id);
+        if (!proposal) throw new Error('Not found');
         // Upsert
         const existing = await db.select().from(proposalDrinks)
           .where(and(eq(proposalDrinks.proposalId, input.proposalId), eq(proposalDrinks.ownerId, ctx.user.id)))
@@ -1334,7 +1349,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const proposal = await getProposalByToken(input.token);
         if (!proposal) throw new Error("Proposal not found");
         if (!["sent", "viewed"].includes(proposal.status)) throw new Error("Proposal cannot be responded to");
-        await updateProposal(proposal.id, {
+        // Public token already authenticated the action — use the proposal's own ownerId.
+        await updateProposal(proposal.id, proposal.ownerId, {
           status: input.action,
           respondedAt: new Date(),
           clientMessage: input.clientMessage,
@@ -2887,7 +2903,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        await db.delete(runsheetItems).where(eq(runsheetItems.runsheetId, input.id));
+        // Confirm the runsheet belongs to this owner BEFORE cascading the
+        // child rows — otherwise a guessed ID would let one tenant wipe
+        // another tenant's runsheet items.
+        const [own] = await db.select({ id: runsheets.id }).from(runsheets)
+          .where(and(eq(runsheets.id, input.id), eq(runsheets.ownerId, ctx.user.id)))
+          .limit(1);
+        if (!own) return { success: true };
+        await db.delete(runsheetItems).where(and(
+          eq(runsheetItems.runsheetId, input.id),
+          eq(runsheetItems.ownerId, ctx.user.id),
+        ));
         await db.delete(runsheets)
           .where(and(eq(runsheets.id, input.id), eq(runsheets.ownerId, ctx.user.id)));
         return { success: true };
@@ -3174,7 +3200,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const [venue] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId));
         const spaces = await db.select().from(eventSpaces).where(eq(eventSpaces.ownerId, input.ownerId));
         const packages = await db.select().from(menuPackages).where(eq(menuPackages.ownerId, input.ownerId));
-        return { venue, spaces, packages };
+        // Strip secrets from the venue row before returning — this endpoint
+        // is public and previously leaked SMTP creds + NBI webhook secret.
+        return { venue: venue ? stripVenueSecrets(venue) : null, spaces, packages };
       }),
     submit: publicProcedure
       .input(z.object({
@@ -4459,10 +4487,24 @@ Return ONLY valid JSON.`;
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
-        const { clientPortalTokens } = await import('../drizzle/schema');
+        const { clientPortalTokens, bookings, leads } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
         const { nanoid: nid } = await import('nanoid');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        // Verify the booking/lead actually belongs to this owner BEFORE
+        // minting a public portal token for it — otherwise a user could
+        // create a token that exposes another tenant's booking/lead data.
+        if (input.bookingId) {
+          const [b] = await db.select({ id: bookings.id }).from(bookings)
+            .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          if (!b) throw new Error('Booking not found');
+        }
+        if (input.leadId) {
+          const [l] = await db.select({ id: leads.id }).from(leads)
+            .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id))).limit(1);
+          if (!l) throw new Error('Lead not found');
+        }
         const token = nid(32);
         const now = Date.now();
         await db.insert(clientPortalTokens).values({
@@ -4502,6 +4544,11 @@ Return ONLY valid JSON.`;
         const rows = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
         const row = rows[0];
         if (!row) throw new Error('Portal link not found or expired');
+        // Enforce expiry — the error message has always implied this, but
+        // the check was missing. Once expired the link is dead.
+        if (row.expiresAt && row.expiresAt < Date.now()) {
+          throw new Error('Portal link not found or expired');
+        }
         // Update last accessed
         await db.update(clientPortalTokens).set({ lastAccessedAt: Date.now() }).where(eq(clientPortalTokens.token, input.token));
         const permissions = row.permissions ? JSON.parse(row.permissions) : {};
@@ -4608,9 +4655,16 @@ Return ONLY valid JSON.`;
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
-        const { staffPortalLinks } = await import('../drizzle/schema');
+        const { staffPortalLinks, runsheets } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        // Verify the runsheet belongs to this owner before minting a public
+        // token for it. Without this a user could expose another tenant's
+        // runsheet (including F&B, contacts, payments) via a guessed ID.
+        const [rs] = await db.select({ id: runsheets.id }).from(runsheets)
+          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+        if (!rs) throw new Error('Runsheet not found');
         const crypto = await import('crypto');
         const token = crypto.randomBytes(32).toString('hex');
         const expiresAt = input.expiresInDays ? Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000 : null;
@@ -4929,7 +4983,16 @@ Return ONLY valid JSON.`;
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        await db.delete(dailyChecklistItems).where(eq(dailyChecklistItems.checklistId, input.id));
+        // Confirm ownership BEFORE cascading the child items, otherwise a
+        // guessed ID would let one tenant wipe another tenant's checklist.
+        const [own] = await db.select({ id: dailyChecklists.id }).from(dailyChecklists)
+          .where(and(eq(dailyChecklists.id, input.id), eq(dailyChecklists.ownerId, ctx.user.id)))
+          .limit(1);
+        if (!own) return { success: true };
+        await db.delete(dailyChecklistItems).where(and(
+          eq(dailyChecklistItems.checklistId, input.id),
+          eq(dailyChecklistItems.ownerId, ctx.user.id),
+        ));
         await db.delete(dailyChecklists).where(and(eq(dailyChecklists.id, input.id), eq(dailyChecklists.ownerId, ctx.user.id)));
         return { success: true };
       }),
@@ -5105,16 +5168,22 @@ Return ONLY valid JSON.`;
       .mutation(async ({ input }) => {
         const { getDb } = await import('./db');
         const { dailyChecklists, dailyChecklistItems } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
+        const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [cl] = await db.select().from(dailyChecklists).where(eq(dailyChecklists.token, input.token)).limit(1);
         if (!cl) throw new Error('Checklist not found');
+        // Bind the itemId to THIS checklist — otherwise a valid token could
+        // toggle arbitrary items in any other tenant's checklist by guessing
+        // item IDs.
         await db.update(dailyChecklistItems).set({
           checked: input.checked ? 1 : 0,
           checkedAt: input.checked ? Date.now() : null,
           checkedBy: input.checkedBy ?? null,
-        }).where(eq(dailyChecklistItems.id, input.itemId));
+        }).where(and(
+          eq(dailyChecklistItems.id, input.itemId),
+          eq(dailyChecklistItems.checklistId, cl.id),
+        ));
         return { success: true };
       }),
 
