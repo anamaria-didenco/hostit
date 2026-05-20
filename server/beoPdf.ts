@@ -313,11 +313,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     <div class="fnb-diet">DIETARY</div>
     ${showLastCol ? `<div class="fnb-last">${lastColHeader}</div>` : ""}
   </div>
-  ${allCourses.map(course => `
+  ${allCourses.map(course => {
+    const isDrink = course === "Drinks";
+    return `
   <div class="course-block">
-    <div class="course-group">${course}</div>
+    <div class="course-group${isDrink ? ' is-drink' : ''}">${course}</div>
     ${(grouped[course] ?? []).map((f: any) => `
-    <div class="fnb-row">
+    <div class="fnb-row${isDrink ? ' is-drink' : ''}">
       <div class="fnb-course"></div>
       <div class="fnb-dish">
         <div class="dish-name">${f.dishName}</div>
@@ -333,7 +335,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
         }
       </div>` : ""}
     </div>`).join("")}
-  </div>`).join("")}
+  </div>`;
+  }).join("")}
 </div>`;
     }
 
@@ -650,6 +653,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     page-break-after: avoid;
   }
   .course-group + .fnb-row { page-break-before: avoid; }
+  /* Colour-code drink rows so beverages are visually distinct from food */
+  .course-group.is-drink {
+    color: #2b4d8a;
+    background: rgba(107,152,231,0.18);
+    border-bottom-color: rgba(107,152,231,0.32);
+  }
+  .fnb-row.is-drink { background: rgba(107,152,231,0.06); }
   .dish-name { font-weight: 600; font-size: 9.5px; }
   .dish-desc { font-size: 8px; color: rgba(26,18,9,0.45); margin-top: 1px; }
   .diet-tag {

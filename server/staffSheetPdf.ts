@@ -217,10 +217,12 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     <div class="fnb-dietary">DIETARY</div>
     <div class="fnb-staff">${lastColHeader}</div>
   </div>
-  ${orderedCourses.map(course => `
-  <div class="course-group-header">${course}</div>
+  ${orderedCourses.map(course => {
+    const isDrink = course === "Drinks";
+    return `
+  <div class="course-group-header${isDrink ? ' is-drink' : ''}">${course}</div>
   ${grouped[course].map((f: any) => `
-  <div class="fnb-row">
+  <div class="fnb-row${isDrink ? ' is-drink' : ''}">
     <div class="fnb-course"></div>
     <div class="fnb-dish">
       <div class="fnb-dish-name">${f.dishName}</div>
@@ -235,7 +237,8 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
         : `${f.prepNotes ? `<div class="prep-note">${f.prepNotes}</div>` : ""}${f.platingNotes ? `<div class="plating-note">${f.platingNotes}</div>` : ""}`
       }
     </div>
-  </div>`).join("")}`).join("")}
+  </div>`).join("")}`;
+  }).join("")}
 </div>`;
     }
 
@@ -465,6 +468,12 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     align-items: start;
   }
   .fnb-row:last-child { border-bottom: none; }
+  /* Colour-code drink rows so beverages stand out from food at a glance */
+  .course-group-header.is-drink {
+    color: #2b4d8a;
+    background: rgba(107,152,231,0.18);
+  }
+  .fnb-row.is-drink { background: rgba(107,152,231,0.06); }
   .course-group-header {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 8px;

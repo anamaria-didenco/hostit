@@ -3719,9 +3719,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { inArray, and, eq } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const result = await db.delete(menuCategoryItems)
-          .where(and(inArray(menuCategoryItems.id, input.ids), eq(menuCategoryItems.ownerId, ctx.user.id)));
-        return { success: true, count: input.ids.length, result };
+        // Use .returning() so we can report the true affected count rather
+        // than blindly trusting the requested id list (some ids may not
+        // exist or may belong to another tenant).
+        const deleted = await db.delete(menuCategoryItems)
+          .where(and(inArray(menuCategoryItems.id, input.ids), eq(menuCategoryItems.ownerId, ctx.user.id)))
+          .returning({ id: menuCategoryItems.id });
+        return { success: true, count: deleted.length };
       }),
     // Bulk update catalogue items. Apply a partial patch (categoryId/price/
     // pricingType/allergens) to many items at once — used for "move to
@@ -3740,10 +3744,20 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
-        const { menuCategoryItems } = await import('../drizzle/schema');
+        const { menuCategoryItems, menuCategories } = await import('../drizzle/schema');
         const { inArray, and, eq } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        // If moving items to a different category, verify that target
+        // category belongs to the same owner — prevents a malicious client
+        // from re-pointing their items at another tenant's category id.
+        if (input.patch.categoryId !== undefined) {
+          const [target] = await db.select({ id: menuCategories.id })
+            .from(menuCategories)
+            .where(and(eq(menuCategories.id, input.patch.categoryId), eq(menuCategories.ownerId, ctx.user.id)))
+            .limit(1);
+          if (!target) throw new Error('Target category not found or not owned by you');
+        }
         const updates: Record<string, unknown> = {};
         if (input.patch.categoryId !== undefined) updates.categoryId = input.patch.categoryId;
         if (input.patch.pricingType !== undefined) updates.pricingType = input.patch.pricingType;
@@ -3752,9 +3766,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (input.patch.allergens !== undefined) updates.allergens = input.patch.allergens;
         if (input.patch.available !== undefined) updates.available = input.patch.available;
         if (Object.keys(updates).length === 0) return { success: true, count: 0 };
-        await db.update(menuCategoryItems).set(updates)
-          .where(and(inArray(menuCategoryItems.id, input.ids), eq(menuCategoryItems.ownerId, ctx.user.id)));
-        return { success: true, count: input.ids.length };
+        // Return real affected count via .returning() so the UI can show
+        // an accurate toast if some ids didn't match.
+        const updated = await db.update(menuCategoryItems).set(updates)
+          .where(and(inArray(menuCategoryItems.id, input.ids), eq(menuCategoryItems.ownerId, ctx.user.id)))
+          .returning({ id: menuCategoryItems.id });
+        return { success: true, count: updated.length };
       }),
     bulkCreateItems: protectedProcedure
       .input(z.array(z.object({
