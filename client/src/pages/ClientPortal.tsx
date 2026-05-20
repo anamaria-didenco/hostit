@@ -14,7 +14,15 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function ClientPortal() {
   const { token } = useParams<{ token: string }>();
-  const { data, isLoading, error } = trpc.portal.getByToken.useQuery({ token: token ?? "" }, { enabled: !!token });
+  const { data, isLoading, error } = trpc.portal.getByToken.useQuery(
+    { token: token ?? "" },
+    {
+      enabled: !!token,
+      // Bad/expired tokens return 404 — retrying just makes the user stare at
+      // a spinner for several seconds before the "Link Not Found" card shows.
+      retry: false,
+    },
+  );
   const [signerName, setSignerName] = useState("");
   const [signatureData, setSignatureData] = useState("");
   const [signing, setSigning] = useState(false);

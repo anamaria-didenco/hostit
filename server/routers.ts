@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -4643,11 +4644,17 @@ Return ONLY valid JSON.`;
         if (!db) throw new Error('DB not available');
         const rows = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
         const row = rows[0];
-        if (!row) throw new Error('Portal link not found or expired');
-        // Enforce expiry — the error message has always implied this, but
-        // the check was missing. Once expired the link is dead.
-        if (row.expiresAt && row.expiresAt < Date.now()) {
-          throw new Error('Portal link not found or expired');
+        // Throw NOT_FOUND so the client gets a 404 (not a 500). tRPC/react-query
+        // does not retry 4xx responses, so the "Link Not Found" card shows
+        // immediately instead of after several silent retries.
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Portal link not found or expired' });
+        // Enforce expiry. expiresAt may come back as a Date (timestamp column)
+        // or a number depending on the driver — normalise before comparing.
+        if (row.expiresAt) {
+          const expiresMs = row.expiresAt instanceof Date ? row.expiresAt.getTime() : Number(row.expiresAt);
+          if (Number.isFinite(expiresMs) && expiresMs < Date.now()) {
+            throw new TRPCError({ code: 'NOT_FOUND', message: 'Portal link not found or expired' });
+          }
         }
         // Update last accessed
         await db.update(clientPortalTokens).set({ lastAccessedAt: Date.now() }).where(eq(clientPortalTokens.token, input.token));
