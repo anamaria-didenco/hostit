@@ -3036,6 +3036,68 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(runsheets.id, input.id), eq(runsheets.ownerId, ctx.user.id)));
         return { success: true };
       }),
+
+    // ── Attachments (PDFs shown on the runsheet + live staff link) ──
+    addAttachment: protectedProcedure
+      .input(z.object({
+        runsheetId: z.number(),
+        name: z.string().min(1).max(255),
+        // url MUST be a server-issued path from /api/upload-pdf — anything
+        // else would let a logged-in user save phishing/open-redirect links
+        // onto the public staff portal page.
+        url: z.string().regex(/^\/uploads\/[A-Za-z0-9._-]+\.pdf$/, 'Invalid attachment URL'),
+        size: z.number().int().nonnegative().max(10 * 1024 * 1024),
+        contentType: z.literal('application/pdf'),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { runsheets } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const fs = await import('fs');
+        const path = await import('path');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [rs] = await db.select().from(runsheets)
+          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+        if (!rs) throw new Error('Runsheet not found');
+        // Confirm the file actually exists on disk in /uploads — this
+        // closes the loop between /api/upload-pdf and the DB record.
+        const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+        const filename = input.url.replace(/^\/uploads\//, '');
+        const filePath = path.join(uploadsDir, filename);
+        if (!filePath.startsWith(uploadsDir + path.sep) || !fs.existsSync(filePath)) {
+          throw new Error('Attachment file not found — please re-upload');
+        }
+        const current = Array.isArray(rs.attachments) ? rs.attachments : [];
+        const next = [...current, {
+          id: Math.random().toString(36).slice(2) + Date.now().toString(36),
+          name: input.name,
+          url: input.url,
+          size: input.size,
+          contentType: input.contentType,
+          uploadedAt: Date.now(),
+        }];
+        await db.update(runsheets).set({ attachments: next, updatedAt: new Date() })
+          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id)));
+        return { attachments: next };
+      }),
+    removeAttachment: protectedProcedure
+      .input(z.object({ runsheetId: z.number(), attachmentId: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { runsheets } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [rs] = await db.select().from(runsheets)
+          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+        if (!rs) throw new Error('Runsheet not found');
+        const current = Array.isArray(rs.attachments) ? rs.attachments : [];
+        const next = current.filter(a => a.id !== input.attachmentId);
+        await db.update(runsheets).set({ attachments: next, updatedAt: new Date() })
+          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id)));
+        return { attachments: next };
+      }),
   }),
 
   // ─── Payments ──────────────────────────────────────────────────────────────

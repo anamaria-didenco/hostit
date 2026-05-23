@@ -351,6 +351,7 @@ export const runsheets = pgTable("runsheets", {
   eventStartTime: varchar("eventStartTime", { length: 10 }),
   eventEndTime: varchar("eventEndTime", { length: 10 }),
   publicToken: varchar("publicToken", { length: 64 }).unique(),
+  attachments: json("attachments").$type<{ id: string; name: string; url: string; size: number; contentType: string; uploadedAt: number }[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

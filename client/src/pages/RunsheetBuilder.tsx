@@ -978,6 +978,40 @@ export default function RunsheetBuilder() {
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffEmail, setNewStaffEmail] = useState("");
   const [sendingStaffEmail, setSendingStaffEmail] = useState(false);
+  // ── Runsheet attachments (PDFs shown on the live staff link) ──
+  const addAttachmentMutation = trpc.runsheets.addAttachment.useMutation({
+    onSuccess: () => utils.runsheets.get.invalidate({ id: sheetId! }),
+    onError: (e) => toast.error(e.message ?? 'Upload failed'),
+  });
+  const removeAttachmentMutation = trpc.runsheets.removeAttachment.useMutation({
+    onSuccess: () => utils.runsheets.get.invalidate({ id: sheetId! }),
+  });
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const handleAttachmentUpload = async (file: File) => {
+    if (!sheetId) { toast.error('Save the runsheet first'); return; }
+    if (file.type !== 'application/pdf') { toast.error('PDFs only'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error('Max 10MB'); return; }
+    setUploadingAttachment(true);
+    const tId = toast.loading(`Uploading ${file.name}...`);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/upload-pdf', { method: 'POST', body: fd, credentials: 'include' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(err.error || 'Upload failed');
+      }
+      const { url, name, size, contentType } = await res.json();
+      await addAttachmentMutation.mutateAsync({ runsheetId: sheetId, url, name, size, contentType });
+      toast.success(`${name} attached`, { id: tId });
+    } catch (err: any) {
+      toast.error(err?.message || 'Upload failed', { id: tId });
+    } finally {
+      setUploadingAttachment(false);
+      if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+    }
+  };
   // AI F&B parse mutation
   const parseFnbMutation = trpc.menuCatalog.parseFnbText.useMutation({
     onSuccess: (data: any) => {
@@ -3925,6 +3959,57 @@ export default function RunsheetBuilder() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── ATTACHMENTS (PDFs shown on the live staff link) ───────────── */}
+        {sheetId && (
+          <div className="dante-card border-t-0 no-print">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-forest" />
+                <span className="font-bebas tracking-widest text-sm text-forest">ATTACHMENTS</span>
+                {Array.isArray(existing?.attachments) && existing.attachments.length > 0 && (
+                  <span className="font-dm text-xs text-ink/40">({existing.attachments.length})</span>
+                )}
+              </div>
+              <span className="font-dm text-[11px] text-ink/40">Shown on the live staff link · PDFs only · max 10MB</span>
+            </div>
+            <div className="px-5 py-4 space-y-2">
+              {(existing?.attachments ?? []).map((att: any) => (
+                <div key={att.id} className="flex items-center gap-3 px-3 py-2 border border-gold/20 hover:bg-linen/40 transition-colors group">
+                  <FileText className="w-4 h-4 text-forest/70 flex-shrink-0" />
+                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 font-dm text-sm text-ink hover:text-forest truncate" title={att.name}>
+                    {att.name}
+                  </a>
+                  <span className="font-dm text-[11px] text-ink/40 flex-shrink-0">{(att.size / 1024).toFixed(0)} KB</span>
+                  <button
+                    onClick={() => { if (confirm(`Remove ${att.name}?`)) removeAttachmentMutation.mutate({ runsheetId: sheetId, attachmentId: att.id }); }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/30 hover:text-red-500"
+                    title="Remove"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleAttachmentUpload(f); }}
+              />
+              <button
+                onClick={() => attachmentInputRef.current?.click()}
+                disabled={uploadingAttachment}
+                className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-3 py-1.5 hover:bg-forest/5 transition-colors disabled:opacity-50"
+              >
+                <Plus className="w-3 h-3" /> {uploadingAttachment ? 'UPLOADING...' : 'ATTACH PDF'}
+              </button>
+              {(existing?.attachments ?? []).length === 0 && !uploadingAttachment && (
+                <p className="font-dm text-xs text-ink/40 italic pt-1">Attach menus, maps, or any PDF — staff can download them from the live link.</p>
+              )}
+            </div>
           </div>
         )}
 

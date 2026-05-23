@@ -354,6 +354,34 @@ async function startServer() {
     }
   });
 
+  // PDF upload endpoint — used by runsheet attachments (drinks menus, etc).
+  // Authenticated. Whitelisted to application/pdf to keep /uploads safe.
+  app.post("/api/upload-pdf", upload.single("file"), async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user) { res.status(401).json({ error: "Unauthorized" }); return; }
+      const multerReq = req as express.Request & { file?: Express.Multer.File };
+      if (!multerReq.file) { res.status(400).json({ error: "No file" }); return; }
+      const mime = multerReq.file.mimetype || "";
+      const rawExt = (multerReq.file.originalname.split(".").pop() ?? "").toLowerCase();
+      if (mime !== "application/pdf" || rawExt !== "pdf") {
+        res.status(400).json({ error: "Only PDF files are allowed" });
+        return;
+      }
+      const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
+      const filePath = path.join(uploadsDir, filename);
+      fs.writeFileSync(filePath, multerReq.file.buffer);
+      res.json({
+        url: `/uploads/${filename}`,
+        name: multerReq.file.originalname,
+        size: multerReq.file.size,
+        contentType: "application/pdf",
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // MCP (Model Context Protocol) endpoint — for Claude / external AI integrations.
   // Token auth via `Authorization: Bearer vfk_...`. See server/mcp.ts.
   app.post("/mcp", (req, res) => {
