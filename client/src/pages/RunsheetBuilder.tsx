@@ -961,6 +961,23 @@ export default function RunsheetBuilder() {
   // Used by the per-link "Email staff briefing" button — sends the runsheet
   // share link plus the freshly rendered staff PDF via the operator's SMTP.
   const emailSendMutation = trpc.email.send.useMutation();
+  // ── Staff email distribution list (saved on venueSettings.staffEmails) ──
+  const staffEmailsQuery = trpc.staffEmails.list.useQuery();
+  const addStaffEmailMutation = trpc.staffEmails.add.useMutation({
+    onSuccess: () => { staffEmailsQuery.refetch(); setNewStaffName(""); setNewStaffEmail(""); },
+    onError: (e) => toast.error(e.message ?? 'Failed to add staff email'),
+  });
+  const removeStaffEmailMutation = trpc.staffEmails.remove.useMutation({
+    onSuccess: () => staffEmailsQuery.refetch(),
+  });
+  // Which staff link the user is currently emailing (drives the modal).
+  const [emailingLink, setEmailingLink] = useState<{ id: number; token: string; label: string } | null>(null);
+  // Which saved emails are ticked, plus a free-text field for ad-hoc adds.
+  const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
+  const [extraEmails, setExtraEmails] = useState("");
+  const [newStaffName, setNewStaffName] = useState("");
+  const [newStaffEmail, setNewStaffEmail] = useState("");
+  const [sendingStaffEmail, setSendingStaffEmail] = useState(false);
   // AI F&B parse mutation
   const parseFnbMutation = trpc.menuCatalog.parseFnbText.useMutation({
     onSuccess: (data: any) => {
@@ -3847,45 +3864,13 @@ export default function RunsheetBuilder() {
                             <ExternalLink className="w-3.5 h-3.5" />
                           </a>
                           <button
-                            onClick={async () => {
-                              const to = window.prompt('Email this runsheet + staff PDF to which address?');
-                              if (!to) return;
-                              if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { toast.error('That email looks invalid'); return; }
-                              const tId = toast.loading('Preparing staff briefing...');
-                              try {
-                                // Fetch the staff sheet PDF as a blob, then base64-encode for attachment.
-                                const pdfRes = await fetch(`/api/staff-sheet-pdf/${sheetId}`, { credentials: 'include' });
-                                if (!pdfRes.ok) throw new Error('Could not generate the staff PDF');
-                                const blob = await pdfRes.blob();
-                                const base64: string = await new Promise((resolve, reject) => {
-                                  const r = new FileReader();
-                                  r.onloadend = () => resolve(String(r.result || ''));
-                                  r.onerror = reject;
-                                  r.readAsDataURL(blob);
-                                });
-                                const safeTitle = (title || 'Event').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event';
-                                const filename = `${safeTitle} — Staff Sheet.pdf`;
-                                const lines = [
-                                  `Hi team,`,
-                                  ``,
-                                  `Here's the staff briefing for ${title || 'the event'}${eventDate ? ` on ${new Date(eventDate as any).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}.`,
-                                  ``,
-                                  `Live runsheet (updates as we edit): ${url}`,
-                                  ``,
-                                  `The full staff sheet is attached as a PDF for printing or offline reference.`,
-                                  ``,
-                                  `Thanks!`,
-                                ].join('\n');
-                                await emailSendMutation.mutateAsync({
-                                  to,
-                                  subject: `Staff Briefing — ${title || 'Event'}`,
-                                  body: lines,
-                                  attachments: [{ filename, content: base64, contentType: 'application/pdf' }],
-                                });
-                                toast.success('Staff briefing emailed', { id: tId });
-                              } catch (err: any) {
-                                toast.error(err?.message || 'Could not email staff', { id: tId });
-                              }
+                            onClick={() => {
+                              // Open the staff briefing modal pre-ticking
+                              // every saved staff email by default.
+                              setEmailingLink({ id: link.id, token: link.token, label: link.label });
+                              const all = (staffEmailsQuery.data ?? []).map(s => s.id);
+                              setSelectedStaffIds(new Set(all));
+                              setExtraEmails("");
                             }}
                             className="p-1 hover:text-forest transition-colors text-ink/40"
                             title="Email staff briefing (runsheet link + PDF)"
@@ -4874,6 +4859,193 @@ export default function RunsheetBuilder() {
           </div>
         </div>
       )}
+      {/* ── Staff email briefing modal ─────────────────────────────────── */}
+      {emailingLink && (() => {
+        const saved = staffEmailsQuery.data ?? [];
+        const url = `${window.location.origin}/staff/${emailingLink.token}`;
+        // Build the final recipient list from ticked saved emails + the
+        // ad-hoc comma/semicolon/newline-separated extras field.
+        const adHoc = extraEmails.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+        const picked = saved.filter(s => selectedStaffIds.has(s.id)).map(s => s.email);
+        const allRecipients = Array.from(new Set([...picked, ...adHoc.map(e => e.toLowerCase())]));
+        const invalidAdHoc = adHoc.filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+        const canSend = allRecipients.length > 0 && invalidAdHoc.length === 0 && !sendingStaffEmail;
+
+        const sendBriefing = async () => {
+          if (!canSend) return;
+          setSendingStaffEmail(true);
+          const tId = toast.loading(`Preparing staff briefing for ${allRecipients.length} recipient${allRecipients.length !== 1 ? 's' : ''}...`);
+          try {
+            const pdfRes = await fetch(`/api/staff-sheet-pdf/${sheetId}`, { credentials: 'include' });
+            if (!pdfRes.ok) throw new Error('Could not generate the staff PDF');
+            const blob = await pdfRes.blob();
+            const base64: string = await new Promise((resolve, reject) => {
+              const r = new FileReader();
+              r.onloadend = () => resolve(String(r.result || ''));
+              r.onerror = reject;
+              r.readAsDataURL(blob);
+            });
+            const safeTitle = (title || 'Event').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event';
+            const filename = `${safeTitle} — Staff Sheet.pdf`;
+            const lines = [
+              `Hi team,`,
+              ``,
+              `Here's the staff briefing for ${title || 'the event'}${eventDate ? ` on ${new Date(eventDate as any).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}.`,
+              ``,
+              `Live runsheet (updates as we edit): ${url}`,
+              ``,
+              `The full staff sheet is attached as a PDF for printing or offline reference.`,
+              ``,
+              `Thanks!`,
+            ].join('\n');
+            await emailSendMutation.mutateAsync({
+              to: allRecipients,
+              subject: `Staff Briefing — ${title || 'Event'}`,
+              body: lines,
+              attachments: [{ filename, content: base64, contentType: 'application/pdf' }],
+            });
+            toast.success(`Staff briefing sent to ${allRecipients.length} recipient${allRecipients.length !== 1 ? 's' : ''}`, { id: tId });
+            setEmailingLink(null);
+          } catch (err: any) {
+            toast.error(err?.message || 'Could not email staff', { id: tId });
+          } finally {
+            setSendingStaffEmail(false);
+          }
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print" onClick={() => !sendingStaffEmail && setEmailingLink(null)}>
+            <div className="bg-white max-w-lg w-full max-h-[90vh] overflow-y-auto rounded-sm shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-gold/20 flex items-center justify-between">
+                <div>
+                  <h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2>
+                  <p className="font-dm text-xs text-ink/50 mt-0.5">Sends the live runsheet link + staff PDF.</p>
+                </div>
+                <button onClick={() => setEmailingLink(null)} disabled={sendingStaffEmail} className="text-ink/40 hover:text-ink p-1 disabled:opacity-30" title="Close">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Saved staff list */}
+              <div className="px-5 py-4 border-b border-gold/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bebas tracking-widest text-[11px] text-ink/50">SAVED STAFF ({saved.length})</span>
+                  {saved.length > 0 && (
+                    <div className="flex items-center gap-2 text-[11px] font-dm">
+                      <button
+                        onClick={() => setSelectedStaffIds(new Set(saved.map(s => s.id)))}
+                        className="text-forest hover:underline"
+                      >Select all</button>
+                      <span className="text-ink/20">|</span>
+                      <button
+                        onClick={() => setSelectedStaffIds(new Set())}
+                        className="text-ink/50 hover:underline"
+                      >None</button>
+                    </div>
+                  )}
+                </div>
+                {saved.length === 0 ? (
+                  <p className="font-dm text-xs text-ink/40 italic">No saved staff yet — add some below or type ad-hoc emails.</p>
+                ) : (
+                  <div className="space-y-1 max-h-44 overflow-y-auto">
+                    {saved.map(s => {
+                      const isOn = selectedStaffIds.has(s.id);
+                      return (
+                        <div key={s.id} className="flex items-center gap-2 group">
+                          <label className="flex-1 flex items-center gap-2 cursor-pointer px-2 py-1.5 hover:bg-linen/60 rounded-sm">
+                            <input
+                              type="checkbox"
+                              checked={isOn}
+                              onChange={() => {
+                                const next = new Set(selectedStaffIds);
+                                if (isOn) next.delete(s.id); else next.add(s.id);
+                                setSelectedStaffIds(next);
+                              }}
+                              className="accent-forest"
+                            />
+                            <span className="font-dm text-sm text-ink truncate">{s.name}</span>
+                            <span className="font-dm text-xs text-ink/40 truncate">{s.email}</span>
+                          </label>
+                          <button
+                            onClick={() => { if (confirm(`Remove ${s.email} from the staff list?`)) removeStaffEmailMutation.mutate({ id: s.id }); }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/30 hover:text-red-500"
+                            title="Remove from list"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Add to saved list */}
+                <div className="mt-3 pt-3 border-t border-gold/10">
+                  <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1.5">ADD TO LIST</div>
+                  <div className="flex gap-2">
+                    <input
+                      value={newStaffName}
+                      onChange={e => setNewStaffName(e.target.value)}
+                      placeholder="Name"
+                      className="flex-1 border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest"
+                    />
+                    <input
+                      value={newStaffEmail}
+                      onChange={e => setNewStaffEmail(e.target.value)}
+                      placeholder="email@venue.co.nz"
+                      type="email"
+                      className="flex-1 border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest"
+                    />
+                    <button
+                      onClick={() => addStaffEmailMutation.mutate({ name: newStaffName.trim(), email: newStaffEmail.trim() })}
+                      disabled={!newStaffName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newStaffEmail.trim()) || addStaffEmailMutation.isPending}
+                      className="bg-forest text-white font-bebas tracking-widest text-[11px] px-3 disabled:opacity-40"
+                    >
+                      {addStaffEmailMutation.isPending ? '...' : 'ADD'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ad-hoc one-off addresses */}
+              <div className="px-5 py-4 border-b border-gold/20">
+                <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1.5">EXTRA EMAILS (THIS SEND ONLY)</label>
+                <textarea
+                  value={extraEmails}
+                  onChange={e => setExtraEmails(e.target.value)}
+                  placeholder="extra1@example.com, extra2@example.com"
+                  rows={2}
+                  className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest"
+                />
+                {invalidAdHoc.length > 0 && (
+                  <p className="font-dm text-[11px] text-red-600 mt-1">Invalid: {invalidAdHoc.join(', ')}</p>
+                )}
+              </div>
+
+              {/* Footer / send */}
+              <div className="px-5 py-3 flex items-center justify-between gap-3">
+                <div className="font-dm text-xs text-ink/60">
+                  {allRecipients.length === 0
+                    ? <span className="text-ink/40">Pick at least one recipient</span>
+                    : <span><b>{allRecipients.length}</b> recipient{allRecipients.length !== 1 ? 's' : ''}</span>}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEmailingLink(null)}
+                    disabled={sendingStaffEmail}
+                    className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink/60 hover:bg-linen disabled:opacity-40"
+                  >CANCEL</button>
+                  <button
+                    onClick={sendBriefing}
+                    disabled={!canSend}
+                    className="bg-forest text-white font-bebas tracking-widest text-xs px-5 py-2 disabled:opacity-40"
+                  >{sendingStaffEmail ? 'SENDING…' : 'SEND BRIEFING'}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <style>{`
         @media print {
           .no-print { display: none !important; }

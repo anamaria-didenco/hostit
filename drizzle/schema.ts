@@ -126,6 +126,9 @@ export const venueSettings = pgTable("venue_settings", {
   emailSignatureLogo: text("emailSignatureLogo"),
   customCourses: text("customCourses"),
   shiftSections: text("shiftSections"),
+  // Saved staff email distribution list — used by the runsheet "email staff
+  // briefing" modal. Shape: Array<{ id: string, name: string, email: string }>.
+  staffEmails: jsonb("staffEmails"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

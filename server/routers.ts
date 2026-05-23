@@ -2097,7 +2097,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
   email: router({
     send: protectedProcedure
       .input(z.object({
-        to: z.string().email(),
+        // Either a single address (single-recipient client emails) or an
+        // array of addresses (staff distribution lists from the runsheet).
+        to: z.union([z.string().email(), z.array(z.string().email()).min(1)]),
         toName: z.string().optional(),
         subject: z.string().min(1),
         body: z.string().min(1),
@@ -2160,9 +2162,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // a copy of every outgoing message in their email log.
         const replyAndBcc = settings.notificationEmail || fromEmail;
 
+        // Normalise `to` for both nodemailer (which accepts arrays directly)
+        // and our activity-log string. For a single named recipient we keep
+        // the friendly "Name <email>" form; for arrays we just pass the
+        // addresses through and skip toName (it doesn't make sense to apply
+        // one display name to many recipients).
+        const toForNodemailer = Array.isArray(input.to)
+          ? input.to
+          : (input.toName ? `"${input.toName}" <${input.to}>` : input.to);
+        const toForLog = Array.isArray(input.to) ? input.to.join(', ') : input.to;
         await transporter.sendMail({
           from: `"${fromName}" <${fromEmail}>`,
-          to: input.toName ? `"${input.toName}" <${input.to}>` : input.to,
+          to: toForNodemailer,
           replyTo: replyAndBcc,
           bcc: replyAndBcc,
           subject: input.subject,
@@ -2190,7 +2201,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             leadId: activityLeadId,
             ownerId: ctx.user.id,
             type: 'email',
-            content: `Email sent to ${input.to}\n\nSubject: ${input.subject}\n\n${input.body}`,
+            content: `Email sent to ${toForLog}\n\nSubject: ${input.subject}\n\n${input.body}`,
           });
           // Auto-advance: if lead is still "new", move it to "contacted"
           const { leads } = await import('../drizzle/schema');
@@ -5637,6 +5648,68 @@ Return ONLY valid JSON.`;
         await db.update(apiTokens).set({ revokedAt: Date.now() })
           .where(and(eq(apiTokens.id, input.id), eq(apiTokens.ownerId, ctx.user.id)));
         return { success: true };
+      }),
+  }),
+  // ─── Staff Email Distribution List ───────────────────────────────────────
+  // Stored as JSON on venueSettings.staffEmails. Used by the runsheet email
+  // briefing modal so the user can tick checkboxes instead of typing every
+  // staff member's address each time.
+  staffEmails: router({
+    list: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [] as Array<{ id: string; name: string; email: string }>;
+        const [s] = await db.select({ staffEmails: venueSettings.staffEmails })
+          .from(venueSettings)
+          .where(eq(venueSettings.ownerId, ctx.user.id))
+          .limit(1);
+        const list = (s?.staffEmails as Array<{ id: string; name: string; email: string }> | null) ?? [];
+        return Array.isArray(list) ? list : [];
+      }),
+    add: protectedProcedure
+      .input(z.object({ name: z.string().min(1).max(120), email: z.string().email().max(320) }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [s] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        const existing = (s?.staffEmails as Array<{ id: string; name: string; email: string }> | null) ?? [];
+        const normalizedEmail = input.email.trim().toLowerCase();
+        if (existing.some(x => x.email.toLowerCase() === normalizedEmail)) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'That email is already on the list.' });
+        }
+        const next = [...existing, {
+          id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+          name: input.name.trim(),
+          email: normalizedEmail,
+        }];
+        if (s) {
+          await db.update(venueSettings).set({ staffEmails: next, updatedAt: new Date() })
+            .where(eq(venueSettings.ownerId, ctx.user.id));
+        } else {
+          await db.insert(venueSettings).values({ ownerId: ctx.user.id, staffEmails: next });
+        }
+        return next;
+      }),
+    remove: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [s] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        const existing = (s?.staffEmails as Array<{ id: string; name: string; email: string }> | null) ?? [];
+        const next = existing.filter(x => x.id !== input.id);
+        await db.update(venueSettings).set({ staffEmails: next, updatedAt: new Date() })
+          .where(eq(venueSettings.ownerId, ctx.user.id));
+        return next;
       }),
   }),
   // ─── Account Logins ──────────────────────────────────────────────────────
