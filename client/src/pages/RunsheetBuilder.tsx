@@ -2207,11 +2207,15 @@ export default function RunsheetBuilder() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
               <div className="flex items-center gap-3">
                 <h2 className="font-bebas tracking-widest text-ink/60 text-sm">EVENT TIMELINE</h2>
-                {items.length > 0 && (
-                  <span className="font-dm text-xs text-ink/40">
-                    {formatTime12(items[0].time)} – {formatTime12(addMinutes(items[items.length-1].time, items[items.length-1].duration))}
-                  </span>
-                )}
+                {items.length > 0 && (() => {
+                  const sorted = [...items].sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
+                  const first = sorted[0]; const last = sorted[sorted.length - 1];
+                  return (
+                    <span className="font-dm text-xs text-ink/40">
+                      {formatTime12(first.time)} – {formatTime12(addMinutes(last.time, last.duration))}
+                    </span>
+                  );
+                })()}
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -2256,7 +2260,13 @@ export default function RunsheetBuilder() {
               </div>
             ) : (
               <div className="divide-y divide-gold/20">
-                {items.map((item, idx) => {
+                {items
+                  .map((it, i) => ({ it, i }))
+                  // Sort chronologically by time for display. We keep the
+                  // original index `i` so updateItemField / moveItem /
+                  // removeItem keep targeting the right row in state.
+                  .sort((a, b) => (a.it.time ?? '').localeCompare(b.it.time ?? ''))
+                  .map(({ it: item, i: idx }) => {
                   const key = getItemKey(item);
                   const isExpanded = expandedItem === key;
                   const endTime = addMinutes(item.time, item.duration);

@@ -2110,7 +2110,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         })).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        if (ctx.isTeamMember) throw new Error('Team members cannot send emails. Contact your venue manager.');
+        // Block ephemeral team-link sessions (which mark isTeamMember=true),
+        // but always allow admins — including additional account logins
+        // created via Settings → Team, which resolve to the workspace owner.
+        if (ctx.isTeamMember && ctx.user?.role !== 'admin') {
+          throw new Error('Team members cannot send emails. Contact your venue manager.');
+        }
         const { getDb } = await import('./db');
         const { venueSettings, leadActivity, bookings: bookingsTable } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
