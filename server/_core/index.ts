@@ -99,9 +99,26 @@ async function startServer() {
   // Content-Security-Policy here because the app loads Google Fonts, inline
   // styles from Tailwind v4, and a handful of third-party scripts that need
   // their own audited allow-list before CSP can be turned on without breakage.
+  // Routes that are deliberately designed to be embedded in a customer's
+  // own website via <iframe> (the public enquiry form is the main one).
+  // Keep this list narrow — every entry weakens clickjacking protection on
+  // that specific URL.
+  const EMBEDDABLE_PATH_PREFIXES = [
+    "/enquire",     // /enquire and /enquire/:slug — public lead form
+  ];
+  function isEmbeddablePath(pathname: string): boolean {
+    return EMBEDDABLE_PATH_PREFIXES.some(p => pathname === p || pathname.startsWith(p + "/"));
+  }
+
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    // SAMEORIGIN by default to defeat clickjacking, but omit on routes that
+    // are intentionally embeddable (e.g. the enquiry form embedded in a
+    // venue's marketing site like barfranco.nz). Browsers treat an absent
+    // X-Frame-Options as "framing allowed".
+    if (!isEmbeddablePath(req.path)) {
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    }
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     if (process.env.NODE_ENV === "production") {
