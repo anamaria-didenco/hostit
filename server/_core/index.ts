@@ -170,7 +170,13 @@ async function startServer() {
     return entry.count <= LOGIN_MAX;
   }
 
-  // Local password login (for trial/dev use — no external OAuth needed)
+  // Local password login. Two modes:
+  //   1. { password }            → original single-admin ADMIN_PASSWORD flow
+  //   2. { email, password }     → per-user login via users.passwordHash
+  //                                (created by an admin in Settings → Team)
+  // In mode 2 the session is issued for the WORKSPACE OWNER, not the
+  // credential user — that way every existing data query (all scoped by
+  // ctx.user.id) just keeps working without any per-row plumbing.
   app.post("/api/auth/local-login", async (req, res) => {
     try {
       const ip = getClientIp(req);
@@ -178,15 +184,55 @@ async function startServer() {
         res.status(429).json({ error: "Too many login attempts. Please wait a few minutes and try again." });
         return;
       }
-      const { password } = req.body ?? {};
-      const adminPassword = ENV.adminPassword;
+      const { password, email } = req.body ?? {};
+      if (!password || typeof password !== "string") {
+        res.status(400).json({ error: "Password is required." });
+        return;
+      }
 
+      // Mode 2: email + password lookup against users table.
+      if (email && typeof email === "string") {
+        const bcrypt = await import("bcryptjs");
+        const { getDb } = await import("../db");
+        const { users: usersTable } = await import("../../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const db = await getDb();
+        if (!db) {
+          res.status(503).json({ error: "Database not available." });
+          return;
+        }
+        const normalizedEmail = email.trim().toLowerCase();
+        const rows = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail)).limit(1);
+        const credUser = rows[0];
+        // Use a constant-ish branch so timing doesn't leak whether the email exists.
+        const hash = credUser?.passwordHash ?? "$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidi";
+        const ok = await bcrypt.compare(password, hash);
+        if (!credUser || !credUser.passwordHash || !ok) {
+          res.status(401).json({ error: "Incorrect email or password." });
+          return;
+        }
+        // Resolve which workspace this login belongs to.
+        let sessionUser = credUser;
+        if (credUser.workspaceOwnerId) {
+          const ownerRows = await db.select().from(usersTable).where(eq(usersTable.id, credUser.workspaceOwnerId)).limit(1);
+          if (ownerRows[0]) sessionUser = ownerRows[0];
+        }
+        // Stamp last login on the credential row (helps the admin see who's active).
+        await db.update(usersTable).set({ lastSignedIn: new Date() }).where(eq(usersTable.id, credUser.id));
+        const token = await sdk.createSessionToken(sessionUser.openId, { name: sessionUser.name ?? "Admin" });
+        const cookieOptions = getSessionCookieOptions(req);
+        res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        res.json({ success: true });
+        return;
+      }
+
+      // Mode 1: shared ADMIN_PASSWORD (bootstrap / owner).
+      const adminPassword = ENV.adminPassword;
       if (!adminPassword) {
         res.status(503).json({ error: "Local login is not configured. Set the ADMIN_PASSWORD environment variable." });
         return;
       }
-
-      if (!password || password !== adminPassword) {
+      if (password !== adminPassword) {
         res.status(401).json({ error: "Incorrect password." });
         return;
       }

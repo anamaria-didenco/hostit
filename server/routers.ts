@@ -5634,5 +5634,94 @@ Return ONLY valid JSON.`;
         return { success: true };
       }),
   }),
+  // ─── Account Logins ──────────────────────────────────────────────────────
+  // Email/password logins that share the current user's workspace. Admin-only:
+  // any user with role === 'admin' can add, remove, or reset passwords for
+  // additional people who log in to the same data.
+  accountLogins: router({
+    list: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+        const { getDb } = await import('./db');
+        const { users: usersTable } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const rows = await db.select({
+          id: usersTable.id,
+          name: usersTable.name,
+          email: usersTable.email,
+          lastSignedIn: usersTable.lastSignedIn,
+          createdAt: usersTable.createdAt,
+        }).from(usersTable).where(eq(usersTable.workspaceOwnerId, ctx.user.id));
+        return rows;
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        email: z.string().email().max(320),
+        name: z.string().min(1).max(120),
+        password: z.string().min(8).max(200),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+        const bcrypt = await import('bcryptjs');
+        const { getDb } = await import('./db');
+        const { users: usersTable } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const normalizedEmail = input.email.trim().toLowerCase();
+        const existing = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail)).limit(1);
+        if (existing[0]) throw new TRPCError({ code: 'CONFLICT', message: 'A user with that email already exists.' });
+        const passwordHash = await bcrypt.hash(input.password, 10);
+        // openId is the platform's unique identity key. Local-only logins
+        // get a `login-<n>` prefix so they never collide with OAuth openIds.
+        const openId = `login-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        const [created] = await db.insert(usersTable).values({
+          openId,
+          name: input.name.trim(),
+          email: normalizedEmail,
+          loginMethod: 'local',
+          role: 'admin', // shared workspace = same powers as the owner
+          passwordHash,
+          workspaceOwnerId: ctx.user.id,
+        }).returning({ id: usersTable.id, email: usersTable.email, name: usersTable.name });
+        return created;
+      }),
+    setPassword: protectedProcedure
+      .input(z.object({ id: z.number(), password: z.string().min(8).max(200) }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+        const bcrypt = await import('bcryptjs');
+        const { getDb } = await import('./db');
+        const { users: usersTable } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const passwordHash = await bcrypt.hash(input.password, 10);
+        // Only allow updating passwords for logins that belong to *this*
+        // workspace — never another admin's people.
+        const result = await db.update(usersTable).set({ passwordHash })
+          .where(and(eq(usersTable.id, input.id), eq(usersTable.workspaceOwnerId, ctx.user.id)))
+          .returning({ id: usersTable.id });
+        if (!result[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Login not found.' });
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
+        const { getDb } = await import('./db');
+        const { users: usersTable } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const result = await db.delete(usersTable)
+          .where(and(eq(usersTable.id, input.id), eq(usersTable.workspaceOwnerId, ctx.user.id)))
+          .returning({ id: usersTable.id });
+        if (!result[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Login not found.' });
+        return { success: true };
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;

@@ -30,6 +30,13 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: userRoleEnum("role").default("user").notNull(),
+  // bcrypt hash for users created via the Account Logins admin UI. NULL for
+  // OAuth users and the original ADMIN_PASSWORD bootstrap user.
+  passwordHash: text("passwordHash"),
+  // If set, this user is an additional login for another user's workspace —
+  // when they sign in, the session is issued for the workspaceOwner so all
+  // data scoping (which uses ctx.user.id) keeps working transparently.
+  workspaceOwnerId: integer("workspaceOwnerId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
