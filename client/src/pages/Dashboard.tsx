@@ -16,6 +16,7 @@ import {
   Link as LinkIcon
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { AccountLoginsSection } from "@/components/AccountLoginsSection";
 import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -6204,8 +6205,9 @@ export default function Dashboard() {
                 const getAccessLink = (token: string) => `${window.location.origin}/api/team-login/${token}`;
                 return (
                 <div className="max-w-3xl mx-auto">
+                  <AccountLoginsSection />
                   <div className="flex items-center justify-between mb-6">
-                    <h1 className="font-cormorant text-3xl font-semibold text-ink">Team</h1>
+                    <h1 className="font-cormorant text-3xl font-semibold text-ink">Team Access Links</h1>
                     <button onClick={() => setShowTeamForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
                       <Plus className="w-3 h-3" /> ADD MEMBER
                     </button>
