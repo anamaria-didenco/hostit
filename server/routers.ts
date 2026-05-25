@@ -5779,6 +5779,69 @@ Return ONLY valid JSON.`;
         }
         return next;
       }),
+    // Bulk-add staff from a pasted blob. We're deliberately loose with the
+    // input — accept any free-form text, pull every plausible email out, and
+    // try to grab a name from the same line (e.g. "Joe Bloggs <joe@x.com>"
+    // or "Joe Bloggs - joe@x.com"). Duplicates (against the existing list
+    // and within the paste) are dropped silently. Returns the added rows so
+    // the UI can show "Added 5 staff (2 duplicates skipped)".
+    addBulk: protectedProcedure
+      .input(z.object({ text: z.string().min(1).max(50_000) }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [s] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        const existing = (s?.staffEmails as Array<{ id: string; name: string; email: string }> | null) ?? [];
+        const existingEmails = new Set(existing.map(x => x.email.toLowerCase()));
+
+        const emailRe = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+        // Split on commas/semicolons/newlines first to keep names with their
+        // emails (e.g. "Joe Bloggs <joe@x.com>, Sam Smith sam@x.com").
+        const segments = input.text.split(/[\n;,]+/).map(s => s.trim()).filter(Boolean);
+        const added: Array<{ id: string; name: string; email: string }> = [];
+        const seenInBatch = new Set<string>();
+        let skippedDuplicates = 0;
+        let skippedInvalid = 0;
+
+        for (const seg of segments) {
+          const matches = seg.match(emailRe);
+          if (!matches || matches.length === 0) { skippedInvalid++; continue; }
+          for (const rawEmail of matches) {
+            const email = rawEmail.toLowerCase();
+            if (existingEmails.has(email) || seenInBatch.has(email)) { skippedDuplicates++; continue; }
+            // Best-effort name extraction: strip the email + common
+            // separators (< > ( ) - – | :) and trim whatever's left. Fall
+            // back to the local-part of the address.
+            const nameGuess = seg
+              .replace(rawEmail, '')
+              .replace(/[<>(),;:|\-–"]+/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+            const name = (nameGuess || email.split('@')[0] || 'Staff').slice(0, 120);
+            seenInBatch.add(email);
+            added.push({
+              id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-${added.length}`,
+              name,
+              email,
+            });
+          }
+        }
+
+        if (added.length === 0) {
+          return { added: [], total: existing.length, skippedDuplicates, skippedInvalid };
+        }
+        const next = [...existing, ...added];
+        if (s) {
+          await db.update(venueSettings).set({ staffEmails: next, updatedAt: new Date() })
+            .where(eq(venueSettings.ownerId, ctx.user.id));
+        } else {
+          await db.insert(venueSettings).values({ ownerId: ctx.user.id, staffEmails: next });
+        }
+        return { added, total: next.length, skippedDuplicates, skippedInvalid };
+      }),
     remove: protectedProcedure
       .input(z.object({ id: z.string() }))
       .mutation(async ({ ctx, input }) => {

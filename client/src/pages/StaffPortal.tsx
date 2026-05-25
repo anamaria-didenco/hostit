@@ -166,9 +166,20 @@ export default function StaffPortal() {
   }
 
   const extraFohCourses = Object.keys(fohByCourse).filter(c => !COURSES.includes(c));
-  const orderedFohCourses = [...COURSES.filter(c => fohByCourse[c]), ...extraFohCourses];
+  // Food first, drinks last — custom courses like "Shared Menu" used to
+  // render after Drinks because they weren't in the predefined list.
+  const isDrinks = (c: string) => c.toLowerCase() === 'drinks';
+  const orderedFohCourses = [
+    ...COURSES.filter(c => !isDrinks(c) && fohByCourse[c]),
+    ...extraFohCourses.filter(c => !isDrinks(c)),
+    ...Object.keys(fohByCourse).filter(isDrinks),
+  ];
   const extraKitchenCourses = Object.keys(kitchenByCourse).filter(c => !COURSES.includes(c));
-  const orderedKitchenCourses = [...COURSES.filter(c => kitchenByCourse[c]), ...extraKitchenCourses];
+  const orderedKitchenCourses = [
+    ...COURSES.filter(c => !isDrinks(c) && kitchenByCourse[c]),
+    ...extraKitchenCourses.filter(c => !isDrinks(c)),
+    ...Object.keys(kitchenByCourse).filter(isDrinks),
+  ];
 
   return (
     <div className="min-h-screen bg-linen">

@@ -144,8 +144,19 @@ export default function ShiftRunsheetLive() {
     guestCount: number | null; venueArea: string | null; spaceName: string | null;
     eventStartTime: string | null; eventEndTime: string | null;
     drinksData: { barOption?: string; barNotes?: string; selectedDrinks?: string[]; customDrinks?: { name: string }[] } | null;
-    fnb: Array<{ id: number; section?: string | null; course?: string | null; dishName: string; qty?: number | null; serviceTime?: string | null; dietary?: string | null; staffAssigned?: string | null; description?: string | null }>;
+    fnb: Array<{ id: number; section?: string | null; course?: string | null; dishName: string; qty?: number | null; unitPrice?: string | null; serviceTime?: string | null; dietary?: string | null; staffAssigned?: string | null; description?: string | null }>;
   }>;
+  const paymentInstructions = (sr as any).paymentInstructions as string | null | undefined;
+  const fmtNzd = (n: number) => `$${n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // Sum F&B (qty × unit price) across every event on this shift so duty
+  // managers see the day's expected take at a glance.
+  const dayFoodTotal = events.reduce((sum, ev) => sum + ev.fnb
+    .filter(f => (f.course ?? '').toLowerCase() !== 'drinks')
+    .reduce((s, f) => s + (Number(f.qty ?? 0) * Number(f.unitPrice ?? 0)), 0), 0);
+  const dayDrinkTotal = events.reduce((sum, ev) => sum + ev.fnb
+    .filter(f => (f.course ?? '').toLowerCase() === 'drinks')
+    .reduce((s, f) => s + (Number(f.qty ?? 0) * Number(f.unitPrice ?? 0)), 0), 0);
+  const dayGrand = dayFoodTotal + dayDrinkTotal;
   const sectionDefs = parseSectionDefs((sr as any).shiftSections);
   const venueLogoUrl = (sr as any).venueLogoUrl as string | null | undefined;
   const venueName = (sr as any).venueName as string | null | undefined;
@@ -486,6 +497,40 @@ export default function ShiftRunsheetLive() {
             </div>
           );
         })}
+
+        {(dayGrand > 0 || (paymentInstructions && paymentInstructions.trim().length > 0)) && (
+          <div className="bg-white border border-stone-200 rounded overflow-hidden">
+            <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5 flex items-center gap-2">
+              <span className="font-bebas tracking-widest text-xs text-stone-600">RUNNING TOTAL · TODAY</span>
+            </div>
+            {dayGrand > 0 && (
+              <div className="px-4 py-3 grid grid-cols-3 gap-3">
+                {dayFoodTotal > 0 && (
+                  <div>
+                    <div className="font-bebas tracking-widest text-[10px] text-stone-400">FOOD</div>
+                    <div className="font-dm text-sm text-stone-800 font-semibold">{fmtNzd(dayFoodTotal)}</div>
+                  </div>
+                )}
+                {dayDrinkTotal > 0 && (
+                  <div>
+                    <div className="font-bebas tracking-widest text-[10px] text-stone-400">DRINKS</div>
+                    <div className="font-dm text-sm text-stone-800 font-semibold">{fmtNzd(dayDrinkTotal)}</div>
+                  </div>
+                )}
+                <div>
+                  <div className="font-bebas tracking-widest text-[10px] text-[var(--brand)]">TOTAL</div>
+                  <div className="font-dm text-sm text-stone-900 font-semibold">{fmtNzd(dayGrand)}</div>
+                </div>
+              </div>
+            )}
+            {paymentInstructions && paymentInstructions.trim().length > 0 && (
+              <div className="border-t border-stone-100 px-4 py-3">
+                <div className="font-bebas tracking-widest text-[10px] text-stone-400 mb-1">PAYMENT INSTRUCTIONS</div>
+                <div className="font-dm text-xs text-stone-700 whitespace-pre-wrap leading-relaxed">{paymentInstructions}</div>
+              </div>
+            )}
+          </div>
+        )}
 
         {!activeSections.length && infoFields.length === 0 && !hasChecklists && events.length === 0 && (
           <div className="text-center py-16">

@@ -746,7 +746,16 @@ export default function RunsheetBuilder() {
     setShowDietaryManager(true);
   }
   function saveDietaryOptions() {
-    updateVenueMutation.mutate({ customDietaryOptions: JSON.stringify(editingDietaries) });
+    // Same "pending entry" rescue as setup templates — commit a typed-in
+    // option if the user didn't press ADD first.
+    let toSave = editingDietaries;
+    const pending = newDietaryOption.trim();
+    if (pending && !toSave.includes(pending)) {
+      toSave = [...editingDietaries, pending];
+      setEditingDietaries(toSave);
+      setNewDietaryOption('');
+    }
+    updateVenueMutation.mutate({ customDietaryOptions: JSON.stringify(toSave) });
     setShowDietaryManager(false);
   }
 
@@ -761,7 +770,20 @@ export default function RunsheetBuilder() {
     setShowSetupManager(true);
   }
   function saveSetupTemplates() {
-    updateVenueMutation.mutate({ customSetupTemplates: JSON.stringify(editingSetups) });
+    // Pick up any half-entered template still sitting in the ADD NEW
+    // TEMPLATE fields so the user doesn't lose it by clicking SAVE without
+    // first clicking ADD TEMPLATE. This was the silent failure people kept
+    // hitting: type → SAVE → "saved" toast → nothing actually persists.
+    let toSave = editingSetups;
+    const pendingLabel = newSetupLabel.trim();
+    const pendingValue = newSetupValue.trim();
+    if (pendingLabel && pendingValue) {
+      toSave = [...editingSetups, { label: pendingLabel, value: pendingValue }];
+      setEditingSetups(toSave);
+      setNewSetupLabel('');
+      setNewSetupValue('');
+    }
+    updateVenueMutation.mutate({ customSetupTemplates: JSON.stringify(toSave) });
     setShowSetupManager(false);
   }
 
@@ -970,6 +992,22 @@ export default function RunsheetBuilder() {
   const emailSendMutation = trpc.email.send.useMutation();
   // ── Staff email distribution list (saved on venueSettings.staffEmails) ──
   const staffEmailsQuery = trpc.staffEmails.list.useQuery();
+  const [bulkStaffPaste, setBulkStaffPaste] = useState("");
+  const [showBulkStaffPaste, setShowBulkStaffPaste] = useState(false);
+  const addBulkStaffMutation = trpc.staffEmails.addBulk.useMutation({
+    onSuccess: (res) => {
+      const added = res.added.length;
+      const parts: string[] = [];
+      if (added > 0) parts.push(`Added ${added} staff`);
+      if (res.skippedDuplicates > 0) parts.push(`${res.skippedDuplicates} duplicate${res.skippedDuplicates !== 1 ? 's' : ''} skipped`);
+      if (added === 0 && res.skippedDuplicates === 0) parts.push('No valid emails found');
+      (added > 0 ? toast.success : toast.warning)(parts.join(' · '));
+      setBulkStaffPaste("");
+      setShowBulkStaffPaste(false);
+      staffEmailsQuery.refetch();
+    },
+    onError: () => toast.error('Failed to add emails'),
+  });
   const addStaffEmailMutation = trpc.staffEmails.add.useMutation({
     onSuccess: () => { staffEmailsQuery.refetch(); setNewStaffName(""); setNewStaffEmail(""); },
     onError: (e) => toast.error(e.message ?? 'Failed to add staff email'),
@@ -3253,40 +3291,85 @@ export default function RunsheetBuilder() {
               </div>
             )}
             {/* ── RUNNING TOTALS (bottom of runsheet) ────────────────────────── */}
-            {(booking?.minimumSpend || rsTabAmount || costItems.length > 0 || booking?.depositNzd) ? (
-              <div className="px-5 py-4 border-t-2 border-forest/20 bg-linen/30 print:avoid-break">
-                <div className="font-bebas tracking-widest text-xs text-forest mb-3">RUNNING TOTALS</div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {booking?.minimumSpend != null && Number(booking.minimumSpend) > 0 && (
-                    <div className="bg-white border border-gold/20 px-3 py-2">
-                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">MINIMUM SPEND</div>
-                      <div className="font-cormorant text-lg font-semibold text-ink">${Number(booking.minimumSpend).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
-                    </div>
-                  )}
-                  {rsTabAmount && Number(rsTabAmount) > 0 && (
-                    <div className="bg-white border border-gold/20 px-3 py-2">
-                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">BAR TAB</div>
-                      <div className="font-cormorant text-lg font-semibold text-ink">${Number(rsTabAmount).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
-                    </div>
-                  )}
-                  {costItems.length > 0 && (() => {
-                    const food = costItems.filter(ci => (ci.category || '').toLowerCase().includes('food') || (ci.category || '').toLowerCase().includes('beverage')).reduce((s, ci) => s + Number(ci.qty) * Number(ci.unitPrice), 0);
-                    return food > 0 ? (
+            {(() => {
+              // Pull F&B totals out of the selected dishes/drinks themselves
+              // (qty × unit price) so the running total reflects what the team
+              // actually chose, not just whatever cost line items were added
+              // separately. Food and drinks are split so the bar runs its own
+              // sub-total.
+              const fnbFoodTotal = fnbItems
+                .filter(it => (it.course ?? '') !== 'Drinks')
+                .reduce((sum, it) => sum + (Number(it.qty || 0) * Number(it.unitPrice ?? 0)), 0);
+              const fnbDrinkTotal = fnbItems
+                .filter(it => (it.course ?? '') === 'Drinks')
+                .reduce((sum, it) => sum + (Number(it.qty || 0) * Number(it.unitPrice ?? 0)), 0);
+              // Legacy cost-item food/bev (entered on the Costs tab) — kept so
+              // existing runsheets aren't visibly downgraded after the switch.
+              const costFood = costItems
+                .filter(ci => (ci.category || '').toLowerCase().includes('food') || (ci.category || '').toLowerCase().includes('beverage'))
+                .reduce((s, ci) => s + Number(ci.qty) * Number(ci.unitPrice), 0);
+              const grandTotal = fnbFoodTotal + fnbDrinkTotal + costFood + (rsTabAmount ? Number(rsTabAmount) : 0);
+              const paymentInstructions = (venueSettings as any)?.paymentInstructions as string | null;
+              const showBlock = booking?.minimumSpend || rsTabAmount || costItems.length > 0 || booking?.depositNzd
+                || fnbFoodTotal > 0 || fnbDrinkTotal > 0 || (paymentInstructions && paymentInstructions.trim().length > 0);
+              if (!showBlock) return null;
+              const fmt = (n: number) => `$${n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              return (
+                <div className="px-5 py-4 border-t-2 border-forest/20 bg-linen/30 print:avoid-break">
+                  <div className="font-bebas tracking-widest text-xs text-forest mb-3">RUNNING TOTALS</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {booking?.minimumSpend != null && Number(booking.minimumSpend) > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">FOOD &amp; BEVERAGE</div>
-                        <div className="font-cormorant text-lg font-semibold text-ink">${food.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">MINIMUM SPEND</div>
+                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(Number(booking.minimumSpend))}</div>
                       </div>
-                    ) : null;
-                  })()}
-                  {booking?.depositNzd != null && Number(booking.depositNzd) > 0 && (
-                    <div className={`border px-3 py-2 ${booking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-200'}`}>
-                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
-                      <div className="font-cormorant text-lg font-semibold text-ink">${Number(booking.depositNzd).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                    )}
+                    {fnbFoodTotal > 0 && (
+                      <div className="bg-white border border-gold/20 px-3 py-2">
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">FOOD ({fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && Number(it.unitPrice ?? 0) > 0).length} items)</div>
+                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(fnbFoodTotal)}</div>
+                      </div>
+                    )}
+                    {fnbDrinkTotal > 0 && (
+                      <div className="bg-white border border-gold/20 px-3 py-2">
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">DRINKS ({fnbItems.filter(it => (it.course ?? '') === 'Drinks' && Number(it.unitPrice ?? 0) > 0).length} items)</div>
+                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(fnbDrinkTotal)}</div>
+                      </div>
+                    )}
+                    {costFood > 0 && (
+                      <div className="bg-white border border-gold/20 px-3 py-2">
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">EXTRA F&amp;B (COSTS TAB)</div>
+                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(costFood)}</div>
+                      </div>
+                    )}
+                    {rsTabAmount && Number(rsTabAmount) > 0 && (
+                      <div className="bg-white border border-gold/20 px-3 py-2">
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">BAR TAB</div>
+                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(Number(rsTabAmount))}</div>
+                      </div>
+                    )}
+                    {grandTotal > 0 && (
+                      <div className="bg-forest text-cream border border-forest px-3 py-2">
+                        <div className="font-bebas tracking-widest text-[10px] text-cream/70">RUNNING TOTAL</div>
+                        <div className="font-cormorant text-lg font-semibold">{fmt(grandTotal)}</div>
+                      </div>
+                    )}
+                    {booking?.depositNzd != null && Number(booking.depositNzd) > 0 && (
+                      <div className={`border px-3 py-2 ${booking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-200'}`}>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
+                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(Number(booking.depositNzd))}</div>
+                      </div>
+                    )}
+                  </div>
+                  {paymentInstructions && paymentInstructions.trim().length > 0 && (
+                    <div className="mt-3 bg-white border border-gold/30 px-4 py-3">
+                      <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1">PAYMENT INSTRUCTIONS</div>
+                      <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{paymentInstructions}</div>
                     </div>
                   )}
                 </div>
-              </div>
-            ) : null}
+              );
+            })()}
             {/* ── EVENT SPEND / BUDGET ───────────────────────────────────────── */}
             {effectiveBookingId && (
               <div className="px-5 py-5 border-t border-gold/20 no-print">
@@ -4970,9 +5053,19 @@ export default function RunsheetBuilder() {
           setSendingStaffEmail(true);
           const tId = toast.loading(`Preparing staff briefing for ${allRecipients.length} recipient${allRecipients.length !== 1 ? 's' : ''}...`);
           try {
-            const pdfRes = await fetch(`/api/staff-sheet-pdf/${sheetId}`, { credentials: 'include' });
-            if (!pdfRes.ok) throw new Error('Could not generate the staff PDF');
+            // Attach the BEO (one canonical document) instead of the
+            // standalone staff sheet — same content, but it actually opens
+            // in Gmail (the /api/staff-sheet-pdf path was 404'ing and
+            // sending an empty body), and it's the prettier doc.
+            if (!effectiveBookingId) throw new Error('Save the runsheet against a booking first so we can generate the BEO');
+            const pdfRes = await fetch(`/api/beo/${effectiveBookingId}`, { credentials: 'include' });
+            if (!pdfRes.ok) throw new Error('Could not generate the BEO PDF');
             const blob = await pdfRes.blob();
+            if (!blob.type.includes('pdf') || blob.size < 1000) {
+              // Server returned an HTML error page or empty body. Fail loud
+              // so we never silently attach a broken file again.
+              throw new Error('BEO PDF came back empty — try again or check the booking');
+            }
             const base64: string = await new Promise((resolve, reject) => {
               const r = new FileReader();
               r.onloadend = () => resolve(String(r.result || ''));
@@ -4980,15 +5073,15 @@ export default function RunsheetBuilder() {
               r.readAsDataURL(blob);
             });
             const safeTitle = (title || 'Event').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event';
-            const filename = `${safeTitle} — Staff Sheet.pdf`;
+            const filename = `${safeTitle} — BEO.pdf`;
             const lines = [
               `Hi team,`,
               ``,
-              `Here's the staff briefing for ${title || 'the event'}${eventDate ? ` on ${new Date(eventDate as any).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}.`,
+              `Here's the briefing for ${title || 'the event'}${eventDate ? ` on ${new Date(eventDate as any).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}.`,
               ``,
               `Live runsheet (updates as we edit): ${url}`,
               ``,
-              `The full staff sheet is attached as a PDF for printing or offline reference.`,
+              `Full BEO is attached for printing or offline reference.`,
               ``,
               `Thanks!`,
             ].join('\n');
@@ -5013,7 +5106,7 @@ export default function RunsheetBuilder() {
               <div className="px-5 py-4 border-b border-gold/20 flex items-center justify-between">
                 <div>
                   <h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2>
-                  <p className="font-dm text-xs text-ink/50 mt-0.5">Sends the live runsheet link + staff PDF.</p>
+                  <p className="font-dm text-xs text-ink/50 mt-0.5">Sends the live runsheet link + BEO PDF.</p>
                 </div>
                 <button onClick={() => setEmailingLink(null)} disabled={sendingStaffEmail} className="text-ink/40 hover:text-ink p-1 disabled:opacity-30" title="Close">
                   <X className="w-4 h-4" />
@@ -5098,6 +5191,37 @@ export default function RunsheetBuilder() {
                       {addStaffEmailMutation.isPending ? '...' : 'ADD'}
                     </button>
                   </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <button
+                      onClick={() => setShowBulkStaffPaste(v => !v)}
+                      className="font-bebas tracking-widest text-[10px] text-forest hover:underline"
+                    >
+                      {showBulkStaffPaste ? '— HIDE BULK PASTE' : '+ PASTE A WHOLE LIST'}
+                    </button>
+                    {showBulkStaffPaste && (
+                      <span className="font-dm text-[10px] text-ink/40">Paste comma/line-separated emails or "Name &lt;email&gt;" pairs.</span>
+                    )}
+                  </div>
+                  {showBulkStaffPaste && (
+                    <div className="mt-2 space-y-2">
+                      <textarea
+                        value={bulkStaffPaste}
+                        onChange={e => setBulkStaffPaste(e.target.value)}
+                        placeholder={"Joe Bloggs <joe@venue.co.nz>, Sam Smith sam@venue.co.nz\nor just\njoe@venue.co.nz; sam@venue.co.nz; alex@venue.co.nz"}
+                        rows={4}
+                        className="w-full border border-gold/30 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest"
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => addBulkStaffMutation.mutate({ text: bulkStaffPaste })}
+                          disabled={!bulkStaffPaste.trim() || addBulkStaffMutation.isPending}
+                          className="bg-forest text-white font-bebas tracking-widest text-[11px] px-4 py-1.5 disabled:opacity-40"
+                        >
+                          {addBulkStaffMutation.isPending ? 'ADDING…' : 'ADD ALL'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

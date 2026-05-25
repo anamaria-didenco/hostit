@@ -1868,6 +1868,7 @@ export default function Dashboard() {
         ]),
         emailSignature: vs?.emailSignature ?? "",
         emailSignatureLogo: (vs as any)?.emailSignatureLogo ?? "",
+        paymentInstructions: (vs as any)?.paymentInstructions ?? "",
         customCourses: (() => {
           if (vs?.customCourses) {
             try {
@@ -4650,6 +4651,16 @@ export default function Dashboard() {
                           onChange={e => setSettingsForm((f: any) => ({ ...f, autoCancelTentative: e.target.checked ? 1 : 0 }))}
                           className="w-4 h-4 accent-forest" />
                         <label htmlFor="autoCancelTentative" className="font-dm text-sm text-ink">Automatically cancel tentative events after their event date</label>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PAYMENT INSTRUCTIONS</label>
+                        <Textarea
+                          value={settingsForm.paymentInstructions ?? ""}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, paymentInstructions: e.target.value }))}
+                          placeholder={"How clients pay you. e.g.\nBank transfer to 12-3456-7890123-00\nReference: <event date + surname>\nDeposit due to confirm; balance by event day."}
+                          rows={4}
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
+                        <p className="font-dm text-xs text-sage/60 mt-1">Shown under running totals on every runsheet, the live staff link, and the BEO PDF.</p>
                       </div>
                     </div>
                   </div>

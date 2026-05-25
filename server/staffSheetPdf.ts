@@ -201,8 +201,12 @@ export async function handleStaffSheetPdf(req: Request, res: Response) {
     function renderFnbSection(sectionTitle: string, fnbArr: typeof fohItems) {
       if (!fnbArr.length) return "";
       const grouped = groupByCourse(fnbArr);
-      const extraCourses = Object.keys(grouped).filter(c => !COURSE_ORDER.includes(c));
-      const orderedCourses = [...COURSE_ORDER.filter(c => grouped[c]), ...extraCourses];
+      // Food first, drinks last — see beoPdf.ts for the same fix.
+      const isDrinks = (c: string) => c.toLowerCase() === 'drinks';
+      const food = COURSE_ORDER.filter(c => !isDrinks(c) && grouped[c]);
+      const custom = Object.keys(grouped).filter(c => !isDrinks(c) && !COURSE_ORDER.includes(c));
+      const drinkKeys = Object.keys(grouped).filter(isDrinks);
+      const orderedCourses = [...food, ...custom, ...drinkKeys];
       const isFoh = sectionTitle.includes("FOH") || sectionTitle.includes("FRONT");
       const lastColHeader = isFoh ? "STAFF" : "PREP / PLATING";
 

@@ -296,9 +296,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       // assignments — guests don't need (and shouldn't see) operational detail.
       if (isPublic && isKitchen) return "";
       const grouped = groupByCourse(items);
-      const ordered = COURSE_ORDER.filter(c => grouped[c]);
-      const remaining = Object.keys(grouped).filter(c => !COURSE_ORDER.includes(c));
-      const allCourses = [...ordered, ...remaining];
+      // Food first, drinks last — always. Custom courses (e.g. "Shared
+      // Menu") were sliding in after Drinks because they weren't in
+      // COURSE_ORDER. Pin Drinks to the tail no matter what.
+      const isDrinks = (c: string) => c.toLowerCase() === 'drinks';
+      const food = COURSE_ORDER.filter(c => !isDrinks(c) && grouped[c]);
+      const custom = Object.keys(grouped).filter(c => !isDrinks(c) && !COURSE_ORDER.includes(c));
+      const drinkKeys = Object.keys(grouped).filter(isDrinks);
+      const allCourses = [...food, ...custom, ...drinkKeys];
       const showLastCol = !isPublic;
       const lastColHeader = isKitchen ? "PREP / PLATING" : "STAFF";
 
@@ -751,6 +756,37 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   ${renderFnbSection("KITCHEN — PREP &amp; PRODUCTION", kitchenItemsArr, true)}
   ${barSection}
   ${financialsSection}
+  ${(() => {
+    // Running totals from F&B selection (qty × unit price), split food vs
+    // drinks. Mirrors what staff see on the runsheet so the BEO matches.
+    const food = fnbList.filter(i => (i.course ?? '') !== 'Drinks')
+      .reduce((s, i) => s + (Number(i.qty ?? 0) * Number((i as any).unitPrice ?? 0)), 0);
+    const drinks = fnbList.filter(i => (i.course ?? '') === 'Drinks')
+      .reduce((s, i) => s + (Number(i.qty ?? 0) * Number((i as any).unitPrice ?? 0)), 0);
+    const tab = (runsheet as any)?.drinksData?.tabAmount ? Number((runsheet as any).drinksData.tabAmount) : 0;
+    const grand = food + drinks + tab;
+    if (grand <= 0) return "";
+    return `
+<div class="card">
+  <div class="card-header">RUNNING TOTALS</div>
+  <div class="card-body">
+    ${food > 0 ? `<div class="detail-row"><span class="detail-label">Food</span><span class="detail-value">${fmtCurrency(food)}</span></div>` : ""}
+    ${drinks > 0 ? `<div class="detail-row"><span class="detail-label">Drinks</span><span class="detail-value">${fmtCurrency(drinks)}</span></div>` : ""}
+    ${tab > 0 ? `<div class="detail-row"><span class="detail-label">Bar Tab</span><span class="detail-value">${fmtCurrency(tab)}</span></div>` : ""}
+    <div class="detail-row" style="border-top:1px solid rgba(201,168,76,0.3);margin-top:6px;padding-top:6px;font-weight:600"><span class="detail-label">Running Total</span><span class="detail-value">${fmtCurrency(grand)}</span></div>
+  </div>
+</div>`;
+  })()}
+  ${(() => {
+    const pi = (venue as any)?.paymentInstructions as string | null | undefined;
+    if (!pi || !pi.trim()) return "";
+    const esc = pi.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    return `
+<div class="card">
+  <div class="card-header">PAYMENT INSTRUCTIONS</div>
+  <div class="card-body notes-text">${esc}</div>
+</div>`;
+  })()}
   ${notesSection}
 
   <div class="doc-footer">
