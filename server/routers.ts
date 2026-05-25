@@ -62,8 +62,12 @@ async function syncDepositPaidFlag(bookingId: number, ownerId: number) {
     const pmts = await db.select().from(payments)
       .where(and(eq(payments.bookingId, bookingId), eq(payments.ownerId, ownerId)));
     const net = pmts.reduce((s, p) => s + (p.type === 'refund' ? -1 : 1) * Number(p.amount), 0);
-    const depositRequired = Number(booking.depositNzd ?? 0);
-    const shouldBePaid = depositRequired > 0 && net >= depositRequired;
+    const depositAmount = Number(booking.depositNzd ?? 0);
+    // If the venue has marked this booking as not requiring a deposit,
+    // skip the auto-sync entirely — the flag is meaningless and the UI
+    // shows "Not required" anyway.
+    if ((booking as any).depositRequired === false) return;
+    const shouldBePaid = depositAmount > 0 && net >= depositAmount;
     if (Boolean(booking.depositPaid) !== shouldBePaid) {
       await db.update(bookings)
         .set({ depositPaid: shouldBePaid })
@@ -1637,6 +1641,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         totalNzd: z.number().nullable().optional(),
         depositNzd: z.number().nullable().optional(),
         depositPaid: z.boolean().optional(),
+        depositRequired: z.boolean().optional(),
         minimumSpend: z.number().nullable().optional(),
         status: z.enum(['confirmed', 'tentative', 'cancelled']).optional(),
         notes: z.string().nullable().optional(),
@@ -1676,6 +1681,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.totalNzd !== undefined) updates.totalNzd = rest.totalNzd !== null ? String(rest.totalNzd) : null;
         if (rest.depositNzd !== undefined) updates.depositNzd = rest.depositNzd !== null ? String(rest.depositNzd) : null;
         if (rest.depositPaid !== undefined) updates.depositPaid = rest.depositPaid;
+        if (rest.depositRequired !== undefined) {
+          updates.depositRequired = rest.depositRequired;
+          // Marking the deposit as not required also clears the paid
+          // flag so the badge can't show a stale "✓ paid" for a
+          // booking the venue isn't collecting a deposit on.
+          if (rest.depositRequired === false) updates.depositPaid = false;
+        }
         if (rest.minimumSpend !== undefined) updates.minimumSpend = rest.minimumSpend !== null ? String(rest.minimumSpend) : null;
         if (rest.status !== undefined) updates.status = rest.status;
         if (rest.notes !== undefined) updates.notes = rest.notes;

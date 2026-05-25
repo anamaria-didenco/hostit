@@ -261,6 +261,11 @@ export const bookings = pgTable("bookings", {
   totalNzd: decimal("totalNzd", { precision: 10, scale: 2 }),
   depositNzd: decimal("depositNzd", { precision: 10, scale: 2 }),
   depositPaid: boolean("depositPaid").default(false).notNull(),
+  // When false, this booking does not require a deposit at all — the
+  // pending warning is hidden and syncDepositPaidFlag won't flip the
+  // paid flag from incoming payments. Default true preserves prior
+  // behaviour for existing rows.
+  depositRequired: boolean("depositRequired").default(true).notNull(),
   minimumSpend: decimal("minimumSpend", { precision: 10, scale: 2 }),
   status: bookingStatusEnum("status").default("confirmed").notNull(),
   notes: text("notes"),

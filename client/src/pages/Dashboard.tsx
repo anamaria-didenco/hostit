@@ -7570,7 +7570,7 @@ export default function Dashboard() {
                     // can move into a live state (booked/confirmed/tentative).
                     const needsSpace = ['booked', 'confirmed', 'tentative'].includes(newStatus);
                     if (needsSpace && !selectedBooking.spaceName?.trim()) {
-                      toast.error('Please set a space on this event first.');
+                      toast.error('Pick a space in the SPACE field above first — it\'s the row with the pin icon.', { duration: 5000 });
                       return;
                     }
                     if (selectedBooking._isLead) {
@@ -7736,49 +7736,35 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-                {/* SPACE — bookings only (leads.update has no spaceName field) */}
-                {!selectedBooking._isLead && (
-                  <div className="flex items-start gap-3">
-                    <MapPin className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <div className="font-bebas text-xs tracking-widest text-ink/40">SPACE</div>
-                        {drawerEdit?.field !== "spaceName" && (
-                          <button onClick={() => setDrawerEdit({ field: "spaceName", value: selectedBooking.spaceName ?? "" })}
-                            className="text-ink/30 hover:text-forest" aria-label="Edit space">
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                      {drawerEdit?.field === "spaceName" ? (
-                        <div className="flex items-center gap-1 mt-1">
-                          {spaces && spaces.length > 0 ? (
-                            <Select value={drawerEdit.value || "__clear__"}
-                              onValueChange={v => saveDrawerField("spaceName", v === "__clear__" ? "" : v)}>
-                              <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Pick a space" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__clear__" className="text-xs italic text-ink/50">— None —</SelectItem>
-                                {spaces.map((s: any) => (
-                                  <SelectItem key={s.id} value={s.name} className="text-xs">{s.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input value={drawerEdit.value}
-                              onChange={e => setDrawerEdit({ field: "spaceName", value: e.target.value })}
-                              className="h-8 text-xs flex-1" autoFocus />
-                          )}
-                          <button onClick={() => saveDrawerField("spaceName", drawerEdit.value)}
-                            className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
-                          <button onClick={() => setDrawerEdit(null)}
-                            className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
-                        </div>
-                      ) : (
-                        <div className="font-dm text-sm text-ink">{selectedBooking.spaceName || '—'}</div>
-                      )}
-                    </div>
+                {/* SPACE — shown for both leads and bookings. Leads must be
+                    able to pick a space too, otherwise the "set status to
+                    Tentative/Confirmed" path is blocked with no way to fix
+                    it from the side drawer. leads.update accepts spaceName,
+                    so saveDrawerField handles both paths automatically. */}
+                <div className="flex items-start gap-3">
+                  <MapPin className={`w-4 h-4 mt-0.5 flex-shrink-0 ${!selectedBooking.spaceName?.trim() ? 'text-amber-600' : 'text-gold'}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">SPACE {!selectedBooking.spaceName?.trim() && <span className="text-amber-600 normal-case">— required to confirm</span>}</div>
+                    {/* Always-on space picker (no click-to-edit dance) so the
+                        user can never get stuck unable to set one. */}
+                    {spaces && spaces.length > 0 ? (
+                      <Select value={selectedBooking.spaceName || "__none__"}
+                        onValueChange={v => saveDrawerField("spaceName", v === "__none__" ? "" : v)}>
+                        <SelectTrigger className={`h-8 text-xs ${!selectedBooking.spaceName?.trim() ? 'border-amber-500 ring-1 ring-amber-500/30' : 'border-gold/30'}`}>
+                          <SelectValue placeholder="Pick a space" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__" className="text-xs italic text-ink/50">— None —</SelectItem>
+                          {spaces.map((s: any) => (
+                            <SelectItem key={s.id} value={s.name} className="text-xs">{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="text-xs text-ink/60 italic">No spaces yet — add one in Settings → Spaces</div>
+                    )}
                   </div>
-                )}
+                </div>
                 {/* EMAIL */}
                 <div className="flex items-start gap-3">
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
@@ -7861,18 +7847,49 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => {
-                      const next = !selectedBooking.depositPaid;
-                      setSelectedBooking((prev: any) => prev ? { ...prev, depositPaid: next } : prev);
-                      rescheduleBooking.mutate({ id: selectedBooking.id, depositPaid: next } as any);
-                    }}
-                    className={`mt-2 font-bebas text-xs tracking-widest cursor-pointer hover:opacity-80 ${
-                      selectedBooking.depositPaid ? 'text-forest' : 'text-amber-600'
-                    }`}
-                    title="Click to toggle">
-                    {selectedBooking.depositPaid ? '✓ DEPOSIT PAID — click to mark unpaid' : '⚠ DEPOSIT PENDING — click to mark paid'}
-                  </button>
+                  {/* Three states: NOT REQUIRED · PENDING · PAID. The
+                      "deposit not taken" case (mates rates, internal
+                      events) silences the amber warning so the drawer
+                      doesn't nag the user about a deposit they were
+                      never going to collect. */}
+                  {selectedBooking.depositRequired === false ? (
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="font-bebas text-xs tracking-widest text-ink/50">— DEPOSIT NOT REQUIRED</span>
+                      <button
+                        onClick={() => {
+                          setSelectedBooking((prev: any) => prev ? { ...prev, depositRequired: true } : prev);
+                          rescheduleBooking.mutate({ id: selectedBooking.id, depositRequired: true } as any);
+                        }}
+                        className="font-bebas text-[10px] tracking-widest text-forest hover:underline"
+                        title="Click to start tracking a deposit again">
+                        REQUIRE DEPOSIT
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => {
+                          const next = !selectedBooking.depositPaid;
+                          setSelectedBooking((prev: any) => prev ? { ...prev, depositPaid: next } : prev);
+                          rescheduleBooking.mutate({ id: selectedBooking.id, depositPaid: next } as any);
+                        }}
+                        className={`font-bebas text-xs tracking-widest cursor-pointer hover:opacity-80 ${
+                          selectedBooking.depositPaid ? 'text-forest' : 'text-amber-600'
+                        }`}
+                        title="Click to toggle">
+                        {selectedBooking.depositPaid ? '✓ DEPOSIT PAID — click to mark unpaid' : '⚠ DEPOSIT PENDING — click to mark paid'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedBooking((prev: any) => prev ? { ...prev, depositRequired: false, depositPaid: false } : prev);
+                          rescheduleBooking.mutate({ id: selectedBooking.id, depositRequired: false } as any);
+                        }}
+                        className="font-bebas text-[10px] tracking-widest text-ink/40 hover:text-ink"
+                        title="This booking doesn't require a deposit at all">
+                        NO DEPOSIT
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               {/* Quick Actions */}

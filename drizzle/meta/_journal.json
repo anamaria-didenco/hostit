@@ -273,6 +273,20 @@
       "when": 1779700000000,
       "tag": "0038_fnb_pricing_payment_instructions",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1779703500000,
+      "tag": "0039_staff_briefing_template",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1779703600000,
+      "tag": "0040_deposit_required",
+      "breakpoints": true
     }
   ]
 }
