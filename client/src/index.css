@@ -968,3 +968,14 @@
   /* Headings page-break behaviour */
   h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
 }
+
+/* ── Print rules for staff-facing runsheets (StaffPortal + ShiftRunsheetLive) ── */
+@media print {
+  header.sticky, .sticky { position: static !important; }
+  body, html { background: white !important; }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+

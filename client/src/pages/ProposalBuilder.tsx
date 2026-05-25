@@ -101,6 +101,24 @@ export default function ProposalBuilder() {
   const [selectedMenuPackageIds, setSelectedMenuPackageIds] = useState<number[]>([]);
   const [menuSectionOpen, setMenuSectionOpen] = useState(true);
 
+  // ── Live food + drink catalogue (kept in sync as menus are updated) ───────
+  const { data: catalogueCategories } = trpc.menuCatalog.listCategories.useQuery({ type: 'all' }, { enabled: !!user });
+  const { data: catalogueFoodItems } = trpc.menuCatalog.listItems.useQuery({ type: 'food' }, { enabled: !!user });
+  const { data: catalogueDrinkItems } = trpc.menuCatalog.listItems.useQuery({ type: 'drink' }, { enabled: !!user });
+  const groupItemsByCategory = (items: any[] | undefined, type: 'food' | 'drink') => {
+    const cats = (catalogueCategories ?? []).filter((c: any) => c.type === type);
+    const byId: Record<number, any[]> = {};
+    (items ?? []).forEach((it: any) => {
+      if (!it.available) return;
+      (byId[it.categoryId] ||= []).push(it);
+    });
+    return cats
+      .map((c: any) => ({ category: c, items: (byId[c.id] ?? []).sort((a, b) => a.sortOrder - b.sortOrder) }))
+      .filter(g => g.items.length > 0);
+  };
+  const groupedFoodCatalogue = groupItemsByCategory(catalogueFoodItems, 'food');
+  const groupedDrinkCatalogue = groupItemsByCategory(catalogueDrinkItems, 'drink');
+
   // ── Food items state ───────────────────────────────────────────────────────
   const [foodSectionOpen, setFoodSectionOpen] = useState(false);
   const [customFoodItems, setCustomFoodItems] = useState<{ name: string; description?: string; pricePerHead?: number }[]>([]);
@@ -750,9 +768,54 @@ export default function ProposalBuilder() {
             </button>
             {foodSectionOpen && (
               <div className="px-5 pb-5 space-y-4 border-t border-border">
-                <div className="pt-4">
+                {/* Live food catalogue — always reflects current menu */}
+                {groupedFoodCatalogue.length > 0 && (
+                  <div className="pt-4">
+                    <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">PICK FROM YOUR MENU CATALOGUE</div>
+                    <p className="font-dm text-xs text-muted-foreground mb-3">This list updates automatically when you edit menus in Dashboard → Menu Catalogue.</p>
+                    <div className="space-y-3 max-h-72 overflow-y-auto border border-border p-3 bg-white/40">
+                      {groupedFoodCatalogue.map(g => (
+                        <div key={g.category.id}>
+                          <div className="font-playfair italic text-sm text-primary mb-1 border-b border-primary/20 pb-1">{g.category.name}</div>
+                          <div className="space-y-1">
+                            {g.items.map((it: any) => {
+                              const already = customFoodItems.some(ci => ci.name === it.name);
+                              return (
+                                <div key={it.id} className="flex items-center gap-2 py-1">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-dm text-sm text-ink truncate">{it.name}</div>
+                                    {it.description && <div className="font-dm text-xs text-muted-foreground truncate">{it.description}</div>}
+                                  </div>
+                                  <div className="font-dm text-xs text-muted-foreground shrink-0">${(it.price / 100).toFixed(2)}{it.pricingType === 'per_person' ? '/head' : '/item'}</div>
+                                  <Button
+                                    size="sm"
+                                    variant={already ? 'outline' : 'default'}
+                                    disabled={already}
+                                    onClick={() => {
+                                      const dollars = it.price / 100;
+                                      const suffix = it.pricingType === 'per_person' ? ' (per head)' : ' (per item)';
+                                      setCustomFoodItems(prev => [...prev, {
+                                        name: it.name,
+                                        description: (it.description ? it.description + suffix : suffix.trim()),
+                                        pricePerHead: dollars,
+                                      }]);
+                                    }}
+                                    className="font-bebas tracking-widest rounded-none px-3 text-xs"
+                                  >
+                                    {already ? 'ADDED' : 'ADD'}
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className={groupedFoodCatalogue.length > 0 ? '' : 'pt-4'}>
                   {customFoodItems.length === 0 && (
-                    <p className="font-dm text-sm text-muted-foreground mb-3">No food items added yet. Use this to list specific dishes, courses, or catering items.</p>
+                    <p className="font-dm text-sm text-muted-foreground mb-3">No food items added yet. Pick from the catalogue above or add a custom one below.</p>
                   )}
                   {customFoodItems.map((item, i) => (
                     <div key={i} className="flex items-center gap-2 mb-2 p-2 bg-sage-tint border border-sage-green/20">
@@ -916,6 +979,48 @@ export default function ProposalBuilder() {
                     </div>
                   ))}
                 </div>
+
+                {/* Live drink catalogue — always reflects current menu */}
+                {groupedDrinkCatalogue.length > 0 && (
+                  <div className="pt-4 mt-2 border-t-2 border-primary/20">
+                    <div className="font-bebas text-sm tracking-widest text-ink mb-1">PICK FROM YOUR DRINK CATALOGUE</div>
+                    <p className="font-dm text-xs text-muted-foreground mb-3">This list updates automatically when you edit drinks in Dashboard → Menu Catalogue.</p>
+                    <div className="space-y-3 max-h-72 overflow-y-auto border border-border p-3 bg-white/40">
+                      {groupedDrinkCatalogue.map(g => (
+                        <div key={g.category.id}>
+                          <div className="font-playfair italic text-sm text-primary mb-1 border-b border-primary/20 pb-1">{g.category.name}</div>
+                          <div className="space-y-1">
+                            {g.items.map((it: any) => {
+                              const already = customDrinks.some(cd => cd.name === it.name);
+                              return (
+                                <div key={it.id} className="flex items-center gap-2 py-1">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-dm text-sm text-ink truncate">{it.name}</div>
+                                    {it.description && <div className="font-dm text-xs text-muted-foreground truncate">{it.description}</div>}
+                                  </div>
+                                  <div className="font-dm text-xs text-muted-foreground shrink-0">${(it.price / 100).toFixed(2)}</div>
+                                  <Button
+                                    size="sm"
+                                    variant={already ? 'outline' : 'default'}
+                                    disabled={already}
+                                    onClick={() => setCustomDrinks(prev => [...prev, {
+                                      name: it.name,
+                                      description: it.description ?? undefined,
+                                      price: it.price / 100,
+                                    }])}
+                                    className="font-bebas tracking-widest rounded-none px-3 text-xs"
+                                  >
+                                    {already ? 'ADDED' : 'ADD'}
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Custom Drinks */}
                 <div>

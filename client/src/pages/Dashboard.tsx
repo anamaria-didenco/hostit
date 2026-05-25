@@ -62,73 +62,6 @@ const FORM_FONTS = [
   { key: 'dm', label: 'Refined', sub: 'DM Serif Display' },
 ];
 
-// ─── Follow-Up Date Card ────────────────────────────────────────────────────
-function FollowUpDateCard({ lead, onSaved }: { lead: any; onSaved: (date: Date | null) => void }) {
-  const utils = trpc.useUtils();
-  const setFollowUpDate = trpc.leads.setFollowUpDate.useMutation({
-    onSuccess: (_, vars) => {
-      onSaved(vars.followUpDate ? new Date(vars.followUpDate) : null);
-      toast.success(vars.followUpDate ? 'Follow-up date saved' : 'Follow-up date cleared');
-    },
-    onError: () => toast.error('Failed to save follow-up date'),
-  });
-
-  const existing = lead.followUpDate ? new Date(lead.followUpDate) : null;
-  const isOverdue = existing && existing <= new Date() && !['booked', 'lost', 'cancelled'].includes(lead.status);
-  const isUpcoming = existing && existing > new Date();
-
-  // Format date as YYYY-MM-DD for the input value
-  const inputValue = existing
-    ? existing.toLocaleDateString('en-CA') // en-CA gives YYYY-MM-DD
-    : '';
-
-  return (
-    <div className="dante-card p-4 mb-4">
-      <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-3 flex items-center gap-2">
-        FOLLOW-UP DATE
-        {isOverdue && (
-          <span className="bg-red-100 text-red-700 font-bebas text-xs tracking-widest px-2 py-0.5">OVERDUE</span>
-        )}
-        {isUpcoming && (
-          <span className="bg-gold/20 text-amber-700 font-bebas text-xs tracking-widest px-2 py-0.5">SCHEDULED</span>
-        )}
-      </h3>
-      <div className="flex gap-2 items-center">
-        <input
-          type="date"
-          defaultValue={inputValue}
-          key={inputValue} // re-mount when lead changes
-          className="flex-1 border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest"
-          onChange={e => {
-            if (e.target.value) {
-              setFollowUpDate.mutate({ id: lead.id, followUpDate: e.target.value });
-            }
-          }}
-        />
-        {existing && (
-          <button
-            onClick={() => setFollowUpDate.mutate({ id: lead.id, followUpDate: null })}
-            className="border border-border font-bebas tracking-widest text-xs px-3 py-2 text-ink/60 hover:text-tomato hover:border-tomato transition-colors"
-            title="Clear follow-up date"
-          >
-            CLEAR
-          </button>
-        )}
-      </div>
-      {isOverdue && existing && (
-        <p className="font-dm text-xs text-red-600 mt-2">
-          Overdue since {existing.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
-        </p>
-      )}
-      {isUpcoming && existing && (
-        <p className="font-dm text-xs text-amber-700 mt-2">
-          Scheduled for {existing.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
-        </p>
-      )}
-    </div>
-  );
-}
-
 const PIPELINE_STAGES = [
   { key: "new", label: "NEW", color: "border-amber-400 bg-amber-100 text-amber-900" },
   { key: "contacted", label: "CONTACTED", color: "border-sky-400 bg-sky-100 text-sky-800" },
@@ -282,58 +215,6 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
       <div className="p-3 border-t border-gold/15">
         <button onClick={onViewCalendar} className="w-full font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors py-1">VIEW FULL CALENDAR →</button>
       </div>
-    </div>
-  );
-}
-
-function NewEnquiriesWidget({ newEnquiries, overdueLeads, onSelectLead, onViewAll, onViewOverdue }: {
-  newEnquiries: any[]; overdueLeads: any;
-  onSelectLead: (lead: any) => void; onViewAll: () => void; onViewOverdue: () => void;
-}) {
-  return (
-    <div className="dante-card shadow-sm flex flex-col">
-      <div className="flex items-center justify-between p-4 border-b border-gold/15">
-        <div className="flex items-center gap-3">
-          <h2 className="font-cormorant text-lg font-semibold text-ink">New Enquiries</h2>
-          {newEnquiries.length > 0 && (
-            <span className="bg-gold/20 text-amber-800 font-bebas text-xs tracking-widest px-2 py-0.5 border border-gold/30">{newEnquiries.length}</span>
-          )}
-        </div>
-        <button onClick={onViewAll} className="font-bebas tracking-widest text-xs text-forest hover:text-gold transition-colors">VIEW ALL</button>
-      </div>
-      {newEnquiries.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-          <CheckCircle className="w-10 h-10 text-forest mb-3" />
-          <p className="font-cormorant text-lg text-ink/60 italic">All caught up!</p>
-          <p className="font-dm text-xs text-ink/40 mt-1">No new enquiries waiting for a reply.</p>
-        </div>
-      ) : (
-        <div className="divide-y divide-border/40 overflow-y-auto max-h-[420px]">
-          {newEnquiries.slice(0, 8).map((lead: any) => (
-            <button key={lead.id} onClick={() => onSelectLead(lead)}
-              className="w-full flex items-start gap-3 p-4 hover:bg-gold/5 transition-colors text-left">
-              <div className="w-2 h-2 rounded-full bg-gold mt-1.5 flex-shrink-0 animate-pulse" />
-              <div className="flex-1 min-w-0">
-                <div className="font-cormorant font-semibold text-sm text-ink">{lead.firstName} {lead.lastName}</div>
-                <div className="font-dm text-xs text-ink/60 truncate">{lead.eventType || 'Event'}{lead.guestCount ? ` · ${lead.guestCount} guests` : ''}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
-                {lead.message && <div className="font-dm text-xs text-ink/40 truncate mt-0.5 italic">"{lead.message}"</div>}
-              </div>
-              <div className="font-dm text-xs text-ink/40 flex-shrink-0">
-                {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-      {(overdueLeads ?? []).length > 0 && (
-        <div className="border-t border-red-200 bg-red-50/50">
-          <div className="flex items-center gap-2 px-4 py-2">
-            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            <span className="font-bebas text-xs tracking-widest text-red-700">{(overdueLeads ?? []).length} OVERDUE FOLLOW-UP{(overdueLeads ?? []).length > 1 ? 'S' : ''}</span>
-            <button onClick={onViewOverdue} className="ml-auto font-bebas text-xs tracking-widest text-red-600 hover:text-red-800 transition-colors">VIEW →</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -910,8 +791,7 @@ export default function Dashboard() {
   const [catalogAiPreview, setCatalogAiPreview] = useState<Array<{ name: string; description?: string; price?: number; pricingType?: 'per_person'|'per_item'; unit?: string; allergens?: string }>>([]);
   const parseFnbForCatalog = trpc.menuCatalog.parseFnbText.useMutation();
   const [leadSearch, setLeadSearch] = useState("");
-  // Multi-select status filter — empty array means "All Statuses". The
-  // sentinel "overdue_followup" is virtual (filters client-side by followUpDate).
+  // Multi-select status filter — empty array means "All Statuses".
   const [leadStatusFilter, setLeadStatusFilter] = useState<string[]>([]);
   const [statusFilterOpen, setStatusFilterOpen] = useState(false);
   const statusFilterRef = useRef<HTMLDivElement | null>(null);
@@ -1054,11 +934,9 @@ export default function Dashboard() {
   const utils = trpc.useUtils();
 
   const { data: stats } = trpc.dashboard.stats.useQuery(undefined, { enabled: !!user?.id });
-  const { data: overdueLeads, refetch: refetchOverdue } = trpc.leads.overdue.useQuery(undefined, { enabled: !!user?.id });
   const { data: allLeads, refetch: refetchLeads } = trpc.leads.list.useQuery(
-    // Server filters by a single status; for multi-select or virtual filters
-    // (overdue_followup) we fetch all and filter client-side below.
-    { status: (leadStatusFilter.length === 1 && leadStatusFilter[0] !== "overdue_followup") ? leadStatusFilter[0] : undefined },
+    // Server filters by a single status; multi-select filters fan out client-side.
+    { status: leadStatusFilter.length === 1 ? leadStatusFilter[0] : undefined },
     { enabled: !!user?.id, refetchInterval: 30_000 }
   );
 
@@ -1178,10 +1056,6 @@ export default function Dashboard() {
   const { data: contacts, refetch: refetchContacts } = trpc.contacts.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: monthBookings } = trpc.bookings.byMonth.useQuery(
-    { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
-    { enabled: !!user?.id }
-  );
-  const { data: monthFollowUps } = trpc.leads.followUpsByMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
   );
@@ -1397,7 +1271,6 @@ export default function Dashboard() {
   const bulkUpdateStatus = trpc.leads.bulkUpdateStatus.useMutation({
     onSuccess: (data) => {
       refetchLeads();
-      refetchOverdue();
       setSelectedLeadIds(new Set());
       setBulkSelectMode(false);
       toast.success(`${data.updated} lead${data.updated === 1 ? '' : 's'} updated`);
@@ -1407,7 +1280,6 @@ export default function Dashboard() {
   const bulkDelete = trpc.leads.bulkDelete.useMutation({
     onSuccess: (data) => {
       utils.leads.list.invalidate();
-      utils.leads.overdue.invalidate();
       setSelectedLeadIds(new Set());
       setBulkSelectMode(false);
       setShowBulkDeleteConfirm(false);
@@ -1480,7 +1352,6 @@ export default function Dashboard() {
   const deleteLead = trpc.leads.delete.useMutation({
     onSuccess: () => {
       utils.leads.list.invalidate();
-      utils.leads.overdue.invalidate();
       utils.leads.eventsByMonth.invalidate();
       utils.bookings.byMonth.invalidate();
       utils.dashboard.stats.invalidate();
@@ -1713,7 +1584,6 @@ export default function Dashboard() {
       }
       if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
       refetchLeads();
-      refetchOverdue();
     },
     onError: (err) => toast.error(err.message || "Failed to send email"),
   });
@@ -2064,16 +1934,9 @@ export default function Dashboard() {
   }
 
   // When the user has picked one or more statuses, fetch+filter from the full
-  // enquiry set. "overdue_followup" is virtual — matches any lead whose follow-up
-  // date has passed. Multiple selections OR together.
-  const hasOverdueFilter = leadStatusFilter.includes("overdue_followup");
-  const realStatuses = leadStatusFilter.filter(s => s !== "overdue_followup");
+  // enquiry set. Multiple selections OR together.
   const leadsToShow = leadStatusFilter.length > 0
-    ? applyDateFilter(allEnquiries).filter((l: any) => {
-        const matchesStatus = realStatuses.length > 0 && realStatuses.includes(l.status);
-        const matchesOverdue = hasOverdueFilter && l.followUpDate && new Date(l.followUpDate) < new Date();
-        return matchesStatus || matchesOverdue;
-      })
+    ? applyDateFilter(allEnquiries).filter((l: any) => leadStatusFilter.includes(l.status))
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const filteredLeads = leadsToShow
     .filter((l: any) =>
@@ -2103,7 +1966,6 @@ export default function Dashboard() {
   const safeMonthBookings = (monthBookings ?? []).filter(Boolean).filter((b: any) => b && b.id != null && b.eventDate);
   const safeMonthLeadEvents = (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => l && l.id != null && l.eventDate);
   const bookingDays = new Set(safeMonthBookings.map((b: any) => new Date(b.eventDate).getUTCDate()));
-  const followUpDays = new Set((monthFollowUps ?? []).filter(Boolean).map((l: any) => new Date(l.followUpDate).getUTCDate()));
   const leadEventDays = new Set((monthLeadEvents ?? []).filter(Boolean).map((l: any) => new Date(l.eventDate).getUTCDate()));
   // Deduplicate: leads that already have a booking record should not show as separate lead cards
   const bookedLeadIds = new Set((monthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
@@ -2403,7 +2265,6 @@ export default function Dashboard() {
               { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", icon: <TrendingUp className="w-5 h-5 text-forest" /> },
               { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-amber-600" /> },
               { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${(stats?.overdueTasks ?? 0) > 0 ? 'text-red-500' : 'text-sage/40'}`} /> },
-              { id: "overdue_followups", label: "Overdue Follow-ups", value: stats?.overdueFollowUps ?? 0, sub: (stats?.overdueFollowUps ?? 0) > 0 ? "action required" : "all clear", icon: <Clock className={`w-5 h-5 ${(stats?.overdueFollowUps ?? 0) > 0 ? 'text-red-600' : 'text-sage/40'}`} /> },
             ];
             const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
             return (
@@ -2460,24 +2321,13 @@ export default function Dashboard() {
                       s.id === 'conversion_rate' ? 'reports' :
                       s.id === 'revenue_month' ? 'reports' :
                       s.id === 'overdue_tasks' ? 'tasks' :
-                      s.id === 'overdue_followups' ? 'enquiries' :
                       'overview'
                     );
                     return (
                       <button
                         key={s.id}
                         type="button"
-                        onClick={() => {
-                          // Overdue follow-ups live in the enquiries pipeline —
-                          // route there and pre-apply the "overdue" filter so the
-                          // user lands on exactly the rows that need action.
-                          if (s.id === 'overdue_followups') {
-                            setLeadStatusFilter(['overdue_followup']);
-                            setLeadsSubTab('all');
-                            setLeadViewMode('table');
-                          }
-                          setTab(target);
-                        }}
+                        onClick={() => { setTab(target); }}
                         aria-label={`Open ${s.label}`}
                         className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
@@ -2569,13 +2419,6 @@ export default function Dashboard() {
                             </div>
                           </button>
                         ))}
-                      </div>
-                    )}
-                    {(overdueLeads ?? []).length > 0 && (
-                      <div className="border-t border-red-200 bg-red-50/50 px-4 py-2 flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
-                        <span className="font-bebas text-xs tracking-widest text-red-700">{(overdueLeads ?? []).length} OVERDUE FOLLOW-UP{(overdueLeads ?? []).length > 1 ? 'S' : ''}</span>
-                        <button onClick={() => { setTab('enquiries'); setLeadsSubTab('all'); setLeadStatusFilter('overdue_followup'); setSelectedLead(null); }} className="ml-auto font-dm text-xs text-red-600 hover:text-red-800 transition-colors">View →</button>
                       </div>
                     )}
                   </div>
@@ -2703,9 +2546,7 @@ export default function Dashboard() {
                           {leadStatusFilter.length === 0
                             ? "All Statuses"
                             : leadStatusFilter.length === 1
-                            ? (leadStatusFilter[0] === "overdue_followup"
-                                ? "Overdue Follow-ups"
-                                : (pipelineStages.find(s => s.key === leadStatusFilter[0])?.label ?? leadStatusFilter[0]))
+                            ? (pipelineStages.find(s => s.key === leadStatusFilter[0])?.label ?? leadStatusFilter[0])
                             : `${leadStatusFilter.length} statuses`}
                         </span>
                         <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
@@ -2722,15 +2563,6 @@ export default function Dashboard() {
                               </button>
                             )}
                           </div>
-                          <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={leadStatusFilter.includes("overdue_followup")}
-                              onChange={() => toggleLeadStatus("overdue_followup")}
-                              className="cursor-pointer" />
-                            <span className="text-xs font-inter text-red-600">⚠ Overdue Follow-ups</span>
-                          </label>
-                          <div className="border-t border-gray-100 my-1" />
                           {pipelineStages.map(s => (
                             <label key={s.key} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer">
                               <input
@@ -3311,12 +3143,6 @@ export default function Dashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  {/* Follow-Up Date */}
-                  <FollowUpDateCard lead={selectedLead} onSaved={(updated) => {
-                    refetchLeads();
-                    utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
-                    setSelectedLead((prev: any) => prev ? { ...prev, followUpDate: updated } : prev);
-                  }} />
                 </div>
               ) : leadViewMode === "list" ? (
                 <div className="flex-1 hidden md:flex items-center justify-center text-center p-8">
@@ -4430,7 +4256,6 @@ export default function Dashboard() {
                   {[...Array(daysInMonth)].map((_, i) => {
                     const day = i + 1;
                     const hasBooking = bookingDays.has(day);
-                    const hasFollowUp = followUpDays.has(day);
                     const hasLeadEvent = leadEventDays.has(day);
                     const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
                     // Find bookings and lead events for this day
@@ -4440,8 +4265,6 @@ export default function Dashboard() {
                       ? "bg-forest/10 border-forest"
                       : hasLeadEvent
                       ? "bg-rose-50 border-rose-400"
-                      : hasFollowUp
-                      ? "bg-gold/10 border-gold"
                       : isToday
                       ? "border-gold bg-gold/5"
                       : "border-transparent hover:bg-linen";
@@ -4449,8 +4272,6 @@ export default function Dashboard() {
                       ? "text-forest font-bold"
                       : hasLeadEvent
                       ? "text-rose-700 font-semibold"
-                      : hasFollowUp
-                      ? "text-amber-700 font-semibold"
                       : isToday
                       ? "text-ink font-semibold"
                       : "text-foreground";
@@ -4552,36 +4373,6 @@ export default function Dashboard() {
               </div>
               )}
 
-              {/* This month's follow-ups */}
-              {calendarView === "list" && (monthFollowUps ?? []).filter(Boolean).length > 0 && (
-                <div className="mt-6 max-w-2xl px-6">
-                  <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Follow-Ups</h2>
-                  <div className="space-y-2">
-                    {(monthFollowUps ?? []).filter(Boolean).map((lead: any) => {
-                      const followDate = new Date(lead.followUpDate);
-                      const isPast = followDate <= new Date();
-                      return (
-                        <button key={lead.id}
-                          onClick={() => { selectLead(lead); setTab('enquiries'); }}
-                          className="w-full dante-card p-4 flex items-center justify-between hover:bg-gold/5 transition-colors text-left">
-                          <div>
-                            <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
-                            <div className="font-dm text-xs text-ink/60">{lead.eventType || 'Enquiry'} · {lead.email}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className={`font-bebas text-xs tracking-widest ${isPast ? 'text-red-600' : 'text-amber-700'}`}>
-                              {isPast ? 'OVERDUE' : 'FOLLOW UP'}
-                            </div>
-                            <div className="font-dm text-xs text-ink/50">
-                              {followDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
               {/* This month's lead events */}
               {calendarView === "list" && (monthLeadEvents ?? []).filter(Boolean).length > 0 && (
                 <div className="mt-6 max-w-2xl px-6">
@@ -7915,7 +7706,7 @@ export default function Dashboard() {
                           setSelectedBooking(null);
                           // Make sure the enquiries tab is in a state that actually shows this lead's detail
                           setLeadViewMode('list');
-                          setLeadStatusFilter('all');
+                          setLeadStatusFilter([]);
                           setLeadsSubTab('all');
                           selectLead(lead);
                           setTab('enquiries');

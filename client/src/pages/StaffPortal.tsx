@@ -4,7 +4,7 @@ import { trpc } from "@/lib/trpc";
 import {
   Clock, Calendar, ChefHat, UtensilsCrossed,
   AlertCircle, CheckCircle2, Loader2, User, Phone, Mail,
-  Building2, DollarSign, CheckSquare, Square, ClipboardCheck, FileText,
+  Building2, DollarSign, CheckSquare, Square, ClipboardCheck, FileText, Printer,
 } from "lucide-react";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
@@ -179,9 +179,19 @@ export default function StaffPortal() {
             <p className="font-bebas tracking-widest text-white/60 text-xs">FUNCTION RUNSHEET — STAFF COPY</p>
             <h1 className="font-bebas tracking-widest text-white text-lg leading-tight">{runsheet.title}</h1>
           </div>
-          <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-sm">
-            <CheckCircle2 className="w-3.5 h-3.5 text-white/80" />
-            <span className="font-bebas tracking-widest text-white/90 text-xs">LIVE</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="print:hidden flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-sm transition-colors"
+              title="Print or save as PDF"
+            >
+              <Printer className="w-3.5 h-3.5 text-white/90" />
+              <span className="font-bebas tracking-widest text-white/90 text-xs">PRINT / PDF</span>
+            </button>
+            <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-sm">
+              <CheckCircle2 className="w-3.5 h-3.5 text-white/80" />
+              <span className="font-bebas tracking-widest text-white/90 text-xs">LIVE</span>
+            </div>
           </div>
         </div>
         {/* Tab bar */}
