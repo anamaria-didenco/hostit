@@ -381,6 +381,82 @@ export default function RunsheetBuilder() {
 
   // Print layout
   const [printColumns, setPrintColumns] = useState<1 | 2>(1);
+  // ── PRINT VIEW EDITOR ──────────────────────────────────────────────
+  // Lets the user toggle which sections appear in the print view +
+  // BEO PDF. Stored as a set of HIDDEN keys (so the default — empty
+  // set — means "show everything"). Persisted in localStorage per
+  // owner so the same operator gets the same view across runsheets.
+  const PRINT_SECTIONS: { key: string; label: string; beoOnly?: boolean }[] = [
+    { key: 'setup',    label: 'Venue setup' },
+    { key: 'dietary',  label: 'Dietary requirements' },
+    { key: 'timeline', label: 'Event timeline' },
+    { key: 'notes',    label: 'Event notes' },
+    { key: 'food',     label: 'F&B — food' },
+    { key: 'kitchen',  label: 'Kitchen — prep & production', beoOnly: true },
+    { key: 'drinks',   label: 'Drinks / bar' },
+    { key: 'totals',   label: 'Running totals' },
+    { key: 'payment',  label: 'Payment instructions' },
+    { key: 'menus',    label: 'Linked menu PDFs (chef appendix)', beoOnly: true },
+  ];
+  const PRINT_PREFS_KEY = 'vf:printHide:v1';
+  const [printHide, setPrintHide] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(PRINT_PREFS_KEY);
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch { return new Set(); }
+  });
+  const [printEditorOpen, setPrintEditorOpen] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem(PRINT_PREFS_KEY, JSON.stringify(Array.from(printHide))); } catch {}
+  }, [printHide]);
+  const togglePrintSection = (key: string) => setPrintHide(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  // Drive the in-app print view: when the user fires window.print(),
+  // inject a <style> tag that hides every section marked
+  // [data-print-section="..."] for keys in `printHide`. Cleaned up
+  // afterprint so screen view is unaffected.
+  const runPrint = () => {
+    // Belt-and-braces cleanup: a previous print that was cancelled or
+    // had `afterprint` swallowed can leave a stale override style in
+    // the DOM, which would silently affect the next print. Remove any
+    // orphan before we add a fresh one, keep a direct ref to *our*
+    // node, and listen on multiple events so we don't depend on any
+    // single browser firing `afterprint`.
+    document.querySelectorAll('#vf-print-overrides').forEach(n => n.remove());
+    const style = document.createElement('style');
+    style.id = 'vf-print-overrides';
+    const rules = Array.from(printHide)
+      .map(k => `[data-print-section="${k}"]`)
+      .join(', ');
+    style.textContent = rules ? `@media print { ${rules} { display: none !important; } }` : '';
+    document.head.appendChild(style);
+    const styleRef = style;
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      styleRef.remove();
+      window.removeEventListener('afterprint', cleanup);
+      mql?.removeEventListener?.('change', mqlListener);
+      document.removeEventListener('visibilitychange', visListener);
+    };
+    const mql = window.matchMedia?.('print');
+    const mqlListener = (e: MediaQueryListEvent) => { if (!e.matches) cleanup(); };
+    const visListener = () => { if (document.visibilityState === 'visible') cleanup(); };
+    window.addEventListener('afterprint', cleanup);
+    mql?.addEventListener?.('change', mqlListener);
+    document.addEventListener('visibilitychange', visListener);
+    // Final fail-safe: even if every event source is blocked, drop
+    // the override after 30s so it can't poison future prints.
+    setTimeout(cleanup, 30000);
+    setTimeout(() => window.print(), 0);
+  };
+  const beoHideQuery = printHide.size > 0 ? `?hide=${encodeURIComponent(Array.from(printHide).join(','))}` : '';
 
   // AI F&B paste modal
   const [showFnbPaste, setShowFnbPaste] = useState(false);
@@ -1736,20 +1812,70 @@ export default function RunsheetBuilder() {
           >
             <LayoutGrid className="w-3.5 h-3.5" /> {printColumns === 1 ? '1 COL' : '2 COL'}
           </button>
+          <div className="relative hidden md:block">
+            <button
+              onClick={() => setPrintEditorOpen(v => !v)}
+              className={`font-bebas tracking-widest text-xs items-center gap-1.5 transition-colors px-2 py-1.5 flex ${printHide.size > 0 ? 'text-gold' : 'text-cream/70 hover:text-gold'}`}
+              title="Choose which sections appear in the print view and the BEO PDF"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              <span>PRINT VIEW</span>
+              {printHide.size > 0 && (
+                <span className="bg-gold text-ink text-[9px] font-bebas px-1.5 rounded-sm">{printHide.size}</span>
+              )}
+            </button>
+            {printEditorOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setPrintEditorOpen(false)} />
+                <div className="absolute right-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-2xl rounded-sm w-72 no-print">
+                  <div className="px-4 py-3 border-b border-gold/20 flex items-center justify-between">
+                    <span className="font-bebas tracking-widest text-xs text-forest">PRINT VIEW EDITOR</span>
+                    <button
+                      onClick={() => setPrintHide(new Set())}
+                      className="font-bebas tracking-widest text-[10px] text-ink/40 hover:text-forest"
+                      title="Show all sections"
+                    >RESET</button>
+                  </div>
+                  <p className="px-4 pt-2 pb-1 font-dm text-[11px] text-ink/50 leading-snug">
+                    Tick sections to include them. Applies to the in-app print and the BEO PDF.
+                  </p>
+                  <div className="px-2 pb-2 max-h-80 overflow-y-auto">
+                    {PRINT_SECTIONS.map(s => {
+                      const checked = !printHide.has(s.key);
+                      return (
+                        <label key={s.key} className="flex items-start gap-2 px-2 py-1.5 hover:bg-linen/50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => togglePrintSection(s.key)}
+                            className="mt-0.5 accent-forest"
+                          />
+                          <div className="flex-1">
+                            <div className="font-dm text-sm text-ink leading-tight">{s.label}</div>
+                            {s.beoOnly && <div className="font-dm text-[10px] text-ink/40">BEO PDF only</div>}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <button
-            onClick={() => window.print()}
+            onClick={runPrint}
             className="font-bebas tracking-widest text-xs text-cream/70 hover:text-gold hidden md:flex items-center gap-1.5 transition-colors px-2 py-1.5"
-            title="Print runsheet"
+            title="Print runsheet (respects Print View)"
           >
             <Printer className="w-4 h-4" /> <span>PRINT</span>
           </button>
           {effectiveBookingId ? (
             <a
-              href={`/api/beo/${effectiveBookingId}`}
+              href={`/api/beo/${effectiveBookingId}${beoHideQuery}`}
               target="_blank"
               rel="noopener noreferrer"
               className="hidden md:flex font-bebas tracking-widest text-xs border border-cream/20 text-cream/70 hover:border-gold/40 hover:text-gold px-3 py-1.5 items-center gap-1.5 transition-colors"
-              title="Open the BEO — the single staff-facing document"
+              title="Open the BEO — the single staff-facing document (respects Print View)"
             >
               <FileText className="w-3.5 h-3.5" /> BEO PDF
             </a>
@@ -2035,7 +2161,7 @@ export default function RunsheetBuilder() {
 
               if (sectionId === 'setup') return (
                 <SortableSection key="setup" id="setup">
-                  <div className={`dante-card mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
+                  <div data-print-section="setup" className={`dante-card mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
                     <div className="flex items-center no-print">
                       <button
@@ -2299,7 +2425,7 @@ export default function RunsheetBuilder() {
 
         {/* ── TIMELINE TAB ────────────────────────────────────────────────── */}
         {activeMainTab === 'timeline' && (
-          <div className="dante-card border-t-0 print:shadow-none">
+          <div data-print-section="timeline" className="dante-card border-t-0 print:shadow-none">
             {/* Timeline header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
               <div className="flex items-center gap-3">
@@ -2337,7 +2463,7 @@ export default function RunsheetBuilder() {
             </div>
 
             {/* Event notes — at top */}
-            <div className="px-5 py-3 border-b border-gold/20 bg-linen/30">
+            <div data-print-section="notes" className="px-5 py-3 border-b border-gold/20 bg-linen/30">
               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1.5">EVENT NOTES</label>
               <RichTextarea
                 value={notes}
@@ -2556,7 +2682,7 @@ export default function RunsheetBuilder() {
         )}
 
         {/* ── F&B SHEET TAB ────────────────────────────────────────────────── */}
-        <div className={activeMainTab !== 'fnb' ? 'hidden print:block' : ''}>
+        <div data-print-section="food" className={activeMainTab !== 'fnb' ? 'hidden print:block' : ''}>
           <div className="dante-card border-t-0 print:shadow-none">
             {/* F&B unified header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
@@ -3279,7 +3405,7 @@ export default function RunsheetBuilder() {
 
             {/* Dietary summary */}
             {dietaries.length > 0 && (
-              <div className="px-5 py-4 border-t border-gold/20 bg-blue-50/50">
+              <div data-print-section="dietary" className="px-5 py-4 border-t border-gold/20 bg-blue-50/50">
                 <div className="font-bebas tracking-widest text-xs text-forest mb-2">DIETARY SUMMARY</div>
                 <div className="flex flex-wrap gap-2">
                   {dietaries.map((d, i) => (
@@ -3316,7 +3442,7 @@ export default function RunsheetBuilder() {
               if (!showBlock) return null;
               const fmt = (n: number) => `$${n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
               return (
-                <div className="px-5 py-4 border-t-2 border-forest/20 bg-linen/30 print:avoid-break">
+                <div data-print-section="totals" className="px-5 py-4 border-t-2 border-forest/20 bg-linen/30 print:avoid-break">
                   <div className="font-bebas tracking-widest text-xs text-forest mb-3">RUNNING TOTALS</div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {booking?.minimumSpend != null && Number(booking.minimumSpend) > 0 && (
@@ -3363,7 +3489,7 @@ export default function RunsheetBuilder() {
                     )}
                   </div>
                   {paymentInstructions && paymentInstructions.trim().length > 0 && (
-                    <div className="mt-3 bg-white border border-gold/30 px-4 py-3">
+                    <div data-print-section="payment" className="mt-3 bg-white border border-gold/30 px-4 py-3">
                       <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1">PAYMENT INSTRUCTIONS</div>
                       <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{paymentInstructions}</div>
                     </div>
@@ -3384,7 +3510,7 @@ export default function RunsheetBuilder() {
 
         {/* ── DRINKS TAB ───────────────────────────────────────────────────── */}
         {activeMainTab === 'drinks' && (
-          <div className="dante-card border-t-0">
+          <div data-print-section="drinks" className="dante-card border-t-0">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">

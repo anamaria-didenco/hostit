@@ -185,6 +185,16 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     }
     const bookingId = booking.id;
 
+    // ── Print View hide list ───────────────────────────────────────
+    // Operator-controlled section toggles, sent as ?hide=key1,key2
+    // from the runsheet's Print View editor. Public event-pack route
+    // ignores them (guests always get the curated public view).
+    const hideRaw = mode === "auth" ? String((req.query.hide as string) || "") : "";
+    const hideSet = new Set(
+      hideRaw.split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+    );
+    const show = (key: string, html: string) => hideSet.has(key) ? "" : html;
+
     const [venue] = await db.select().from(venueSettings)
       .where(eq(venueSettings.ownerId, userId)).limit(1);
 
@@ -825,14 +835,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     </div>`).join("")}
   </div>
 
-  ${setupSection}
-  ${dietarySection}
-  ${timelineSection}
-  ${renderFnbSection("FOOD &amp; BEVERAGE SELECTION", fohItems, false)}
-  ${renderFnbSection("KITCHEN — PREP &amp; PRODUCTION", kitchenItemsArr, true)}
-  ${barSection}
+  ${show('setup', setupSection)}
+  ${show('dietary', dietarySection)}
+  ${show('timeline', timelineSection)}
+  ${show('food', renderFnbSection("FOOD &amp; BEVERAGE SELECTION", fohItems, false))}
+  ${show('kitchen', renderFnbSection("KITCHEN — PREP &amp; PRODUCTION", kitchenItemsArr, true))}
+  ${show('drinks', barSection)}
   ${financialsSection}
-  ${(() => {
+  ${hideSet.has('totals') ? '' : (() => {
     // Running totals from F&B selection (qty × unit price), split food vs
     // drinks. Mirrors what staff see on the runsheet so the BEO matches.
     const food = fnbList.filter(i => (i.course ?? '') !== 'Drinks')
@@ -853,7 +863,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   </div>
 </div>`;
   })()}
-  ${(() => {
+  ${hideSet.has('payment') ? '' : (() => {
     const pi = (venue as any)?.paymentInstructions as string | null | undefined;
     if (!pi || !pi.trim()) return "";
     const esc = pi.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
@@ -863,7 +873,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   <div class="card-body notes-text">${esc}</div>
 </div>`;
   })()}
-  ${notesSection}
+  ${show('notes', notesSection)}
 
   <div class="doc-footer">
     <div class="footer-l">POWERED BY VENUEFLOWHQ · BANQUET EVENT ORDER</div>
@@ -914,7 +924,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       // being cooked. Skipped on the public event-pack — the menu PDFs
       // are operational/chef collateral and not meant for guests.
       let finalPdf: Uint8Array = pdf;
-      if (!isPublic) {
+      if (!isPublic && !hideSet.has('menus')) {
         try {
           finalPdf = await appendLinkedMenuPdfs({
             beoPdfBytes: pdf,
