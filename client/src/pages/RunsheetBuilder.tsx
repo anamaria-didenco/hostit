@@ -1743,14 +1743,15 @@ export default function RunsheetBuilder() {
           >
             <Printer className="w-4 h-4" /> <span>PRINT</span>
           </button>
-          {sheetId ? (
+          {effectiveBookingId ? (
             <a
-              href={`/api/staff-sheet/${sheetId}`}
+              href={`/api/beo/${effectiveBookingId}`}
               target="_blank"
               rel="noopener noreferrer"
               className="hidden md:flex font-bebas tracking-widest text-xs border border-cream/20 text-cream/70 hover:border-gold/40 hover:text-gold px-3 py-1.5 items-center gap-1.5 transition-colors"
+              title="Open the BEO — the single staff-facing document"
             >
-              <FileText className="w-3.5 h-3.5" /> STAFF PDF
+              <FileText className="w-3.5 h-3.5" /> BEO PDF
             </a>
           ) : null}
           {effectiveBookingId && (
