@@ -20,51 +20,86 @@ import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { handleGithubWebhook } from "../githubWebhook";
 import { handleNbiWebhook } from "../nbiWebhook";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-
-// Given the schema version Drizzle records in __drizzle_migrations, return
-// the tag (filename without extension) of the next migration the migrator
-// would try to apply — i.e. the one that just failed. Used purely for log
-// context so we know *which* migration tripped a benign duplicate error.
-async function identifyFailingMigration(pgDb: any): Promise<string | null> {
-  try {
-    const fs = await import('node:fs/promises');
-    const path = await import('node:path');
-    const journalRaw = await fs.readFile(path.resolve('drizzle/meta/_journal.json'), 'utf8');
-    const journal = JSON.parse(journalRaw) as { entries: Array<{ idx: number; tag: string }> };
-    // Drizzle stores one row per applied migration; row count == next idx.
-    const res = await pgDb.execute(`SELECT COUNT(*)::int AS n FROM drizzle.__drizzle_migrations`);
-    const appliedCount = Number(res?.rows?.[0]?.n ?? 0);
-    const next = journal.entries.find(e => e.idx === appliedCount);
-    return next?.tag ?? null;
-  } catch {
-    return null;
-  }
-}
-
+// Custom migration runner. The stock drizzle migrator runs all journal
+// entries in one go and aborts the whole loop on the first error — even
+// a benign "object already exists" duplicate. That's catastrophic on a
+// DB that was provisioned out-of-band (or where the
+// drizzle.__drizzle_migrations tracking table got reset), because the
+// very first CREATE TYPE trips and every later migration is silently
+// skipped forever. We saw this in prod: a fresh deploy reported
+// "Migration skipped (migration 0000_oval_argent...)" on every boot,
+// while migrations 39/40 (which added genuinely new columns the BEO
+// renderer queries) never applied, breaking the PDF endpoint.
+//
+// This implementation runs each journal entry's SQL statement-by-
+// statement, swallows duplicate-object errors on a per-statement basis,
+// then records the migration's hash in drizzle.__drizzle_migrations
+// using the same format Drizzle uses, so subsequent boots are no-ops
+// and a future return to drizzle's own migrate() would also Just Work.
 async function runMigrations() {
   if (!process.env.DATABASE_URL) return;
-  const db = drizzle(process.env.DATABASE_URL);
+  const { Pool } = await import('pg');
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  const crypto = await import('node:crypto');
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await migrate(db, { migrationsFolder: "drizzle" });
-    console.log("[DB] Migrations applied successfully");
-  } catch (err: any) {
-    // Drizzle has no built-in "IF NOT EXISTS" for CREATE TYPE/TABLE/COLUMN,
-    // so re-running a migration whose objects already exist in the DB raises
-    // a duplicate_object / duplicate_table / duplicate_column error. Those
-    // are safe to ignore — the schema is already in the desired state. Any
-    // other migration error still surfaces loudly so we can act on it.
-    const pgCode = err?.cause?.code ?? err?.code;
-    const benign = ['42P07', '42710', '42701']; // duplicate_table, duplicate_object, duplicate_column
-    if (pgCode && benign.includes(pgCode)) {
-      const failingTag = await identifyFailingMigration(db);
-      const where = failingTag ? `migration ${failingTag}` : 'unknown migration';
-      const detail = err?.cause?.message ?? err?.message ?? '';
-      console.log(`[DB] Migration skipped (${where}, object already exists, code ${pgCode}): ${detail}`);
-    } else {
-      console.error("[DB] Migration error (non-fatal):", err);
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS drizzle`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+      id serial PRIMARY KEY,
+      hash text NOT NULL,
+      created_at bigint
+    )`);
+    const journalRaw = await fs.readFile(path.resolve('drizzle/meta/_journal.json'), 'utf8');
+    const journal = JSON.parse(journalRaw) as { entries: Array<{ idx: number; tag: string; when: number }> };
+    const applied = await pool.query(`SELECT hash FROM drizzle.__drizzle_migrations`);
+    const appliedHashes = new Set<string>(applied.rows.map((r: any) => r.hash));
+    // 42P07 duplicate_table, 42710 duplicate_object, 42701 duplicate_column
+    const benignCodes = new Set(['42P07', '42710', '42701']);
+    for (const entry of journal.entries) {
+      const sqlPath = path.resolve(`drizzle/${entry.tag}.sql`);
+      let sql: string;
+      try {
+        sql = await fs.readFile(sqlPath, 'utf8');
+      } catch {
+        console.warn(`[DB] journal references missing SQL file ${entry.tag}.sql — skipping`);
+        continue;
+      }
+      const hash = crypto.createHash('sha256').update(sql).digest('hex');
+      if (appliedHashes.has(hash)) continue;
+      const statements = sql
+        .split('--> statement-breakpoint')
+        .map(s => s.trim())
+        .filter(Boolean);
+      let success = true;
+      for (const stmt of statements) {
+        try {
+          await pool.query(stmt);
+        } catch (err: any) {
+          const code = err?.code;
+          if (code && benignCodes.has(code)) {
+            // Object already exists from an earlier out-of-band schema
+            // creation — safe to treat as no-op and continue.
+            console.log(`[DB] ${entry.tag}: object already exists, skipping statement (code ${code})`);
+          } else {
+            success = false;
+            console.error(`[DB] migration ${entry.tag} FAILED on statement:`, stmt.slice(0, 120), err?.message);
+            break;
+          }
+        }
+      }
+      if (success) {
+        await pool.query(
+          `INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ($1, $2)`,
+          [hash, entry.when],
+        );
+        console.log(`[DB] applied migration ${entry.tag}`);
+      }
     }
+  } catch (err) {
+    console.error('[DB] migration runner crashed (non-fatal):', err);
+  } finally {
+    await pool.end();
   }
 }
 
