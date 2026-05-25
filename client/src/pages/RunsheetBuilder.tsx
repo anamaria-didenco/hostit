@@ -5203,10 +5203,10 @@ export default function RunsheetBuilder() {
           setSendingStaffEmail(true);
           const tId = toast.loading(`Preparing staff briefing for ${allRecipients.length} recipient${allRecipients.length !== 1 ? 's' : ''}...`);
           try {
-            // Attach the BEO (one canonical document) instead of the
-            // standalone staff sheet — same content, but it actually opens
-            // in Gmail (the /api/staff-sheet-pdf path was 404'ing and
-            // sending an empty body), and it's the prettier doc.
+            // The BEO is the one canonical staff-facing document. The old
+            // standalone staff-sheet PDF has been removed entirely (route
+            // and file). Everything that used to point at it now points
+            // here — do not reintroduce a second staff PDF.
             if (!effectiveBookingId) throw new Error('Save the runsheet against a booking first so we can generate the BEO');
             const pdfRes = await fetch(`/api/beo/${effectiveBookingId}`, { credentials: 'include' });
             if (!pdfRes.ok) throw new Error('Could not generate the BEO PDF');

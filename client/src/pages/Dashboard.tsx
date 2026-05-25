@@ -6924,7 +6924,7 @@ export default function Dashboard() {
                         <p className="font-dm text-[11px] text-ink/40 mt-1">Plain text only — paste from anywhere and the layout is kept as-is.</p>
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF PDF (FOR PRINTING)</label>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CHEF MENU PDF (APPENDED TO BEO)</label>
                         {menuForm.pdfUrl ? (
                           <div className="flex items-center gap-2 p-2 bg-white border border-gold/30">
                             <FileText className="w-4 h-4 text-forest" />

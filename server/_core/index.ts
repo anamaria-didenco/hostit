@@ -7,7 +7,6 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
 import { handleBeoPdf, handleBeoPdfPublic } from "../beoPdf";
-import { handleStaffSheetPdf } from "../staffSheetPdf";
 import { handleFloorPlanPdf } from "../floorPlanPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -310,13 +309,11 @@ async function startServer() {
   // BEO Live Link — public, token-gated. Used as the customer-facing event pack.
   app.get("/api/beo/public/:token", pdfPublicLimit, handleBeoPdfPublic);
 
-  // Staff Sheet PDF download (requires session auth)
-  app.get("/api/staff-sheet/:runsheetId", pdfAuthLimit, (req, res, next) => {
-    createContext({ req: req as any, res: res as any, info: {} as any }).then(ctx => {
-      (req as any).user = ctx.user;
-      handleStaffSheetPdf(req, res);
-    }).catch(next);
-  });
+  // NOTE: The old /api/staff-sheet/:runsheetId route and staffSheetPdf.ts
+  // have been removed. The BEO (handleBeoPdf above) is now the single
+  // staff-facing document — used by the runsheet "BEO PDF" header
+  // button, the staff briefing email attachment, and the booking
+  // download. Don't reintroduce a second staff PDF.
 
   // Serve uploaded files statically
   const uploadsDir = path.join(process.cwd(), "public", "uploads");

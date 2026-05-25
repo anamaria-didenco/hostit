@@ -43,7 +43,7 @@ Optional Environment Variables for OAuth:
     - `/server/_core`: Core server utilities (auth, context, env)
     - `/server/db.ts`: Database query functions
     - `/server/routers.ts`: tRPC API routes
-    - `/server/beoPdf.ts`, `/server/proposalPdf.ts`, `/server/staffSheetPdf.ts`, `/server/floorPlanPdf.ts`: PDF generation
+    - `/server/beoPdf.ts`, `/server/proposalPdf.ts`, `/server/floorPlanPdf.ts`: PDF generation (the BEO is the single staff-facing document — there is no separate staff-sheet PDF)
     - `/server/nowbookit.ts`: NowBookIt integration logic
     - `/server/nbiWebhook.ts`: NowBookIt webhook receiver
 - `/shared`: Shared types between client and server
