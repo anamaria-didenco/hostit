@@ -1812,14 +1812,14 @@ export default function RunsheetBuilder() {
           >
             <LayoutGrid className="w-3.5 h-3.5" /> {printColumns === 1 ? '1 COL' : '2 COL'}
           </button>
-          <div className="relative hidden md:block">
+          <div className="relative">
             <button
               onClick={() => setPrintEditorOpen(v => !v)}
-              className={`font-bebas tracking-widest text-xs items-center gap-1.5 transition-colors px-2 py-1.5 flex ${printHide.size > 0 ? 'text-gold' : 'text-cream/70 hover:text-gold'}`}
+              className={`font-bebas tracking-widest text-xs items-center gap-1.5 transition-colors px-3 py-1.5 border flex ${printHide.size > 0 ? 'border-gold text-gold bg-gold/10' : 'border-cream/20 text-cream/70 hover:text-gold hover:border-gold/40'}`}
               title="Choose which sections appear in the print view and the BEO PDF"
             >
               <Settings2 className="w-3.5 h-3.5" />
-              <span>PRINT VIEW</span>
+              <span className="hidden sm:inline">PRINT VIEW</span>
               {printHide.size > 0 && (
                 <span className="bg-gold text-ink text-[9px] font-bebas px-1.5 rounded-sm">{printHide.size}</span>
               )}
