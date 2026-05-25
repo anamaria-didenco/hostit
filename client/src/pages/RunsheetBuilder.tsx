@@ -227,7 +227,7 @@ type FnbItem = {
   unitPrice?: number | string | null;
   _tempId?: string;
 };
-const DEFAULT_COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'];
+const DEFAULT_COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Other'];
 
 type ParsedRunsheetData = {
   eventDetails?: {
@@ -3252,7 +3252,12 @@ export default function RunsheetBuilder() {
                 </div>
                 {/* Group by course — derived from actual items + any extra empty courses
                     the user added via "+ NEW COURSE" so empty headers still render */}
+                {/* Drinks live in the dedicated BAR & DRINKS tab now — hide the
+                    legacy "Drinks" course from the F&B sheet so the two
+                    surfaces don't double up. Existing data is preserved on
+                    disk but no longer rendered/edited here. */}
                 {[...new Set([...fnbItems.map(i => i.course ?? 'Other'), ...extraCourses])]
+                  .filter(course => course !== 'Drinks')
                   .sort((a, b) => {
                     const ai = courses.indexOf(a); const bi = courses.indexOf(b);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
@@ -3354,6 +3359,24 @@ export default function RunsheetBuilder() {
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PLATING NOTES</label>
                                 <input value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating / presentation..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                              </div>
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">UNIT PRICE (NZD)</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  value={item.unitPrice == null || item.unitPrice === '' ? '' : String(item.unitPrice)}
+                                  onChange={e => updateFnbItem(originalIdx, 'unitPrice', e.target.value === '' ? null : Number(e.target.value))}
+                                  placeholder="e.g. 70 per head"
+                                  className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                                  title="Per head for food, per drink for drinks — feeds the running total"
+                                />
+                                {item.unitPrice != null && item.unitPrice !== '' && Number(item.qty) > 0 && (
+                                  <div className="text-[10px] text-ink/40 font-dm mt-0.5">
+                                    {item.qty} × ${Number(item.unitPrice).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = <span className="text-forest font-semibold">${(Number(item.qty) * Number(item.unitPrice)).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                  </div>
+                                )}
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DESCRIPTION</label>
