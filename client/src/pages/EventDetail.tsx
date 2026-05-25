@@ -76,7 +76,7 @@ export default function EventDetail() {
       setEditing(false);
       toast.success("Event updated");
     },
-    onError: () => toast.error("Failed to update event"),
+    onError: (e) => toast.error(e.message ?? "Failed to update event"),
   });
 
   const getBeoToken = trpc.bookings.getOrCreateBeoToken.useMutation({
