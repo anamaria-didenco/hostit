@@ -1210,7 +1210,7 @@ export default function Dashboard() {
     let mutValue: any = raw;
     if (field === "guestCount") mutValue = raw === "" ? null : Number(raw);
     else if (field === "totalNzd" || field === "depositNzd" || field === "minimumSpend") mutValue = raw === "" ? null : Number(raw);
-    else if (field === "eventDate") mutValue = new Date(raw).toISOString();
+    else if (field === "eventDate" || field === "eventEndDate") mutValue = raw === "" ? null : new Date(raw).toISOString();
     else if (field === "spaceName") mutValue = raw === "" ? null : raw;
     else mutValue = raw; // email and any other string field
     // Optimistic local update — keep the prior value so we can roll back if the
@@ -1233,6 +1233,29 @@ export default function Dashboard() {
     if (!iso) return "";
     const d = new Date(iso);
     if (isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  // ISO datetime → "HH:MM" in LOCAL time (for <input type="time">).
+  function toTimeLocal(iso: string | null | undefined): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  // Combine an existing ISO date (or a fallback date) with an "HH:MM" string
+  // and return a new datetime-local value (yyyy-MM-ddTHH:mm) ready for save.
+  // If no base date is available we anchor to the existing start date.
+  function combineDateAndTime(baseIso: string | null | undefined, hhmm: string, fallbackIso?: string | null): string {
+    const anchor = baseIso || fallbackIso;
+    if (!anchor || !hhmm) return "";
+    const d = new Date(anchor);
+    if (isNaN(d.getTime())) return "";
+    const [hStr, mStr] = hhmm.split(":");
+    const h = Number(hStr); const m = Number(mStr);
+    if (Number.isNaN(h) || Number.isNaN(m)) return "";
+    d.setHours(h, m, 0, 0);
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
@@ -7484,14 +7507,39 @@ export default function Dashboard() {
                         <div className="font-dm text-sm text-ink">
                           {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
                         </div>
-                        {(fmtEventTime(selectedBooking.eventDate) || selectedBooking.eventEndDate) && (
-                          <div className="font-dm text-xs text-forest mt-0.5">
-                            {fmtEventTime(selectedBooking.eventDate)}
-                            {selectedBooking.eventEndDate && fmtEventTime(selectedBooking.eventEndDate) && (
-                              <> – {fmtEventTime(selectedBooking.eventEndDate)}</>
-                            )}
+                        {/* Always-on inline START / END time editors — change saves immediately */}
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-1">
+                            <span className="font-bebas text-[10px] tracking-widest text-ink/40">START</span>
+                            <Input
+                              type="time"
+                              value={toTimeLocal(selectedBooking.eventDate)}
+                              disabled={!selectedBooking.eventDate}
+                              onChange={e => {
+                                const combined = combineDateAndTime(selectedBooking.eventDate, e.target.value);
+                                if (combined) saveDrawerField("eventDate", combined);
+                              }}
+                              className="h-7 text-xs px-2 w-[90px]"
+                            />
                           </div>
-                        )}
+                          <div className="flex items-center gap-1">
+                            <span className="font-bebas text-[10px] tracking-widest text-ink/40">END</span>
+                            <Input
+                              type="time"
+                              value={toTimeLocal(selectedBooking.eventEndDate)}
+                              disabled={!selectedBooking.eventDate}
+                              onChange={e => {
+                                if (!e.target.value) {
+                                  saveDrawerField("eventEndDate", "");
+                                  return;
+                                }
+                                const combined = combineDateAndTime(selectedBooking.eventEndDate, e.target.value, selectedBooking.eventDate);
+                                if (combined) saveDrawerField("eventEndDate", combined);
+                              }}
+                              className="h-7 text-xs px-2 w-[90px]"
+                            />
+                          </div>
+                        </div>
                       </>
                     )}
                   </div>
