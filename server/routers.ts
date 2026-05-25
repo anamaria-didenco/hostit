@@ -190,6 +190,8 @@ export const appRouter = router({
         customCourses: z.string().optional(),
         shiftSections: z.string().optional(),
         paymentInstructions: z.string().optional(),
+        staffBriefingSubject: z.string().optional(),
+        staffBriefingBody: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };

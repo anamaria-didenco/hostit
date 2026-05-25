@@ -5224,10 +5224,24 @@ export default function RunsheetBuilder() {
             });
             const safeTitle = (title || 'Event').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event';
             const filename = `${safeTitle} — BEO.pdf`;
-            const lines = [
+            // Pull the operator's saved template (Venue Setup → Staff
+            // Briefing Email). Falls back to the built-in defaults so
+            // nothing breaks for venues that never customised it.
+            const eventTitleStr = title || 'the event';
+            const eventDateStr = eventDate
+              ? new Date(eventDate as any).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })
+              : '';
+            const venueNameStr = (venueSettings as any)?.name || '';
+            const fill = (s: string) => s
+              .replace(/\{eventTitle\}/g, eventTitleStr)
+              .replace(/\{eventDate\}/g, eventDateStr)
+              .replace(/\{runsheetUrl\}/g, url)
+              .replace(/\{venueName\}/g, venueNameStr);
+            const defaultSubject = `Staff Briefing — ${eventTitleStr}`;
+            const defaultBody = [
               `Hi team,`,
               ``,
-              `Here's the briefing for ${title || 'the event'}${eventDate ? ` on ${new Date(eventDate as any).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}.`,
+              `Here's the briefing for ${eventTitleStr}${eventDateStr ? ` on ${eventDateStr}` : ''}.`,
               ``,
               `Live runsheet (updates as we edit): ${url}`,
               ``,
@@ -5235,10 +5249,14 @@ export default function RunsheetBuilder() {
               ``,
               `Thanks!`,
             ].join('\n');
+            const subjectTpl = ((venueSettings as any)?.staffBriefingSubject || '').trim();
+            const bodyTpl = ((venueSettings as any)?.staffBriefingBody || '').trim();
+            const subject = subjectTpl ? fill(subjectTpl) : defaultSubject;
+            const body = bodyTpl ? fill(bodyTpl) : defaultBody;
             await emailSendMutation.mutateAsync({
               to: allRecipients,
-              subject: `Staff Briefing — ${title || 'Event'}`,
-              body: lines,
+              subject,
+              body,
               attachments: [{ filename, content: base64, contentType: 'application/pdf' }],
             });
             toast.success(`Staff briefing sent to ${allRecipients.length} recipient${allRecipients.length !== 1 ? 's' : ''}`, { id: tId });

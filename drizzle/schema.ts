@@ -133,6 +133,11 @@ export const venueSettings = pgTable("venue_settings", {
   // block, the live staff shift link, and the BEO PDF so everyone sees the
   // same instructions (e.g. "Bank transfer to 12-3456-7890123-00 by event date").
   paymentInstructions: text("paymentInstructions"),
+  // Editable template for the bulk "Email staff briefing" send from the
+  // runsheet. Body supports {eventTitle}, {eventDate}, {runsheetUrl},
+  // {venueName} placeholders. Null = fall back to the built-in default.
+  staffBriefingSubject: text("staffBriefingSubject"),
+  staffBriefingBody: text("staffBriefingBody"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

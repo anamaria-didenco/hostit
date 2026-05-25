@@ -1869,6 +1869,8 @@ export default function Dashboard() {
         emailSignature: vs?.emailSignature ?? "",
         emailSignatureLogo: (vs as any)?.emailSignatureLogo ?? "",
         paymentInstructions: (vs as any)?.paymentInstructions ?? "",
+        staffBriefingSubject: (vs as any)?.staffBriefingSubject ?? "",
+        staffBriefingBody: (vs as any)?.staffBriefingBody ?? "",
         customCourses: (() => {
           if (vs?.customCourses) {
             try {
@@ -4661,6 +4663,26 @@ export default function Dashboard() {
                           rows={4}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                         <p className="font-dm text-xs text-sage/60 mt-1">Shown under running totals on every runsheet, the live staff link, and the BEO PDF.</p>
+                      </div>
+                      <div className="col-span-2 border-t border-gold/20 pt-4 mt-2">
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — SUBJECT</label>
+                        <Input
+                          value={settingsForm.staffBriefingSubject ?? ""}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, staffBriefingSubject: e.target.value }))}
+                          placeholder="Staff Briefing — {eventTitle}"
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold text-sm" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — BODY</label>
+                        <Textarea
+                          value={settingsForm.staffBriefingBody ?? ""}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, staffBriefingBody: e.target.value }))}
+                          placeholder={"Hi team,\n\nHere's the briefing for {eventTitle} on {eventDate}.\n\nLive runsheet (updates as we edit): {runsheetUrl}\n\nFull BEO is attached for printing or offline reference.\n\nThanks!"}
+                          rows={8}
+                          className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm font-dm" />
+                        <p className="font-dm text-xs text-sage/60 mt-1">
+                          Used when you bulk-email staff from a runsheet. Leave blank to use the default wording. Placeholders: <code className="bg-linen px-1">{`{eventTitle}`}</code> <code className="bg-linen px-1">{`{eventDate}`}</code> <code className="bg-linen px-1">{`{runsheetUrl}`}</code> <code className="bg-linen px-1">{`{venueName}`}</code>
+                        </p>
                       </div>
                     </div>
                   </div>
