@@ -129,6 +129,10 @@ export const venueSettings = pgTable("venue_settings", {
   // Saved staff email distribution list — used by the runsheet "email staff
   // briefing" modal. Shape: Array<{ id: string, name: string, email: string }>.
   staffEmails: jsonb("staffEmails"),
+  // Free-text "how to pay" message — shown on the runsheet running-total
+  // block, the live staff shift link, and the BEO PDF so everyone sees the
+  // same instructions (e.g. "Bank transfer to 12-3456-7890123-00 by event date").
+  paymentInstructions: text("paymentInstructions"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -533,6 +537,7 @@ export const fnbItems = pgTable("fnb_items", {
   platingNotes: text("platingNotes"),
   staffAssigned: varchar("staffAssigned", { length: 255 }),
   sortOrder: integer("sortOrder").default(0).notNull(),
+  unitPrice: decimal("unitPrice", { precision: 10, scale: 2 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type FnbItem = typeof fnbItems.$inferSelect;

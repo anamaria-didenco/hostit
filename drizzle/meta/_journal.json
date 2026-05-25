@@ -266,6 +266,13 @@
       "when": 1779600000000,
       "tag": "0037_menu_package_extras",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1779700000000,
+      "tag": "0038_fnb_pricing_payment_instructions",
+      "breakpoints": true
     }
   ]
 }

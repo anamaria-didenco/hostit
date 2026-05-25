@@ -221,6 +221,10 @@ type FnbItem = {
   platingNotes?: string;
   staffAssigned?: string;
   sortOrder: number;
+  // Per-unit price (food = per-head, drink = per-drink). Optional so existing
+  // items without pricing aren't penalised, but when set it feeds the
+  // RUNNING TOTAL block + BEO + live link.
+  unitPrice?: number | string | null;
   _tempId?: string;
 };
 const DEFAULT_COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Drinks', 'Other'];
@@ -487,6 +491,8 @@ export default function RunsheetBuilder() {
         serviceTime: '',
         staffAssigned: '',
         sortOrder: fnbItems.length + i,
+        // Carry catalogue pricing through so it shows up in the running total.
+        unitPrice: ci.priceCents != null ? Number(ci.priceCents) / 100 : (ci.price != null ? Number(ci.price) : null),
         _tempId: `cat-${Date.now()}-${i}`,
       }));
     const skipped = eligible.length - toAdd.length;
@@ -813,6 +819,7 @@ export default function RunsheetBuilder() {
           platingNotes: item.platingNotes,
           staffAssigned: item.staffAssigned,
           sortOrder: i,
+          unitPrice: item.unitPrice != null && item.unitPrice !== '' ? Number(item.unitPrice) : null,
         })),
       });
       await refetchFnb();
@@ -2785,6 +2792,8 @@ export default function RunsheetBuilder() {
                         serviceTime: '',
                         staffAssigned: '',
                         sortOrder: fnbItems.length + i,
+                        // Pull pricing through from the proposal quote so running totals stay accurate.
+                        unitPrice: qi.unitPrice != null ? Number(qi.unitPrice) : (qi.priceCents != null ? Number(qi.priceCents) / 100 : null),
                         _tempId: `pull-qi-${Date.now()}-${i}`,
                       }));
                       const drinkRows: FnbItem[] = [];
@@ -2809,7 +2818,7 @@ export default function RunsheetBuilder() {
                         try {
                           const li = JSON.parse((linkedProposal as any).lineItems as string ?? '[]') as any[];
                           li.filter((item: any) => item.description).forEach((item: any, i: number) => {
-                            liRows.push({ section: 'foh', course: 'Menu', dishName: item.description, qty: Number(item.qty) || 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: fnbItems.length + foodRows.length + drinkRows.length + i, _tempId: `pull-li-${Date.now()}-${i}` });
+                            liRows.push({ section: 'foh', course: 'Menu', dishName: item.description, qty: Number(item.qty) || 1, dietary: '', serviceTime: '', staffAssigned: '', sortOrder: fnbItems.length + foodRows.length + drinkRows.length + i, unitPrice: item.unitPrice != null ? Number(item.unitPrice) : null, _tempId: `pull-li-${Date.now()}-${i}` });
                           });
                         } catch {}
                       }

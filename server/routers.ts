@@ -189,6 +189,7 @@ export const appRouter = router({
         emailSignatureLogo: z.string().optional(),
         customCourses: z.string().optional(),
         shiftSections: z.string().optional(),
+        paymentInstructions: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
@@ -3227,6 +3228,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           platingNotes: z.string().nullable().optional(),
           staffAssigned: z.string().nullable().optional(),
           sortOrder: z.number().int().default(0),
+          unitPrice: z.number().nullable().optional(),
         })),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -3252,6 +3254,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             platingNotes: item.platingNotes,
             staffAssigned: item.staffAssigned,
             sortOrder: item.sortOrder ?? idx,
+            unitPrice: item.unitPrice != null ? String(item.unitPrice) : null,
           })));
         }
         return { success: true };
@@ -5455,7 +5458,7 @@ Return ONLY valid JSON.`;
         const [sr] = await db.select().from(shiftRunsheets).where(eq(shiftRunsheets.token, input.token)).limit(1);
         if (!sr) return null;
         // Fetch venue logo/name for header display
-        const [venue] = await db.select({ logoUrl: venueSettings.logoUrl, name: venueSettings.name, shiftSections: venueSettings.shiftSections })
+        const [venue] = await db.select({ logoUrl: venueSettings.logoUrl, name: venueSettings.name, shiftSections: venueSettings.shiftSections, paymentInstructions: venueSettings.paymentInstructions, primaryColor: venueSettings.primaryColor, timezone: venueSettings.timezone })
           .from(venueSettings).where(eq(venueSettings.ownerId, sr.ownerId)).limit(1);
         const ids = (sr.linkedChecklistIds as number[] | null) ?? [];
         let checklists: { id: number; name: string; token: string; items: any[] }[] = [];
@@ -5537,7 +5540,7 @@ Return ONLY valid JSON.`;
           }
         }
 
-        return { ...sr, checklists, events, venueLogoUrl: venue?.logoUrl ?? null, venuePrimaryColor: (venue as any)?.primaryColor ?? null, venueName: venue?.name ?? null, shiftSections: venue?.shiftSections ?? null };
+        return { ...sr, checklists, events, venueLogoUrl: venue?.logoUrl ?? null, venuePrimaryColor: (venue as any)?.primaryColor ?? null, venueName: venue?.name ?? null, shiftSections: venue?.shiftSections ?? null, paymentInstructions: (venue as any)?.paymentInstructions ?? null };
       }),
 
     create: protectedProcedure
