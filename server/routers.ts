@@ -1852,6 +1852,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         description: z.string().optional(),
         type: z.enum(['food', 'beverages', 'food_and_beverages']),
         pricePerHead: z.number().optional(),
+        customPriceLabel: z.string().max(120).optional(),
+        chefNotes: z.string().optional(),
+        // PDF URL must come from /api/upload-pdf — same shape contract as
+        // runsheet attachments so we can't be tricked into linking arbitrary URLs.
+        pdfUrl: z.string().regex(/^\/uploads\/[A-Za-z0-9._-]+\.pdf$/).optional(),
+        pdfName: z.string().max(255).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1864,6 +1870,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           description: input.description ?? null,
           type: input.type,
           pricePerHead: input.pricePerHead ? String(input.pricePerHead) : null,
+          customPriceLabel: input.customPriceLabel ?? null,
+          chefNotes: input.chefNotes ?? null,
+          pdfUrl: input.pdfUrl ?? null,
+          pdfName: input.pdfName ?? null,
         }).returning({ id: menuPackages.id });
         return { id: result.id };
       }),
@@ -1875,6 +1885,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         description: z.string().optional(),
         type: z.enum(['food', 'beverages', 'food_and_beverages']).optional(),
         pricePerHead: z.number().nullable().optional(),
+        customPriceLabel: z.string().max(120).nullable().optional(),
+        chefNotes: z.string().nullable().optional(),
+        pdfUrl: z.string().regex(/^\/uploads\/[A-Za-z0-9._-]+\.pdf$/).nullable().optional(),
+        pdfName: z.string().max(255).nullable().optional(),
         isActive: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -1888,6 +1902,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (input.description !== undefined) updates.description = input.description;
         if (input.type !== undefined) updates.type = input.type;
         if (input.pricePerHead !== undefined) updates.pricePerHead = input.pricePerHead !== null ? String(input.pricePerHead) : null;
+        if (input.customPriceLabel !== undefined) updates.customPriceLabel = input.customPriceLabel;
+        if (input.chefNotes !== undefined) updates.chefNotes = input.chefNotes;
+        if (input.pdfUrl !== undefined) updates.pdfUrl = input.pdfUrl;
+        if (input.pdfName !== undefined) updates.pdfName = input.pdfName;
         if (input.isActive !== undefined) updates.isActive = input.isActive;
         await db.update(menuPackages).set(updates).where(and(eq(menuPackages.id, input.id), eq(menuPackages.ownerId, ctx.user.id)));
         return { success: true };

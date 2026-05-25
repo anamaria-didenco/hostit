@@ -288,6 +288,17 @@ export const menuPackages = pgTable("menu_packages", {
   description: text("description"),
   type: menuPackageTypeEnum("type").default("food").notNull(),
   pricePerHead: decimal("pricePerHead", { precision: 10, scale: 2 }),
+  // Optional free-text price override (e.g. "$1500 flat" or "POA"). When set,
+  // it is shown instead of the per-head price in displays.
+  customPriceLabel: varchar("customPriceLabel", { length: 120 }),
+  // Long-form plain-text body used by chefs/staff — e.g. the full set menu
+  // formatted with line breaks. Kept as plain text on purpose so paste from
+  // Word/Google Docs is preserved verbatim.
+  chefNotes: text("chefNotes"),
+  // Optional staff-accessible PDF (e.g. printable menu). Path returned by
+  // /api/upload-pdf — always shaped like "/uploads/<name>.pdf".
+  pdfUrl: varchar("pdfUrl", { length: 500 }),
+  pdfName: varchar("pdfName", { length: 255 }),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),

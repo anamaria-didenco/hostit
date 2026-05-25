@@ -1576,7 +1576,8 @@ export default function Dashboard() {
 
   // Menu packages
   const { data: menuPackages, refetch: refetchMenuPackages } = trpc.menu.listPackages.useQuery(undefined, { enabled: !!user?.id });
-  const [menuForm, setMenuForm] = useState({ name: "", type: "food" as "food"|"beverages"|"food_and_beverages", description: "", pricePerHead: "" });
+  const [menuForm, setMenuForm] = useState({ name: "", type: "food" as "food"|"beverages"|"food_and_beverages", description: "", pricePerHead: "", customPriceLabel: "", chefNotes: "", pdfUrl: "", pdfName: "" });
+  const [menuPdfUploading, setMenuPdfUploading] = useState(false);
   const [showMenuForm, setShowMenuForm] = useState(false);
   const [editingPackageId, setEditingPackageId] = useState<number|null>(null);
 
@@ -1612,11 +1613,11 @@ export default function Dashboard() {
   });
 
   const createMenuPackage = trpc.menu.createPackage.useMutation({
-    onSuccess: () => { refetchMenuPackages(); setShowMenuForm(false); setMenuForm({ name: "", type: "food", description: "", pricePerHead: "" }); toast.success("Menu package added!"); },
+    onSuccess: () => { refetchMenuPackages(); setShowMenuForm(false); setMenuForm({ name: "", type: "food", description: "", pricePerHead: "", customPriceLabel: "", chefNotes: "", pdfUrl: "", pdfName: "" }); toast.success("Menu package added!"); },
     onError: () => toast.error("Failed to add menu package"),
   });
   const updateMenuPackage = trpc.menu.updatePackage.useMutation({
-    onSuccess: () => { refetchMenuPackages(); setEditingPackageId(null); setShowMenuForm(false); setMenuForm({ name: "", type: "food", description: "", pricePerHead: "" }); toast.success("Package updated!"); },
+    onSuccess: () => { refetchMenuPackages(); setEditingPackageId(null); setShowMenuForm(false); setMenuForm({ name: "", type: "food", description: "", pricePerHead: "", customPriceLabel: "", chefNotes: "", pdfUrl: "", pdfName: "" }); toast.success("Package updated!"); },
     onError: () => toast.error("Failed to update package"),
   });
   const deleteMenuPackage = trpc.menu.deletePackage.useMutation({
@@ -6829,7 +6830,7 @@ export default function Dashboard() {
                 <div className="bg-white border border-gray-200 rounded">
                   <div className="flex items-center justify-between p-4 border-b border-gray-200">
                     <h2 className="font-semibold text-gray-800">Menu Items</h2>
-                    <button onClick={() => { setShowMenuForm(true); setEditingPackageId(null); setMenuForm({ name: '', type: 'food', description: '', pricePerHead: '' }); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
+                    <button onClick={() => { setShowMenuForm(true); setEditingPackageId(null); setMenuForm({ name: '', type: 'food', description: '', pricePerHead: '', customPriceLabel: '', chefNotes: '', pdfUrl: '', pdfName: '' }); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
                   </div>
                   {/* Section filter tabs */}
                   <div className="flex border-b border-gray-100 px-4 pt-2 gap-1 overflow-x-auto">
@@ -6839,7 +6840,26 @@ export default function Dashboard() {
                     ))}
                   </div>
                   {showMenuForm && (
-                    <form onSubmit={e => { e.preventDefault(); if (editingPackageId) { updateMenuPackage.mutate({ id: editingPackageId, name: menuForm.name, type: menuForm.type, description: menuForm.description || undefined, pricePerHead: menuForm.pricePerHead ? parseFloat(menuForm.pricePerHead) : undefined }); } else { createMenuPackage.mutate({ name: menuForm.name, type: menuForm.type, description: menuForm.description || undefined, pricePerHead: menuForm.pricePerHead ? parseFloat(menuForm.pricePerHead) : undefined }); } }} className="p-4 border-b border-gray-100 bg-gray-50 space-y-3">
+                    <form onSubmit={e => {
+                      e.preventDefault();
+                      // Send empty strings as null when editing so users can clear a field.
+                      // On create we omit them so server defaults to null.
+                      const payload = {
+                        name: menuForm.name,
+                        type: menuForm.type,
+                        description: menuForm.description || undefined,
+                        pricePerHead: menuForm.pricePerHead ? parseFloat(menuForm.pricePerHead) : (editingPackageId ? null : undefined),
+                        customPriceLabel: menuForm.customPriceLabel || (editingPackageId ? null : undefined),
+                        chefNotes: menuForm.chefNotes || (editingPackageId ? null : undefined),
+                        pdfUrl: menuForm.pdfUrl || (editingPackageId ? null : undefined),
+                        pdfName: menuForm.pdfName || (editingPackageId ? null : undefined),
+                      };
+                      if (editingPackageId) {
+                        updateMenuPackage.mutate({ id: editingPackageId, ...payload } as any);
+                      } else {
+                        createMenuPackage.mutate(payload as any);
+                      }
+                    }} className="p-4 border-b border-gray-100 bg-gray-50 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ITEM NAME *</label>
@@ -6851,8 +6871,66 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CUSTOM PRICE LABEL (OPTIONAL)</label>
+                        <Input value={menuForm.customPriceLabel} onChange={e => setMenuForm(f => ({ ...f, customPriceLabel: e.target.value }))} placeholder={'e.g. "$95pp" or "$1500 flat" or "POA" — shown instead of the price-per-head'} className="rounded-none border border-gold/30 text-sm" />
+                        <p className="font-dm text-[11px] text-ink/40 mt-1">When set, this overrides the per-head price wherever this menu is displayed.</p>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SHORT DESCRIPTION</label>
                         <Input value={menuForm.description} onChange={e => setMenuForm(f => ({ ...f, description: e.target.value }))} placeholder="A choice of 3 courses" className="rounded-none border border-gold/30 text-sm" />
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CHEF / STAFF MENU TEXT (PASTE FULL MENU)</label>
+                        <textarea
+                          value={menuForm.chefNotes}
+                          onChange={e => setMenuForm(f => ({ ...f, chefNotes: e.target.value }))}
+                          rows={8}
+                          placeholder={"Paste the full menu here exactly as you want chefs to see it. Line breaks and spacing are preserved.\n\nENTRÉE\n— Hapuka crudo, finger lime, kohlrabi\n— Heirloom tomato, smoked ricotta, basil\n\nMAIN\n— Wagyu sirloin, bone marrow jus\n— Market fish, brown butter"}
+                          className="w-full rounded-none border border-gold/30 text-sm font-mono p-2 whitespace-pre-wrap"
+                        />
+                        <p className="font-dm text-[11px] text-ink/40 mt-1">Plain text only — paste from anywhere and the layout is kept as-is.</p>
+                      </div>
+                      <div>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF PDF (FOR PRINTING)</label>
+                        {menuForm.pdfUrl ? (
+                          <div className="flex items-center gap-2 p-2 bg-white border border-gold/30">
+                            <FileText className="w-4 h-4 text-forest" />
+                            <a href={menuForm.pdfUrl} target="_blank" rel="noopener noreferrer" className="font-dm text-sm text-forest hover:underline truncate flex-1">{menuForm.pdfName || 'View PDF'}</a>
+                            <button type="button" onClick={() => setMenuForm(f => ({ ...f, pdfUrl: '', pdfName: '' }))} className="text-red-400 hover:text-red-600 text-xs font-bebas tracking-widest">REMOVE</button>
+                          </div>
+                        ) : (
+                          <label className={`inline-flex items-center gap-2 font-bebas tracking-widest text-xs px-3 py-2 border cursor-pointer ${menuPdfUploading ? 'bg-forest/40 text-cream border-forest cursor-wait' : 'border-forest/40 text-forest hover:bg-forest/10'}`}>
+                            {menuPdfUploading ? 'UPLOADING…' : 'UPLOAD PDF'}
+                            <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={menuPdfUploading}
+                              onChange={async e => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.type !== 'application/pdf') { toast.error('PDFs only'); return; }
+                                if (file.size > 10 * 1024 * 1024) { toast.error('Max 10MB'); return; }
+                                setMenuPdfUploading(true);
+                                const tId = toast.loading(`Uploading ${file.name}...`);
+                                try {
+                                  const fd = new FormData();
+                                  fd.append('file', file);
+                                  const res = await fetch('/api/upload-pdf', { method: 'POST', body: fd, credentials: 'include' });
+                                  if (!res.ok) {
+                                    const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+                                    throw new Error(err.error || 'Upload failed');
+                                  }
+                                  const { url, name } = await res.json();
+                                  setMenuForm(f => ({ ...f, pdfUrl: url, pdfName: name }));
+                                  toast.success(`${name} attached`, { id: tId });
+                                } catch (err: any) {
+                                  toast.error(err?.message || 'Upload failed', { id: tId });
+                                } finally {
+                                  setMenuPdfUploading(false);
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                        <p className="font-dm text-[11px] text-ink/40 mt-1">Staff can open or print this PDF straight from the menu — useful for printed table menus.</p>
                       </div>
                       <div className="flex gap-2">
                         <button type="submit" disabled={createMenuPackage.isPending || updateMenuPackage.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{editingPackageId ? 'UPDATE' : 'ADD ITEM'}</button>
@@ -6865,16 +6943,37 @@ export default function Dashboard() {
                       <p className="p-6 text-center text-sm text-gray-400">No menu items yet. Click Add to create one.</p>
                     )}
                     {(menuPackages ?? []).map((pkg: any) => (
-                      <div key={pkg.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-                        <div>
-                          <span className="text-sm font-medium text-gray-800">{pkg.name}</span>
-                          {pkg.description && <span className="text-xs text-gray-400 ml-2">{pkg.description}</span>}
+                      <div key={pkg.id} className="px-4 py-3 hover:bg-gray-50">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium text-gray-800">{pkg.name}</span>
+                              {pkg.description && <span className="text-xs text-gray-400">{pkg.description}</span>}
+                            </div>
+                            {pkg.pdfUrl && (
+                              <a href={pkg.pdfUrl} target="_blank" rel="noopener noreferrer"
+                                 className="inline-flex items-center gap-1 mt-1 text-xs text-forest hover:underline">
+                                <FileText className="w-3 h-3" /> {pkg.pdfName || 'Open PDF'}
+                              </a>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            {pkg.customPriceLabel
+                              ? <span className="text-sm font-semibold text-gray-700">{pkg.customPriceLabel}</span>
+                              : pkg.pricePerHead && <span className="text-sm font-semibold text-gray-700">${Number(pkg.pricePerHead).toFixed(2)} <span className="text-xs text-gray-400 font-normal">per person</span></span>
+                            }
+                            <button onClick={() => { setEditingPackageId(pkg.id); setMenuForm({ name: pkg.name, type: pkg.type, description: pkg.description ?? '', pricePerHead: pkg.pricePerHead ? String(pkg.pricePerHead) : '', customPriceLabel: pkg.customPriceLabel ?? '', chefNotes: pkg.chefNotes ?? '', pdfUrl: pkg.pdfUrl ?? '', pdfName: pkg.pdfName ?? '' }); setShowMenuForm(true); }} className="text-blue-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
+                            <button onClick={() => deleteMenuPackage.mutate({ id: pkg.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          {pkg.pricePerHead && <span className="text-sm font-semibold text-gray-700">${Number(pkg.pricePerHead).toFixed(2)} <span className="text-xs text-gray-400 font-normal">per person</span></span>}
-                          <button onClick={() => { setEditingPackageId(pkg.id); setMenuForm({ name: pkg.name, type: pkg.type, description: pkg.description ?? '', pricePerHead: pkg.pricePerHead ? String(pkg.pricePerHead) : '' }); setShowMenuForm(true); }} className="text-blue-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
-                          <button onClick={() => deleteMenuPackage.mutate({ id: pkg.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                        </div>
+                        {pkg.chefNotes && (
+                          <details className="mt-2 group">
+                            <summary className="cursor-pointer text-[11px] font-bebas tracking-widest text-gray-500 hover:text-forest">
+                              ▾ CHEF / STAFF MENU
+                            </summary>
+                            <pre className="mt-1 p-3 bg-cream-card border border-gold/15 font-mono text-xs text-ink/80 whitespace-pre-wrap break-words">{pkg.chefNotes}</pre>
+                          </details>
+                        )}
                       </div>
                     ))}
                   </div>
