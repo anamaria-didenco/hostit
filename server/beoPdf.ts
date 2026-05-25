@@ -4,6 +4,8 @@
  * Route: GET /api/beo/:bookingId
  */
 import type { Request, Response } from "express";
+import path from "path";
+import fs from "fs";
 import { resolveChromiumPath } from "./chromiumPath";
 import { getDb } from "./db";
 import {
@@ -17,8 +19,10 @@ import {
   quoteSettings,
   quoteItems,
   leads,
+  menuPackages,
+  menuItems,
 } from "../drizzle/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 
 const VENUE_AREA_LABELS: Record<string, string> = {
   bar: "Bar",
@@ -68,6 +72,78 @@ function groupByCourse(items: any[]) {
     groups[c].push(item);
   }
   return groups;
+}
+
+/**
+ * Finds menu packages whose items appear on this booking's F&B list,
+ * loads any attached PDFs from disk, and appends their pages onto the
+ * end of the BEO PDF. No-op when nothing matches.
+ *
+ * Match strategy: dish names on fnb_items → menu_items.name (case-
+ * insensitive) → distinct package IDs → menuPackages.pdfUrl. This way
+ * we only include menus the kitchen is actually cooking from, not every
+ * menu the venue has on file.
+ */
+async function appendLinkedMenuPdfs(opts: {
+  beoPdfBytes: Uint8Array;
+  db: any;
+  userId: number;
+  fnbList: any[];
+}): Promise<Uint8Array> {
+  const { beoPdfBytes, db, userId, fnbList } = opts;
+  const dishNames = Array.from(new Set(
+    fnbList.map(i => String(i.dishName || "").trim().toLowerCase()).filter(Boolean)
+  ));
+  if (dishNames.length === 0) return beoPdfBytes;
+
+  // Look up matching menu items for this owner. We compare normalised
+  // (lowercase + trimmed) names so casing differences between the
+  // saved F&B row and the menu library don't miss a match.
+  const allItems = await db.select({ name: menuItems.name, packageId: menuItems.packageId })
+    .from(menuItems)
+    .where(eq(menuItems.ownerId, userId));
+  const packageIds = new Set<number>();
+  for (const mi of allItems) {
+    if (dishNames.includes(String(mi.name || "").trim().toLowerCase())) {
+      packageIds.add(mi.packageId);
+    }
+  }
+  if (packageIds.size === 0) return beoPdfBytes;
+
+  const pkgs = await db.select().from(menuPackages)
+    .where(and(eq(menuPackages.ownerId, userId), inArray(menuPackages.id, Array.from(packageIds))));
+  const pdfPkgs = pkgs.filter((p: any) => p.pdfUrl && /\.pdf$/i.test(p.pdfUrl));
+  if (pdfPkgs.length === 0) return beoPdfBytes;
+
+  const { PDFDocument } = await import("pdf-lib");
+  const uploadsDir = path.join(process.cwd(), "public", "uploads");
+  const merged = await PDFDocument.load(beoPdfBytes);
+
+  for (const pkg of pdfPkgs) {
+    // pdfUrl is stored as "/uploads/<name>.pdf". Strip the prefix and
+    // resolve against the on-disk uploads dir. Reject anything that
+    // escapes uploadsDir (path traversal guard).
+    const rel = String(pkg.pdfUrl).replace(/^\/uploads\//, "");
+    const filePath = path.resolve(uploadsDir, rel);
+    if (!filePath.startsWith(uploadsDir + path.sep)) {
+      console.warn("[BEO PDF] refusing menu PDF outside uploads dir:", pkg.pdfUrl);
+      continue;
+    }
+    if (!fs.existsSync(filePath)) {
+      console.warn("[BEO PDF] menu PDF missing on disk:", filePath);
+      continue;
+    }
+    try {
+      const bytes = fs.readFileSync(filePath);
+      const src = await PDFDocument.load(bytes);
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      for (const p of pages) merged.addPage(p);
+    } catch (e) {
+      console.warn("[BEO PDF] could not merge menu PDF:", pkg.pdfUrl, e);
+    }
+  }
+
+  return await merged.save();
 }
 
 export async function handleBeoPdf(req: Request, res: Response) {
@@ -832,6 +908,25 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
         headerTemplate: `<div></div>`,
         footerTemplate,
       });
+
+      // Append linked menu PDFs (chef-facing) to the end of the internal
+      // BEO so kitchens can print one document and know exactly what's
+      // being cooked. Skipped on the public event-pack — the menu PDFs
+      // are operational/chef collateral and not meant for guests.
+      let finalPdf: Uint8Array = pdf;
+      if (!isPublic) {
+        try {
+          finalPdf = await appendLinkedMenuPdfs({
+            beoPdfBytes: pdf,
+            db,
+            userId,
+            fnbList,
+          });
+        } catch (mergeErr) {
+          console.warn("[BEO PDF] menu merge failed, sending BEO without menus:", mergeErr);
+        }
+      }
+
       res.setHeader("Content-Type", "application/pdf");
       // Public event-pack opens inline in the browser (no forced download)
       // so customers click the link and see it; internal BEO PDF still
@@ -839,7 +934,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       const disposition = isPublic ? "inline" : "attachment";
       res.setHeader("Content-Disposition",
         `${disposition}; filename="${isPublic ? "Event-Pack" : "BEO"}-${booking.id}-${clientName.replace(/\s+/g, "-")}.pdf"`);
-      res.send(Buffer.from(pdf));
+      res.send(Buffer.from(finalPdf));
     } finally {
       await browser.close();
     }
