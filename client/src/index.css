@@ -938,7 +938,7 @@
 @media print {
   @page {
     size: A4;
-    margin: 12mm 10mm;
+    margin: 10mm 8mm;
   }
   html, body {
     background: white !important;
@@ -949,9 +949,9 @@
   .print\:break-before { break-before: page; }
   .print\:break-after  { break-after: page; }
   .print\:avoid-break  { break-inside: avoid; page-break-inside: avoid; }
-  /* Tighter spacing throughout BEO */
+  /* Tighter spacing throughout BEO so more rows fit per page */
   .print-tight, .print-tight * {
-    line-height: 1.35 !important;
+    line-height: 1.3 !important;
   }
   /* Keep table-style rows together */
   tr, .grid { break-inside: avoid; page-break-inside: avoid; }
@@ -960,13 +960,37 @@
     -webkit-appearance: none;
     appearance: none;
   }
-  /* Ensure backgrounds print (color-coded F&B rows) */
+  /* Ensure backgrounds print (color-coded F&B rows AND amber dietary alerts) */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   /* Headings page-break behaviour */
   h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+
+  /* ── Staff runsheet print optimizations ──────────────────────────────
+     Bigger fonts, denser rows, prominent dietary alerts so staff don't
+     have to squint or flip between pages during service. */
+  [data-print-section="timeline"] .font-dm,
+  [data-print-section="food"] .font-dm {
+    font-size: 11.5pt !important;
+  }
+  [data-print-section="timeline"] input[type="time"] + div,
+  [data-print-section="timeline"] .text-base {
+    font-size: 13pt !important;
+    font-weight: 700 !important;
+  }
+  /* Dietary alerts MUST be impossible to miss in print */
+  [data-print-section="dietary"] {
+    border: 2px solid #d97706 !important;
+    page-break-inside: avoid;
+    background: #fffbeb !important;
+  }
+  /* Compact F&B rows in print so a 50-item menu fits on 1-2 pages */
+  [data-print-section="food"] .grid {
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+  }
 }
 
 /* ── Print rules for staff-facing runsheets (StaffPortal + ShiftRunsheetLive) ── */

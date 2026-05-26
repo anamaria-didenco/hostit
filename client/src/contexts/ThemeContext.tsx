@@ -92,16 +92,16 @@ function safeSet(key: string, value: string): void {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [colourTheme, setColourThemeState] = useState<ColourTheme>(() => {
-    return (safeGet("hostit-colour-theme") as ColourTheme) || "sage";
+    return (safeGet("venueflow-colour-theme") as ColourTheme) || "sage";
   });
   const [fontTheme, setFontThemeState] = useState<FontTheme>(() => {
-    return (safeGet("hostit-font-theme") as FontTheme) || "modern";
+    return (safeGet("venueflow-font-theme") as FontTheme) || "modern";
   });
 
   // Apply colour theme as data-theme attribute on <html>
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", colourTheme);
-    safeSet("hostit-colour-theme", colourTheme);
+    safeSet("venueflow-colour-theme", colourTheme);
   }, [colourTheme]);
 
   // Apply font theme as CSS variables on <html>
@@ -109,7 +109,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement;
     root.style.setProperty("--font-heading", FONT_HEADING_MAP[fontTheme]);
     root.style.setProperty("--font-body", FONT_BODY_MAP[fontTheme]);
-    safeSet("hostit-font-theme", fontTheme);
+    safeSet("venueflow-font-theme", fontTheme);
   }, [fontTheme]);
 
   const setColourTheme = (t: ColourTheme) => setColourThemeState(t);

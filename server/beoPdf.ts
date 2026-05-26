@@ -335,10 +335,11 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   <div class="card-body notes-text">${venueSetup}</div>
 </div>` : "";
 
-    // Dietary section
+    // Dietary section — high-attention amber treatment so chefs can scan
+    // allergies/diets in one glance.
     const dietarySection = dietaries.length > 0 ? `
-<div class="card">
-  <div class="card-header">DIETARY REQUIREMENTS</div>
+<div class="card dietary-card">
+  <div class="card-header dietary-header">⚠ DIETARY REQUIREMENTS</div>
   <div class="card-body">
     <div class="dietary-grid">
       ${dietaries.map(d => `
@@ -376,7 +377,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 </div>` : "";
 
     // F&B section renderer
-    function renderFnbSection(title: string, items: any[], isKitchen = false) {
+    const renderFnbSection = (title: string, items: any[], isKitchen = false) => {
       if (!items.length) return "";
       // Public event-pack hides internal kitchen prep/plating + staff
       // assignments — guests don't need (and shouldn't see) operational detail.
@@ -431,26 +432,21 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 </div>`;
     }
 
-    // Bar section
+    // Bar section — arrangement & notes only. The actual drinks list is
+    // rendered inside the Food & Beverage Selection table above, so we
+    // intentionally don't duplicate it here.
     const barNotes = (drinks as any)?.barNotes as string | undefined;
-    const barSection = drinks ? `
+    const hasBarInfo = drinks && (drinks.barOption || drinks.tabAmount || barNotes);
+    const barSection = hasBarInfo ? `
 <div class="card">
-  <div class="card-header">BAR &amp; DRINKS</div>
+  <div class="card-header">BAR ARRANGEMENT</div>
   <div class="card-body">
-    <div class="detail-row"><span class="detail-label">Bar Arrangement</span><span class="detail-value">${BAR_LABELS[drinks.barOption] ?? drinks.barOption}</span></div>
+    ${drinks.barOption ? `<div class="detail-row"><span class="detail-label">Bar Arrangement</span><span class="detail-value">${BAR_LABELS[drinks.barOption] ?? drinks.barOption}</span></div>` : ""}
     ${drinks.tabAmount ? `<div class="detail-row"><span class="detail-label">Bar Tab Amount</span><span class="detail-value">${fmtCurrency(drinks.tabAmount)}</span></div>` : ""}
     ${barNotes ? `
-    <div style="margin-top:8px;padding:8px 10px;background:#eef3fb;border-left:3px solid ${venuePrimaryColor}">
-      <div class="detail-label" style="margin-bottom:4px;color:#3a5ab0">Bar Notes</div>
+    <div style="margin-top:8px;padding:8px 10px;background:#f5f2eb;border-left:3px solid ${venuePrimaryColor}">
+      <div class="detail-label" style="margin-bottom:4px">Bar Notes</div>
       <div style="font-size:9.5px;line-height:1.55;color:#1a1209;white-space:pre-wrap">${(barNotes as string).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>
-    </div>` : ""}
-    ${(drinks.selectedDrinks ?? []).length > 0 || (drinks.customDrinks ?? []).length > 0 ? `
-    <div style="margin-top:8px">
-      <div class="detail-label" style="margin-bottom:4px">Selected Drinks</div>
-      <ul style="margin:0;padding-left:14px">
-        ${(drinks.selectedDrinks as string[]).map((key: string) => `<li style="font-size:9px;margin-bottom:2px">${key.replace(/_/g, ' ')}</li>`).join("")}
-        ${(drinks.customDrinks ?? []).map((d: any) => `<li style="font-size:9px;margin-bottom:2px"><strong>${d.name}</strong>${d.description ? ` — ${d.description}` : ""}</li>`).join("")}
-      </ul>
     </div>` : ""}
   </div>
 </div>` : "";
@@ -630,7 +626,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     background: ${venuePrimaryColor};
     padding: 5px 12px;
   }
-  .card-header-dark { background: #4a73c9; }
+  .card-header-dark { background: #3a3530; }
   .card-body { padding: 9px 12px; }
   .notes-text {
     font-size: 9.5px;
@@ -659,7 +655,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     color: #1a1209;
   }
 
-  /* ── Dietary ── */
+  /* ── Dietary ── amber alert palette for chef/kitchen visibility */
+  .dietary-card { border: 2px solid #f59e0b; }
+  .dietary-header { background: #d97706 !important; color: white; }
   .dietary-grid {
     display: flex;
     flex-wrap: wrap;
@@ -669,19 +667,21 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     display: flex;
     align-items: flex-start;
     gap: 6px;
-    background: #f9f5ef;
-    border: 1px solid rgba(201,168,76,0.3);
-    padding: 5px 8px;
+    background: #fffbeb;
+    border: 1px solid #fbbf24;
+    border-left: 4px solid #d97706;
+    padding: 6px 10px;
     min-width: 120px;
   }
   .dietary-badge {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 14px;
-    color: ${venuePrimaryColor};
+    font-size: 16px;
+    color: #b45309;
     line-height: 1;
+    font-weight: 700;
   }
-  .dietary-name { font-size: 9px; font-weight: 600; }
-  .dietary-notes { font-size: 8px; color: rgba(26,18,9,0.5); margin-top: 1px; }
+  .dietary-name { font-size: 9.5px; font-weight: 700; color: #78350f; }
+  .dietary-notes { font-size: 8.5px; color: #92400e; margin-top: 2px; font-style: italic; }
 
   /* ── Timeline ── */
   .tl-head {
@@ -744,23 +744,29 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     page-break-after: avoid;
   }
   .course-group + .fnb-row { page-break-before: avoid; }
-  /* Colour-code drink rows so beverages are visually distinct from food */
+  /* Subtle distinction for drink rows — uses neutral grey so it works with
+     any venue primary colour (red, blue, green, etc.) without clashing. */
   .course-group.is-drink {
-    color: #2b4d8a;
-    background: rgba(107,152,231,0.18);
-    border-bottom-color: rgba(107,152,231,0.32);
+    color: #5a544a;
+    background: rgba(58,53,48,0.08);
+    border-bottom-color: rgba(58,53,48,0.18);
   }
-  .fnb-row.is-drink { background: rgba(107,152,231,0.06); }
+  .fnb-row.is-drink { background: rgba(58,53,48,0.03); }
   .dish-name { font-weight: 600; font-size: 9.5px; }
   .dish-desc { font-size: 8px; color: rgba(26,18,9,0.45); margin-top: 1px; }
+  /* Dietary tag — amber alert colour so chefs spot allergies/diets instantly.
+     Stands out against neutral rows AND against any venue header colour. */
   .diet-tag {
     display: inline-block;
-    background: #dde7f7;
-    color: #3a5ab0;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #f59e0b;
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 7px;
-    letter-spacing: 0.06em;
-    padding: 1px 4px;
+    font-size: 8px;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
   }
   .prep-note { font-size: 8.5px; color: rgba(26,18,9,0.6); }
   .plating-note { font-size: 8px; color: rgba(26,18,9,0.4); margin-top: 1px; font-style: italic; }

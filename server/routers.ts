@@ -4770,7 +4770,7 @@ Return ONLY valid JSON.`;
         // Enforce expiry. expiresAt may come back as a Date (timestamp column)
         // or a number depending on the driver — normalise before comparing.
         if (row.expiresAt) {
-          const expiresMs = row.expiresAt instanceof Date ? row.expiresAt.getTime() : Number(row.expiresAt);
+          const expiresMs = (row.expiresAt as unknown) instanceof Date ? (row.expiresAt as unknown as Date).getTime() : Number(row.expiresAt);
           if (Number.isFinite(expiresMs) && expiresMs < Date.now()) {
             throw new TRPCError({ code: 'NOT_FOUND', message: 'Portal link not found or expired' });
           }

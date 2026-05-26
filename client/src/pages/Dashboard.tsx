@@ -6431,16 +6431,18 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {/* Password */}
-                <div className="bg-white border border-gray-200 rounded p-4">
-                  <h2 className="font-semibold text-gray-800 mb-4">Password</h2>
-                  <div className="max-w-sm space-y-3">
-                    <div className="relative"><input type="password" className="w-full border border-gray-200 rounded p-2 text-sm pr-10" placeholder="Old Password" /><Eye className="w-4 h-4 text-gray-400 absolute right-3 top-2.5" /></div>
-                    <div className="relative"><input type="password" className="w-full border border-gray-200 rounded p-2 text-sm pr-10" placeholder="New Password" /><Eye className="w-4 h-4 text-gray-400 absolute right-3 top-2.5" /></div>
-                    <div className="relative"><input type="password" className="w-full border border-gray-200 rounded p-2 text-sm pr-10" placeholder="New Password Confirmation" /><Eye className="w-4 h-4 text-gray-400 absolute right-3 top-2.5" /></div>
-                    <button className="btn-forest text-cream text-sm font-bebas tracking-widest px-6 py-2">Change Password</button>
-                    <p className="text-xs text-gray-400">If you can't remember your old password, click below to send a reset password email. Make sure to log out before opening the email.</p>
-                    <button className="border border-gray-300 text-gray-700 text-sm px-4 py-1.5 rounded hover:bg-gray-50">Send Password Reset Email</button>
+                <div className="bg-white border border-gray-200 rounded p-4 opacity-60">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-semibold text-gray-800">Password</h2>
+                    <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded">Coming soon</span>
                   </div>
+                  <div className="max-w-sm space-y-3 pointer-events-none">
+                    <div className="relative"><input type="password" disabled className="w-full border border-gray-200 rounded p-2 text-sm pr-10 bg-gray-50" placeholder="Old Password" /><Eye className="w-4 h-4 text-gray-300 absolute right-3 top-2.5" /></div>
+                    <div className="relative"><input type="password" disabled className="w-full border border-gray-200 rounded p-2 text-sm pr-10 bg-gray-50" placeholder="New Password" /><Eye className="w-4 h-4 text-gray-300 absolute right-3 top-2.5" /></div>
+                    <div className="relative"><input type="password" disabled className="w-full border border-gray-200 rounded p-2 text-sm pr-10 bg-gray-50" placeholder="New Password Confirmation" /><Eye className="w-4 h-4 text-gray-300 absolute right-3 top-2.5" /></div>
+                    <button disabled className="btn-forest text-cream text-sm font-bebas tracking-widest px-6 py-2 opacity-50 cursor-not-allowed">Change Password</button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-3">Password change is being wired up — for now, contact your admin to reset your password.</p>
                 </div>
               </div>
               )}
@@ -7924,6 +7926,7 @@ export default function Dashboard() {
                         <button
                           onClick={() => {
                             createRunsheet.mutate({
+                              title: `${selectedBooking.firstName ?? ''}${selectedBooking.lastName ? ' ' + selectedBooking.lastName : ''}${selectedBooking.eventType ? ' — ' + selectedBooking.eventType : ''}`.trim() || 'Untitled Runsheet',
                               leadId: selectedBooking.id,
                               eventDate: selectedBooking.eventDate ?? undefined,
                               guestCount: selectedBooking.guestCount ?? undefined,

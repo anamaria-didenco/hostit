@@ -269,6 +269,43 @@ export default function RunsheetBuilder() {
   const [saving, setSaving] = useState(false);
   const [sheetId, setSheetId] = useState<number | null>(runsheetId);
 
+  // ── Unsaved-changes tracking ──────────────────────────────────────────────
+  // Set to true when user edits anything; reset to false after save.
+  const [isDirty, setIsDirty] = useState(false);
+  const isInitialLoadRef = useRef(true);
+
+  // ── "NOW" indicator for live service ──────────────────────────────────────
+  // Updates every 30s. Lets the timeline highlight the currently-active item
+  // so staff can see at a glance "where are we right now?"
+  const [currentTimeMinutes, setCurrentTimeMinutes] = useState(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  });
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setCurrentTimeMinutes(now.getHours() * 60 + now.getMinutes());
+    };
+    const interval = setInterval(tick, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+  // Helper: convert "HH:MM" to minutes-since-midnight
+  const timeToMinutes = (t: string): number => {
+    if (!t || typeof t !== 'string') return -1;
+    const [h, m] = t.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return -1;
+    return h * 60 + m;
+  };
+  // Whether the runsheet is for "today" (so the NOW indicator is meaningful)
+  const isToday = (() => {
+    if (!eventDate) return false;
+    const today = new Date();
+    const evt = new Date(eventDate);
+    return evt.getFullYear() === today.getFullYear()
+      && evt.getMonth() === today.getMonth()
+      && evt.getDate() === today.getDate();
+  })();
+
   // Keep sheetId in sync with the URL — navigate() changes the URL but doesn't
   // remount the component, so useState initial value becomes stale after redirect.
   useEffect(() => {
@@ -668,6 +705,32 @@ export default function RunsheetBuilder() {
   const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>([]);
   const [checklistInstance, setChecklistInstance] = useState<any>(null);
   const [newChecklistText, setNewChecklistText] = useState("");
+
+  // ── Dirty-state tracking ──────────────────────────────────────────────
+  // Watches the main editable state. On the first render after data loads
+  // (which we detect via isInitialLoadRef), we skip setting dirty. After
+  // that, any change to any watched field flips isDirty → true.
+  useEffect(() => {
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+    setIsDirty(true);
+  // We intentionally watch these specific user-editable fields.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, title, eventDate, venueName, spaceName, venueArea, eventStartTime, eventEndTime,
+      guestCount, eventType, notes, dietaries, venueSetup, footerText, gstInclusive, paymentNotes]);
+
+  // Warn before leaving page with unsaved changes
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
 
   const getOrCreateChecklist = trpc.checklists.getOrCreateForRunsheet.useMutation({
     onSuccess: (instance) => {
@@ -1540,6 +1603,8 @@ export default function RunsheetBuilder() {
         }
         if (fnbItems.length > 0) await saveFnb();
       }
+      // Mark clean after successful save
+      setIsDirty(false);
     } finally {
       setSaving(false);
     }
@@ -1894,13 +1959,23 @@ export default function RunsheetBuilder() {
               {pushRunsheetToNbi.isPending ? 'PUSHING…' : 'PUSH TO NOWBOOKIT'}
             </button>
           )}
+          {isDirty && !saving && (
+            <div className="no-print flex items-center gap-1.5 text-xs font-dm text-amber-700 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Unsaved changes
+            </div>
+          )}
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 shadow-sm shadow-gold/30"
+            className={`font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 transition-all ${
+              isDirty
+                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-500/40 animate-pulse'
+                : 'bg-gold hover:bg-gold/90 text-ink shadow-sm shadow-gold/30'
+            }`}
           >
             <Save className="w-3.5 h-3.5" />
-            {saving ? "SAVING..." : "SAVE"}
+            {saving ? "SAVING..." : isDirty ? "SAVE CHANGES" : "SAVED"}
           </Button>
         </div>
       </nav>
@@ -2495,21 +2570,37 @@ export default function RunsheetBuilder() {
                   const endTime = addMinutes(item.time, item.duration);
                   const catInfo = CATEGORIES.find(c => c.value === item.category);
                   const hlBg = item.highlight ? item.highlight : undefined;
+                  // Live "NOW" detection — highlight the item currently in progress
+                  const itemStart = timeToMinutes(item.time);
+                  const itemEnd = itemStart >= 0 ? itemStart + (item.duration || 0) : -1;
+                  const isNow = isToday && itemStart >= 0 && currentTimeMinutes >= itemStart && currentTimeMinutes < itemEnd;
+                  const isPast = isToday && itemEnd >= 0 && currentTimeMinutes >= itemEnd;
                   return (
-                    <div key={key} className="group hover:bg-linen/50 transition-colors print:hover:bg-transparent" style={hlBg ? { backgroundColor: hlBg } : undefined}>
+                    <div
+                      key={key}
+                      className={`group transition-colors print:hover:bg-transparent ${
+                        isNow ? 'bg-emerald-50 ring-2 ring-emerald-500 ring-inset relative z-10' :
+                        isPast ? 'opacity-50 hover:opacity-100' :
+                        'hover:bg-linen/50'
+                      }`}
+                      style={hlBg ? { backgroundColor: hlBg } : undefined}
+                    >
                       {/* Main row */}
                       <div className="flex items-center gap-0 print:gap-3">
-                        {/* Time column */}
-                        <div className="w-[90px] flex-shrink-0 px-4 py-3 border-r border-gold/15 print:border-0">
+                        {/* Time column — wider + bolder for service-time scannability */}
+                        <div className={`w-[110px] flex-shrink-0 px-4 py-3 border-r border-gold/15 print:border-0 relative ${isNow ? 'bg-emerald-100' : ''}`}>
+                          {isNow && (
+                            <span className="no-print absolute -top-1 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[9px] font-bebas tracking-widest px-1.5 py-0.5 rounded-sm shadow-sm">NOW</span>
+                          )}
                           <input
                             type="time"
                             value={item.time}
                             onChange={e => updateItemField(idx, "time", e.target.value)}
-                            className="font-dm text-sm font-bold text-ink bg-transparent border-0 focus:outline-none w-full no-print"
+                            className={`font-dm text-base font-bold bg-transparent border-0 focus:outline-none w-full no-print ${isNow ? 'text-emerald-700' : 'text-ink'}`}
                           />
-                          <div className="hidden print:block font-dm text-sm font-bold">{formatTime12(item.time)}</div>
+                          <div className="hidden print:block font-dm text-base font-bold">{formatTime12(item.time)}</div>
                           {item.duration > 0 && (
-                            <div className="text-[10px] text-ink/30 font-dm no-print">{item.duration}m</div>
+                            <div className={`text-[11px] font-dm no-print ${isNow ? 'text-emerald-700/70 font-semibold' : 'text-ink/30'}`}>{item.duration}m</div>
                           )}
                         </div>
 
@@ -3294,7 +3385,7 @@ export default function RunsheetBuilder() {
                               </div>
                             )}
                             {showDietaryCol && (
-                              <div>{item.dietary && <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 font-bebas tracking-widest">{item.dietary}</span>}</div>
+                              <div>{item.dietary && <span className="bg-amber-100 text-amber-800 border border-amber-400 text-xs px-1.5 py-0.5 font-bebas tracking-widest font-bold rounded-sm">{item.dietary}</span>}</div>
                             )}
                             {showTimeCol && (
                               <div>
@@ -3426,15 +3517,20 @@ export default function RunsheetBuilder() {
               </div>
             )}
 
-            {/* Dietary summary */}
+            {/* Dietary summary — amber-themed so chefs can scan instantly */}
             {dietaries.length > 0 && (
-              <div data-print-section="dietary" className="px-5 py-4 border-t border-gold/20 bg-blue-50/50">
-                <div className="font-bebas tracking-widest text-xs text-forest mb-2">DIETARY SUMMARY</div>
+              <div data-print-section="dietary" className="px-5 py-4 border-t-2 border-amber-500 bg-amber-50">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-amber-600 text-base">⚠</span>
+                  <span className="font-bebas tracking-widest text-xs text-amber-800 font-bold">DIETARY REQUIREMENTS</span>
+                  <span className="text-amber-700 text-xs font-dm bg-amber-100 px-2 py-0.5 rounded-sm">{dietaries.reduce((s, d) => s + d.count, 0)} guests</span>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {dietaries.map((d, i) => (
-                    <div key={i} className="bg-white border border-blue-200 px-3 py-1.5 text-sm font-dm">
-                      <span className="font-bold">{d.count}×</span> {d.name}
-                      {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
+                    <div key={i} className="bg-white border border-amber-400 border-l-4 border-l-amber-600 px-3 py-1.5 text-sm font-dm shadow-sm">
+                      <span className="font-bold text-amber-900">{d.count}×</span>
+                      <span className="ml-1.5 font-semibold text-amber-900">{d.name}</span>
+                      {d.notes && <span className="text-amber-700 italic ml-1.5">— {d.notes}</span>}
                     </div>
                   ))}
                 </div>
