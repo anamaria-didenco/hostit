@@ -267,9 +267,9 @@ export default function ShiftRunsheetLive() {
         {/* Sections — who's on where */}
         {activeSections.length > 0 && (
           <div className="bg-white border border-stone-200 rounded overflow-hidden">
-            <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5 flex items-center gap-2">
-              <Users className="w-3.5 h-3.5 text-[var(--brand)]" />
-              <span className="font-bebas tracking-widest text-xs text-stone-600">SECTIONS</span>
+            <div className="bg-[var(--brand)] border-b border-[var(--brand)] px-4 py-2.5 flex items-center gap-2">
+              <Users className="w-3.5 h-3.5 text-white" />
+              <span className="font-bebas tracking-widest text-xs text-white">SECTIONS</span>
             </div>
             <div className="divide-y divide-stone-100">
               {activeSections.map(({ key, label }) => (
@@ -294,10 +294,10 @@ export default function ShiftRunsheetLive() {
         {/* Today's events with F&B (color-coded) */}
         {events.length > 0 && (
           <div className="bg-white border border-stone-200 rounded overflow-hidden">
-            <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5 flex items-center gap-2">
-              <Utensils className="w-3.5 h-3.5 text-[var(--brand)]" />
-              <span className="font-bebas tracking-widest text-xs text-stone-600">EVENTS TODAY</span>
-              <span className="font-dm text-xs text-stone-400">· {events.length}</span>
+            <div className="bg-[var(--brand)] border-b border-[var(--brand)] px-4 py-2.5 flex items-center gap-2">
+              <Utensils className="w-3.5 h-3.5 text-white" />
+              <span className="font-bebas tracking-widest text-xs text-white">EVENTS TODAY</span>
+              <span className="font-dm text-xs text-white/60">· {events.length}</span>
             </div>
             <div className="divide-y divide-stone-100">
               {events.map(ev => {
@@ -379,14 +379,14 @@ export default function ShiftRunsheetLive() {
 
                     {/* Drinks (cool blue tone) */}
                     {(drinkItems.length > 0 || ev.drinksData?.barNotes || (ev.drinksData?.selectedDrinks?.length ?? 0) > 0 || (ev.drinksData?.customDrinks?.length ?? 0) > 0) && (
-                      <div className="bg-[#eef3fb] border-l-4 border-[var(--brand)] rounded-r overflow-hidden">
-                        <div className="px-3 py-1.5 flex items-center gap-1.5 bg-[#dde7f7]">
-                          <Wine className="w-3 h-3 text-[#3a5ab0]" />
-                          <span className="font-bebas tracking-widest text-[10px] text-[#3a5ab0]">DRINKS</span>
+                      <div className="border-l-4 border-[var(--brand)] rounded-r overflow-hidden" style={{ backgroundColor: 'color-mix(in srgb, var(--brand) 8%, white)' }}>
+                        <div className="px-3 py-1.5 flex items-center gap-1.5" style={{ backgroundColor: 'color-mix(in srgb, var(--brand) 15%, white)' }}>
+                          <Wine className="w-3 h-3 text-[var(--brand)]" />
+                          <span className="font-bebas tracking-widest text-[10px] text-[var(--brand)]">DRINKS</span>
                         </div>
                         <div className="px-3 py-2 space-y-1.5">
                           {ev.drinksData?.barNotes && (
-                            <div className="font-dm text-[12px] text-stone-700 whitespace-pre-wrap leading-relaxed border-b border-[#dde7f7] pb-2 mb-1">
+                            <div className="font-dm text-[12px] text-stone-700 whitespace-pre-wrap leading-relaxed pb-2 mb-1" style={{ borderBottom: '1px solid color-mix(in srgb, var(--brand) 20%, white)' }}>
                               {ev.drinksData.barNotes}
                             </div>
                           )}
@@ -405,12 +405,12 @@ export default function ShiftRunsheetLive() {
                           {((ev.drinksData?.selectedDrinks?.length ?? 0) > 0 || (ev.drinksData?.customDrinks?.length ?? 0) > 0) && (
                             <div className="flex flex-wrap gap-1 pt-1">
                               {ev.drinksData?.selectedDrinks?.map((d, i) => (
-                                <span key={i} className="bg-white border border-[var(--brand)]/30 text-[#3a5ab0] text-[10px] font-dm px-2 py-0.5 rounded">
+                                <span key={i} className="bg-white text-[var(--brand)] text-[10px] font-dm px-2 py-0.5 rounded" style={{ border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
                                   {d.replace(/_/g, ' ')}
                                 </span>
                               ))}
                               {ev.drinksData?.customDrinks?.map((d, i) => (
-                                <span key={`c${i}`} className="bg-white border border-[var(--brand)]/30 text-[#3a5ab0] text-[10px] font-dm px-2 py-0.5 rounded">
+                                <span key={`c${i}`} className="bg-white text-[var(--brand)] text-[10px] font-dm px-2 py-0.5 rounded" style={{ border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
                                   {d.name}
                                 </span>
                               ))}
@@ -500,8 +500,8 @@ export default function ShiftRunsheetLive() {
 
         {(dayGrand > 0 || (paymentInstructions && paymentInstructions.trim().length > 0)) && (
           <div className="bg-white border border-stone-200 rounded overflow-hidden">
-            <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5 flex items-center gap-2">
-              <span className="font-bebas tracking-widest text-xs text-stone-600">RUNNING TOTAL · TODAY</span>
+            <div className="bg-[var(--brand)] border-b border-[var(--brand)] px-4 py-2.5 flex items-center gap-2">
+              <span className="font-bebas tracking-widest text-xs text-white">RUNNING TOTAL · TODAY</span>
             </div>
             {dayGrand > 0 && (
               <div className="px-4 py-3 grid grid-cols-3 gap-3">

@@ -830,8 +830,42 @@ export default function Dashboard() {
   const [kanbanDetailOpen, setKanbanDetailOpen] = useState(false);
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
   const [kanbanStagePrefs, setKanbanStagePrefs] = useState<{ visible: string[]; order: string[] } | null>(null);
-  const [eventSortBy, setEventSortBy] = useState<"event_date"|"date_booked"|"status">("event_date");
-  const [eventSortDir, setEventSortDir] = useState<"asc"|"desc">("asc");
+  // ── Events table display prefs (persisted to localStorage) ──────────────
+  const EVENT_TABLE_PREFS_KEY = `vf_events_table_prefs_v1_${user?.id ?? "default"}`;
+  const DEFAULT_EVENT_TABLE_PREFS = {
+    sortBy: "event_date" as "event_date" | "date_booked" | "status",
+    sortDir: "asc" as "asc" | "desc",
+    upcomingOnly: true,
+    hideStatuses: ["lost", "finished"] as string[],
+  };
+  const [eventTablePrefs, _setEventTablePrefs] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`vf_events_table_prefs_v1_${user?.id ?? "default"}`);
+      if (raw) return { ...DEFAULT_EVENT_TABLE_PREFS, ...JSON.parse(raw) };
+    } catch {}
+    return { ...DEFAULT_EVENT_TABLE_PREFS };
+  });
+  const setEventTablePrefs = React.useCallback((updates: Partial<typeof DEFAULT_EVENT_TABLE_PREFS>) => {
+    _setEventTablePrefs(prev => {
+      const next = { ...prev, ...updates };
+      try { localStorage.setItem(EVENT_TABLE_PREFS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [EVENT_TABLE_PREFS_KEY]);
+  const eventSortBy = eventTablePrefs.sortBy;
+  const eventSortDir = eventTablePrefs.sortDir;
+  const [eventStatusFilterOpen, setEventStatusFilterOpen] = useState(false);
+  const eventStatusFilterRef = useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!eventStatusFilterOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (eventStatusFilterRef.current && !eventStatusFilterRef.current.contains(e.target as Node)) {
+        setEventStatusFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [eventStatusFilterOpen]);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
@@ -3901,7 +3935,62 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <h2 className="font-inter font-semibold text-gray-900 text-lg" style={{ letterSpacing: '-0.02em' }}>All Events — {MONTHS[month]} {year}</h2>
                   <div className="flex items-center gap-2">
-                    <Select value={eventSortBy} onValueChange={(v: any) => setEventSortBy(v)}>
+                    {/* Upcoming-only toggle */}
+                    <button
+                      onClick={() => setEventTablePrefs({ upcomingOnly: !eventTablePrefs.upcomingOnly })}
+                      className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-1.5 transition-colors ${eventTablePrefs.upcomingOnly ? "border-sage-green bg-sage-green/10 text-sage-dark font-semibold" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
+                      title="Show only upcoming events (today and future)"
+                    >
+                      Upcoming
+                    </button>
+                    {/* Status filter dropdown */}
+                    <div className="relative" ref={eventStatusFilterRef}>
+                      <button
+                        type="button"
+                        onClick={() => setEventStatusFilterOpen(o => !o)}
+                        className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-1.5 transition-colors ${eventTablePrefs.hideStatuses.length > 0 ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
+                        title="Filter by status"
+                      >
+                        <SlidersHorizontal className="w-3 h-3" />
+                        Status
+                        {eventTablePrefs.hideStatuses.length > 0 && (
+                          <span className="bg-sage-green text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                            {eventTablePrefs.hideStatuses.length}
+                          </span>
+                        )}
+                        <ChevronDown className="w-3 h-3 opacity-60" />
+                      </button>
+                      {eventStatusFilterOpen && (
+                        <div className="absolute right-0 z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
+                          <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">HIDE STATUSES</span>
+                            {eventTablePrefs.hideStatuses.length > 0 && (
+                              <button
+                                onClick={() => setEventTablePrefs({ hideStatuses: [] })}
+                                className="text-[10px] font-dm text-forest hover:underline">
+                                SHOW ALL
+                              </button>
+                            )}
+                          </div>
+                          {[...pipelineStages, ...(["confirmed","tentative","cancelled","finished"].filter(k => !pipelineStages.find(s => s.key === k)).map(k => ({ key: k, label: k.charAt(0).toUpperCase() + k.slice(1) })))].map(s => (
+                            <label key={s.key} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={eventTablePrefs.hideStatuses.includes(s.key)}
+                                onChange={() => setEventTablePrefs({
+                                  hideStatuses: eventTablePrefs.hideStatuses.includes(s.key)
+                                    ? eventTablePrefs.hideStatuses.filter(k => k !== s.key)
+                                    : [...eventTablePrefs.hideStatuses, s.key]
+                                })}
+                                className="cursor-pointer"
+                              />
+                              <span className="text-xs font-inter text-ink">{s.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <Select value={eventSortBy} onValueChange={(v: any) => setEventTablePrefs({ sortBy: v })}>
                       <SelectTrigger className="h-8 text-xs font-inter border-gray-200 rounded-lg w-36">
                         <SelectValue />
                       </SelectTrigger>
@@ -3912,7 +4001,7 @@ export default function Dashboard() {
                       </SelectContent>
                     </Select>
                     <button
-                      onClick={() => setEventSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                      onClick={() => setEventTablePrefs({ sortDir: eventSortDir === 'asc' ? 'desc' : 'asc' })}
                       className="h-8 w-8 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
                       title={eventSortDir === 'asc' ? 'Ascending' : 'Descending'}
                     >
@@ -3967,28 +4056,67 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {[...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => !bookedLeadIds.has(l.id) && l.status !== 'lost').map((l: any) => ({ ...l, _type: 'lead' }))]
-                      .sort((a: any, b: any) => {
-                        let cmp = 0;
-                        if (eventSortBy === 'event_date') {
-                          cmp = new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime();
-                        } else if (eventSortBy === 'date_booked') {
-                          cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-                        } else if (eventSortBy === 'status') {
-                          const ord = ['confirmed','booked','tentative','proposal_sent','negotiating','contacted','new','lost','cancelled'];
-                          cmp = (ord.indexOf(a.status) ?? 99) - (ord.indexOf(b.status) ?? 99);
-                        }
-                        return eventSortDir === 'asc' ? cmp : -cmp;
-                      })
-                      .map((item: any) => {
+                    {/* Filtered-empty hint (data exists but filters hide everything) */}
+                    {(() => {
+                      const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+                      const all = [
+                        ...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })),
+                        ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' })),
+                      ];
+                      const filtered = all
+                        .filter((item: any) => !eventTablePrefs.hideStatuses.includes(item.status))
+                        .filter((item: any) => !eventTablePrefs.upcomingOnly || new Date(item.eventDate) >= todayStart);
+                      if (all.length > 0 && filtered.length === 0) {
+                        return (
+                          <div className="border border-dashed border-sage-green/20 rounded-xl p-8 text-center">
+                            <SlidersHorizontal className="w-8 h-8 text-sage-green/30 mx-auto mb-3" />
+                            <p className="font-inter text-sm text-gray-400">No events match your current filters</p>
+                            <button
+                              onClick={() => setEventTablePrefs({ ...DEFAULT_EVENT_TABLE_PREFS, hideStatuses: [] })}
+                              className="mt-3 font-inter text-xs font-semibold px-4 py-2 border border-sage-green text-sage-dark rounded-lg hover:bg-sage-green/10 transition-colors"
+                            >
+                              Clear Filters
+                            </button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                    {(() => {
+                      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+                      return [
+                        ...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })),
+                        ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' })),
+                      ]
+                        // status hide filter — normalise "confirmed" → "confirmed" (bookings) as-is
+                        .filter((item: any) => !eventTablePrefs.hideStatuses.includes(item.status))
+                        // upcoming only filter
+                        .filter((item: any) => !eventTablePrefs.upcomingOnly || new Date(item.eventDate) >= todayStart)
+                        .sort((a: any, b: any) => {
+                          let cmp = 0;
+                          if (eventSortBy === 'event_date') {
+                            cmp = new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime();
+                          } else if (eventSortBy === 'date_booked') {
+                            cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+                          } else if (eventSortBy === 'status') {
+                            const ord = ['confirmed','booked','tentative','proposal_sent','negotiating','contacted','new','lost','cancelled'];
+                            cmp = (ord.indexOf(a.status) ?? 99) - (ord.indexOf(b.status) ?? 99);
+                          }
+                          return eventSortDir === 'asc' ? cmp : -cmp;
+                        });
+                    })().map((item: any) => {
                         const si = getStatusInfo(item.status);
                         return (
-                          <div key={item.id} className="flex items-stretch border border-gold/20 overflow-hidden transition-all hover:shadow-sm bg-white">
-                            <div className={`w-1 flex-shrink-0 ${si.barClasses}`} />
+                          <div
+                            key={item.id}
+                            className="flex items-stretch border-b border-white/30 overflow-hidden transition-all hover:brightness-95"
+                            style={{ backgroundColor: si.swatch + '33' }}
+                          >
+                            <div className="w-1 flex-shrink-0" style={{ backgroundColor: si.swatch }} />
                             <div className="flex-1 p-3 flex items-center justify-between gap-3">
                               <div className="flex-1 min-w-0">
                                 <div className="font-cormorant font-semibold text-base text-ink">{item.firstName} {item.lastName}</div>
-                                <div className="font-dm text-xs text-ink/60 truncate">
+                                <div className="font-dm text-xs text-ink/70 truncate">
                                   {item.eventType || (item._type === 'booking' ? 'Event' : 'Enquiry')}
                                   {' · '}{new Date(item.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
                                   {fmtEventTime(item.eventDate) && ` · ${fmtEventTime(item.eventDate)}`}
@@ -3997,7 +4125,7 @@ export default function Dashboard() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-                                <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${si.calClasses}`}>
+                                <span className="font-bebas tracking-widest text-[10px] px-2 py-0.5 rounded text-white" style={{ backgroundColor: si.swatch }}>
                                   {si.label.toUpperCase()}
                                 </span>
                                 {item._type === 'booking' ? (
@@ -4013,7 +4141,7 @@ export default function Dashboard() {
                                       else deleteLead.mutate({ id: item.id });
                                     }
                                   }}
-                                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100/60 rounded transition-colors"
                                   title={`Delete ${item._type === 'booking' ? 'event' : 'enquiry'}`}>
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -4028,6 +4156,7 @@ export default function Dashboard() {
               )}
 
               {/* ── WEEK VIEW ───────────────────────────────────────────────────── */}
+
               {calendarView === "week" && (() => {
                 // Monday of current week
                 const dow = (calDate.getDay() + 6) % 7;
@@ -7581,8 +7710,8 @@ export default function Dashboard() {
                       setSelectedBooking((prev: any) => prev ? { ...prev, status: newStatus } : prev);
                       utils.leads.eventsByMonth.invalidate();
                     } else {
-                      // Real booking row — bookings.update only accepts confirmed/tentative/cancelled
-                      const allowed = ['confirmed','tentative','cancelled'];
+                      // Real booking row — bookings.update only accepts confirmed/tentative/cancelled/finished
+                      const allowed = ['confirmed','tentative','cancelled','finished'];
                       if (!allowed.includes(newStatus)) { toast.error('Use the enquiry pipeline for that status'); return; }
                       rescheduleBooking.mutate({ id: selectedBooking.id, status: newStatus as any });
                       setSelectedBooking((prev: any) => prev ? { ...prev, status: newStatus } : prev);
@@ -7604,6 +7733,7 @@ export default function Dashboard() {
                           <SelectItem value="confirmed" className="text-xs">Confirmed</SelectItem>
                           <SelectItem value="tentative" className="text-xs">Tentative</SelectItem>
                           <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
+                          <SelectItem value="finished" className="text-xs">Finished</SelectItem>
                         </>
                       )}
                   </SelectContent>

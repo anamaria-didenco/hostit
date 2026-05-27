@@ -1528,13 +1528,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     pendingSpend: protectedProcedure.query(async ({ ctx }) => {
       const { getDb } = await import('./db');
       const { bookings } = await import('../drizzle/schema');
-      const { eq, and, isNull, lte, or, sql } = await import('drizzle-orm');
+      const { eq, inArray, and, isNull, lte, or, sql } = await import('drizzle-orm');
       const db = await getDb();
       if (!db) return [];
       const cutoff = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
       const rows = await db.select().from(bookings).where(and(
         eq(bookings.ownerId, ctx.user.id),
-        eq(bookings.status, 'confirmed'),
+        inArray(bookings.status, ['confirmed', 'finished']),
         isNull(bookings.actualSpend),
         isNull(bookings.spendPromptDismissedAt),
         // event finished — use eventEndDate if set, otherwise eventDate
@@ -1643,7 +1643,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         depositPaid: z.boolean().optional(),
         depositRequired: z.boolean().optional(),
         minimumSpend: z.number().nullable().optional(),
-        status: z.enum(['confirmed', 'tentative', 'cancelled']).optional(),
+        status: z.enum(['confirmed', 'tentative', 'cancelled', 'finished']).optional(),
         notes: z.string().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -1721,6 +1721,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               confirmed: 'booked',
               tentative: 'tentative',
               cancelled: 'lost',
+              finished: 'finished',
             };
             const mapped = statusMap[rest.status];
             if (mapped) leadUpdates.status = mapped;

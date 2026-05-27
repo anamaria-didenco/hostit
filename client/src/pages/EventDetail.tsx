@@ -287,6 +287,7 @@ export default function EventDetail() {
                       <SelectItem value="confirmed">Confirmed</SelectItem>
                       <SelectItem value="tentative">Tentative</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
+                      <SelectItem value="finished">Finished</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -423,9 +424,15 @@ export default function EventDetail() {
                         {p.method && ` · ${p.method}`}
                       </div>
                     </div>
-                    <div className="font-cormorant text-lg font-semibold text-forest">
-                      +${Number(p.amount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
-                    </div>
+                    {p.type === 'refund' ? (
+                      <div className="font-cormorant text-lg font-semibold text-red-500">
+                        −${Number(p.amount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                      </div>
+                    ) : (
+                      <div className="font-cormorant text-lg font-semibold text-forest">
+                        +${Number(p.amount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -472,7 +479,7 @@ export default function EventDetail() {
               </Link>
               {booking.leadId && (
                 <button
-                  onClick={() => setLocation(`/dashboard?tab=leads&leadId=${booking.leadId}`)}
+                  onClick={() => setLocation(`/dashboard?tab=enquiries&leadId=${booking.leadId}`)}
                   className="w-full flex items-center gap-3 px-4 py-3 border border-gold/30 text-amber-700 hover:bg-gold/10 transition-colors font-bebas tracking-widest text-xs">
                   <Mail className="w-4 h-4" />
                   VIEW ENQUIRY

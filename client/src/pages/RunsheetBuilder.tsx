@@ -792,6 +792,7 @@ export default function RunsheetBuilder() {
 
   // Venue settings for customisable dietaries and setup templates
   const { data: venueSettings, refetch: refetchVenueSettings } = trpc.venue.getOwn.useQuery();
+  const venuePrimaryColor = (venueSettings as any)?.primaryColor ?? "#1a3a2a";
   const updateVenueMutation = trpc.venue.update.useMutation({
     onSuccess: () => { toast.success('Options saved'); refetchVenueSettings(); },
     onError: () => toast.error('Failed to save options'),
@@ -1843,7 +1844,7 @@ export default function RunsheetBuilder() {
   const checkedCount = checklistItems.filter(i => i.checked).length;
 
   return (
-    <div className="min-h-screen bg-cream print:bg-white">
+    <div className="min-h-screen bg-cream print:bg-white" style={{ ['--brand' as any]: venuePrimaryColor }}>
       {/* ── Header (matches EventDetail style) ──────────────────────────── */}
       <nav className="no-print bg-forest-dark sticky top-0 z-50 border-b border-gold/20 h-14 flex items-center px-4 gap-3">
         <button
@@ -2099,7 +2100,7 @@ export default function RunsheetBuilder() {
         <div className="hidden print:block mb-6 pb-4 border-b-2 border-ink">
           <div className="flex items-start justify-between">
             <div>
-              <div className="font-bebas text-2xl tracking-widest text-forest mb-1">FUNCTION RUNSHEET</div>
+              <div className="font-bebas text-2xl tracking-widest text-[var(--brand)] mb-1">FUNCTION RUNSHEET</div>
               <div className="font-cormorant text-3xl font-semibold text-ink">{title}</div>
             </div>
             <div className="text-right">
@@ -2264,9 +2265,9 @@ export default function RunsheetBuilder() {
                       </div>
                     </div>
                     {/* Print header */}
-                    <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30">
-                      <Building2 className="w-4 h-4 text-forest" />
-                      <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
+                    <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-[var(--brand)]">
+                      <Building2 className="w-4 h-4 text-white" />
+                      <span className="font-bebas tracking-widest text-sm text-white">VENUE SETUP</span>
                     </div>
                     {/* Body */}
                     {!isHidden && setupSectionOpen && (
@@ -2342,9 +2343,9 @@ export default function RunsheetBuilder() {
                       </div>
                     </div>
                     {/* Print header */}
-                    <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30">
-                      <Leaf className="w-4 h-4 text-forest" />
-                      <span className="font-bebas tracking-widest text-sm text-forest">DIETARY REQUIREMENTS</span>
+                    <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-[var(--brand)]">
+                      <Leaf className="w-4 h-4 text-white" />
+                      <span className="font-bebas tracking-widest text-sm text-white">DIETARY REQUIREMENTS</span>
                     </div>
                     {/* Body */}
                     {!isHidden && dietarySectionOpen && (
@@ -2532,7 +2533,7 @@ export default function RunsheetBuilder() {
             </div>
 
             {/* Print timeline header */}
-            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-forest">
+            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-[var(--brand)]">
               <Clock className="w-4 h-4 text-white" />
               <span className="font-bebas tracking-widest text-sm text-white">EVENT TIMELINE</span>
             </div>
@@ -2972,7 +2973,7 @@ export default function RunsheetBuilder() {
             )}
 
             {/* Print F&B header */}
-            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-forest">
+            <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-[var(--brand)]">
               <UtensilsCrossed className="w-4 h-4 text-white" />
               <span className="font-bebas tracking-widest text-sm text-white">F&B SHEET</span>
             </div>
@@ -2980,7 +2981,7 @@ export default function RunsheetBuilder() {
             {/* Print: Dietary requirements summary at top of F&B sheet */}
             {dietaries.length > 0 && (
               <div className="hidden print:block px-5 py-3 border-b border-gold/30">
-                <div className="font-bebas tracking-widest text-xs text-forest mb-2">DIETARY REQUIREMENTS</div>
+                <div className="font-bebas tracking-widest text-xs text-[var(--brand)] mb-2">DIETARY REQUIREMENTS</div>
                 <div className="flex flex-wrap gap-2">
                   {dietaries.map((d, i) => (
                     <div key={i} className="border border-gold/30 px-3 py-1.5 text-sm font-dm">
