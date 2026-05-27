@@ -810,9 +810,27 @@ export default function Dashboard() {
     setLeadsSubTab("all");
   };
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
-  const [leadSortBy, setLeadSortBy] = useState<"enquiry_date"|"event_date"|"status">("enquiry_date");
-  const [leadSortDir, setLeadSortDir] = useState<"desc"|"asc">("desc");
-  const [leadDateFilter, setLeadDateFilter] = useState<"all"|"future"|"today"|"weekend"|"month"|"year"|"custom">("all");
+
+  // ── Events table display prefs — persisted to localStorage ────────────────
+  const LEAD_TABLE_PREFS_KEY = "vf_lead_table_prefs_v1";
+  const _savedLTP = (() => { try { const r = localStorage.getItem(LEAD_TABLE_PREFS_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } })();
+  const [leadSortBy, setLeadSortByRaw] = useState<"enquiry_date"|"event_date"|"status">(_savedLTP.sortBy ?? "event_date");
+  const [leadSortDir, setLeadSortDirRaw] = useState<"asc"|"desc">(_savedLTP.sortDir ?? "asc");
+  const [leadDateFilter, setLeadDateFilterRaw] = useState<"all"|"future"|"today"|"weekend"|"month"|"year"|"custom">(_savedLTP.dateFilter ?? "future");
+  const [leadStatusExclude, setLeadStatusExcludeRaw] = useState<string[]>(_savedLTP.excludeStatuses ?? ["lost", "finished"]);
+
+  // Persist whenever any pref changes
+  useEffect(() => {
+    try { localStorage.setItem(LEAD_TABLE_PREFS_KEY, JSON.stringify({ sortBy: leadSortBy, sortDir: leadSortDir, dateFilter: leadDateFilter, excludeStatuses: leadStatusExclude })); } catch {}
+  }, [leadSortBy, leadSortDir, leadDateFilter, leadStatusExclude]);
+
+  // Wrapped setters (same signature as original so all existing callsites work unchanged)
+  const setLeadSortBy = (v: "enquiry_date"|"event_date"|"status") => setLeadSortByRaw(v);
+  const setLeadSortDir = (fn: "asc"|"desc" | ((d: "asc"|"desc") => "asc"|"desc")) =>
+    setLeadSortDirRaw(prev => typeof fn === "function" ? fn(prev) : fn);
+  const setLeadDateFilter = (v: "all"|"future"|"today"|"weekend"|"month"|"year"|"custom") => setLeadDateFilterRaw(v);
+  const toggleLeadStatusExclude = (key: string) =>
+    setLeadStatusExcludeRaw(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
   const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("table");
@@ -2000,6 +2018,7 @@ export default function Dashboard() {
     ? applyDateFilter(allEnquiries).filter((l: any) => leadStatusFilter.includes(l.status))
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const filteredLeads = leadsToShow
+    .filter((l: any) => !leadStatusExclude.includes(l.status))
     .filter((l: any) =>
       !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
     )
@@ -2602,10 +2621,12 @@ export default function Dashboard() {
                       <button
                         type="button"
                         onClick={() => setStatusFilterOpen(o => !o)}
-                        className={`h-8 w-44 px-3 text-xs font-inter rounded-lg border flex items-center justify-between gap-2 ${leadStatusFilter.length > 0 ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
+                        className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-2 ${(leadStatusFilter.length > 0 || leadStatusExclude.length > 0) ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
                         <span className="truncate">
                           {leadStatusFilter.length === 0
-                            ? "All Statuses"
+                            ? leadStatusExclude.length > 0
+                              ? `${leadStatusExclude.length} hidden`
+                              : "All Statuses"
                             : leadStatusFilter.length === 1
                             ? (pipelineStages.find(s => s.key === leadStatusFilter[0])?.label ?? leadStatusFilter[0])
                             : `${leadStatusFilter.length} statuses`}
@@ -2613,25 +2634,33 @@ export default function Dashboard() {
                         <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
                       </button>
                       {statusFilterOpen && (
-                        <div className="absolute z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
+                        <div className="absolute z-50 mt-1 w-60 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[70vh] overflow-y-auto">
+                          {/* Show section */}
                           <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
-                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">FILTER BY STATUS</span>
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">SHOW ONLY</span>
                             {leadStatusFilter.length > 0 && (
-                              <button
-                                onClick={() => setLeadStatusFilter([])}
-                                className="text-[10px] font-dm text-forest hover:underline">
-                                CLEAR
-                              </button>
+                              <button onClick={() => setLeadStatusFilter([])} className="text-[10px] font-dm text-forest hover:underline">CLEAR</button>
                             )}
                           </div>
                           {pipelineStages.map(s => (
                             <label key={s.key} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={leadStatusFilter.includes(s.key)}
-                                onChange={() => toggleLeadStatus(s.key)}
-                                className="cursor-pointer" />
+                              <input type="checkbox" checked={leadStatusFilter.includes(s.key)} onChange={() => toggleLeadStatus(s.key)} className="cursor-pointer" />
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.swatch }} />
                               <span className="text-xs font-inter text-ink">{s.label}</span>
+                            </label>
+                          ))}
+                          {/* Hidden section */}
+                          <div className="flex items-center justify-between px-2 py-1 border-t border-gray-100 mt-1 mb-1">
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">HIDDEN BY DEFAULT</span>
+                            {leadStatusExclude.length > 0 && (
+                              <button onClick={() => setLeadStatusExcludeRaw([])} className="text-[10px] font-dm text-forest hover:underline">SHOW ALL</button>
+                            )}
+                          </div>
+                          {[...pipelineStages, ...(["confirmed","tentative","cancelled","finished"].filter(k => !pipelineStages.find(s => s.key === k)).map(k => ({ key: k, label: k.charAt(0).toUpperCase() + k.slice(1), swatch: "#9ca3af" })))].map(s => (
+                            <label key={`excl-${s.key}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer">
+                              <input type="checkbox" checked={leadStatusExclude.includes(s.key)} onChange={() => toggleLeadStatusExclude(s.key)} className="cursor-pointer" />
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: (s as any).swatch ?? '#9ca3af' }} />
+                              <span className="text-xs font-inter text-ink/70">{s.label} <span className="text-ink/40">(hide)</span></span>
                             </label>
                           ))}
                         </div>
@@ -2727,14 +2756,17 @@ export default function Dashboard() {
                             ))}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-border/30">
+                        <tbody className="divide-y divide-white/50">
                           {filteredLeads.map((lead: any) => {
                             const statusStage = pipelineStages.find(s => s.key === lead.status);
+                            const rowBg = statusStage?.swatch ? statusStage.swatch + '22' : 'transparent';
                             return (
                               <tr key={lead.id}
                                 onClick={() => { if (!bulkSelectMode) { if (lead && !lead.readAt) markRead.mutate({ id: lead.id }); openEventDrawer({ ...lead, _isLead: true }); } }}
-                                className={`hover:bg-linen/60 transition-colors cursor-pointer ${selectedLeadIds.has(lead.id) ? "bg-forest/5" : ""}`}
-                                style={{ borderLeft: `3px solid ${statusStage?.swatch ?? '#d4c5a9'}` }}>
+                                className={`transition-colors cursor-pointer ${selectedLeadIds.has(lead.id) ? "brightness-90" : ""}`}
+                                style={{ backgroundColor: rowBg, borderLeft: `4px solid ${statusStage?.swatch ?? '#d4c5a9'}` }}
+                                onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.93)')}
+                                onMouseLeave={e => (e.currentTarget.style.filter = '')}>
                                 {bulkSelectMode && (
                                   <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                                     <input type="checkbox" checked={selectedLeadIds.has(lead.id)}
