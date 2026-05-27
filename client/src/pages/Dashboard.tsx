@@ -977,6 +977,7 @@ export default function Dashboard() {
   const [widgetSizes, setWidgetSizes] = useState<Record<string, 'half' | 'full'>>({});
   const [collapsedInboxSections, setCollapsedInboxSections] = useState<Set<string>>(new Set());
   const [showAddLead, setShowAddLead] = useState(false);
+  const [spendSectionOpen, setSpendSectionOpen] = useState(false);
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [enquiryPasteText, setEnquiryPasteText] = useState('');
   const [enquiryParsing, setEnquiryParsing] = useState(false);
@@ -2421,10 +2422,6 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Post-Event Spend Prompt — surfaces 2 days after event end */}
-              <PostEventSpendPrompt />
-              
-
               {/* Calendar + Sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Calendar card */}
@@ -2503,6 +2500,25 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* ── Record Actual Spend — collapsible, bottom of overview ─────── */}
+              <div className="mt-4 border border-gold/20 bg-white overflow-hidden">
+                <button
+                  onClick={() => setSpendSectionOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-linen/40 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-forest/60" />
+                    <span className="font-bebas tracking-widest text-sm text-ink/70">RECORD ACTUAL SPEND</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-ink/40 transition-transform duration-200 ${spendSectionOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {spendSectionOpen && (
+                  <div className="border-t border-gold/20">
+                    <PostEventSpendPrompt />
+                  </div>
+                )}
               </div>
             </div>
             );
@@ -2759,7 +2775,7 @@ export default function Dashboard() {
                         <tbody className="divide-y divide-white/50">
                           {filteredLeads.map((lead: any) => {
                             const statusStage = pipelineStages.find(s => s.key === lead.status);
-                            const rowBg = statusStage?.swatch ? statusStage.swatch + '22' : 'transparent';
+                            const rowBg = statusStage?.swatch ? statusStage.swatch + 'CC' : 'transparent';
                             return (
                               <tr key={lead.id}
                                 onClick={() => { if (!bulkSelectMode) { if (lead && !lead.readAt) markRead.mutate({ id: lead.id }); openEventDrawer({ ...lead, _isLead: true }); } }}
@@ -2775,9 +2791,9 @@ export default function Dashboard() {
                                   </td>
                                 )}
                                 <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink whitespace-nowrap">{lead.firstName} {lead.lastName}</td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/70 max-w-[160px] truncate">{lead.eventType || "—"}</td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : "—"}</td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/60 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[160px] truncate">{lead.eventType || "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
                                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                   <select
                                     value={lead.status}
