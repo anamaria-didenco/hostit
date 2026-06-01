@@ -287,6 +287,13 @@
       "when": 1779703600000,
       "tag": "0040_deposit_required",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1779800000000,
+      "tag": "0041_nbi_service_mappings",
+      "breakpoints": true
     }
   ]
 }
