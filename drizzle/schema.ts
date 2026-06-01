@@ -118,6 +118,10 @@ export const venueSettings = pgTable("venue_settings", {
   // if null we fall back to NBI's first available section for the picked service.
   nbiSectionId: varchar("nbiSectionId", { length: 100 }),
   nbiSyncEnabled: integer("nbiSyncEnabled").default(0),
+  // JSON array of space-to-service mappings so different venue spaces push
+  // to the correct NBI service/section.
+  // Shape: [{ spaceName: string, serviceId: string, sectionId: string }]
+  nbiServiceMappings: text("nbiServiceMappings"),
   // Per-venue secret token used in the inbound webhook URL so NowBookIt can
   // POST new/updated bookings into VenueFlowHQ. The secret IS the auth — it
   // appears in the URL path: /api/webhook/nowbookit/<secret>

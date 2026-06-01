@@ -474,12 +474,30 @@ export async function pushBookingToNbi(
       console.warn(`[NBI push:${opts.source}] booking ${bookingId} missing ${substituted.join(',')} — using placeholders`);
     }
 
+    // Resolve service/section: check per-space mappings first, then fall back
+    // to the global default configured in Settings → NowBookIt.
+    let resolvedServiceId = venue.nbiServiceId ?? undefined;
+    let resolvedSectionId = (venue as any).nbiSectionId ?? undefined;
+    const rawMappings = (venue as any).nbiServiceMappings;
+    if (rawMappings && booking.spaceName) {
+      try {
+        const mappings: { spaceName: string; serviceId: string; sectionId: string }[] = JSON.parse(rawMappings);
+        const spaceNameLower = (booking.spaceName ?? '').toLowerCase().trim();
+        const match = mappings.find(m => m.spaceName && spaceNameLower.includes(m.spaceName.toLowerCase().trim()));
+        if (match) {
+          if (match.serviceId) resolvedServiceId = match.serviceId;
+          if (match.sectionId) resolvedSectionId = match.sectionId;
+          console.log(`[NBI push:${opts.source}] booking ${bookingId} — space "${booking.spaceName}" matched mapping → service=${match.serviceId} section=${match.sectionId}`);
+        }
+      } catch { /* malformed JSON — ignore, use defaults */ }
+    }
+
     const result = await createNbiBooking(
       {
         accountId: venue.nbiAccountId!,
         venueId: venue.nbiVenueId!,
-        serviceId: venue.nbiServiceId ?? undefined,
-        sectionId: (venue as any).nbiSectionId ?? undefined,
+        serviceId: resolvedServiceId,
+        sectionId: resolvedSectionId,
       },
       {
         firstName,

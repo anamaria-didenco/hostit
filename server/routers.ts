@@ -13,7 +13,7 @@ import { enforceRateLimit, getRequestIp } from "./_core/rateLimit";
 const VENUE_SECRET_FIELDS = [
   "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFromName", "smtpFromEmail", "smtpSecure",
   "notificationEmail", "internalName",
-  "nbiApiKey", "nbiVenueId", "nbiAccountId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret",
+  "nbiApiKey", "nbiVenueId", "nbiAccountId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret", "nbiServiceMappings",
   "automatedTaskRules", "emailSignature", "emailSignatureLogo", "autoCancelTentative",
 ] as const;
 function stripVenueSecrets<T extends Record<string, any>>(row: T): T {
@@ -189,6 +189,7 @@ export const appRouter = router({
         nbiServiceId: z.string().optional(),
         nbiSectionId: z.string().optional(),
         nbiSyncEnabled: z.number().optional(),
+        nbiServiceMappings: z.string().optional(),
         emailSignature: z.string().optional(),
         emailSignatureLogo: z.string().optional(),
         customCourses: z.string().optional(),

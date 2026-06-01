@@ -1562,6 +1562,16 @@ export default function Dashboard() {
   });
   const [nbiServiceList, setNbiServiceList] = useState<{ id: string; name: string; serviceType: string; duration: number; sections?: { id: string; name: string }[] }[]>([]);
   const [nbiSelectedServiceId, setNbiSelectedServiceId] = useState<string>('');
+  // Space → service mappings UI state
+  const [nbiMappings, setNbiMappings] = useState<{ spaceName: string; serviceId: string; sectionId: string }[]>(() => {
+    try { return JSON.parse((venueSettings as any)?.nbiServiceMappings ?? '[]'); } catch { return []; }
+  });
+  // Re-sync when venueSettings loads
+  React.useEffect(() => {
+    if ((venueSettings as any)?.nbiServiceMappings) {
+      try { setNbiMappings(JSON.parse((venueSettings as any).nbiServiceMappings)); } catch {}
+    }
+  }, [(venueSettings as any)?.nbiServiceMappings]);
   // Auto-load NBI services when integrations tab opens with saved credentials
   const nbiAccountIdSaved = (venueSettings as any)?.nbiAccountId as string | undefined;
   const nbiVenueIdSaved = (venueSettings as any)?.nbiVenueId as string | undefined;
@@ -6122,6 +6132,81 @@ export default function Dashboard() {
                       </div>
                       <p className="font-dm text-[11px] text-ink/50 -mt-2">Pick the service (e.g. <em>Drinks &amp; Snacks</em>) and the section/area where bookings land. Use <strong>Whole Area</strong> for large groups — individual sections have pax caps that reject 50+ person bookings.</p>
 
+                      {/* ── Space → NBI Service mappings ──────────────────── */}
+                      <div className="border border-gold/20 bg-linen/30 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-bebas tracking-widest text-xs text-forest">SPACE → SERVICE ROUTING</div>
+                            <p className="font-dm text-[11px] text-ink/50 mt-0.5">Override the default service per space — e.g. Restaurant bookings → Restaurant service, Bar → Drinks &amp; Snacks. Space name matching is partial (case-insensitive).</p>
+                          </div>
+                          <button
+                            onClick={() => setNbiMappings(prev => [...prev, { spaceName: '', serviceId: '', sectionId: 'all' }])}
+                            className="font-bebas tracking-widest text-xs text-forest border border-forest/30 px-3 py-1.5 hover:bg-forest/5 flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <Plus className="w-3 h-3" /> ADD SPACE
+                          </button>
+                        </div>
+                        {nbiMappings.length === 0 && (
+                          <p className="font-dm text-xs text-ink/40 text-center py-2">No space mappings — all bookings use the default service above.</p>
+                        )}
+                        {nbiMappings.map((m, i) => (
+                          <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                            <input
+                              value={m.spaceName}
+                              onChange={e => setNbiMappings(prev => prev.map((x, j) => j === i ? { ...x, spaceName: e.target.value } : x))}
+                              placeholder="Space name (e.g. Restaurant)"
+                              className="col-span-4 border border-gold/30 bg-white text-xs px-2 py-1.5 focus:outline-none focus:border-forest font-dm"
+                            />
+                            <select
+                              value={m.serviceId}
+                              onChange={e => setNbiMappings(prev => prev.map((x, j) => j === i ? { ...x, serviceId: e.target.value } : x))}
+                              className="col-span-4 border border-gold/30 bg-white text-xs px-2 py-1.5 focus:outline-none focus:border-forest font-dm"
+                            >
+                              <option value="">— pick NBI service —</option>
+                              {(nbiServiceList ?? []).map((s: any) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={m.sectionId}
+                              onChange={e => setNbiMappings(prev => prev.map((x, j) => j === i ? { ...x, sectionId: e.target.value } : x))}
+                              className="col-span-3 border border-gold/30 bg-white text-xs px-2 py-1.5 focus:outline-none focus:border-forest font-dm"
+                            >
+                              <option value="all">Whole Area</option>
+                              {(() => {
+                                const svc = (nbiServiceList ?? []).find((s: any) => s.id === m.serviceId);
+                                return ((svc?.sections ?? []) as any[]).map((sec: any) => (
+                                  <option key={sec.id} value={sec.id}>{sec.name}</option>
+                                ));
+                              })()}
+                            </select>
+                            <button onClick={() => setNbiMappings(prev => prev.filter((_, j) => j !== i))} className="col-span-1 flex justify-center text-red-400 hover:text-red-600">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                        {nbiMappings.length > 0 && (
+                          <button
+                            onClick={() => {
+                              const accountId = (document.getElementById('nbi-account-id') as HTMLInputElement)?.value || (venueSettings as any)?.nbiAccountId || '';
+                              const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value || (venueSettings as any)?.nbiVenueId || '';
+                              const serviceId = (document.getElementById('nbi-service-id') as HTMLSelectElement)?.value || '';
+                              const sectionId = (document.getElementById('nbi-section-id') as HTMLSelectElement)?.value || 'all';
+                              updateSettings.mutate({
+                                nbiAccountId: accountId || undefined,
+                                nbiVenueId: venueId || undefined,
+                                nbiServiceId: serviceId || undefined,
+                                nbiSectionId: sectionId || undefined,
+                                nbiServiceMappings: JSON.stringify(nbiMappings),
+                              }, { onSuccess: () => toast.success('Space mappings saved') });
+                            }}
+                            className="w-full bg-forest hover:bg-forest/90 text-cream font-bebas tracking-widest text-xs py-2 transition-colors"
+                          >
+                            SAVE SPACE MAPPINGS
+                          </button>
+                        )}
+                      </div>
+
                       {/* Direction header — makes it obvious which way bookings flow */}
                       <div className="border-t border-gold/20 pt-3 mt-1">
                         <div className="font-bebas text-xs tracking-widest text-forest mb-2">VENUEFLOW → NOWBOOKIT (push bookings out)</div>
@@ -6137,7 +6222,7 @@ export default function Dashboard() {
                               if (!accountId || !venueId) { toast.error('Enter your Account ID and Venue ID first'); return; }
                               const serviceId = (document.getElementById('nbi-service-id') as HTMLSelectElement)?.value || '';
                               const sectionId = (document.getElementById('nbi-section-id') as HTMLSelectElement)?.value || '';
-                              updateSettings.mutate({ nbiAccountId: accountId, nbiVenueId: venueId, nbiServiceId: serviceId, nbiSectionId: sectionId || undefined, nbiSyncEnabled: nbiEnabled ? 0 : 1 });
+                              updateSettings.mutate({ nbiAccountId: accountId, nbiVenueId: venueId, nbiServiceId: serviceId, nbiSectionId: sectionId || undefined, nbiSyncEnabled: nbiEnabled ? 0 : 1, nbiServiceMappings: JSON.stringify(nbiMappings) });
                             }}
                           >
                             <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${nbiEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -6163,7 +6248,7 @@ export default function Dashboard() {
                               const venueId = (document.getElementById('nbi-venue-id') as HTMLInputElement)?.value;
                               const serviceId = (document.getElementById('nbi-service-id') as HTMLSelectElement)?.value;
                               const sectionId = (document.getElementById('nbi-section-id') as HTMLSelectElement)?.value;
-                              updateSettings.mutate({ nbiAccountId: accountId || undefined, nbiVenueId: venueId || undefined, nbiServiceId: serviceId || undefined, nbiSectionId: sectionId || undefined });
+                              updateSettings.mutate({ nbiAccountId: accountId || undefined, nbiVenueId: venueId || undefined, nbiServiceId: serviceId || undefined, nbiSectionId: sectionId || undefined, nbiServiceMappings: JSON.stringify(nbiMappings) });
                             }}
                             disabled={updateSettings.isPending}
                             className="font-bebas tracking-widest text-xs px-4 py-2 bg-forest text-cream hover:bg-forest/90 rounded disabled:opacity-50"
