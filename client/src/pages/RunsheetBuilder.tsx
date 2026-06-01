@@ -605,7 +605,7 @@ export default function RunsheetBuilder() {
         staffAssigned: '',
         sortOrder: fnbItems.length + i,
         // Carry catalogue pricing through so it shows up in the running total.
-        unitPrice: ci.priceCents != null ? Number(ci.priceCents) / 100 : (ci.price != null ? Number(ci.price) : null),
+        unitPrice: ci.priceCents != null ? Number(ci.priceCents) / 100 : (ci.price != null ? Number(ci.price) / 100 : null),
         _tempId: `cat-${Date.now()}-${i}`,
       }));
     const skipped = eligible.length - toAdd.length;
