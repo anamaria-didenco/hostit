@@ -1871,13 +1871,21 @@ export default function RunsheetBuilder() {
           >
             <FileText className="w-3.5 h-3.5" /> TEMPLATES
           </button>
-          <button
-            onClick={() => setPrintColumns(c => c === 1 ? 2 : 1)}
-            className="hidden md:flex font-bebas tracking-widest text-xs text-cream/70 hover:text-gold items-center gap-1.5 transition-colors px-2 py-1.5"
-            title={printColumns === 1 ? 'Switch to 2-column print' : 'Switch to 1-column print'}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" /> {printColumns === 1 ? '1 COL' : '2 COL'}
-          </button>
+          <div className="hidden md:flex items-center border border-cream/20 overflow-hidden" title="Print column layout">
+            <button
+              onClick={() => setPrintColumns(1)}
+              className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 transition-colors flex items-center gap-1 ${printColumns === 1 ? 'bg-gold text-ink' : 'text-cream/50 hover:text-gold'}`}
+            >
+              <LayoutGrid className="w-3 h-3" /> 1 COL
+            </button>
+            <div className="w-px h-4 bg-cream/20" />
+            <button
+              onClick={() => setPrintColumns(2)}
+              className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 transition-colors flex items-center gap-1 ${printColumns === 2 ? 'bg-gold text-ink' : 'text-cream/50 hover:text-gold'}`}
+            >
+              <LayoutGrid className="w-3 h-3" /> 2 COL
+            </button>
+          </div>
           <div className="relative">
             <button
               onClick={() => setPrintEditorOpen(v => !v)}
@@ -2474,7 +2482,7 @@ export default function RunsheetBuilder() {
         <div className="no-print flex border-b border-gold/20 overflow-x-auto">
           {[
             { id: 'timeline', label: 'TIMELINE', icon: <Clock className="w-4 h-4" />, count: items.length },
-            { id: 'fnb', label: 'F&B SHEET', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
+            { id: 'fnb', label: 'FOOD', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
             { id: 'drinks', label: 'DRINKS', icon: <Wine className="w-4 h-4" />, count: rsBarNotes ? ('✓' as any) : ((rsSelectedDrinks.length + rsCustomDrinks.length) || undefined) },
             { id: 'checklist', label: 'CHECKLIST', icon: <CheckSquare className="w-4 h-4" />, count: `${checkedCount}/${checklistItems.length}` },
             { id: 'tableplan', label: 'TABLE PLAN', icon: <LayoutGrid className="w-4 h-4" /> },
@@ -2780,7 +2788,7 @@ export default function RunsheetBuilder() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
               <div className="flex items-center gap-2">
                 <UtensilsCrossed className="w-4 h-4 text-gold" />
-                <span className="font-bebas tracking-widest text-sm text-ink">F&B SHEET</span>
+                <span className="font-bebas tracking-widest text-sm text-ink">FOOD</span>
                 <span className="text-xs text-ink/40 font-dm">({fnbItems.length} items)</span>
               </div>
               <div className="flex items-center gap-2">
@@ -2834,7 +2842,7 @@ export default function RunsheetBuilder() {
                   className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-sm px-4 py-2 flex items-center gap-1.5"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  {fnbSaving ? 'SAVING...' : 'SAVE F&B'}
+                  {fnbSaving ? 'SAVING...' : 'SAVE FOOD'}
                 </Button>
               </div>
             </div>
@@ -2975,7 +2983,7 @@ export default function RunsheetBuilder() {
             {/* Print F&B header */}
             <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-[var(--brand)]">
               <UtensilsCrossed className="w-4 h-4 text-white" />
-              <span className="font-bebas tracking-widest text-sm text-white">F&B SHEET</span>
+              <span className="font-bebas tracking-widest text-sm text-white">FOOD</span>
             </div>
 
             {/* Print: Dietary requirements summary at top of F&B sheet */}
@@ -2995,37 +3003,6 @@ export default function RunsheetBuilder() {
 
             {/* Items sub-tab wrapper */}
             <div className={fnbSubTab === 'items' ? '' : 'hidden print:block'}>
-            {/* ── BAR ARRANGEMENT (moved above F&B selections per user request) ─ */}
-            {(rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length) ? (
-              <div className="px-5 py-4 border-b border-gold/20 print:avoid-break bg-blue-50/30">
-                <div className="font-bebas tracking-widest text-xs text-forest mb-2">BAR ARRANGEMENT</div>
-                <div className="text-sm font-dm text-ink/80 capitalize mb-2">
-                  <span className="font-semibold">{rsBarOption.replace(/_/g, ' ')}</span>
-                  {rsTabAmount && (rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash')
-                    ? ` — Bar tab: $${Number(rsTabAmount).toLocaleString('en-NZ')}` : ''}
-                </div>
-                {rsBarNotes && (
-                  <div className="text-sm font-dm text-ink/70 whitespace-pre-wrap mb-2 bg-white border-l-2 border-blue-300 pl-2 py-1">
-                    {rsBarNotes}
-                  </div>
-                )}
-                {(rsSelectedDrinks.length > 0 || rsCustomDrinks.length > 0) && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {rsSelectedDrinks.map(k => {
-                      const found = DRINKS_MENU.flatMap((c: any) => c.items as any[]).find((i: any) => i.key === k);
-                      return (
-                        <span key={k} className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 font-dm border border-blue-200">
-                          {found ? found.name : k.replace(/_/g, ' ')}
-                        </span>
-                      );
-                    })}
-                    {rsCustomDrinks.map((d, i) => (
-                      <span key={i} className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 font-dm border border-amber-200">{d.name}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : null}
 
             {/* ── PROPOSAL F&B SUMMARY ─────────────────────────────────── */}
             {linkedProposalId && (proposalDrinks || (proposalQuote?.items && proposalQuote.items.length > 0) || (linkedProposal?.lineItems)) && (
@@ -5530,12 +5507,12 @@ export default function RunsheetBuilder() {
         );
       })()}
       <style>{`
+        .print-cols-2 { columns: 2; column-gap: 1.5rem; column-fill: auto; }
+        .print-cols-2 .group\/sortable { break-inside: avoid; }
         @media print {
           .no-print { display: none !important; }
           body { background: white; }
           @page { margin: 1cm 1.5cm; size: A4; }
-          .print-cols-2 { columns: 2; column-gap: 1.5rem; column-fill: auto; }
-          .print-cols-2 .group\/sortable { break-inside: avoid; }
           .vf-rich-content b, .vf-rich-content strong { font-weight: bold; }
           .vf-rich-content i, .vf-rich-content em { font-style: italic; }
           .vf-rich-content u { text-decoration: underline; }
