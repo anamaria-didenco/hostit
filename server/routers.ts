@@ -2264,6 +2264,139 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
 
     // ─── Weekly staff runsheet digest ──────────────────────────────────────
+    /** Generate the weekly runsheet email HTML without sending it. */
+    previewWeekly: protectedProcedure
+      .input(z.object({
+        weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        subject: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings, bookings: bookingsTable, runsheets, runsheetItems, fnbItems: fnbItemsTable } = await import('../drizzle/schema');
+        const { eq, and, gte, lte } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+
+        const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        const tz = vs?.timezone || 'Pacific/Auckland';
+        const weekStartDate = new Date(`${input.weekStart}T00:00:00`);
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekEndDate.getDate() + 6);
+        weekEndDate.setHours(23, 59, 59, 999);
+
+        const allBookings = await db.select().from(bookingsTable)
+          .where(and(
+            eq(bookingsTable.ownerId, ctx.user.id),
+            gte(bookingsTable.eventDate, weekStartDate),
+            lte(bookingsTable.eventDate, weekEndDate),
+          ))
+          .orderBy(bookingsTable.eventDate);
+
+        if (!allBookings.length) throw new Error('No events found for that week.');
+
+        const fmtDate = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+        const fmtTime = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true }).format(d);
+
+        const byDay: Map<string, typeof allBookings> = new Map();
+        for (const b of allBookings) {
+          const d = b.eventDate instanceof Date ? b.eventDate : new Date(b.eventDate as any);
+          const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+          if (!byDay.has(dayKey)) byDay.set(dayKey, []);
+          byDay.get(dayKey)!.push(b);
+        }
+
+        let dayBlocksHtml = '';
+        for (const [dayKey, dayBookings] of Array.from(byDay.entries()).sort()) {
+          const dayDate = new Date(`${dayKey}T12:00:00`);
+          const dayLabel = fmtDate(dayDate);
+          let eventsHtml = '';
+          for (const booking of dayBookings) {
+            const bDate = booking.eventDate instanceof Date ? booking.eventDate : new Date(booking.eventDate as any);
+            const timeLabel = fmtTime(bDate);
+            const name = [booking.firstName, booking.lastName].filter(Boolean).join(' ') || 'Unnamed Event';
+            const guestCount = booking.guestCount ?? '—';
+            const space = booking.spaceName ?? '';
+            const eventType = booking.eventType ?? '';
+            const [sheet] = await db.select().from(runsheets)
+              .where(and(eq(runsheets.bookingId, booking.id), eq(runsheets.ownerId, ctx.user.id)))
+              .orderBy(runsheets.createdAt).limit(1);
+            let timelineHtml = '';
+            let fnbHtml = '';
+            if (sheet) {
+              const items = await db.select().from(runsheetItems).where(eq(runsheetItems.runsheetId, sheet.id)).orderBy(runsheetItems.sortOrder);
+              if (items.length) {
+                timelineHtml = `<tr><td colspan="2" style="padding:6px 0 2px;font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#6b7280">TIMELINE</td></tr>` +
+                  items.map(it => {
+                    const t = it.time ? `<span style="font-family:monospace;color:#374151;min-width:48px;display:inline-block">${it.time}</span> ` : '';
+                    return `<tr><td style="padding:2px 0;font-size:13px;color:#374151" colspan="2">${t}${it.title ?? ''}${it.description ? `<span style="color:#6b7280"> — ${it.description}</span>` : ''}</td></tr>`;
+                  }).join('');
+              }
+              const fnb = await db.select().from(fnbItemsTable).where(and(eq(fnbItemsTable.runsheetId, sheet.id), eq(fnbItemsTable.ownerId, ctx.user.id)));
+              if (fnb.length) {
+                const foodItems = fnb.filter(f => (f.course ?? '') !== 'Drinks');
+                const drinkItems = fnb.filter(f => (f.course ?? '') === 'Drinks');
+                const renderFnbRows = (items: typeof fnb) => items.map(f =>
+                  `<tr><td style="padding:2px 0;font-size:13px;color:#374151">${f.qty && f.qty > 1 ? `${f.qty}× ` : ''}${f.dishName}${f.dietary ? ` <span style="font-size:11px;color:#d97706">[${f.dietary}]</span>` : ''}</td><td style="font-size:12px;color:#6b7280;text-align:right">${f.course ?? ''}</td></tr>`
+                ).join('');
+                if (foodItems.length) fnbHtml += `<tr><td colspan="2" style="padding:6px 0 2px;font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#6b7280">FOOD</td></tr>` + renderFnbRows(foodItems);
+                if (drinkItems.length) fnbHtml += `<tr><td colspan="2" style="padding:6px 0 2px;font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#6b7280">DRINKS</td></tr>` + renderFnbRows(drinkItems);
+              }
+            }
+            const metaRows = [
+              space && `<tr><td style="font-size:12px;color:#6b7280;padding:1px 0;width:80px">Space</td><td style="font-size:12px;color:#374151">${space}</td></tr>`,
+              eventType && `<tr><td style="font-size:12px;color:#6b7280;padding:1px 0">Type</td><td style="font-size:12px;color:#374151">${eventType}</td></tr>`,
+              booking.notes && `<tr><td style="font-size:12px;color:#6b7280;padding:1px 0;vertical-align:top">Notes</td><td style="font-size:12px;color:#374151">${booking.notes}</td></tr>`,
+            ].filter(Boolean).join('');
+            eventsHtml += `
+              <div style="background:#fff;border:1px solid #e5e7eb;margin-bottom:12px;border-radius:4px;overflow:hidden">
+                <div style="background:#f9f5f0;border-bottom:1px solid #e5e7eb;padding:10px 16px;display:flex;justify-content:space-between;align-items:baseline">
+                  <div>
+                    <span style="font-size:15px;font-weight:bold;color:#1a1209">${name}</span>
+                    ${eventType ? `<span style="font-size:12px;color:#6b7280;margin-left:8px">${eventType}</span>` : ''}
+                  </div>
+                  <div style="text-align:right;font-size:13px;color:#374151">
+                    <strong>${timeLabel}</strong> &nbsp;·&nbsp; ${guestCount} pax
+                  </div>
+                </div>
+                <div style="padding:12px 16px">
+                  <table style="width:100%;border-collapse:collapse">
+                    ${metaRows}${timelineHtml}${fnbHtml}
+                  </table>
+                  ${!sheet ? '<p style="font-size:12px;color:#9ca3af;margin:4px 0">No runsheet found for this event.</p>' : ''}
+                </div>
+              </div>`;
+          }
+          dayBlocksHtml += `
+            <div style="margin-bottom:24px">
+              <div style="background:#1a3a2a;color:#f5e6c8;padding:8px 16px;font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;border-radius:4px 4px 0 0">
+                ${dayLabel}
+              </div>
+              ${eventsHtml}
+            </div>`;
+        }
+
+        const venueName = vs?.name ?? 'Your Venue';
+        const subject = input.subject || `Staff Runsheets — Week of ${input.weekStart}`;
+        const html = `
+          <div style="font-family:sans-serif;max-width:700px;margin:0 auto;background:#f7f3ee;padding:24px">
+            <div style="background:#1a3a2a;color:#f5e6c8;padding:20px 24px;border-radius:8px 8px 0 0">
+              <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;opacity:0.7">${venueName}</div>
+              <div style="font-size:22px;font-weight:bold;margin-top:4px">Staff Runsheets</div>
+              <div style="font-size:13px;opacity:0.8;margin-top:2px">Week of ${fmtDate(weekStartDate)}</div>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
+              <p style="font-size:13px;color:#6b7280;margin:0 0 20px">
+                ${allBookings.length} event${allBookings.length !== 1 ? 's' : ''} this week. Please review your assigned shifts and reach out if anything needs clarifying.
+              </p>
+              ${dayBlocksHtml}
+              <div style="border-top:1px solid #e5e7eb;margin-top:16px;padding-top:12px;font-size:11px;color:#9ca3af;text-align:center">
+                Sent via VenueFlowHQ · ${venueName}
+              </div>
+            </div>
+          </div>`;
+        return { html, subject, eventCount: allBookings.length };
+      }),
+
     sendWeekly: protectedProcedure
       .input(z.object({
         /** Monday of the target week, YYYY-MM-DD */
@@ -2272,6 +2405,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         to: z.array(z.string().email()).min(1),
         /** Optional subject override */
         subject: z.string().optional(),
+        /** Pre-built HTML from preview (skips HTML generation if provided) */
+        html: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -2302,13 +2437,29 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
 
         if (!allBookings.length) throw new Error('No events found for that week.');
 
+        // If caller passed pre-built HTML (from preview/edit step), skip HTML generation
+        if (input.html) {
+          const subject = input.subject || `Staff Runsheets — Week of ${input.weekStart}`;
+          const transporter2 = nodemailer.default.createTransport({
+            host: vs.smtpHost, port: vs.smtpPort ?? 587,
+            secure: (vs.smtpSecure ?? 0) === 1 || (vs.smtpPort ?? 587) === 465,
+            auth: { user: vs.smtpUser, pass: vs.smtpPass },
+            tls: { rejectUnauthorized: false },
+          } as any);
+          const fromName2 = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
+          const fromEmail2 = vs.smtpFromEmail ?? vs.smtpUser!;
+          await transporter2.sendMail({
+            from: `"${fromName2}" <${fromEmail2}>`,
+            to: input.to,
+            replyTo: vs.notificationEmail ?? fromEmail2,
+            subject,
+            html: input.html,
+          });
+          return { success: true, eventCount: allBookings.length };
+        }
+
         // For each booking fetch its most recent runsheet + items + F&B
-        const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const fmtDate = (d: Date) => {
-          const local = new Intl.DateTimeFormat('en-NZ', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(d);
-          return local;
-        };
+        const fmtDate = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(d);
         const fmtTime = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true }).format(d);
 
         // Group bookings by calendar day
