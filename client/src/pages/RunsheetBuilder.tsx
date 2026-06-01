@@ -2686,11 +2686,14 @@ export default function RunsheetBuilder() {
                             <div>
                               <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DURATION (MINS)</label>
                               <Input
-                                type="number"
-                                min={0}
-                                value={item.duration > 0 ? item.duration : ''}
+                                type="text"
+                                inputMode="numeric"
+                                value={item.duration > 0 ? String(item.duration) : ''}
                                 placeholder="—"
-                                onChange={e => updateItemField(idx, "duration", Number(e.target.value) || 0)}
+                                onChange={e => {
+                                  const raw = e.target.value.replace(/[^\d]/g, '');
+                                  updateItemField(idx, "duration", raw === '' ? 0 : Number(raw));
+                                }}
                                 className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                               />
                             </div>
@@ -4713,8 +4716,8 @@ export default function RunsheetBuilder() {
                                 className="w-full font-mono text-xs text-forest font-semibold bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="HH:MM" />
                             </div>
                             <div className="col-span-1">
-                              <input type="number" value={item.duration ?? 30} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, duration: parseInt(e.target.value) || 30 } : p))}
-                                className="w-full text-xs text-ink/60 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" min={1} />
+                              <input type="text" inputMode="numeric" value={item.duration > 0 ? String(item.duration) : ''} onChange={e => { const raw = e.target.value.replace(/[^\d]/g, ''); setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, duration: raw === '' ? 0 : Number(raw) } : p)); }}
+                                className="w-full text-xs text-ink/60 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="—" />
                             </div>
                             <div className="col-span-4">
                               <input type="text" value={item.title ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, title: e.target.value } : p))}
