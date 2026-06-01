@@ -6106,10 +6106,10 @@ export default function Dashboard() {
                           <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SECTION / AREA</label>
                           <select
                             id="nbi-section-id"
-                            defaultValue={(venueSettings as any)?.nbiSectionId ?? ''}
+                            defaultValue={(venueSettings as any)?.nbiSectionId ?? 'all'}
                             className="w-full font-dm text-sm border border-gold/30 rounded px-3 py-2 bg-white focus:outline-none focus:border-forest"
                           >
-                            <option value="">Auto-pick first section</option>
+                            <option value="all">Whole Area (all sections) — recommended for large groups</option>
                             {(() => {
                               const selectedSvcId = nbiSelectedServiceId || (venueSettings as any)?.nbiServiceId || '';
                               const svc = (nbiServiceList ?? []).find((s: any) => s.id === selectedSvcId) || (nbiServiceList ?? [])[0];
@@ -6120,7 +6120,7 @@ export default function Dashboard() {
                           </select>
                         </div>
                       </div>
-                      <p className="font-dm text-[11px] text-ink/50 -mt-2">Pick the service (e.g. <em>Drinks &amp; Snacks</em>) and the section/area in your venue (e.g. <em>Bar Area Level 1</em>) where new VenueFlow bookings should land.</p>
+                      <p className="font-dm text-[11px] text-ink/50 -mt-2">Pick the service (e.g. <em>Drinks &amp; Snacks</em>) and the section/area where bookings land. Use <strong>Whole Area</strong> for large groups — individual sections have pax caps that reject 50+ person bookings.</p>
 
                       {/* Direction header — makes it obvious which way bookings flow */}
                       <div className="border-t border-gold/20 pt-3 mt-1">

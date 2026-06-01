@@ -158,10 +158,13 @@ function pickBestTime(
     }
   }
   // Prefer the user-configured section (e.g. "Bar Area") if it's present in this slot.
-  // Otherwise fall back to the first section returned by NBI, otherwise "all".
+  // Fall back to "all" (whole venue) so large groups aren't rejected by a
+  // section that has a lower capacity than the booking's pax count.
   const sections: any[] = best.sections ?? [];
-  const matched = preferredSectionId ? sections.find((s: any) => String(s.id) === String(preferredSectionId)) : null;
-  const sectionId = matched?.id ?? sections[0]?.id ?? "all";
+  const matched = preferredSectionId && preferredSectionId !== "all"
+    ? sections.find((s: any) => String(s.id) === String(preferredSectionId))
+    : null;
+  const sectionId = matched?.id ?? "all";
   // Return the human-readable list of what was actually offered so callers
   // can explain to the user when nothing matches their requested time.
   const available = times.map((t: any) => (t.time as string).slice(11, 16)).sort();
@@ -181,21 +184,48 @@ export async function createNbiBooking(
   payload: NbiBookingPayload
 ): Promise<NbiResult> {
   try {
-    // Step 1: load schedule
-    const schedUrl = `${NBI_API}/bookings/get-schedule/venue/${encodeURIComponent(
-      creds.venueId
-    )}?date=${payload.date}&numOfPeople=${payload.covers}&accountId=${encodeURIComponent(creds.accountId)}`;
-    const schedRes = await fetch(schedUrl, { method: "GET", headers: widgetHeaders() });
-    if (!schedRes.ok) {
-      const t = await schedRes.text().catch(() => "");
-      return { success: false, error: `Schedule lookup failed (${schedRes.status}): ${t.slice(0, 160)}` };
+    // Step 1: load schedule.
+    // NBI filters available slots by section capacity — large pax counts may return
+    // no slots if every section is below capacity. Fetch once with real covers; if
+    // that returns no bookable times for the chosen service, retry with covers=2 so
+    // we can at least find the service window, then send the real pax in the POST.
+    async function fetchSchedule(numOfPeople: number) {
+      const url = `${NBI_API}/bookings/get-schedule/venue/${encodeURIComponent(
+        creds.venueId
+      )}?date=${payload.date}&numOfPeople=${numOfPeople}&accountId=${encodeURIComponent(creds.accountId)}`;
+      const r = await fetch(url, { method: "GET", headers: widgetHeaders() });
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        return { ok: false as const, error: `Schedule lookup failed (${r.status}): ${t.slice(0, 160)}` };
+      }
+      return { ok: true as const, data: await r.json() as any };
     }
-    const sched: any = await schedRes.json();
+
+    let schedResult = await fetchSchedule(payload.covers);
+    if (!schedResult.ok) return { success: false, error: schedResult.error };
+    let sched = schedResult.data;
+
     if (!sched?.isVenueOpen) {
       return { success: false, error: sched?.blockoutMessage || "Venue is closed on that date in NowBookIt" };
     }
-    const services: any[] = sched?.services ?? [];
+    let services: any[] = sched?.services ?? [];
     if (!services.length) return { success: false, error: "NowBookIt returned no services for that date" };
+
+    // If the real pax count caused the chosen service to return no bookable slots
+    // (common for large groups — NBI hides sections below their min/max pax), retry
+    // the schedule fetch with covers=2 so we can find available times. We still
+    // send the real pax in the POST, which gives NBI correct capacity info.
+    const chosenService = (creds.serviceId && services.find((s: any) => String(s.id) === String(creds.serviceId)))
+      || services.find((s: any) => s.online !== false) || services[0];
+    const hasTimes = (chosenService?.times ?? []).filter((t: any) => !t.expired && !t.isBlockOut).length > 0;
+    if (!hasTimes && payload.covers > 2) {
+      console.log(`[NBI] No slots for ${payload.covers} pax — retrying schedule fetch with covers=2 to find service window`);
+      const fallbackResult = await fetchSchedule(2);
+      if (fallbackResult.ok && fallbackResult.data?.isVenueOpen) {
+        sched = fallbackResult.data;
+        services = sched?.services ?? [];
+      }
+    }
 
     // Normalize string comparison — NBI sometimes returns numeric ids while we
     // persist the configured value as a string from the <select>. Without this
