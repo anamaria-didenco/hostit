@@ -1703,6 +1703,9 @@ export default function Dashboard() {
   const [weeklyAttachBeos, setWeeklyAttachBeos] = React.useState(true);
   const [weeklyEventsData, setWeeklyEventsData] = React.useState<any>(null);
   const [weeklySending, setWeeklySending] = React.useState(false);
+  const [weeklyExtraEmails, setWeeklyExtraEmails] = React.useState('');
+  const [weeklyNewStaffName, setWeeklyNewStaffName] = React.useState('');
+  const [weeklyNewStaffEmail, setWeeklyNewStaffEmail] = React.useState('');
 
   const staffEmailsForWeekly = trpc.staffEmails.list.useQuery(undefined, { enabled: showWeeklyModal });
   React.useEffect(() => {
@@ -1744,23 +1747,22 @@ export default function Dashboard() {
     onError: (e: any) => toast.error(e.message || 'No events found for that week'),
   });
 
-  // Reload events when week changes (if modal is open)
-  React.useEffect(() => {
-    if (showWeeklyModal && weeklyWeekStart) {
-      setWeeklyEventsData(null);
-      setWeeklySubject('');
-      setWeeklyBody('');
-      getWeekEventsMutation.mutate({ weekStart: weeklyWeekStart });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weeklyWeekStart, showWeeklyModal]);
+  const loadWeeklyEvents = () => {
+    setWeeklyEventsData(null);
+    setWeeklySubject('');
+    setWeeklyBody('');
+    getWeekEventsMutation.mutate({ weekStart: weeklyWeekStart });
+  };
 
   const emailSendForWeekly = trpc.email.send.useMutation({
     onError: (e: any) => toast.error(e.message || 'Failed to send'),
   });
 
   const doSendWeeklyBriefing = async () => {
-    const recipients = Array.from(weeklySelectedStaff);
+    const adHoc = weeklyExtraEmails.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+    const recipients = Array.from(new Set([...Array.from(weeklySelectedStaff), ...adHoc.map(e => e.toLowerCase())]));
+    const invalidAdHoc = adHoc.filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    if (invalidAdHoc.length) { toast.error(`Invalid emails: ${invalidAdHoc.join(', ')}`); return; }
     if (!recipients.length) { toast.error('Select at least one recipient'); return; }
     const events: any[] = weeklyEventsData?.events ?? [];
     if (!events.length) { toast.error('No events loaded'); return; }
@@ -1797,6 +1799,7 @@ export default function Dashboard() {
       setWeeklyEventsData(null);
       setWeeklySubject('');
       setWeeklyBody('');
+      setWeeklyExtraEmails('');
     } catch (err: any) {
       toast.error(err?.message || 'Send failed', { id: tId });
     } finally {
@@ -8960,7 +8963,7 @@ export default function Dashboard() {
                 <div className="font-bebas tracking-widest text-cream text-base">EMAIL STAFF BRIEFING — WEEKLY</div>
                 <p className="font-dm text-cream/60 text-xs mt-0.5">Sends live runsheet links + BEO PDFs for the whole week</p>
               </div>
-              <button onClick={() => { setShowWeeklyModal(false); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); }}
+              <button onClick={() => { setShowWeeklyModal(false); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); setWeeklyExtraEmails(''); }}
                 className="text-cream/60 hover:text-cream transition-colors ml-4 flex-shrink-0">
                 <X className="w-5 h-5" />
               </button>
@@ -8969,40 +8972,49 @@ export default function Dashboard() {
             {/* Body */}
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
 
-              {/* Week picker */}
+              {/* Week picker + load button */}
               <div>
                 <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1">WEEK STARTING (MONDAY)</label>
-                <input type="date" value={weeklyWeekStart}
-                  onChange={e => setWeeklyWeekStart(e.target.value)}
-                  className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest" />
+                <div className="flex gap-2">
+                  <input type="date" value={weeklyWeekStart}
+                    onChange={e => { setWeeklyWeekStart(e.target.value); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); }}
+                    className="flex-1 border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest" />
+                  <button
+                    onClick={loadWeeklyEvents}
+                    disabled={getWeekEventsMutation.isPending}
+                    className="font-bebas tracking-widest text-xs px-4 py-2 bg-forest text-cream hover:bg-forest/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                  >
+                    {getWeekEventsMutation.isPending ? 'LOADING…' : weeklyEventsData ? '↻ RELOAD' : 'LOAD EVENTS'}
+                  </button>
+                </div>
               </div>
 
               {/* Events summary */}
-              <div>
-                <div className="font-bebas tracking-widest text-[11px] text-ink/50 mb-1.5">EVENTS THIS WEEK</div>
-                {getWeekEventsMutation.isPending ? (
-                  <p className="font-dm text-xs text-ink/40 py-2">Loading events…</p>
-                ) : !weeklyEventsData ? (
-                  <p className="font-dm text-xs text-ink/40 py-2 italic">No events loaded</p>
-                ) : (weeklyEventsData.events as any[]).length === 0 ? (
-                  <p className="font-dm text-xs text-red-500 py-2">No events found for this week</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {(weeklyEventsData.events as any[]).map((ev: any) => (
-                      <div key={ev.bookingId} className="flex items-start gap-2 px-3 py-2 bg-linen/50 border border-gold/20 rounded-sm">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-cormorant font-semibold text-sm text-ink">{ev.name}</div>
-                          <div className="font-dm text-xs text-ink/50">{ev.dateLabel} · {ev.timeLabel}{ev.guestCount ? ` · ${ev.guestCount} pax` : ''}{ev.spaceName ? ` · ${ev.spaceName}` : ''}</div>
-                        </div>
-                        <div className="flex gap-1 flex-shrink-0">
-                          {ev.staffPortalToken && <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-forest/10 text-forest border border-forest/20">LIVE LINK ✓</span>}
-                          <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-gold/10 text-amber-700 border border-gold/30">BEO ✓</span>
-                        </div>
-                      </div>
-                    ))}
+              {weeklyEventsData && (
+                <div>
+                  <div className="font-bebas tracking-widest text-[11px] text-ink/50 mb-1.5">
+                    EVENTS THIS WEEK ({(weeklyEventsData.events as any[]).length})
                   </div>
-                )}
-              </div>
+                  {(weeklyEventsData.events as any[]).length === 0 ? (
+                    <p className="font-dm text-xs text-red-500 py-2">No events found for this week</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {(weeklyEventsData.events as any[]).map((ev: any) => (
+                        <div key={ev.bookingId} className="flex items-start gap-2 px-3 py-2 bg-linen/50 border border-gold/20 rounded-sm">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-cormorant font-semibold text-sm text-ink">{ev.name}</div>
+                            <div className="font-dm text-xs text-ink/50">{ev.dateLabel} · {ev.timeLabel}{ev.guestCount ? ` · ${ev.guestCount} pax` : ''}{ev.spaceName ? ` · ${ev.spaceName}` : ''}</div>
+                          </div>
+                          <div className="flex gap-1 flex-shrink-0">
+                            {ev.staffPortalToken && <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-forest/10 text-forest border border-forest/20">LIVE LINK ✓</span>}
+                            <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-gold/10 text-amber-700 border border-gold/30">BEO ✓</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Subject */}
               <div>
@@ -9037,9 +9049,9 @@ export default function Dashboard() {
                 </label>
               </div>
 
-              {/* Recipients */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
+              {/* Recipients — saved staff */}
+              <div className="border border-gold/20">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-gold/20 bg-linen/30">
                   <span className="font-bebas tracking-widest text-[11px] text-ink/50">SAVED STAFF ({(staffEmailsForWeekly.data as any[] ?? []).length})</span>
                   <div className="flex items-center gap-2 text-[11px] font-dm">
                     <button onClick={() => setWeeklySelectedStaff(new Set((staffEmailsForWeekly.data as any[] ?? []).map((s: any) => s.email)))}
@@ -9050,13 +9062,13 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {staffEmailsForWeekly.isLoading ? (
-                  <p className="font-dm text-xs text-ink/40">Loading…</p>
+                  <p className="font-dm text-xs text-ink/40 px-3 py-2">Loading…</p>
                 ) : (staffEmailsForWeekly.data as any[] ?? []).length === 0 ? (
-                  <p className="font-dm text-xs text-ink/40 italic">No staff saved — add them in Settings → Team.</p>
+                  <p className="font-dm text-xs text-ink/40 italic px-3 py-2">No staff saved yet — add one below.</p>
                 ) : (
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                  <div className="space-y-0.5 max-h-36 overflow-y-auto p-2">
                     {(staffEmailsForWeekly.data as any[] ?? []).map((s: any) => (
-                      <label key={s.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-linen/60 rounded-sm cursor-pointer">
+                      <label key={s.id} className="flex items-center gap-2 px-1 py-1 hover:bg-linen/60 cursor-pointer">
                         <input type="checkbox" checked={weeklySelectedStaff.has(s.email)}
                           onChange={e => { const next = new Set(weeklySelectedStaff); e.target.checked ? next.add(s.email) : next.delete(s.email); setWeeklySelectedStaff(next); }}
                           className="accent-forest" />
@@ -9066,18 +9078,59 @@ export default function Dashboard() {
                     ))}
                   </div>
                 )}
+                {/* Add to saved list */}
+                <div className="border-t border-gold/20 px-3 py-2.5 space-y-2">
+                  <div className="font-bebas tracking-widest text-[10px] text-ink/40">ADD TO LIST</div>
+                  <div className="flex gap-1.5">
+                    <input value={weeklyNewStaffName} onChange={e => setWeeklyNewStaffName(e.target.value)}
+                      placeholder="Name" className="flex-1 border border-gold/30 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest" />
+                    <input value={weeklyNewStaffEmail} onChange={e => setWeeklyNewStaffEmail(e.target.value)}
+                      placeholder="email@venue.co.nz" type="email"
+                      className="flex-1 border border-gold/30 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest" />
+                    <button
+                      onClick={() => {
+                        if (!weeklyNewStaffName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(weeklyNewStaffEmail.trim())) return;
+                        trpc.staffEmails.add.mutate({ name: weeklyNewStaffName.trim(), email: weeklyNewStaffEmail.trim() }, {
+                          onSuccess: () => { staffEmailsForWeekly.refetch(); setWeeklyNewStaffName(''); setWeeklyNewStaffEmail(''); }
+                        });
+                      }}
+                      disabled={!weeklyNewStaffName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(weeklyNewStaffEmail.trim())}
+                      className="bg-forest text-cream font-bebas tracking-widest text-[11px] px-3 disabled:opacity-40"
+                    >ADD</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Extra ad-hoc emails */}
+              <div>
+                <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1">EXTRA EMAILS <span className="normal-case font-dm text-ink/30">(this send only)</span></label>
+                <textarea value={weeklyExtraEmails} onChange={e => setWeeklyExtraEmails(e.target.value)}
+                  placeholder="extra1@example.com, extra2@example.com"
+                  rows={2}
+                  className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest resize-none" />
+                {weeklyExtraEmails.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)).length > 0 && (
+                  <p className="font-dm text-[11px] text-red-600 mt-1">
+                    Invalid: {weeklyExtraEmails.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)).join(', ')}
+                  </p>
+                )}
               </div>
             </div>
 
             {/* Footer */}
             <div className="px-5 py-3 flex items-center justify-between gap-3 border-t border-gold/20 flex-shrink-0">
-              <div className="font-dm text-xs text-ink/60">
-                {weeklySelectedStaff.size === 0
-                  ? <span className="text-ink/40">Pick at least one recipient</span>
-                  : <span><b>{weeklySelectedStaff.size}</b> recipient{weeklySelectedStaff.size !== 1 ? 's' : ''}{weeklyEventsData ? `, ${(weeklyEventsData.events as any[]).length} event${(weeklyEventsData.events as any[]).length !== 1 ? 's' : ''}` : ''}</span>}
-              </div>
+              {(() => {
+                const adHoc = weeklyExtraEmails.split(/[,;\n]/).map((s: string) => s.trim()).filter(Boolean);
+                const totalR = weeklySelectedStaff.size + adHoc.length;
+                return (
+                  <div className="font-dm text-xs text-ink/60">
+                    {totalR === 0
+                      ? <span className="text-ink/40">Pick at least one recipient</span>
+                      : <span><b>{totalR}</b> recipient{totalR !== 1 ? 's' : ''}{weeklyEventsData ? `, ${(weeklyEventsData.events as any[]).length} event${(weeklyEventsData.events as any[]).length !== 1 ? 's' : ''}` : ''}</span>}
+                  </div>
+                );
+              })()}
               <div className="flex gap-2">
-                <button onClick={() => { setShowWeeklyModal(false); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); }}
+                <button onClick={() => { setShowWeeklyModal(false); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); setWeeklyExtraEmails(''); }}
                   disabled={weeklySending}
                   className="font-bebas tracking-widest text-xs px-4 py-2 border border-ink/20 text-ink/50 hover:text-ink hover:bg-ink/5 transition-colors disabled:opacity-40">CANCEL</button>
                 <button
