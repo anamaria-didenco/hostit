@@ -2264,6 +2264,106 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
 
     // ─── Weekly staff runsheet digest ──────────────────────────────────────
+    /**
+     * Return event data for a week — creates/returns staff portal tokens so the
+     * frontend can build a plain-text briefing email (matching the per-runsheet
+     * "Email Staff Briefing" flow) and attach each BEO PDF client-side.
+     */
+    getWeekEvents: protectedProcedure
+      .input(z.object({
+        weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings, bookings: bookingsTable, runsheets, staffPortalLinks } = await import('../drizzle/schema');
+        const { eq, and, gte, lte } = await import('drizzle-orm');
+        const cryptoMod = await import('crypto');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+
+        const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        const tz = vs?.timezone || 'Pacific/Auckland';
+        const weekStartDate = new Date(`${input.weekStart}T00:00:00`);
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekEndDate.getDate() + 6);
+        weekEndDate.setHours(23, 59, 59, 999);
+
+        const allBookings = await db.select().from(bookingsTable)
+          .where(and(
+            eq(bookingsTable.ownerId, ctx.user.id),
+            gte(bookingsTable.eventDate, weekStartDate),
+            lte(bookingsTable.eventDate, weekEndDate),
+          ))
+          .orderBy(bookingsTable.eventDate);
+
+        const fmtLong = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long' }).format(d);
+        const fmtTime = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true }).format(d);
+        const weekLabel = new Intl.DateTimeFormat('en-NZ', { timeZone: tz, day: 'numeric', month: 'long', year: 'numeric' }).format(weekStartDate);
+
+        const baseUrl = process.env.REPLIT_DEV_DOMAIN
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+          : process.env.REPLIT_DOMAINS
+            ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+            : 'https://venueflowhq.com';
+
+        const events: {
+          bookingId: number;
+          runsheetId: number | null;
+          name: string;
+          dateLabel: string;
+          timeLabel: string;
+          guestCount: number | null;
+          spaceName: string | null;
+          staffPortalToken: string | null;
+          staffPortalUrl: string | null;
+        }[] = [];
+
+        for (const booking of allBookings) {
+          const bDate = booking.eventDate instanceof Date ? booking.eventDate : new Date(booking.eventDate as any);
+          const name = [booking.firstName, booking.lastName].filter(Boolean).join(' ') || 'Unnamed Event';
+          const [sheet] = await db.select().from(runsheets)
+            .where(and(eq(runsheets.bookingId, booking.id), eq(runsheets.ownerId, ctx.user.id)))
+            .orderBy(runsheets.createdAt).limit(1);
+
+          let staffPortalToken: string | null = null;
+          if (sheet) {
+            const [existing] = await db.select().from(staffPortalLinks)
+              .where(eq(staffPortalLinks.runsheetId, sheet.id)).limit(1);
+            if (existing) {
+              staffPortalToken = existing.token;
+            } else {
+              staffPortalToken = cryptoMod.randomBytes(24).toString('hex');
+              await db.insert(staffPortalLinks).values({
+                ownerId: ctx.user.id,
+                runsheetId: sheet.id,
+                token: staffPortalToken,
+                label: name,
+              });
+            }
+          }
+
+          events.push({
+            bookingId: booking.id,
+            runsheetId: sheet?.id ?? null,
+            name,
+            dateLabel: fmtLong(bDate),
+            timeLabel: fmtTime(bDate),
+            guestCount: booking.guestCount ?? null,
+            spaceName: booking.spaceName ?? null,
+            staffPortalToken,
+            staffPortalUrl: staffPortalToken ? `${baseUrl}/staff/${staffPortalToken}` : null,
+          });
+        }
+
+        return {
+          events,
+          weekLabel,
+          venueName: vs?.name ?? '',
+          staffBriefingSubject: (vs as any)?.staffBriefingSubject as string ?? null,
+          staffBriefingBody: (vs as any)?.staffBriefingBody as string ?? null,
+        };
+      }),
+
     /** Generate the weekly runsheet email HTML without sending it. */
     previewWeekly: protectedProcedure
       .input(z.object({
