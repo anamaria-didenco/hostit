@@ -273,10 +273,35 @@ class SDKServer {
 
     const sessionUserId = session.openId;
     const signedInAt = new Date();
-    let user = await db.getUserByOpenId(sessionUserId);
+    let user: User | undefined;
+    try {
+      user = await db.getUserByOpenId(sessionUserId);
+    } catch (err) {
+      console.warn("[Auth] getUserByOpenId failed:", err);
+      user = undefined;
+    }
 
-    // If user not in DB, try to sync from OAuth (skip for local accounts)
-    if (!user && !sessionUserId.startsWith("local-")) {
+    // Local-admin (and other local-* synthetic accounts) work even without
+    // a database connection. This lets the password-only owner flow run on
+    // localhost dev without DATABASE_URL configured.
+    if (!user && sessionUserId.startsWith("local-")) {
+      return {
+        id: 0,
+        openId: sessionUserId,
+        name: session.name ?? "Admin",
+        email: null,
+        loginMethod: "local",
+        role: "admin",
+        workspaceOwnerId: null,
+        passwordHash: null,
+        lastSignedIn: signedInAt,
+        createdAt: signedInAt,
+        updatedAt: signedInAt,
+      } as unknown as User;
+    }
+
+    // If user not in DB, try to sync from OAuth (non-local accounts only)
+    if (!user) {
       try {
         const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
         await db.upsertUser({
@@ -297,10 +322,15 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
-    });
+    // Best-effort last-seen update — don't fail auth if it errors.
+    try {
+      await db.upsertUser({
+        openId: user.openId,
+        lastSignedIn: signedInAt,
+      });
+    } catch (err) {
+      console.warn("[Auth] lastSignedIn update failed:", err);
+    }
 
     return user;
   }

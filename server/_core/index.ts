@@ -272,14 +272,22 @@ async function startServer() {
       }
 
       const openId = "local-admin";
-      await upsertUser({
-        openId,
-        name: "Admin",
-        email: null,
-        loginMethod: "local",
-        role: "admin",
-        lastSignedIn: new Date(),
-      });
+      // Upsert is best-effort: if the database is unavailable (e.g. local dev
+      // without DATABASE_URL configured), we still want the password-only
+      // owner login to succeed. authenticateRequest handles local-* synthetic
+      // users for DB-less environments.
+      try {
+        await upsertUser({
+          openId,
+          name: "Admin",
+          email: null,
+          loginMethod: "local",
+          role: "admin",
+          lastSignedIn: new Date(),
+        });
+      } catch (dbErr) {
+        console.warn("[LocalLogin] DB upsert failed, continuing with synthetic local-admin:", dbErr);
+      }
 
       const token = await sdk.createSessionToken(openId, { name: "Admin" });
       const cookieOptions = getSessionCookieOptions(req);

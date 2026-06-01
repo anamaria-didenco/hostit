@@ -215,8 +215,17 @@ export async function createNbiBooking(
     // (common for large groups — NBI hides sections below their min/max pax), retry
     // the schedule fetch with covers=2 so we can find available times. We still
     // send the real pax in the POST, which gives NBI correct capacity info.
-    const chosenService = (creds.serviceId && services.find((s: any) => String(s.id) === String(creds.serviceId)))
-      || services.find((s: any) => s.online !== false) || services[0];
+    //
+    // NOTE: NBI service IDs have a random prefix that changes on every API call
+    // (e.g. service_VY6M9449HN0SR_1731261... vs service_NNNEO9UZ9YHNK_1731261...).
+    // We therefore match by service NAME (case-insensitive), which is stable.
+    // creds.serviceId is intentionally named "Id" for back-compat but stores the name.
+    const findService = (svcs: any[]) =>
+      (creds.serviceId && svcs.find((s: any) => s.name?.toLowerCase() === creds.serviceId!.toLowerCase())) ||
+      svcs.find((s: any) => s.online !== false) ||
+      svcs[0];
+
+    const chosenService = findService(services);
     const hasTimes = (chosenService?.times ?? []).filter((t: any) => !t.expired && !t.isBlockOut).length > 0;
     if (!hasTimes && payload.covers > 2) {
       console.log(`[NBI] No slots for ${payload.covers} pax — retrying schedule fetch with covers=2 to find service window`);
@@ -227,14 +236,7 @@ export async function createNbiBooking(
       }
     }
 
-    // Normalize string comparison — NBI sometimes returns numeric ids while we
-    // persist the configured value as a string from the <select>. Without this
-    // the configured "Drinks & Snacks" service can silently fall back to first
-    // online service, which then routes bookings to the wrong section/area.
-    const service =
-      (creds.serviceId && services.find((s) => String(s.id) === String(creds.serviceId))) ||
-      services.find((s) => s.online !== false) ||
-      services[0];
+    const service = findService(services);
 
     const slot = pickBestTime(service, payload.time, creds.sectionId);
     if (!slot) {
@@ -476,7 +478,9 @@ export async function pushBookingToNbi(
 
     // Resolve service/section: check per-space mappings first, then fall back
     // to the global default configured in Settings → NowBookIt.
-    let resolvedServiceId = venue.nbiServiceId ?? undefined;
+    // NOTE: both nbiServiceId and mapping.serviceId store the SERVICE NAME (not the
+    // ephemeral NBI service ID whose random prefix changes on every API call).
+    let resolvedServiceId = venue.nbiServiceId ?? undefined;  // actually stores service name
     let resolvedSectionId = (venue as any).nbiSectionId ?? undefined;
     const rawMappings = (venue as any).nbiServiceMappings;
     if (rawMappings && booking.spaceName) {
@@ -485,9 +489,9 @@ export async function pushBookingToNbi(
         const spaceNameLower = (booking.spaceName ?? '').toLowerCase().trim();
         const match = mappings.find(m => m.spaceName && spaceNameLower.includes(m.spaceName.toLowerCase().trim()));
         if (match) {
-          if (match.serviceId) resolvedServiceId = match.serviceId;
+          if (match.serviceId) resolvedServiceId = match.serviceId;  // service name
           if (match.sectionId) resolvedSectionId = match.sectionId;
-          console.log(`[NBI push:${opts.source}] booking ${bookingId} — space "${booking.spaceName}" matched mapping → service=${match.serviceId} section=${match.sectionId}`);
+          console.log(`[NBI push:${opts.source}] booking ${bookingId} — space "${booking.spaceName}" matched mapping → serviceName="${match.serviceId}" section=${match.sectionId}`);
         }
       } catch { /* malformed JSON — ignore, use defaults */ }
     }

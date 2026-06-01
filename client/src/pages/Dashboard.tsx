@@ -1561,6 +1561,7 @@ export default function Dashboard() {
     onError: (err) => toast.error(err.message || "Failed to send test email"),
   });
   const [nbiServiceList, setNbiServiceList] = useState<{ id: string; name: string; serviceType: string; duration: number; sections?: { id: string; name: string }[] }[]>([]);
+  // Stores the selected service NAME (not ID — NBI IDs have a random prefix that changes each API call)
   const [nbiSelectedServiceId, setNbiSelectedServiceId] = useState<string>('');
   // Space → service mappings UI state
   const [nbiMappings, setNbiMappings] = useState<{ spaceName: string; serviceId: string; sectionId: string }[]>(() => {
@@ -6108,7 +6109,7 @@ export default function Dashboard() {
                           >
                             <option value="">Auto-pick first available</option>
                             {(nbiServiceList ?? []).map((s: any) => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
+                              <option key={s.id} value={s.name}>{s.name}</option>
                             ))}
                           </select>
                         </div>
@@ -6121,8 +6122,8 @@ export default function Dashboard() {
                           >
                             <option value="all">Whole Area (all sections) — recommended for large groups</option>
                             {(() => {
-                              const selectedSvcId = nbiSelectedServiceId || (venueSettings as any)?.nbiServiceId || '';
-                              const svc = (nbiServiceList ?? []).find((s: any) => s.id === selectedSvcId) || (nbiServiceList ?? [])[0];
+                              const selectedSvcName = nbiSelectedServiceId || (venueSettings as any)?.nbiServiceId || '';
+                              const svc = (nbiServiceList ?? []).find((s: any) => s.name === selectedSvcName) || (nbiServiceList ?? [])[0];
                               return ((svc?.sections ?? []) as any[]).map((sec: any) => (
                                 <option key={sec.id} value={sec.id}>{sec.name}</option>
                               ));
@@ -6164,7 +6165,7 @@ export default function Dashboard() {
                             >
                               <option value="">— pick NBI service —</option>
                               {(nbiServiceList ?? []).map((s: any) => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
+                                <option key={s.id} value={s.name}>{s.name}</option>
                               ))}
                             </select>
                             <select
@@ -6174,7 +6175,7 @@ export default function Dashboard() {
                             >
                               <option value="all">Whole Area</option>
                               {(() => {
-                                const svc = (nbiServiceList ?? []).find((s: any) => s.id === m.serviceId);
+                                const svc = (nbiServiceList ?? []).find((s: any) => s.name === m.serviceId);
                                 return ((svc?.sections ?? []) as any[]).map((sec: any) => (
                                   <option key={sec.id} value={sec.id}>{sec.name}</option>
                                 ));
