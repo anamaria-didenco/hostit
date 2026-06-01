@@ -2901,7 +2901,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 {/* ── LIST VIEW sidebar ─────────────────────────────── */}
-                {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:block md:w-80 lg:w-96 flex-shrink-0" : "flex-1"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
+                {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:flex md:flex-col md:w-[360px] lg:w-[420px] flex-shrink-0" : "flex-1"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
                   {filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
@@ -2926,55 +2926,37 @@ export default function Dashboard() {
                         </label>
                       )}
                     <button onClick={() => { if (!bulkSelectMode) selectLead(lead); }}
-                      className={`flex-1 p-3 text-left hover:bg-linen transition-colors border-l-4 ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5" : ""}`}
+                      className={`flex-1 min-w-0 p-3 text-left hover:bg-linen transition-colors border-l-4 ${!bulkSelectMode && selectedLead?.id === lead.id ? "bg-forest/5" : ""}`}
                       style={{ borderLeftColor: pipelineStages.find(s => s.key === lead.status)?.swatch ?? '#d4c5a9' }}>
-                      <div className="flex items-start gap-3">
-                        {/* Left: name + contact */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <div className="font-cormorant font-semibold text-base text-ink truncate min-w-0 flex-1">{lead.firstName} {lead.lastName}</div>
-                            <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
-                              {pipelineStages.find(s => s.key === lead.status)?.label ?? lead.status.replace(/_/g, " ").toUpperCase()}
-                            </div>
-                          </div>
-                          <div className="font-dm text-xs text-ink/55 truncate">{lead.email}{lead.phone ? ` · ${lead.phone}` : ""}</div>
-                          <div className="font-dm text-xs text-ink/50 mt-0.5">
-                            {lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}
-                          </div>
-                        </div>
-                        {/* Right: dates */}
-                        <div className="flex-shrink-0 text-right space-y-1 min-w-[110px]">
-                          {lead.eventDate ? (
-                            <div>
-                              <div className="font-bebas text-[9px] tracking-widest text-sage/60 uppercase">Event Date</div>
-                              <div className="font-dm text-xs font-semibold text-forest">
-                                {new Date(lead.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                                {fmtEventTime(lead.eventDate) && (
-                                  <span className="text-forest/70"> · {fmtEventTime(lead.eventDate)}</span>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              <div className="font-bebas text-[9px] tracking-widest text-sage/40 uppercase">Event Date</div>
-                              <div className="font-dm text-xs text-ink/30 italic">not set</div>
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-bebas text-[9px] tracking-widest text-sage/60 uppercase">Enquiry</div>
-                            <div className="font-dm text-xs text-ink/50">
-                              {new Date(lead.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </div>
-                          </div>
-                          {lead.followUpDate && (() => {
-                            const d = new Date(lead.followUpDate);
-                            const overdue = d <= new Date() && !['booked','lost','cancelled'].includes(lead.status);
-                            if (overdue) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-red-100 text-red-700 block">OVERDUE</span>;
-                            if (d > new Date()) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-gold/20 text-amber-700 block">FOLLOW UP {d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>;
-                            return null;
-                          })()}
+                      {/* Row 1: name + status badge */}
+                      <div className="flex items-center gap-2 mb-0.5 min-w-0">
+                        <div className="font-cormorant font-semibold text-base text-ink truncate flex-1 min-w-0">{lead.firstName} {lead.lastName}</div>
+                        <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
+                          {pipelineStages.find(s => s.key === lead.status)?.label ?? lead.status.replace(/_/g, " ").toUpperCase()}
                         </div>
                       </div>
+                      {/* Row 2: email */}
+                      <div className="font-dm text-xs text-ink/55 truncate">{lead.email}{lead.phone ? ` · ${lead.phone}` : ""}</div>
+                      {/* Row 3: event type + date on one line */}
+                      <div className="flex items-center gap-2 mt-0.5 min-w-0 flex-wrap">
+                        <span className="font-dm text-xs text-ink/50 truncate">{lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}</span>
+                        {lead.eventDate ? (
+                          <span className="font-dm text-xs font-semibold text-forest whitespace-nowrap">
+                            {new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            {fmtEventTime(lead.eventDate) && <span className="text-forest/70"> · {fmtEventTime(lead.eventDate)}</span>}
+                          </span>
+                        ) : (
+                          <span className="font-dm text-xs text-ink/30 italic">no date</span>
+                        )}
+                      </div>
+                      {/* Row 4: follow-up badge if set */}
+                      {lead.followUpDate && (() => {
+                            const d = new Date(lead.followUpDate);
+                            const overdue = d <= new Date() && !['booked','lost','cancelled'].includes(lead.status);
+                            if (overdue) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-red-100 text-red-700 inline-block mt-1">OVERDUE</span>;
+                            if (d > new Date()) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-gold/20 text-amber-700 inline-block mt-1">FOLLOW UP {d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>;
+                            return null;
+                          })()}
                     </button>
                       </div>
                   ))}
