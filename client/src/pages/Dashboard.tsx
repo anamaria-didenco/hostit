@@ -1052,10 +1052,40 @@ export default function Dashboard() {
     { enabled: !!selectedLead?.id }
   );
   const drawerLeadId = selectedBooking?._isLead ? selectedBooking.id : null;
-  const { data: drawerLeadRunsheets } = trpc.runsheets.list.useQuery(
+  const { data: drawerLeadRunsheets, refetch: refetchDrawerRunsheets } = trpc.runsheets.list.useQuery(
     { leadId: drawerLeadId ?? 0 },
     { enabled: !!drawerLeadId }
   );
+  // Fetch runsheet F&B content when a runsheet exists for the open drawer lead
+  const drawerRunsheetId = drawerLeadRunsheets && drawerLeadRunsheets.length > 0
+    ? drawerLeadRunsheets[drawerLeadRunsheets.length - 1].id : null;
+  const { data: drawerFnbItems } = trpc.fnb.list.useQuery(
+    { runsheetId: drawerRunsheetId! },
+    { enabled: !!drawerRunsheetId }
+  );
+  // Inline payments sub-view state (for bookings only — not leads)
+  const [drawerPaymentsOpen, setDrawerPaymentsOpen] = React.useState(false);
+  const drawerBookingId = !selectedBooking?._isLead ? selectedBooking?.id ?? null : null;
+  const { data: drawerPayments, refetch: refetchDrawerPayments } = trpc.payments.list.useQuery(
+    { bookingId: drawerBookingId! },
+    { enabled: !!drawerBookingId && drawerPaymentsOpen }
+  );
+  const { data: drawerPaymentSummary, refetch: refetchDrawerPaymentSummary } = trpc.payments.summary.useQuery(
+    { bookingId: drawerBookingId! },
+    { enabled: !!drawerBookingId && drawerPaymentsOpen }
+  );
+  const refreshDrawerPayments = async () => {
+    await Promise.all([refetchDrawerPayments(), refetchDrawerPaymentSummary()]);
+  };
+  const addDrawerPaymentMutation = trpc.payments.add.useMutation({
+    onSuccess: async () => { toast.success('Payment recorded'); await refreshDrawerPayments(); setDrawerNewPayment({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: new Date().toISOString().split('T')[0], notes: '' }); },
+    onError: () => toast.error('Failed to record payment'),
+  });
+  const deleteDrawerPaymentMutation = trpc.payments.delete.useMutation({
+    onSuccess: async () => { toast.success('Payment removed'); await refreshDrawerPayments(); },
+    onError: () => toast.error('Failed to remove payment'),
+  });
+  const [drawerNewPayment, setDrawerNewPayment] = React.useState({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: new Date().toISOString().split('T')[0], notes: '' });
   const { data: venueSettings, refetch: refetchSettings } = trpc.venue.get.useQuery(
     { ownerId: user?.id },
     { enabled: !!user?.id }
@@ -1380,6 +1410,7 @@ export default function Dashboard() {
   const createRunsheet = trpc.runsheets.create.useMutation({
     onSuccess: (data, variables) => {
       toast.success('Runsheet created!');
+      utils.runsheets.list.invalidate();
       const leadParam = variables.leadId ? `&leadId=${variables.leadId}` : '';
       setLocation(`/runsheet?id=${data.id}${leadParam}`);
     },
@@ -1405,6 +1436,7 @@ export default function Dashboard() {
    */
   function openEventDrawer(item: any) {
     if (!item) return;
+    setDrawerPaymentsOpen(false);
     const isBookingType = item._type === 'booking' || (!('_type' in item) && 'leadId' in item && !item._isLead);
     if (isBookingType) { setSelectedBooking(item); return; }
     if (['booked', 'confirmed', 'finished'].includes(item.status)) {
@@ -2453,7 +2485,11 @@ export default function Dashboard() {
                             const isConfirmed = e.status === 'confirmed' || e.status === 'booked';
                             return (
                               <button key={e.id}
-                                onClick={() => openEventDrawer(e._type === 'booking' ? e : { ...e, _isLead: true })}
+                                onClick={() => {
+                                  // Merge with full lead data so the drawer has all fields
+                                  const fullItem = e._type === 'booking' ? e : (allLeads?.find((l: any) => l.id === e.id) ?? e);
+                                  openEventDrawer(e._type === 'booking' ? fullItem : { ...fullItem, _isLead: true });
+                                }}
                                 className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                                 <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} />
                                 <div className="flex-1 min-w-0">
@@ -7727,16 +7763,21 @@ export default function Dashboard() {
             {/* Body */}
             <div className="p-4 md:p-5 space-y-5 flex-1">
               {/* Status + Type */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${
-                  selectedBooking.status === 'confirmed' || selectedBooking.status === 'booked' ? 'text-forest bg-blue-50 border-blue-200'
-                  : selectedBooking.status === 'finished' ? 'text-teal-700 bg-teal-50 border-teal-200'
-                  : selectedBooking.status === 'tentative' ? 'text-amber-600 bg-amber-50 border-amber-200'
-                  : selectedBooking.status === 'new' ? 'text-amber-700 bg-amber-50 border-amber-200'
-                  : 'text-stone-500 bg-stone-50 border-stone-200'
-                }`}>{selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status) ? 'ENQUIRY' : (selectedBooking.status?.toUpperCase() ?? 'EVENT')}</span>
-                {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60">{selectedBooking.eventType}</span>}
-              </div>
+              {(() => {
+                const stage = pipelineStages.find(s => s.key === selectedBooking.status);
+                const swatch = stage?.swatch ?? '#888';
+                return (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bebas text-xs tracking-widest px-2 py-1 border"
+                      style={{ color: swatch, backgroundColor: swatch + '18', borderColor: swatch + '55' }}>
+                      {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status)
+                        ? (stage?.label ?? 'ENQUIRY').toUpperCase()
+                        : (stage?.label ?? selectedBooking.status ?? 'EVENT').toUpperCase()}
+                    </span>
+                    {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60">{selectedBooking.eventType}</span>}
+                  </div>
+                );
+              })()}
               {/* Quick Status Changer — works for both leads and bookings */}
               <div>
                 <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1.5">CHANGE STATUS</div>
@@ -8198,9 +8239,9 @@ export default function Dashboard() {
                         className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <CheckCircle className="w-3 h-3" /> CHECKLIST
                       </button>
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/payments?bookingId=${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs col-span-2">
-                        <DollarSign className="w-3 h-3" /> PAYMENTS
+                      <button onClick={() => setDrawerPaymentsOpen(v => !v)}
+                        className={`flex items-center gap-2 px-3 py-2 transition-colors font-bebas tracking-widest text-xs col-span-2 ${drawerPaymentsOpen ? 'bg-forest text-cream border border-forest' : 'border border-forest/30 text-forest hover:bg-forest/10'}`}>
+                        <DollarSign className="w-3 h-3" /> PAYMENTS {drawerPaymentsOpen ? '▲' : '▼'}
                       </button>
                       {(venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
                         <>
@@ -8256,6 +8297,166 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
+              {/* ── Inline Payments Panel (bookings only) ─────────────────── */}
+              {drawerPaymentsOpen && !selectedBooking._isLead && (
+                <div className="border border-gold/30 bg-linen/30 overflow-hidden">
+                  <div className="bg-forest-dark px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-3.5 h-3.5 text-gold" />
+                      <span className="font-bebas tracking-widest text-sm text-cream">PAYMENTS</span>
+                    </div>
+                    <button onClick={() => setDrawerPaymentsOpen(false)} className="text-cream/50 hover:text-cream"><X className="w-4 h-4" /></button>
+                  </div>
+                  {drawerPaymentSummary && (
+                    <div className="grid grid-cols-3 border-b border-gold/20 divide-x divide-gold/20">
+                      <div className="p-3 text-center">
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">TOTAL VALUE</div>
+                        <div className="font-cormorant text-lg font-semibold text-ink">${Number(drawerPaymentSummary.total ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                      <div className="p-3 text-center bg-green-50/60">
+                        <div className="font-bebas tracking-widest text-[10px] text-green-700">PAID</div>
+                        <div className="font-cormorant text-lg font-semibold text-green-700">${Number(drawerPaymentSummary.totalPaid).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                      <div className={`p-3 text-center ${drawerPaymentSummary.outstanding > 0 ? 'bg-red-50/60' : 'bg-green-50/60'}`}>
+                        <div className={`font-bebas tracking-widest text-[10px] ${drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>OUTSTANDING</div>
+                        <div className={`font-cormorant text-lg font-semibold ${drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>${Number(drawerPaymentSummary.outstanding).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    </div>
+                  )}
+                  {/* Payment history */}
+                  {drawerPayments && drawerPayments.length > 0 && (
+                    <div className="divide-y divide-gold/10 max-h-40 overflow-y-auto">
+                      {drawerPayments.map((p: any) => (
+                        <div key={p.id} className="flex items-center justify-between px-4 py-2 group">
+                          <div>
+                            <span className="font-bebas tracking-widest text-xs text-forest capitalize">{p.type.replace(/_/g, ' ')}</span>
+                            <span className="font-dm text-xs text-ink/50 ml-2">{p.method?.replace(/_/g, ' ')}</span>
+                            {p.notes && <div className="font-dm text-[11px] text-ink/40">{p.notes}</div>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-right">
+                              <div className="font-cormorant font-semibold text-sm text-ink">${Number(p.amount).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                              <div className="font-dm text-[10px] text-ink/40">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                            </div>
+                            <button onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(!drawerPayments || drawerPayments.length === 0) && (
+                    <div className="px-4 py-4 text-center font-dm text-xs text-ink/40">No payments recorded yet</div>
+                  )}
+                  {/* Add payment form */}
+                  <div className="border-t border-gold/20 bg-white/50 p-4 space-y-2">
+                    <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-2">RECORD PAYMENT</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="number" step="0.01" min="0"
+                        value={drawerNewPayment.amount}
+                        onChange={e => setDrawerNewPayment(p => ({ ...p, amount: e.target.value }))}
+                        placeholder="Amount (NZD)"
+                        className="text-xs rounded-sm border-gold/30 focus-visible:ring-0 focus-visible:border-forest h-8"
+                      />
+                      <Input
+                        type="date"
+                        value={drawerNewPayment.paidAt}
+                        onChange={e => setDrawerNewPayment(p => ({ ...p, paidAt: e.target.value }))}
+                        className="text-xs rounded-sm border-gold/30 focus-visible:ring-0 focus-visible:border-forest h-8"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select value={drawerNewPayment.type} onChange={e => setDrawerNewPayment(p => ({ ...p, type: e.target.value }))}
+                        className="border border-gold/30 bg-white text-xs px-2 py-1.5 h-8 focus:outline-none focus:border-forest">
+                        <option value="deposit">Deposit</option>
+                        <option value="partial">Partial</option>
+                        <option value="final">Final</option>
+                        <option value="refund">Refund</option>
+                        <option value="other">Other</option>
+                      </select>
+                      <select value={drawerNewPayment.method} onChange={e => setDrawerNewPayment(p => ({ ...p, method: e.target.value }))}
+                        className="border border-gold/30 bg-white text-xs px-2 py-1.5 h-8 focus:outline-none focus:border-forest">
+                        <option value="bank_transfer">Bank Transfer</option>
+                        <option value="eftpos">EFTPOS</option>
+                        <option value="cash">Cash</option>
+                        <option value="credit_card">Credit Card</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <Input
+                      value={drawerNewPayment.notes}
+                      onChange={e => setDrawerNewPayment(p => ({ ...p, notes: e.target.value }))}
+                      placeholder="Notes (optional)"
+                      className="text-xs rounded-sm border-gold/30 focus-visible:ring-0 focus-visible:border-forest h-8"
+                    />
+                    <button
+                      disabled={!drawerNewPayment.amount || addDrawerPaymentMutation.isPending}
+                      onClick={() => {
+                        if (!drawerBookingId || !drawerNewPayment.amount) return;
+                        addDrawerPaymentMutation.mutate({
+                          bookingId: drawerBookingId,
+                          amount: parseFloat(drawerNewPayment.amount),
+                          type: drawerNewPayment.type as any,
+                          method: drawerNewPayment.method as any,
+                          paidAt: drawerNewPayment.paidAt,
+                          notes: drawerNewPayment.notes || undefined,
+                        });
+                      }}
+                      className="w-full bg-forest hover:bg-forest/90 text-cream font-bebas tracking-widest text-xs py-2 transition-colors disabled:opacity-40">
+                      {addDrawerPaymentMutation.isPending ? 'SAVING...' : '+ RECORD PAYMENT'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Runsheet F&B summary (lead drawer) ────────────────────── */}
+              {selectedBooking._isLead && drawerRunsheetId && drawerFnbItems && drawerFnbItems.length > 0 && (() => {
+                const foodItems = (drawerFnbItems as any[]).filter(i => i.course !== 'Drinks' && i.dishName?.trim());
+                const drinkItems = (drawerFnbItems as any[]).filter(i => i.course === 'Drinks' && i.dishName?.trim());
+                const courses = [...new Set(foodItems.map((i: any) => i.course).filter(Boolean))];
+                return (
+                  <div className="border border-gold/20 overflow-hidden">
+                    <div className="bg-forest-dark px-4 py-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <UtensilsCrossed className="w-3.5 h-3.5 text-gold" />
+                        <span className="font-bebas tracking-widest text-xs text-cream">FOOD & DRINKS (FROM RUNSHEET)</span>
+                      </div>
+                      <button onClick={() => setLocation(`/runsheet?id=${drawerRunsheetId}&leadId=${selectedBooking.id}`)} className="font-bebas tracking-widest text-[10px] text-gold hover:text-gold/80">EDIT →</button>
+                    </div>
+                    <div className="divide-y divide-gold/10">
+                      {courses.map(course => {
+                        const items = foodItems.filter((i: any) => i.course === course);
+                        return (
+                          <div key={course} className="px-4 py-2">
+                            <div className="font-bebas tracking-widest text-[10px] text-forest mb-1">{course}</div>
+                            <div className="space-y-0.5">
+                              {items.map((item: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between">
+                                  <span className="font-dm text-xs text-ink">{item.dishName}{item.dietary ? <span className="text-ink/40 ml-1">({item.dietary})</span> : null}</span>
+                                  {item.qty > 1 && <span className="font-dm text-[11px] text-ink/40">×{item.qty}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {drinkItems.length > 0 && (
+                        <div className="px-4 py-2">
+                          <div className="font-bebas tracking-widest text-[10px] text-forest mb-1">DRINKS</div>
+                          <div className="flex flex-wrap gap-1">
+                            {drinkItems.map((item: any, idx: number) => (
+                              <span key={idx} className="bg-cream border border-gold/30 font-dm text-[11px] px-2 py-0.5 text-ink/70">{item.dishName}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {selectedBooking.notes && (
                 <div>
                   <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">NOTES</div>
