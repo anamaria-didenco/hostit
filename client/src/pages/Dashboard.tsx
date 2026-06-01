@@ -1703,6 +1703,9 @@ export default function Dashboard() {
   const [weeklyPreviewHtml, setWeeklyPreviewHtml] = React.useState<string | null>(null);
   const [weeklyEditedHtml, setWeeklyEditedHtml] = React.useState('');
   const [weeklyEditMode, setWeeklyEditMode] = React.useState(false);
+  const [weeklyIntro, setWeeklyIntro] = React.useState('');
+  const [weeklyIncludeStaffLinks, setWeeklyIncludeStaffLinks] = React.useState(false);
+  const [weeklyIncludeBeoLinks, setWeeklyIncludeBeoLinks] = React.useState(false);
 
   const staffEmailsForWeekly = trpc.staffEmails.list.useQuery(undefined, { enabled: showWeeklyModal });
   React.useEffect(() => {
@@ -1727,6 +1730,9 @@ export default function Dashboard() {
       setWeeklyPreviewHtml(null);
       setWeeklyEditedHtml('');
       setWeeklyEditMode(false);
+      setWeeklyIntro('');
+      setWeeklyIncludeStaffLinks(false);
+      setWeeklyIncludeBeoLinks(false);
     },
     onError: (e) => toast.error(e.message || 'Failed to send'),
   });
@@ -8881,32 +8887,23 @@ export default function Dashboard() {
       {showWeeklyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
           <div
-            className={`bg-white w-full shadow-2xl flex flex-col transition-all duration-200 ${weeklyPreviewHtml ? 'max-w-4xl' : 'max-w-md'}`}
-            style={{ maxHeight: '92vh' }}
+            className={`bg-white w-full shadow-2xl flex flex-col ${weeklyPreviewHtml ? 'max-w-6xl' : 'max-w-lg'}`}
+            style={{ height: '90vh' }}
           >
             {/* Header */}
-            <div className="bg-forest px-6 py-4 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-3">
-                {weeklyPreviewHtml && (
-                  <button
-                    onClick={() => { setWeeklyPreviewHtml(null); setWeeklyEditedHtml(''); setWeeklyEditMode(false); }}
-                    className="text-cream/70 hover:text-cream transition-colors flex items-center gap-1 font-bebas tracking-widest text-xs"
-                  >
-                    <ChevronLeft className="w-4 h-4" /> BACK
-                  </button>
-                )}
-                <div>
-                  <div className="font-bebas tracking-widest text-cream text-lg">
-                    {weeklyPreviewHtml ? 'EMAIL PREVIEW' : 'SEND WEEKLY RUNSHEETS'}
-                  </div>
-                  <p className="font-dm text-cream/60 text-xs mt-0.5">
-                    {weeklyPreviewHtml
-                      ? 'Review your email below — toggle EDIT to make changes before sending'
-                      : 'Email all events for the selected week to staff'}
-                  </p>
+            <div className="bg-forest px-6 py-3 flex items-center justify-between flex-shrink-0">
+              <div>
+                <div className="font-bebas tracking-widest text-cream text-lg">
+                  {weeklyPreviewHtml ? 'PREVIEW & EDIT EMAIL' : 'SEND WEEKLY RUNSHEETS'}
                 </div>
+                <p className="font-dm text-cream/60 text-xs">
+                  {weeklyPreviewHtml ? 'Edit the email on the left — preview updates on refresh' : 'Email all events for the selected week to staff'}
+                </p>
               </div>
-              <button onClick={() => { setShowWeeklyModal(false); setWeeklyPreviewHtml(null); setWeeklyEditedHtml(''); setWeeklyEditMode(false); }} className="text-cream/60 hover:text-cream transition-colors">
+              <button
+                onClick={() => { setShowWeeklyModal(false); setWeeklyPreviewHtml(null); setWeeklyEditedHtml(''); setWeeklyEditMode(false); }}
+                className="text-cream/60 hover:text-cream transition-colors ml-4 flex-shrink-0"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -8918,12 +8915,8 @@ export default function Dashboard() {
                   {/* Week picker */}
                   <div>
                     <label className="font-bebas tracking-widest text-xs text-sage block mb-1">WEEK STARTING (MONDAY)</label>
-                    <input
-                      type="date"
-                      value={weeklyWeekStart}
-                      onChange={e => setWeeklyWeekStart(e.target.value)}
-                      className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest"
-                    />
+                    <input type="date" value={weeklyWeekStart} onChange={e => setWeeklyWeekStart(e.target.value)}
+                      className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest" />
                     {weeklyWeekStart && (
                       <p className="font-dm text-xs text-ink/40 mt-1">
                         Covers {new Date(weeklyWeekStart + 'T12:00:00').toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
@@ -8932,33 +8925,39 @@ export default function Dashboard() {
                       </p>
                     )}
                   </div>
-
-                  {/* Subject override */}
+                  {/* Subject */}
                   <div>
                     <label className="font-bebas tracking-widest text-xs text-sage block mb-1">SUBJECT <span className="normal-case font-dm text-ink/30">(optional)</span></label>
-                    <input
-                      type="text"
-                      value={weeklySubject}
-                      onChange={e => setWeeklySubject(e.target.value)}
+                    <input type="text" value={weeklySubject} onChange={e => setWeeklySubject(e.target.value)}
                       placeholder={`Staff Runsheets — Week of ${weeklyWeekStart}`}
-                      className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest"
-                    />
+                      className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest" />
                   </div>
-
-                  {/* Staff recipients */}
+                  {/* Attachments / links */}
+                  <div>
+                    <label className="font-bebas tracking-widest text-xs text-sage block mb-2">INCLUDE IN EACH EVENT</label>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2.5 cursor-pointer group">
+                        <input type="checkbox" checked={weeklyIncludeStaffLinks} onChange={e => setWeeklyIncludeStaffLinks(e.target.checked)} className="accent-forest w-4 h-4" />
+                        <span className="font-dm text-sm text-ink group-hover:text-forest transition-colors">Staff live runsheet link</span>
+                        <span className="font-dm text-xs text-ink/35">— view runsheet in browser</span>
+                      </label>
+                      <label className="flex items-center gap-2.5 cursor-pointer group">
+                        <input type="checkbox" checked={weeklyIncludeBeoLinks} onChange={e => setWeeklyIncludeBeoLinks(e.target.checked)} className="accent-forest w-4 h-4" />
+                        <span className="font-dm text-sm text-ink group-hover:text-forest transition-colors">BEO PDF download link</span>
+                        <span className="font-dm text-xs text-ink/35">— Banquet Event Order PDF</span>
+                      </label>
+                    </div>
+                  </div>
+                  {/* Recipients */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="font-bebas tracking-widest text-xs text-sage">RECIPIENTS</label>
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => setWeeklySelectedStaff(new Set((staffEmailsForWeekly.data as any[] ?? []).map((s: any) => s.email)))}
-                          className="font-bebas tracking-widest text-[10px] text-forest hover:underline"
-                        >ALL</button>
+                        <button onClick={() => setWeeklySelectedStaff(new Set((staffEmailsForWeekly.data as any[] ?? []).map((s: any) => s.email)))}
+                          className="font-bebas tracking-widest text-[10px] text-forest hover:underline">ALL</button>
                         <span className="text-ink/20">·</span>
-                        <button
-                          onClick={() => setWeeklySelectedStaff(new Set())}
-                          className="font-bebas tracking-widest text-[10px] text-ink/40 hover:text-ink/60"
-                        >NONE</button>
+                        <button onClick={() => setWeeklySelectedStaff(new Set())}
+                          className="font-bebas tracking-widest text-[10px] text-ink/40 hover:text-ink/60">NONE</button>
                       </div>
                     </div>
                     {staffEmailsForWeekly.isLoading ? (
@@ -8966,19 +8965,12 @@ export default function Dashboard() {
                     ) : (staffEmailsForWeekly.data as any[] ?? []).length === 0 ? (
                       <p className="font-dm text-xs text-ink/40 py-2">No staff emails saved. Add them in Settings → Team.</p>
                     ) : (
-                      <div className="space-y-1 max-h-40 overflow-y-auto border border-gold/20 p-2">
+                      <div className="space-y-1 max-h-36 overflow-y-auto border border-gold/20 p-2">
                         {(staffEmailsForWeekly.data as any[] ?? []).map((s: any) => (
                           <label key={s.id} className="flex items-center gap-2 px-1 py-0.5 hover:bg-linen/50 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={weeklySelectedStaff.has(s.email)}
-                              onChange={e => {
-                                const next = new Set(weeklySelectedStaff);
-                                e.target.checked ? next.add(s.email) : next.delete(s.email);
-                                setWeeklySelectedStaff(next);
-                              }}
-                              className="accent-forest"
-                            />
+                            <input type="checkbox" checked={weeklySelectedStaff.has(s.email)}
+                              onChange={e => { const next = new Set(weeklySelectedStaff); e.target.checked ? next.add(s.email) : next.delete(s.email); setWeeklySelectedStaff(next); }}
+                              className="accent-forest" />
                             <span className="font-dm text-sm text-ink">{s.name}</span>
                             <span className="font-dm text-xs text-ink/40">{s.email}</span>
                           </label>
@@ -8987,90 +8979,155 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-gold/20 flex items-center justify-between flex-shrink-0 bg-linen/30">
-                  <span className="font-dm text-xs text-ink/40">
-                    {weeklySelectedStaff.size} recipient{weeklySelectedStaff.size !== 1 ? 's' : ''} selected
-                  </span>
+                  <span className="font-dm text-xs text-ink/40">{weeklySelectedStaff.size} recipient{weeklySelectedStaff.size !== 1 ? 's' : ''} selected</span>
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => { setShowWeeklyModal(false); setWeeklyPreviewHtml(null); }}
-                      className="font-bebas tracking-widest text-xs px-4 py-2 border border-ink/20 text-ink/60 hover:bg-ink/5 transition-colors"
-                    >CANCEL</button>
+                    <button onClick={() => setShowWeeklyModal(false)}
+                      className="font-bebas tracking-widest text-xs px-4 py-2 border border-ink/20 text-ink/60 hover:bg-ink/5 transition-colors">CANCEL</button>
                     <button
                       disabled={previewWeeklyMutation.isPending}
-                      onClick={() => previewWeeklyMutation.mutate({ weekStart: weeklyWeekStart, subject: weeklySubject || undefined })}
-                      className="font-bebas tracking-widest text-xs px-4 py-2 border border-forest text-forest hover:bg-forest/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
-                    >
-                      {previewWeeklyMutation.isPending ? 'LOADING…' : 'PREVIEW EMAIL'}
-                    </button>
-                    <button
-                      disabled={weeklySelectedStaff.size === 0 || sendWeeklyMutation.isPending}
-                      onClick={() => sendWeeklyMutation.mutate({
+                      onClick={() => previewWeeklyMutation.mutate({
                         weekStart: weeklyWeekStart,
-                        to: Array.from(weeklySelectedStaff),
                         subject: weeklySubject || undefined,
+                        customIntro: weeklyIntro || undefined,
+                        includeStaffLinks: weeklyIncludeStaffLinks,
+                        includeBeoLinks: weeklyIncludeBeoLinks,
                       })}
                       className="font-bebas tracking-widest text-xs px-4 py-2 bg-forest text-cream hover:bg-forest/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
                     >
-                      <Mail className="w-3 h-3" />
-                      {sendWeeklyMutation.isPending ? 'SENDING…' : 'SEND NOW'}
+                      {previewWeeklyMutation.isPending ? 'BUILDING…' : 'PREVIEW & EDIT →'}
                     </button>
                   </div>
                 </div>
               </>
             )}
 
-            {/* ── STEP 2: Preview / Edit ── */}
+            {/* ── STEP 2: Side-by-side edit + preview ── */}
             {weeklyPreviewHtml && (
-              <>
-                {/* Toggle bar */}
-                <div className="flex items-center gap-3 px-6 py-2 border-b border-gold/15 bg-linen/40 flex-shrink-0">
-                  <span className="font-bebas tracking-widest text-[10px] text-sage">VIEW AS:</span>
-                  <button
-                    onClick={() => setWeeklyEditMode(false)}
-                    className={`font-bebas tracking-widest text-xs px-3 py-1 border transition-colors ${!weeklyEditMode ? 'bg-forest text-cream border-forest' : 'border-ink/20 text-ink/50 hover:text-ink/80'}`}
-                  >RENDERED</button>
-                  <button
-                    onClick={() => setWeeklyEditMode(true)}
-                    className={`font-bebas tracking-widest text-xs px-3 py-1 border transition-colors ${weeklyEditMode ? 'bg-forest text-cream border-forest' : 'border-ink/20 text-ink/50 hover:text-ink/80'}`}
-                  >EDIT HTML</button>
-                  {weeklyEditMode && weeklyEditedHtml !== weeklyPreviewHtml && (
-                    <span className="font-dm text-[10px] text-amber-600 ml-auto">● unsaved edits</span>
-                  )}
+              <div className="flex flex-1 min-h-0">
+                {/* Left: edit panel */}
+                <div className="w-80 flex-shrink-0 border-r border-gold/20 flex flex-col bg-linen/20">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* Subject */}
+                    <div>
+                      <label className="font-bebas tracking-widest text-[10px] text-sage block mb-1">SUBJECT</label>
+                      <input type="text" value={weeklySubject} onChange={e => setWeeklySubject(e.target.value)}
+                        placeholder={`Staff Runsheets — Week of ${weeklyWeekStart}`}
+                        className="w-full border border-gold/30 px-2 py-1.5 font-dm text-xs focus:outline-none focus:border-forest bg-white" />
+                    </div>
+                    {/* Intro text */}
+                    <div>
+                      <label className="font-bebas tracking-widest text-[10px] text-sage block mb-1">INTRO PARAGRAPH</label>
+                      <textarea
+                        rows={4}
+                        value={weeklyIntro}
+                        onChange={e => setWeeklyIntro(e.target.value)}
+                        placeholder="Leave blank for default intro text"
+                        className="w-full border border-gold/30 px-2 py-1.5 font-dm text-xs focus:outline-none focus:border-forest bg-white resize-none"
+                      />
+                    </div>
+                    {/* Link options */}
+                    <div>
+                      <label className="font-bebas tracking-widest text-[10px] text-sage block mb-2">INCLUDE IN EACH EVENT</label>
+                      <div className="space-y-1.5">
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input type="checkbox" checked={weeklyIncludeStaffLinks} onChange={e => setWeeklyIncludeStaffLinks(e.target.checked)} className="accent-forest w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <span className="font-dm text-xs text-ink">Staff live runsheet link</span>
+                            <div className="font-dm text-[10px] text-ink/40">view runsheet in browser</div>
+                          </div>
+                        </label>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input type="checkbox" checked={weeklyIncludeBeoLinks} onChange={e => setWeeklyIncludeBeoLinks(e.target.checked)} className="accent-forest w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <span className="font-dm text-xs text-ink">BEO PDF download link</span>
+                            <div className="font-dm text-[10px] text-ink/40">Banquet Event Order</div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                    {/* Refresh preview */}
+                    <button
+                      disabled={previewWeeklyMutation.isPending}
+                      onClick={() => previewWeeklyMutation.mutate({
+                        weekStart: weeklyWeekStart,
+                        subject: weeklySubject || undefined,
+                        customIntro: weeklyIntro || undefined,
+                        includeStaffLinks: weeklyIncludeStaffLinks,
+                        includeBeoLinks: weeklyIncludeBeoLinks,
+                      })}
+                      className="w-full font-bebas tracking-widest text-xs py-2 border border-forest text-forest hover:bg-forest/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {previewWeeklyMutation.isPending ? 'REFRESHING…' : '↻ REFRESH PREVIEW'}
+                    </button>
+                    {/* Edit raw HTML toggle */}
+                    <div className="border-t border-gold/20 pt-3">
+                      <label className="font-bebas tracking-widest text-[10px] text-sage block mb-2">ADVANCED</label>
+                      <button
+                        onClick={() => setWeeklyEditMode(m => !m)}
+                        className={`w-full font-bebas tracking-widest text-xs py-1.5 border transition-colors ${weeklyEditMode ? 'bg-ink/10 border-ink/30 text-ink' : 'border-ink/20 text-ink/50 hover:text-ink/80'}`}
+                      >
+                        {weeklyEditMode ? 'HIDE HTML EDITOR' : 'EDIT RAW HTML'}
+                      </button>
+                    </div>
+                    {/* Recipients */}
+                    <div className="border-t border-gold/20 pt-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="font-bebas tracking-widest text-[10px] text-sage">RECIPIENTS</label>
+                        <div className="flex gap-2">
+                          <button onClick={() => setWeeklySelectedStaff(new Set((staffEmailsForWeekly.data as any[] ?? []).map((s: any) => s.email)))}
+                            className="font-bebas tracking-widest text-[9px] text-forest hover:underline">ALL</button>
+                          <span className="text-ink/20 text-[9px]">·</span>
+                          <button onClick={() => setWeeklySelectedStaff(new Set())}
+                            className="font-bebas tracking-widest text-[9px] text-ink/40 hover:text-ink/60">NONE</button>
+                        </div>
+                      </div>
+                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                        {(staffEmailsForWeekly.data as any[] ?? []).map((s: any) => (
+                          <label key={s.id} className="flex items-center gap-1.5 py-0.5 cursor-pointer">
+                            <input type="checkbox" checked={weeklySelectedStaff.has(s.email)}
+                              onChange={e => { const next = new Set(weeklySelectedStaff); e.target.checked ? next.add(s.email) : next.delete(s.email); setWeeklySelectedStaff(next); }}
+                              className="accent-forest w-3 h-3" />
+                            <span className="font-dm text-xs text-ink truncate">{s.name}</span>
+                            <span className="font-dm text-[10px] text-ink/40 truncate">{s.email}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Left footer */}
+                  <div className="px-4 py-3 border-t border-gold/20 bg-linen/40 flex-shrink-0">
+                    <button
+                      onClick={() => { setWeeklyPreviewHtml(null); setWeeklyEditMode(false); }}
+                      className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink flex items-center gap-1"
+                    >
+                      <ChevronLeft className="w-3 h-3" /> BACK
+                    </button>
+                  </div>
                 </div>
 
-                {/* Preview / Edit area */}
-                <div className="flex-1 overflow-hidden">
-                  {!weeklyEditMode ? (
-                    <iframe
-                      key="preview"
-                      srcDoc={weeklyEditedHtml}
-                      className="w-full h-full border-0"
-                      title="Email preview"
-                      sandbox="allow-same-origin"
-                    />
-                  ) : (
+                {/* Right: preview */}
+                <div className="flex-1 flex flex-col min-w-0">
+                  {weeklyEditMode ? (
                     <textarea
-                      className="w-full h-full p-4 font-mono text-xs text-ink/80 bg-gray-50 border-0 resize-none focus:outline-none"
+                      className="flex-1 w-full p-4 font-mono text-xs text-ink/80 bg-gray-50 border-0 resize-none focus:outline-none"
                       value={weeklyEditedHtml}
                       onChange={e => setWeeklyEditedHtml(e.target.value)}
                       spellCheck={false}
                     />
+                  ) : (
+                    <iframe
+                      key={weeklyEditedHtml.length}
+                      srcDoc={weeklyEditedHtml}
+                      style={{ flex: 1, width: '100%', border: 'none', display: 'block' }}
+                      title="Email preview"
+                      sandbox="allow-same-origin"
+                    />
                   )}
-                </div>
-
-                {/* Footer */}
-                <div className="px-6 py-4 border-t border-gold/20 flex items-center justify-between flex-shrink-0 bg-linen/30">
-                  <span className="font-dm text-xs text-ink/40">
-                    Sending to {weeklySelectedStaff.size} recipient{weeklySelectedStaff.size !== 1 ? 's' : ''}
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { setWeeklyPreviewHtml(null); setWeeklyEditedHtml(''); setWeeklyEditMode(false); }}
-                      className="font-bebas tracking-widest text-xs px-4 py-2 border border-ink/20 text-ink/60 hover:bg-ink/5 transition-colors"
-                    >← BACK</button>
+                  {/* Right footer */}
+                  <div className="px-6 py-3 border-t border-gold/20 flex items-center justify-between flex-shrink-0 bg-linen/30">
+                    <span className="font-dm text-xs text-ink/40">{weeklySelectedStaff.size} recipient{weeklySelectedStaff.size !== 1 ? 's' : ''}</span>
                     <button
                       disabled={weeklySelectedStaff.size === 0 || sendWeeklyMutation.isPending}
                       onClick={() => sendWeeklyMutation.mutate({
@@ -9079,14 +9136,14 @@ export default function Dashboard() {
                         subject: weeklySubject || undefined,
                         html: weeklyEditedHtml,
                       })}
-                      className="font-bebas tracking-widest text-xs px-4 py-2 bg-forest text-cream hover:bg-forest/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+                      className="font-bebas tracking-widest text-sm px-6 py-2 bg-forest text-cream hover:bg-forest/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
                     >
-                      <Mail className="w-3 h-3" />
+                      <Mail className="w-4 h-4" />
                       {sendWeeklyMutation.isPending ? 'SENDING…' : 'SEND NOW'}
                     </button>
                   </div>
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>

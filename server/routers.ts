@@ -2269,11 +2269,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .input(z.object({
         weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         subject: z.string().optional(),
+        /** Override the intro paragraph shown under the header */
+        customIntro: z.string().optional(),
+        /** Append a "View live runsheet →" link to each event card */
+        includeStaffLinks: z.boolean().optional(),
+        /** Append a "Download BEO PDF →" link to each event card */
+        includeBeoLinks: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
-        const { venueSettings, bookings: bookingsTable, runsheets, runsheetItems, fnbItems: fnbItemsTable } = await import('../drizzle/schema');
+        const { venueSettings, bookings: bookingsTable, runsheets, runsheetItems, fnbItems: fnbItemsTable, staffPortalLinks } = await import('../drizzle/schema');
         const { eq, and, gte, lte } = await import('drizzle-orm');
+        const cryptoMod = await import('crypto');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
 
@@ -2293,6 +2300,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .orderBy(bookingsTable.eventDate);
 
         if (!allBookings.length) throw new Error('No events found for that week.');
+
+        const baseUrl = process.env.REPLIT_DEV_DOMAIN
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+          : process.env.REPLIT_DOMAINS
+            ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+            : 'https://venueflowhq.com';
 
         const fmtDate = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(d);
         const fmtTime = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true }).format(d);
@@ -2347,6 +2360,31 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               eventType && `<tr><td style="font-size:12px;color:#6b7280;padding:1px 0">Type</td><td style="font-size:12px;color:#374151">${eventType}</td></tr>`,
               booking.notes && `<tr><td style="font-size:12px;color:#6b7280;padding:1px 0;vertical-align:top">Notes</td><td style="font-size:12px;color:#374151">${booking.notes}</td></tr>`,
             ].filter(Boolean).join('');
+
+            // Build action links row
+            const actionLinks: string[] = [];
+            if (input.includeStaffLinks && sheet) {
+              const [existingLink] = await db.select().from(staffPortalLinks)
+                .where(eq(staffPortalLinks.runsheetId, sheet.id)).limit(1);
+              const token = existingLink?.token ?? (() => {
+                const t = cryptoMod.randomBytes(24).toString('hex');
+                db.insert(staffPortalLinks).values({ ownerId: ctx.user.id, runsheetId: sheet.id, token: t, label: name }).catch(() => {});
+                return t;
+              })();
+              actionLinks.push(`<a href="${baseUrl}/staff/${token}" style="display:inline-block;background:#1a3a2a;color:#f5e6c8;text-decoration:none;font-size:11px;font-weight:bold;letter-spacing:1px;padding:5px 12px;border-radius:3px">VIEW LIVE RUNSHEET →</a>`);
+            }
+            if (input.includeBeoLinks) {
+              let beoToken = (booking as any).beoShareToken as string | null;
+              if (!beoToken) {
+                beoToken = cryptoMod.randomBytes(16).toString('hex');
+                await db.update(bookingsTable).set({ beoShareToken: beoToken }).where(eq(bookingsTable.id, booking.id));
+              }
+              actionLinks.push(`<a href="${baseUrl}/api/beo/public/${beoToken}" style="display:inline-block;background:#f9f5f0;color:#1a3a2a;text-decoration:none;font-size:11px;font-weight:bold;letter-spacing:1px;padding:5px 12px;border-radius:3px;border:1px solid #d4c5a9">DOWNLOAD BEO PDF →</a>`);
+            }
+            const actionRow = actionLinks.length
+              ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0ebe3;display:flex;gap:8px;flex-wrap:wrap">${actionLinks.join('')}</div>`
+              : '';
+
             eventsHtml += `
               <div style="background:#fff;border:1px solid #e5e7eb;margin-bottom:12px;border-radius:4px;overflow:hidden">
                 <div style="background:#f9f5f0;border-bottom:1px solid #e5e7eb;padding:10px 16px;display:flex;justify-content:space-between;align-items:baseline">
@@ -2363,6 +2401,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                     ${metaRows}${timelineHtml}${fnbHtml}
                   </table>
                   ${!sheet ? '<p style="font-size:12px;color:#9ca3af;margin:4px 0">No runsheet found for this event.</p>' : ''}
+                  ${actionRow}
                 </div>
               </div>`;
           }
@@ -2377,23 +2416,26 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
 
         const venueName = vs?.name ?? 'Your Venue';
         const subject = input.subject || `Staff Runsheets — Week of ${input.weekStart}`;
-        const html = `
-          <div style="font-family:sans-serif;max-width:700px;margin:0 auto;background:#f7f3ee;padding:24px">
-            <div style="background:#1a3a2a;color:#f5e6c8;padding:20px 24px;border-radius:8px 8px 0 0">
-              <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;opacity:0.7">${venueName}</div>
-              <div style="font-size:22px;font-weight:bold;margin-top:4px">Staff Runsheets</div>
-              <div style="font-size:13px;opacity:0.8;margin-top:2px">Week of ${fmtDate(weekStartDate)}</div>
-            </div>
-            <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
-              <p style="font-size:13px;color:#6b7280;margin:0 0 20px">
-                ${allBookings.length} event${allBookings.length !== 1 ? 's' : ''} this week. Please review your assigned shifts and reach out if anything needs clarifying.
-              </p>
-              ${dayBlocksHtml}
-              <div style="border-top:1px solid #e5e7eb;margin-top:16px;padding-top:12px;font-size:11px;color:#9ca3af;text-align:center">
-                Sent via VenueFlowHQ · ${venueName}
-              </div>
-            </div>
-          </div>`;
+        const introText = input.customIntro?.trim()
+          || `${allBookings.length} event${allBookings.length !== 1 ? 's' : ''} this week. Please review your assigned shifts and reach out if anything needs clarifying.`;
+        const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f7f3ee">
+<div style="font-family:sans-serif;max-width:700px;margin:0 auto;background:#f7f3ee;padding:24px">
+  <div style="background:#1a3a2a;color:#f5e6c8;padding:20px 24px;border-radius:8px 8px 0 0">
+    <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;opacity:0.7">${venueName}</div>
+    <div style="font-size:22px;font-weight:bold;margin-top:4px">Staff Runsheets</div>
+    <div style="font-size:13px;opacity:0.8;margin-top:2px">Week of ${fmtDate(weekStartDate)}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
+    <p style="font-size:13px;color:#6b7280;margin:0 0 20px;white-space:pre-wrap">${introText}</p>
+    ${dayBlocksHtml}
+    <div style="border-top:1px solid #e5e7eb;margin-top:16px;padding-top:12px;font-size:11px;color:#9ca3af;text-align:center">
+      Sent via VenueFlowHQ · ${venueName}
+    </div>
+  </div>
+</div>
+</body></html>`;
         return { html, subject, eventCount: allBookings.length };
       }),
 
