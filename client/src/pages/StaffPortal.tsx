@@ -633,6 +633,15 @@ export default function StaffPortal() {
           </div>
         )}
 
+        {/* ── Footer note ── */}
+        {(runsheet as any).footerText && (
+          <div className="bg-linen/60 border border-gold/30 shadow-sm">
+            <div className="px-5 py-4">
+              <div className="font-dm text-sm vf-rich-content text-ink/80" dangerouslySetInnerHTML={{ __html: (runsheet as any).footerText }} />
+            </div>
+          </div>
+        )}
+
         </>)}
 
         {/* ── Checklist Tab ── */}

@@ -1713,6 +1713,10 @@ export default function Dashboard() {
       setWeeklySelectedStaff(new Set((staffEmailsForWeekly.data as any[]).map((s: any) => s.email)));
     }
   }, [staffEmailsForWeekly.data, showWeeklyModal]);
+  const addStaffForWeeklyMutation = trpc.staffEmails.add.useMutation({
+    onSuccess: () => { staffEmailsForWeekly.refetch(); setWeeklyNewStaffName(''); setWeeklyNewStaffEmail(''); },
+    onError: (e: any) => toast.error(e.message || 'Could not add staff member'),
+  });
 
   const getWeekEventsMutation = trpc.email.getWeekEvents.useMutation({
     onSuccess: (data: any) => {
@@ -1736,7 +1740,9 @@ export default function Dashboard() {
       ];
       for (const ev of events) {
         lines.push(`── ${ev.name} · ${ev.dateLabel} · ${ev.timeLabel}${ev.guestCount ? ` · ${ev.guestCount} pax` : ''}${ev.spaceName ? ` · ${ev.spaceName}` : ''}`);
-        if (ev.staffPortalUrl) lines.push(`Live runsheet (updates as we edit): ${ev.staffPortalUrl}`);
+        // Build the live link from the CURRENT origin (venueflowhq.com) — never the
+        // server's REPLIT_DEV_DOMAIN, which points at the non-running dev instance.
+        if (ev.staffPortalToken) lines.push(`Live runsheet (updates as we edit): ${window.location.origin}/staff/${ev.staffPortalToken}`);
         lines.push('');
       }
       lines.push('BEO PDFs for all events are attached for printing or offline reference.');
@@ -4287,7 +4293,7 @@ export default function Dashboard() {
                     })()}
                     {(() => {
                       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-                      return [
+                      const list = [
                         ...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })),
                         ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' })),
                       ]
@@ -4307,52 +4313,77 @@ export default function Dashboard() {
                           }
                           return eventSortDir === 'asc' ? cmp : -cmp;
                         });
-                    })().map((item: any) => {
-                        const si = getStatusInfo(item.status);
-                        return (
-                          <div
-                            key={item.id}
-                            className="flex items-stretch border-b border-white/30 overflow-hidden transition-all hover:brightness-95"
-                            style={{ backgroundColor: si.swatch + '33' }}
-                          >
-                            <div className="w-1 flex-shrink-0" style={{ backgroundColor: si.swatch }} />
-                            <div className="flex-1 p-3 flex items-center justify-between gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="font-cormorant font-semibold text-base text-ink">{item.firstName} {item.lastName}</div>
-                                <div className="font-dm text-xs text-ink/70 truncate">
+                      if (list.length === 0) return null;
+                      const GRID = '1.6fr 1.3fr 1.4fr 0.6fr 1.1fr auto';
+                      return (
+                        <>
+                          {/* Column header — desktop only */}
+                          <div className="hidden lg:grid items-center gap-3 px-4 pb-1" style={{ gridTemplateColumns: GRID }}>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">NAME</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">EVENT TYPE</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">EVENT DATE</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">GUESTS</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">STATUS</span>
+                            <span></span>
+                          </div>
+                          {list.map((item: any) => {
+                            const si = getStatusInfo(item.status);
+                            return (
+                              <div key={item.id}
+                                className="rounded-xl px-4 py-3 transition-all hover:brightness-95 flex flex-col gap-1.5 lg:grid lg:items-center lg:gap-3"
+                                style={{ backgroundColor: (si.swatch ?? '#d4c5a9') + 'CC', borderLeft: `4px solid ${si.swatch ?? '#d4c5a9'}`, gridTemplateColumns: GRID }}>
+                                {/* Name */}
+                                <div className="font-cormorant font-semibold text-base text-ink truncate min-w-0">{item.firstName} {item.lastName}</div>
+                                {/* Event type */}
+                                <div className="font-dm text-xs text-ink/75 truncate min-w-0">
+                                  <span className="lg:hidden font-bebas tracking-widest text-[10px] text-ink/40 mr-1">TYPE</span>
                                   {item.eventType || (item._type === 'booking' ? 'Event' : 'Enquiry')}
-                                  {' · '}{new Date(item.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
-                                  {fmtEventTime(item.eventDate) && ` · ${fmtEventTime(item.eventDate)}`}
-                                  {item.guestCount ? ` · ${item.guestCount} guests` : ''}
-                                  {item.company ? ` · ${item.company}` : ''}
+                                </div>
+                                {/* Date */}
+                                <div className="font-dm text-xs text-ink/75 whitespace-nowrap">
+                                  {new Date(item.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}{fmtEventTime(item.eventDate) ? ` · ${fmtEventTime(item.eventDate)}` : ''}
+                                </div>
+                                {/* Guests */}
+                                <div className="font-dm text-xs text-ink/75">
+                                  <span className="lg:hidden font-bebas tracking-widest text-[10px] text-ink/40 mr-1">GUESTS</span>
+                                  {item.guestCount ?? '—'}
+                                </div>
+                                {/* Status (+ deposit for bookings) */}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bebas text-[10px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>
+                                  {item._type === 'booking' && (
+                                    <span className={`font-bebas text-[9px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-700'}`}>{item.depositPaid ? '· PAID' : '· PENDING'}</span>
+                                  )}
+                                </div>
+                                {/* Actions */}
+                                <div className="flex gap-1 lg:justify-end items-center" onClick={e => e.stopPropagation()}>
+                                  {item._type === 'booking' ? (
+                                    <>
+                                      <button onClick={() => setLocation(`/event/${item.id}`)} className="font-bebas tracking-widest text-xs border border-ink/30 text-ink px-2 py-1 rounded hover:bg-ink/10 transition-all">OPEN</button>
+                                      <button onClick={() => setLocation(`/runsheet?bookingId=${item.id}`)} className="font-bebas tracking-widest text-xs border border-ink/30 text-ink px-2 py-1 rounded hover:bg-ink/10 transition-all flex items-center gap-1"><Clock className="w-3 h-3" /> RUNSHEET</button>
+                                    </>
+                                  ) : (
+                                    <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} className="font-bebas tracking-widest text-xs border border-ink/30 text-ink px-2 py-1 rounded hover:bg-ink/10 transition-all">VIEW</button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      const label = item._type === 'booking' ? 'event' : 'enquiry';
+                                      if (confirm(`Delete ${label} for ${item.firstName} ${item.lastName ?? ''}?`)) {
+                                        if (item._type === 'booking') deleteBooking.mutate({ id: item.id });
+                                        else deleteLead.mutate({ id: item.id });
+                                      }
+                                    }}
+                                    className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-100/60 rounded transition-colors"
+                                    title={`Delete ${item._type === 'booking' ? 'event' : 'enquiry'}`}>
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-                                <span className="font-bebas tracking-widest text-[10px] px-2 py-0.5 rounded text-white" style={{ backgroundColor: si.swatch }}>
-                                  {si.label.toUpperCase()}
-                                </span>
-                                {item._type === 'booking' ? (
-                                  <button onClick={() => setLocation(`/event/${item.id}`)} className="font-bebas tracking-widest text-xs px-3 py-1.5 bg-forest-dark text-cream hover:bg-forest transition-colors">OPEN</button>
-                                ) : (
-                                  <button onClick={() => { setSelectedLead(item); setTab('enquiries'); }} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/10 transition-colors">VIEW</button>
-                                )}
-                                <button
-                                  onClick={() => {
-                                    const label = item._type === 'booking' ? 'event' : 'enquiry';
-                                    if (confirm(`Delete ${label} for ${item.firstName} ${item.lastName ?? ''}?`)) {
-                                      if (item._type === 'booking') deleteBooking.mutate({ id: item.id });
-                                      else deleteLead.mutate({ id: item.id });
-                                    }
-                                  }}
-                                  className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100/60 rounded transition-colors"
-                                  title={`Delete ${item._type === 'booking' ? 'event' : 'enquiry'}`}>
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                            );
+                          })}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -4680,91 +4711,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Upcoming bookings list — only shown in LIST view (the calendar grid views already display these) */}
-              {calendarView === "list" && (
-              <div className="mt-6 max-w-2xl px-6">
-                <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Bookings</h2>
-                {(monthBookings ?? []).filter(Boolean).length === 0 ? (
-                  <div className="border border-dashed border-gold/20 p-6 text-center">
-                    <p className="font-dm text-sage text-sm">No bookings this month</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {(monthBookings ?? []).filter(Boolean).map((b: any) => (
-                      <div id={`booking-${b.id}`} key={b.id} className="dante-card p-4 flex items-center justify-between hover:bg-gold/5 transition-colors cursor-pointer"
-                        onClick={() => setSelectedBooking(b)}>
-                        <div>
-                          <button
-                            onClick={e => { e.stopPropagation(); setLocation(`/event/${b.id}`); }}
-                            className="font-cormorant font-semibold text-base text-ink hover:text-forest hover:underline text-left">
-                            {b.firstName} {b.lastName}
-                          </button>
-                          <div className="font-dm text-xs text-ink/60">
-                            {b.eventType || "Event"} · {new Date(b.eventDate).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" })}{fmtEventTime(b.eventDate) && ` · ${fmtEventTime(b.eventDate)}`}
-                            {b.guestCount ? ` · ${b.guestCount} guests` : ""}
-                          </div>
-                          <div className={`font-bebas text-xs tracking-widest mt-1 ${
-                            b.status === 'confirmed' ? 'text-forest' : b.status === 'finished' ? 'text-teal-600' : b.status === 'tentative' ? 'text-amber-600' : 'text-stone-400'
-                          }`}>{b.status?.toUpperCase()}</div>
-                        </div>
-                        <div className="text-right flex flex-col items-end gap-2">
-                          {b.totalNzd && <div className="font-cormorant text-xl font-semibold text-forest">${Number(b.totalNzd).toLocaleString()}</div>}
-                          <div className={`font-bebas text-xs tracking-widest ${b.depositPaid ? "text-forest" : "text-gold"}`}>
-                            {b.depositPaid ? "DEPOSIT PAID" : "DEPOSIT PENDING"}
-                          </div>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={e => { e.stopPropagation(); setLocation(`/event/${b.id}`); }}
-                              className="font-bebas tracking-widest text-xs border border-forest/40 text-forest px-2 py-1 hover:bg-forest hover:text-cream transition-all flex items-center gap-1">
-                              OPEN
-                            </button>
-                            <button
-                              onClick={e => { e.stopPropagation(); setLocation(`/runsheet?bookingId=${b.id}`); }}
-                              className="font-bebas tracking-widest text-xs border border-burgundy/40 text-burgundy px-2 py-1 hover:bg-burgundy hover:text-cream transition-all flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> RUNSHEET
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              )}
-
-              {/* This month's lead events */}
-              {calendarView === "list" && (monthLeadEvents ?? []).filter(Boolean).length > 0 && (
-                <div className="mt-6 max-w-2xl px-6">
-                  <h2 className="font-cormorant text-xl font-semibold text-ink mb-3">This Month's Enquiries &amp; Leads</h2>
-                  <div className="space-y-2">
-                    {(monthLeadEvents ?? []).filter(Boolean).map((lead: any) => {
-                      const eventDate = new Date(lead.eventDate);
-                      const statusColors: Record<string, string> = {
-                        new: 'text-amber-700', contacted: 'text-sky-700', proposal_sent: 'text-forest',
-                        negotiating: 'text-orange-600', booked: 'text-forest', lost: 'text-stone-500', cancelled: 'text-stone-400',
-                      };
-                      return (
-                        <button key={lead.id}
-                          onClick={() => { selectLead(lead); setTab('enquiries'); }}
-                          className="w-full dante-card p-4 flex items-center justify-between hover:bg-rose-50/50 transition-colors text-left">
-                          <div>
-                            <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
-                            <div className="font-dm text-xs text-ink/60">{lead.eventType || 'Enquiry'} · {lead.guestCount ? `${lead.guestCount} guests · ` : ''}{lead.email}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className={`font-bebas text-xs tracking-widest px-1.5 py-0.5 rounded ${getStatusInfo(lead.status).calClasses}`}>
-                              {getStatusInfo(lead.status).label.toUpperCase()}
-                            </div>
-                            <div className="font-dm text-xs text-ink/50">
-                              {eventDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
               </div>{/* end swipe wrapper */}
             </div>
           )}
@@ -4901,9 +4847,9 @@ export default function Dashboard() {
                       </div>
                       <div className="col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
-                        <Input type="email" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
-                          placeholder="events@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-                        <p className="font-dm text-xs text-sage/60 mt-1">Email address to receive new enquiry notifications. Requires SMTP configured in Settings → Email.</p>
+                        <Input type="text" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
+                          placeholder="events@yourvenue.co.nz, manager@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                        <p className="font-dm text-xs text-sage/60 mt-1">Where new enquiry notifications are sent. Add multiple addresses separated by commas — every address gets a copy. Requires SMTP configured in Settings → Email.</p>
                       </div>
                     </div>
                   </div>
@@ -9090,9 +9036,7 @@ export default function Dashboard() {
                     <button
                       onClick={() => {
                         if (!weeklyNewStaffName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(weeklyNewStaffEmail.trim())) return;
-                        trpc.staffEmails.add.mutate({ name: weeklyNewStaffName.trim(), email: weeklyNewStaffEmail.trim() }, {
-                          onSuccess: () => { staffEmailsForWeekly.refetch(); setWeeklyNewStaffName(''); setWeeklyNewStaffEmail(''); }
-                        });
+                        addStaffForWeeklyMutation.mutate({ name: weeklyNewStaffName.trim(), email: weeklyNewStaffEmail.trim() });
                       }}
                       disabled={!weeklyNewStaffName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(weeklyNewStaffEmail.trim())}
                       className="bg-forest text-cream font-bebas tracking-widest text-[11px] px-3 disabled:opacity-40"

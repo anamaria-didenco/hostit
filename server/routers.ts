@@ -676,15 +676,18 @@ export const appRouter = router({
     </div>
   </div>
 </div>`;
+              // notificationEmail may hold several addresses separated by commas
+              // or semicolons (e.g. "owner@venue.nz, events@venue.nz") — send to all.
+              const notifyRecipients = String(vs.notificationEmail).split(/[,;]+/).map(s => s.trim()).filter(Boolean);
               await transporter.sendMail({
                 from: `"${fromName}" <${fromEmail}>`,
                 replyTo: input.email || fromEmail,
-                to: vs.notificationEmail,
+                to: notifyRecipients,
                 subject: `New Event Enquiry: ${clientName}`,
                 html,
                 text: `New Enquiry from ${clientName}\nEmail: ${input.email}\n${input.phone ? 'Phone: ' + input.phone + '\n' : ''}${input.eventType ? 'Event type: ' + input.eventType + '\n' : ''}${formattedEventDate ? 'Event date: ' + formattedEventDate + '\n' : ''}${input.guestCount ? 'Guests: ' + input.guestCount + '\n' : ''}${input.message ? 'Message: ' + input.message : ''}`,
               });
-              console.log(`[LeadSubmit] Notification email sent to ${vs.notificationEmail}`);
+              console.log(`[LeadSubmit] Notification email sent to ${notifyRecipients.join(', ')}`);
             } else {
               const missing = [];
               if (!vs?.notificationEmail) missing.push('notificationEmail');
@@ -2300,11 +2303,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const fmtTime = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true }).format(d);
         const weekLabel = new Intl.DateTimeFormat('en-NZ', { timeZone: tz, day: 'numeric', month: 'long', year: 'numeric' }).format(weekStartDate);
 
-        const baseUrl = process.env.REPLIT_DEV_DOMAIN
-          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-          : process.env.REPLIT_DOMAINS
-            ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-            : 'https://venueflowhq.com';
+        // Always use the production public base URL — never REPLIT_DEV_DOMAIN,
+        // which points at the non-running dev instance and 404s in staff emails.
+        const baseUrl = (process.env.PUBLIC_BASE_URL ?? 'https://venueflowhq.com').replace(/\/$/, '');
 
         const events: {
           bookingId: number;
@@ -2338,6 +2339,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                 runsheetId: sheet.id,
                 token: staffPortalToken,
                 label: name,
+                createdAt: Date.now(),
               });
             }
           }
@@ -2401,11 +2403,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
 
         if (!allBookings.length) throw new Error('No events found for that week.');
 
-        const baseUrl = process.env.REPLIT_DEV_DOMAIN
-          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-          : process.env.REPLIT_DOMAINS
-            ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-            : 'https://venueflowhq.com';
+        // Always use the production public base URL — never REPLIT_DEV_DOMAIN.
+        const baseUrl = (process.env.PUBLIC_BASE_URL ?? 'https://venueflowhq.com').replace(/\/$/, '');
 
         const fmtDate = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(d);
         const fmtTime = (d: Date) => new Intl.DateTimeFormat('en-NZ', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true }).format(d);
@@ -2468,7 +2467,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                 .where(eq(staffPortalLinks.runsheetId, sheet.id)).limit(1);
               const token = existingLink?.token ?? (() => {
                 const t = cryptoMod.randomBytes(24).toString('hex');
-                db.insert(staffPortalLinks).values({ ownerId: ctx.user.id, runsheetId: sheet.id, token: t, label: name }).catch(() => {});
+                db.insert(staffPortalLinks).values({ ownerId: ctx.user.id, runsheetId: sheet.id, token: t, label: name, createdAt: Date.now() }).catch(() => {});
                 return t;
               })();
               actionLinks.push(`<a href="${baseUrl}/staff/${token}" style="display:inline-block;background:#1a3a2a;color:#f5e6c8;text-decoration:none;font-size:11px;font-weight:bold;letter-spacing:1px;padding:5px 12px;border-radius:3px">VIEW LIVE RUNSHEET →</a>`);

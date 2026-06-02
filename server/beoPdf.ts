@@ -299,6 +299,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     // Internal-only fields — never surfaced via the public event-pack link.
     const rsNotes = isPublic ? "" : ((runsheet as any)?.notes ?? "");
     const bookingNotes = isPublic ? "" : ((booking as any).notes ?? "");
+    // Footer note — a closing message (payment terms, thank-you, etc.) shown to
+    // everyone, including the public event-pack link.
+    const footerNote = ((runsheet as any)?.footerText ?? "").toString();
     const fnbCols = (runsheet as any)?.fnbColumns ?? {};
     const showQty = fnbCols.qty !== false;
 
@@ -474,6 +477,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 <div class="card">
   <div class="card-header">NOTES</div>
   <div class="card-body notes-text">${allNotes.replace(/\n/g, "<br>")}</div>
+</div>` : "";
+
+    // Footer note section — rich HTML from the runsheet footer box.
+    const footerNoteSection = footerNote.trim() ? `
+<div class="card">
+  <div class="card-header">FOOTER NOTE</div>
+  <div class="card-body notes-text">${footerNote}</div>
 </div>` : "";
 
     // F&B grid columns — drop trailing STAFF / PREP column on public view.
@@ -880,6 +890,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 </div>`;
   })()}
   ${show('notes', notesSection)}
+  ${footerNoteSection}
 
   <div class="doc-footer">
     <div class="footer-l">POWERED BY VENUEFLOWHQ · BANQUET EVENT ORDER</div>

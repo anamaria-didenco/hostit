@@ -1479,6 +1479,7 @@ export default function RunsheetBuilder() {
       silentUpdateMutation.mutate({
         id: sheetId,
         notes: notes || undefined,
+        footerText: footerText || undefined,
         paymentNotes: paymentNotes || undefined,
         spaceName: spaceName || undefined,
         venueArea: venueArea || undefined,
@@ -1492,7 +1493,7 @@ export default function RunsheetBuilder() {
       } as any);
     }, 1000);
     return () => clearTimeout(t);
-  }, [sheetId, notes, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, gstInclusive, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks]);
+  }, [sheetId, notes, footerText, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, gstInclusive, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks]);
 
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
