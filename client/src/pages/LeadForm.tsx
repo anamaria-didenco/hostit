@@ -3,7 +3,6 @@ import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CheckCircle, MapPin, Phone, Mail } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { combineLocalDateTime } from "@/lib/dateTime";
@@ -81,14 +80,16 @@ export default function LeadForm() {
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+  // Stepped embed widget state (NowBookIt-style: Booking → Your Details → Summary)
+  const [embedStep, setEmbedStep] = useState(1);
+  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
 
   const submitLead = trpc.leads.submit.useMutation({
     onSuccess: () => { setSubmitted(true); },
     onError: () => toast.error("Failed to submit. Please try again."),
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const doSubmit = () => {
     if (!venue?.ownerId) return toast.error("Venue not found");
     const customParts = Object.entries(customFieldValues)
       .filter(([, v]) => v.trim())
@@ -109,6 +110,7 @@ export default function LeadForm() {
       source: form.source || "lead_form",
     });
   };
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); doSubmit(); };
 
   if (isLoading) return (
     <div className={isEmbed ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center bg-[#f8f5f0]"}>
@@ -154,9 +156,6 @@ export default function LeadForm() {
   const inputClass = isEmbed
     ? "rounded-sm border border-gray-200 focus-visible:ring-1 focus-visible:ring-offset-0 text-xs bg-white h-7 px-2"
     : "rounded-sm border border-gray-200 focus-visible:ring-1 focus-visible:ring-offset-0 text-sm bg-white";
-  const labelClass = isEmbed
-    ? "font-semibold text-[9px] tracking-wider block mb-0.5 text-gray-400 uppercase"
-    : "font-bold text-xs tracking-widest block mb-1 text-gray-500";
 
   function renderField(field: FormFieldDef, isCustom = false) {
     const value = isCustom ? (customFieldValues[field.label] ?? '') : (form[field.id] ?? '');
@@ -164,30 +163,8 @@ export default function LeadForm() {
       ? (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setCustomFieldValues(p => ({ ...p, [field.label]: e.target.value }))
       : (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(p => ({ ...p, [field.id]: e.target.value }));
 
-    if (field.id === 'eventType') {
-      return (
-        <Select value={form.eventType ?? ''} onValueChange={v => setForm(p => ({ ...p, eventType: v }))}>
-          <SelectTrigger className={`rounded-sm border border-gray-200 focus:ring-1 bg-white ${isEmbed ? 'text-xs h-7 px-2' : 'text-sm'}`}>
-            <SelectValue placeholder="Select event type…" />
-          </SelectTrigger>
-          <SelectContent>
-            {EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      );
-    }
-    if (field.id === 'source') {
-      return (
-        <Select value={form.source ?? ''} onValueChange={v => setForm(p => ({ ...p, source: v }))}>
-          <SelectTrigger className={`rounded-sm border border-gray-200 focus:ring-1 bg-white ${isEmbed ? 'text-xs h-7 px-2' : 'text-sm'}`}>
-            <SelectValue placeholder="Select an option…" />
-          </SelectTrigger>
-          <SelectContent>
-            {SOURCE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      );
-    }
+    if (field.id === 'eventType') return renderEventTypeCards();
+    if (field.id === 'source') return renderSourcePills();
     if (field.type === 'textarea') {
       return (
         <Textarea value={value} onChange={onChange} required={field.required}
@@ -208,61 +185,259 @@ export default function LeadForm() {
     );
   }
 
-  /* ── EMBED MODE ────────────────────────────────────────────────────── */
-  if (isEmbed) {
-    // Flatten all fields into one unified 2-column grid
-    const allEmbedFields = [
-      ...detailFields,
-      ...eventFields,
-      ...customFields,
-      ...(sourceField ? [sourceField] : []),
-      ...(messageField ? [messageField] : []),
-    ];
+  /* ── NowBookIt-style selectable cards (event type) ─────────────────── */
+  function renderEventTypeCards() {
+    const selected = form.eventType ?? '';
+    return (
+      <div className={`grid gap-2 ${isEmbed ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}>
+        {EVENT_TYPES.map(t => {
+          const isSel = selected === t;
+          return (
+            <button key={t} type="button"
+              onClick={() => setForm(p => ({ ...p, eventType: isSel ? '' : t }))}
+              className={`rounded-lg border text-center transition-all ${isEmbed ? 'px-2 py-2 text-[11px]' : 'px-3 py-3 text-sm'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+              style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
+              {t}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
 
-    const fullWidthIds = new Set(['company', 'eventType', 'budget', 'source', 'message']);
+  /* ── NowBookIt-style selectable pills (how did you hear) ───────────── */
+  function renderSourcePills() {
+    const selected = form.source ?? '';
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {SOURCE_OPTIONS.map(s => {
+          const isSel = selected === s;
+          return (
+            <button key={s} type="button"
+              onClick={() => setForm(p => ({ ...p, source: isSel ? '' : s }))}
+              className={`rounded-full border transition-all ${isEmbed ? 'px-2.5 py-1 text-[10px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+              style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
+              {s}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  /* ── EMBED MODE — stepped widget (Booking → Your Details → Summary) ──── */
+  if (isEmbed) {
+    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const selectedDate = form.eventDate ? new Date(form.eventDate + 'T00:00:00') : null;
+
+    // Calendar grid for the displayed month (Monday-first)
+    const calYear = calMonth.getFullYear();
+    const calIdx = calMonth.getMonth();
+    const startOffset = (new Date(calYear, calIdx, 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(calYear, calIdx + 1, 0).getDate();
+    const cells: (number | null)[] = [];
+    for (let i = 0; i < startOffset; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    const prevDisabled = calYear < today.getFullYear() || (calYear === today.getFullYear() && calIdx <= today.getMonth());
+    const goMonth = (delta: number) => { const m = new Date(calMonth); m.setMonth(m.getMonth() + delta); setCalMonth(m); };
+    const fmtSelected = selectedDate
+      ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })
+      : 'Select a date';
+
+    const detailsValid = !!(form.firstName ?? '').trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((form.email ?? '').trim());
+    const steps = ['Booking', 'Your Details', 'Summary'];
+    const timeField = eventFields.find(f => f.id === 'eventTime');
+    const guestField = eventFields.find(f => f.id === 'guestCount');
 
     return (
-      <div style={{ fontFamily, backgroundColor: "transparent" }} className="w-full">
+      <div style={{ fontFamily, backgroundColor: '#fff' }} className="w-full overflow-hidden rounded-lg border border-gray-200 shadow-sm">
 
-        {/* Minimal header — logo + title on one line */}
-        {(logoUrl || formTitle) && (
-          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
-            {logoUrl && (
-              <img src={logoUrl} alt={venueName}
-                style={{ height: `${Math.round(logoScale * 0.26)}px`, width: 'auto', objectFit: 'contain', maxWidth: '60px' }} />
-            )}
-            <div className="font-bold text-xs text-gray-700 leading-tight">{formTitle}</div>
-          </div>
-        )}
+        {/* Brand header bar */}
+        <div className="flex items-center gap-2 px-4 py-2.5" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
+          <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: textOnButton }} />
+          <span className="font-bold text-[11px] tracking-widest uppercase truncate">{venueName} · Enquire</span>
+        </div>
+
+        {/* Logo / name */}
+        <div className="flex flex-col items-center gap-0.5 px-4 py-3 border-b border-gray-100">
+          {logoUrl
+            ? <img src={logoUrl} alt={venueName} style={{ height: `${Math.round(logoScale * 0.4)}px`, width: 'auto', objectFit: 'contain', maxWidth: '150px' }} />
+            : <div className="font-bold text-base text-gray-800">{venueName}</div>}
+          {logoUrl && <div className="text-[11px] text-gray-500">{venueName}</div>}
+        </div>
 
         {submitted ? (
-          <div className="text-center py-6">
-            <CheckCircle className="w-8 h-8 mx-auto mb-2" style={{ color: formButtonColor }} />
-            <p className="font-semibold text-gray-800 text-xs mb-1">Enquiry Received!</p>
-            <p className="text-[11px] text-gray-400 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
+          <div className="text-center py-10 px-4">
+            <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: formButtonColor }} />
+            <p className="font-semibold text-gray-800 text-sm mb-1">Enquiry Received!</p>
+            <p className="text-xs text-gray-400 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit}>
-            {/* Unified compact 2-column grid — no section headers */}
-            <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-              {allEmbedFields.map(field => (
-                <div key={field.id} className={fullWidthIds.has(field.id) || !field.isDefault ? 'col-span-2' : ''}>
-                  <label className={labelClass}>{field.label}{field.required && ' *'}</label>
-                  {renderField(field, !field.isDefault)}
-                </div>
-              ))}
+          <>
+            {/* Progress steps */}
+            <div className="flex items-start justify-center gap-1 px-4 pt-3 pb-1">
+              {steps.map((label, i) => {
+                const n = i + 1;
+                const on = embedStep >= n;
+                return (
+                  <div key={label} className="flex items-start gap-1">
+                    <div className="flex flex-col items-center w-16">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors"
+                        style={on ? { backgroundColor: formButtonColor, color: textOnButton } : { backgroundColor: '#e5e7eb', color: '#9ca3af' }}>
+                        {n}
+                      </div>
+                      <span className="text-[9px] mt-1 font-semibold text-center leading-tight" style={{ color: embedStep === n ? formButtonColor : '#9ca3af' }}>{label}</span>
+                    </div>
+                    {i < steps.length - 1 && <div className="w-6 h-px mt-3" style={{ backgroundColor: embedStep > n ? formButtonColor : '#e5e7eb' }} />}
+                  </div>
+                );
+              })}
             </div>
 
-            <Button type="submit" disabled={submitLead.isPending}
-              className="w-full font-bold tracking-widest rounded-sm h-8 text-xs shadow-sm transition-opacity hover:opacity-90 mt-3"
-              style={{ backgroundColor: formButtonColor, color: textOnButton }}>
-              {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
-            </Button>
+            <div className="px-4 pb-4 pt-1">
+              {/* ── STEP 1: Booking ── */}
+              {embedStep === 1 && (
+                <div className="space-y-3">
+                  {eventFields.some(f => f.id === 'eventType') && (
+                    <div>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-400 uppercase">Event type</label>
+                      {renderEventTypeCards()}
+                    </div>
+                  )}
 
-            <p className="text-[9px] text-center text-gray-300 mt-1.5">
-              By submitting you agree to be contacted by {venueName}.
-            </p>
-          </form>
+                  {eventFields.some(f => f.id === 'eventDate') && (
+                    <div>
+                      <div className="flex items-center justify-between px-3 py-2 rounded-t-md" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
+                        <span className="font-bold text-sm">{calYear}</span>
+                        <span className="text-xs opacity-90">{fmtSelected}</span>
+                      </div>
+                      <div className="border border-t-0 border-gray-200 rounded-b-md px-2 py-2">
+                        <div className="flex items-center justify-between px-1 mb-1.5">
+                          <button type="button" disabled={prevDisabled} onClick={() => goMonth(-1)}
+                            className="w-6 h-6 flex items-center justify-center text-gray-500 disabled:opacity-25 hover:bg-gray-100 rounded">‹</button>
+                          <span className="text-xs font-semibold text-gray-700">{MONTH_NAMES[calIdx]} {calYear}</span>
+                          <button type="button" onClick={() => goMonth(1)}
+                            className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded">›</button>
+                        </div>
+                        <div className="grid grid-cols-7 gap-0.5 text-center">
+                          {DOW.map(d => <div key={d} className="text-[9px] text-gray-400 font-semibold py-0.5">{d}</div>)}
+                          {cells.map((d, i) => {
+                            if (d === null) return <div key={`e${i}`} />;
+                            const cellDate = new Date(calYear, calIdx, d);
+                            const isPast = cellDate < today;
+                            const isSel = !!selectedDate && cellDate.getTime() === selectedDate.getTime();
+                            const dateStr = `${calYear}-${String(calIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                            return (
+                              <button key={d} type="button" disabled={isPast}
+                                onClick={() => setForm(p => ({ ...p, eventDate: dateStr }))}
+                                className={`text-[11px] h-7 rounded-full transition-colors ${isPast ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100'}`}
+                                style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, fontWeight: 700 } : {}}>
+                                {d}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {(timeField || guestField) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {timeField && (
+                        <div>
+                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{timeField.label}</label>
+                          {renderField(timeField)}
+                        </div>
+                      )}
+                      {guestField && (
+                        <div>
+                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{guestField.label}</label>
+                          {renderField(guestField)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button type="button" onClick={() => setEmbedStep(2)}
+                    className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
+                </div>
+              )}
+
+              {/* ── STEP 2: Your Details ── */}
+              {embedStep === 2 && (
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    {detailFields.map(field => (
+                      <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
+                        <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{field.label}{field.required && ' *'}</label>
+                        {renderField(field)}
+                      </div>
+                    ))}
+                  </div>
+                  {customFields.map(field => (
+                    <div key={field.id}>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{field.label}{field.required && ' *'}</label>
+                      {renderField(field, true)}
+                    </div>
+                  ))}
+                  {messageField && (
+                    <div>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{messageField.label}</label>
+                      {renderField(messageField)}
+                    </div>
+                  )}
+                  {sourceField && (
+                    <div>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-400 uppercase">{sourceField.label}</label>
+                      {renderSourcePills()}
+                    </div>
+                  )}
+                  <div className="flex gap-2 pt-1">
+                    <button type="button" onClick={() => setEmbedStep(1)}
+                      className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
+                    <button type="button" disabled={!detailsValid} onClick={() => setEmbedStep(3)}
+                      className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+                      style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── STEP 3: Summary ── */}
+              {embedStep === 3 && (
+                <div className="space-y-3">
+                  <div className="rounded-md border border-gray-200 divide-y divide-gray-100">
+                    {([
+                      ['Event', form.eventType],
+                      ['Date', selectedDate ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''],
+                      ['Time', form.eventTime],
+                      ['Guests', form.guestCount],
+                      ['Name', [form.firstName, form.lastName].filter(Boolean).join(' ')],
+                      ['Email', form.email],
+                      ['Phone', form.phone],
+                    ] as [string, string | undefined][]).filter(([, v]) => v && v.trim()).map(([k, v]) => (
+                      <div key={k} className="flex justify-between gap-3 px-3 py-1.5 text-xs">
+                        <span className="text-gray-400 font-semibold uppercase text-[10px] tracking-wider flex-shrink-0">{k}</span>
+                        <span className="text-gray-800 text-right">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setEmbedStep(2)}
+                      className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
+                    <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
+                      className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                      style={{ backgroundColor: formButtonColor, color: textOnButton }}>
+                      {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-center text-gray-300">By submitting you agree to be contacted by {venueName}.</p>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     );
@@ -337,70 +512,87 @@ export default function LeadForm() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
 
-            {detailFields.length > 0 && (
-              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
-                <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">YOUR DETAILS</h2>
-                <div className="grid grid-cols-2 gap-3">
-                  {detailFields.map(field => (
-                    <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
-                      <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">
-                        {field.label.toUpperCase()}{field.required && ' *'}
-                      </label>
-                      {renderField(field)}
-                    </div>
-                  ))}
+            {/* One unified panel — NowBookIt-style: event-type cards first, then details */}
+            <div className="rounded-xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-7" style={{ backgroundColor: formCardBg }}>
+
+              {/* Event type — tappable cards (the signature NowBookIt element, shown first) */}
+              {eventFields.some(f => f.id === 'eventType') && (
+                <div>
+                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">WHAT KIND OF EVENT?</label>
+                  {renderEventTypeCards()}
                 </div>
-              </div>
-            )}
+              )}
 
-            {eventFields.length > 0 && (
-              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
-                <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">EVENT DETAILS</h2>
-                <div className="grid grid-cols-2 gap-3">
-                  {eventFields.map(field => (
-                    <div key={field.id} className={(field.id === 'eventType' || field.id === 'budget') ? 'col-span-2' : ''}>
-                      <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">
-                        {field.label.toUpperCase()}{field.required && ' *'}
-                      </label>
-                      {renderField(field)}
-                    </div>
-                  ))}
+              {/* Remaining event details (date, time, guests, budget) */}
+              {eventFields.filter(f => f.id !== 'eventType').length > 0 && (
+                <div>
+                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">EVENT DETAILS</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {eventFields.filter(f => f.id !== 'eventType').map(field => (
+                      <div key={field.id} className={field.id === 'budget' ? 'col-span-2' : ''}>
+                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-400">
+                          {field.label.toUpperCase()}{field.required && ' *'}
+                        </label>
+                        {renderField(field)}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {customFields.length > 0 && (
-              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
-                <h2 className="font-bold text-xs tracking-widest mb-4 text-gray-400">ADDITIONAL INFORMATION</h2>
-                <div className="space-y-3">
-                  {customFields.map(field => (
-                    <div key={field.id}>
-                      <label className="font-bold text-xs tracking-widest block mb-1 text-gray-500">
-                        {field.label.toUpperCase()}{field.required && ' *'}
-                      </label>
-                      {renderField(field, true)}
-                    </div>
-                  ))}
+              {/* Your details */}
+              {detailFields.length > 0 && (
+                <div>
+                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">YOUR DETAILS</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {detailFields.map(field => (
+                      <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
+                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-400">
+                          {field.label.toUpperCase()}{field.required && ' *'}
+                        </label>
+                        {renderField(field)}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {sourceField && (
-              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
-                <h2 className="font-bold text-xs tracking-widest mb-3 text-gray-400">{sourceField.label.toUpperCase()}</h2>
-                {renderField(sourceField)}
-              </div>
-            )}
+              {/* Additional custom fields */}
+              {customFields.length > 0 && (
+                <div>
+                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">ADDITIONAL INFORMATION</label>
+                  <div className="space-y-3">
+                    {customFields.map(field => (
+                      <div key={field.id}>
+                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-400">
+                          {field.label.toUpperCase()}{field.required && ' *'}
+                        </label>
+                        {renderField(field, true)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-            {messageField && (
-              <div className="rounded-lg border border-gray-100 shadow-sm p-6" style={{ backgroundColor: formCardBg }}>
-                <h2 className="font-bold text-xs tracking-widest mb-3 text-gray-400">{messageField.label.toUpperCase()}</h2>
-                {renderField(messageField)}
-              </div>
-            )}
+              {/* How did you hear — pills */}
+              {sourceField && (
+                <div>
+                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">{sourceField.label.toUpperCase()}</label>
+                  {renderSourcePills()}
+                </div>
+              )}
+
+              {/* Message */}
+              {messageField && (
+                <div>
+                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">{messageField.label.toUpperCase()}</label>
+                  {renderField(messageField)}
+                </div>
+              )}
+            </div>
 
             <Button type="submit" disabled={submitLead.isPending}
-              className="w-full font-bold tracking-widest rounded-sm h-14 text-base shadow-sm transition-opacity hover:opacity-90"
+              className="w-full font-bold tracking-widest rounded-lg h-14 text-base shadow-sm transition-opacity hover:opacity-90"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
               {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
             </Button>
