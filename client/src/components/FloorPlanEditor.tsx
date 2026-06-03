@@ -36,6 +36,42 @@ type CustomPaletteItem = {
   round: boolean;
 };
 
+/**
+ * Coerce ANY stored/loaded value into a valid CanvasData so the editor can
+ * never crash on bad input. Handles: JSON strings, missing `elements`, the
+ * legacy FloorPlanBuilder shape (`{ canvasSize, elements:[{w,h}] }`), and
+ * elements missing/NaN fields. This is the single guard both call sites
+ * (Dashboard panel + public share view) rely on.
+ */
+function normalizeCanvasData(raw: any): CanvasData {
+  let data: any = raw;
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch { data = null; }
+  }
+  if (!data || typeof data !== "object") return { width: 900, height: 600, elements: [] };
+  const num = (v: any, fallback: number) => (Number.isFinite(v) ? Number(v) : fallback);
+  // Canvas dimensions may live at the top level or under a legacy `canvasSize`.
+  const width = num(data.width, num(data.canvasSize?.width, 900));
+  const height = num(data.height, num(data.canvasSize?.height, 600));
+  const rawEls = Array.isArray(data.elements) ? data.elements : [];
+  const elements: FPElement[] = rawEls
+    .filter((el: any) => el && typeof el === "object")
+    .map((el: any) => ({
+      id: String(el.id ?? `el_${Math.random().toString(36).slice(2, 10)}`),
+      type: typeof el.type === "string" ? el.type : "rect-table-6",
+      x: num(el.x, 40),
+      y: num(el.y, 40),
+      // Accept both the canonical `width`/`height` and the legacy `w`/`h`.
+      width: Math.max(4, num(el.width, num(el.w, 80))),
+      height: Math.max(4, num(el.height, num(el.h, 80))),
+      rotation: num(el.rotation, 0),
+      label: typeof el.label === "string" ? el.label : undefined,
+      color: typeof el.color === "string" ? el.color : undefined,
+      seats: typeof el.seats === "number" ? el.seats : undefined,
+    }));
+  return { width, height, elements };
+}
+
 // ─── Palette items ────────────────────────────────────────────────────────────
 const PALETTE = [
   { type: "round-table-6", label: "Round Table (6)", w: 80, h: 80, seats: 6, color: "#d4b896", icon: "⬤" },
@@ -73,11 +109,14 @@ function getLabel(type: string, customPalette: CustomPaletteItem[]) {
 }
 
 // ─── Render a single element on the canvas ───────────────────────────────────
-function ElementShape({ el, selected, onSelect, onDragStart, customPalette }: {
+function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRotateStart, readOnly, customPalette }: {
   el: FPElement;
   selected: boolean;
   onSelect: (id: string) => void;
   onDragStart: (e: React.MouseEvent, id: string) => void;
+  onResizeStart: (e: React.MouseEvent, id: string, corner: string) => void;
+  onRotateStart: (e: React.MouseEvent, id: string) => void;
+  readOnly?: boolean;
   customPalette: CustomPaletteItem[];
 }) {
   const color = el.color
@@ -88,6 +127,19 @@ function ElementShape({ el, selected, onSelect, onDragStart, customPalette }: {
   const borderRadius = round ? "50%" : el.type === "stage" || el.type === "dance-floor" ? "4px" : "3px";
   const isText = el.type === "text";
 
+  const showHandles = selected && !readOnly;
+  const HS = 11; // handle size
+  const handleBase: React.CSSProperties = {
+    position: "absolute", width: HS, height: HS, background: "#fff",
+    border: "2px solid #C8102E", borderRadius: "50%", zIndex: 20,
+  };
+  const corners: { key: string; pos: React.CSSProperties }[] = [
+    { key: "nw", pos: { left: -HS / 2, top: -HS / 2, cursor: "nwse-resize" } },
+    { key: "ne", pos: { right: -HS / 2, top: -HS / 2, cursor: "nesw-resize" } },
+    { key: "sw", pos: { left: -HS / 2, bottom: -HS / 2, cursor: "nesw-resize" } },
+    { key: "se", pos: { right: -HS / 2, bottom: -HS / 2, cursor: "nwse-resize" } },
+  ];
+
   return (
     <div
       onMouseDown={(e) => { onSelect(el.id); onDragStart(e, el.id); }}
@@ -96,7 +148,7 @@ function ElementShape({ el, selected, onSelect, onDragStart, customPalette }: {
         left: el.x, top: el.y, width: el.width, height: el.height,
         transform: `rotate(${el.rotation}deg)`,
         transformOrigin: "center center",
-        cursor: "grab", userSelect: "none", zIndex: selected ? 10 : 1,
+        cursor: readOnly ? "default" : "grab", userSelect: "none", zIndex: selected ? 10 : 1,
       }}
     >
       {isText ? (
@@ -128,6 +180,22 @@ function ElementShape({ el, selected, onSelect, onDragStart, customPalette }: {
           )}
         </div>
       )}
+
+      {showHandles && (
+        <>
+          {/* Rotation handle (above top-centre) + connector line */}
+          <div
+            onMouseDown={(e) => onRotateStart(e, el.id)}
+            title="Drag to rotate"
+            style={{ ...handleBase, left: "50%", top: -26, transform: "translateX(-50%)", cursor: "grab", borderRadius: "50%" }}
+          />
+          <div style={{ position: "absolute", left: "50%", top: -26 + HS, width: 1.5, height: 26 - HS, background: "#C8102E", transform: "translateX(-50%)", zIndex: 19, pointerEvents: "none" }} />
+          {/* Corner resize handles */}
+          {corners.map(c => (
+            <div key={c.key} onMouseDown={(e) => onResizeStart(e, el.id, c.key)} style={{ ...handleBase, ...c.pos }} />
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -156,7 +224,7 @@ export default function FloorPlanEditor({
   shareToken: initialShareToken,
   onShareTokenGenerated,
 }: FloorPlanEditorProps) {
-  const [canvasData, setCanvasData] = useState<CanvasData>(initialData ?? { width: 900, height: 600, elements: [] });
+  const [canvasData, setCanvasData] = useState<CanvasData>(() => normalizeCanvasData(initialData));
   const [planName, setPlanName] = useState(initialName);
   const [bgImageUrl, setBgImageUrl] = useState(initialBgImageUrl ?? "");
   const [bgOpacity, setBgOpacity] = useState(0.3);
@@ -165,6 +233,7 @@ export default function FloorPlanEditor({
   const [tool] = useState<"select">("select");
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
+  const [showTemplates, setShowTemplates] = useState(false);
   const GRID = 20;
 
   // Share state
@@ -186,6 +255,8 @@ export default function FloorPlanEditor({
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const resizeRef = useRef<{ id: string; corner: string; startX: number; startY: number; origX: number; origY: number; origW: number; origH: number } | null>(null);
+  const rotateRef = useRef<{ id: string; cx: number; cy: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const snap = useCallback((v: number) => snapToGrid ? Math.round(v / GRID) * GRID : v, [snapToGrid]);
@@ -199,21 +270,68 @@ export default function FloorPlanEditor({
     dragRef.current = { id, startX: e.clientX, startY: e.clientY, origX: el.x, origY: el.y };
   }, [canvasData.elements, readOnly]);
 
+  // ── Resize element (corner handles) ───────────────────────────────────────
+  const handleResizeStart = useCallback((e: React.MouseEvent, id: string, corner: string) => {
+    if (readOnly) return;
+    e.preventDefault(); e.stopPropagation();
+    const el = canvasData.elements.find(x => x.id === id);
+    if (!el) return;
+    resizeRef.current = { id, corner, startX: e.clientX, startY: e.clientY, origX: el.x, origY: el.y, origW: el.width, origH: el.height };
+  }, [canvasData.elements, readOnly]);
+
+  // ── Rotate element (top handle) ───────────────────────────────────────────
+  const handleRotateStart = useCallback((e: React.MouseEvent, id: string) => {
+    if (readOnly) return;
+    e.preventDefault(); e.stopPropagation();
+    const el = canvasData.elements.find(x => x.id === id);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!el || !rect) return;
+    // Element centre in screen coordinates (canvas is scaled from top-left).
+    const cx = rect.left + (el.x + el.width / 2) * zoom;
+    const cy = rect.top + (el.y + el.height / 2) * zoom;
+    rotateRef.current = { id, cx, cy };
+  }, [canvasData.elements, readOnly, zoom]);
+
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
-      if (!dragRef.current) return;
-      const dx = (e.clientX - dragRef.current.startX) / zoom;
-      const dy = (e.clientY - dragRef.current.startY) / zoom;
-      setCanvasData(prev => ({
-        ...prev,
-        elements: prev.elements.map(el =>
-          el.id === dragRef.current!.id
-            ? { ...el, x: snap(dragRef.current!.origX + dx), y: snap(dragRef.current!.origY + dy) }
-            : el
-        ),
-      }));
+      // Rotate takes priority, then resize, then drag.
+      if (rotateRef.current) {
+        const { id, cx, cy } = rotateRef.current;
+        let deg = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI + 90;
+        deg = ((Math.round(deg / 15) * 15) % 360 + 360) % 360; // snap to 15°
+        setCanvasData(prev => ({ ...prev, elements: prev.elements.map(el => el.id === id ? { ...el, rotation: deg } : el) }));
+        return;
+      }
+      if (resizeRef.current) {
+        const r = resizeRef.current;
+        const dx = (e.clientX - r.startX) / zoom;
+        const dy = (e.clientY - r.startY) / zoom;
+        let { origX: x, origY: y, origW: w, origH: h } = r;
+        const west = r.corner.includes("w");
+        const north = r.corner.includes("n");
+        let nw = west ? w - dx : w + dx;
+        let nh = north ? h - dy : h + dy;
+        nw = Math.max(GRID, snap(nw));
+        nh = Math.max(GRID, snap(nh));
+        const nx = west ? snap(x + (w - nw)) : x;
+        const ny = north ? snap(y + (h - nh)) : y;
+        setCanvasData(prev => ({ ...prev, elements: prev.elements.map(el => el.id === r.id ? { ...el, x: nx, y: ny, width: nw, height: nh } : el) }));
+        return;
+      }
+      if (dragRef.current) {
+        const dx = (e.clientX - dragRef.current.startX) / zoom;
+        const dy = (e.clientY - dragRef.current.startY) / zoom;
+        setCanvasData(prev => ({
+          ...prev,
+          elements: prev.elements.map(el =>
+            el.id === dragRef.current!.id
+              ? { ...el, x: snap(dragRef.current!.origX + dx), y: snap(dragRef.current!.origY + dy) }
+              : el
+          ),
+        }));
+      }
     };
-    const onMouseUp = () => { dragRef.current = null; };
+    const onMouseUp = () => { dragRef.current = null; resizeRef.current = null; rotateRef.current = null; };
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
     return () => { window.removeEventListener("mousemove", onMouseMove); window.removeEventListener("mouseup", onMouseUp); };
@@ -287,6 +405,61 @@ export default function FloorPlanEditor({
     }));
   };
 
+  // ── Duplicate selected (button + ⌘/Ctrl+D) ────────────────────────────────
+  const duplicateSelected = useCallback(() => {
+    if (!selected) return;
+    setCanvasData(prev => {
+      const el = prev.elements.find(x => x.id === selected);
+      if (!el) return prev;
+      const copy: FPElement = { ...el, id: `${el.type}-${Date.now()}`, x: el.x + GRID, y: el.y + GRID };
+      setTimeout(() => setSelected(copy.id), 0);
+      return { ...prev, elements: [...prev.elements, copy] };
+    });
+  }, [selected]);
+
+  // ── Preset layout templates ───────────────────────────────────────────────
+  const applyTemplate = useCallback((kind: string) => {
+    const W = canvasData.width, H = canvasData.height;
+    const sn = (v: number) => Math.round(v / GRID) * GRID;
+    const out: Omit<FPElement, "id">[] = [];
+    if (kind === "banquet") {
+      const tw = 80, th = 80, gx = 70, gy = 70;
+      const cols = Math.max(1, Math.floor((W - 80) / (tw + gx)));
+      const rows = Math.max(1, Math.floor((H - 140) / (th + gy)));
+      const startX = sn((W - (cols * tw + (cols - 1) * gx)) / 2);
+      let n = 1;
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
+        out.push({ type: "round-table-8", x: sn(startX + c * (tw + gx)), y: sn(80 + r * (th + gy)), width: tw, height: th, rotation: 0, color: "#d4b896", seats: 8, label: `T${n++}` });
+    } else if (kind === "theatre") {
+      out.push({ type: "stage", x: sn(W / 2 - 100), y: 30, width: 200, height: 60, rotation: 0, color: "#4a4a4a", seats: 0, label: "STAGE" });
+      const cw = 24, ch = 24, gx = 10, gy = 22;
+      const cols = Math.max(1, Math.floor((W - 120) / (cw + gx)));
+      const startX = sn((W - (cols * cw + (cols - 1) * gx)) / 2);
+      const rows = Math.max(1, Math.min(8, Math.floor((H - 160) / (ch + gy))));
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
+        out.push({ type: "chair", x: sn(startX + c * (cw + gx)), y: sn(150 + r * (ch + gy)), width: cw, height: ch, rotation: 0, color: "#a0856c", seats: 1 });
+    } else if (kind === "cocktail") {
+      const tw = 40, gx = 90, gy = 90;
+      const cols = Math.max(1, Math.floor((W - 100) / (tw + gx)));
+      const rows = Math.max(1, Math.floor((H - 140) / (tw + gy)));
+      const startX = sn((W - (cols * tw + (cols - 1) * gx)) / 2);
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
+        out.push({ type: "cocktail-table", x: sn(startX + c * (tw + gx)), y: sn(90 + r * (tw + gy)), width: tw, height: tw, rotation: 0, color: "#b8956a", seats: 0 });
+    } else if (kind === "row") {
+      const tw = 120, th = 60, gap = 40;
+      const cols = Math.max(1, Math.floor((W - 80) / (tw + gap)));
+      const startX = sn((W - (cols * tw + (cols - 1) * gap)) / 2);
+      const y = sn(H / 2 - th / 2);
+      let n = 1;
+      for (let c = 0; c < cols; c++)
+        out.push({ type: "rect-table-6", x: sn(startX + c * (tw + gap)), y, width: tw, height: th, rotation: 0, color: "#c8a97e", seats: 6, label: `T${n++}` });
+    }
+    if (!out.length) return;
+    setCanvasData(prev => ({ ...prev, elements: [...prev.elements, ...out.map((e, i) => ({ ...e, id: `tpl-${Date.now()}-${i}` }))] }));
+    setShowTemplates(false);
+    toast.success(`Added ${out.length} item${out.length !== 1 ? "s" : ""}`);
+  }, [canvasData.width, canvasData.height]);
+
   const handleSave = () => {
     if (onSave) onSave(canvasData, planName, bgImageUrl || undefined);
   };
@@ -295,13 +468,14 @@ export default function FloorPlanEditor({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if ((e.metaKey || e.ctrlKey) && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicateSelected(); return; }
       if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
       if (e.key === "r" || e.key === "R") rotateSelected();
       if (e.key === "Escape") setSelected(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected]);
+  }, [selected, duplicateSelected]);
 
   // ── Share & PDF ──────────────────────────────────────────────────────────
   const generateLink = trpc.floorPlans.generateShareLink.useMutation({
@@ -615,6 +789,39 @@ export default function FloorPlanEditor({
             {/* Stats */}
             <span className="text-xs text-ink/50 font-dm">{tableCount} tables · {totalSeats} seats</span>
             <div className="h-4 w-px bg-border" />
+            {/* Templates */}
+            {!readOnly && (
+              <>
+                <div className="relative">
+                  <button type="button" onClick={() => setShowTemplates(s => !s)}
+                    className={`p-1.5 rounded text-xs font-bebas tracking-wider flex items-center gap-1 ${showTemplates ? "bg-burgundy/10 text-burgundy" : "text-ink/50 hover:text-ink"}`}
+                    title="Insert a preset layout">
+                    <Plus className="w-3 h-3" /> TEMPLATES
+                  </button>
+                  {showTemplates && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setShowTemplates(false)} />
+                      <div className="absolute left-0 top-9 z-40 w-48 bg-white border border-border rounded shadow-lg py-1">
+                        <div className="px-3 py-1 font-bebas tracking-widest text-[9px] text-sage/70 border-b border-border mb-1">PRESET LAYOUTS</div>
+                        {[
+                          { k: "banquet", label: "Banquet — round tables" },
+                          { k: "theatre", label: "Theatre — rows + stage" },
+                          { k: "cocktail", label: "Cocktail — standing" },
+                          { k: "row", label: "Row of tables" },
+                        ].map(t => (
+                          <button key={t.k} type="button" onClick={() => applyTemplate(t.k)}
+                            className="w-full text-left px-3 py-1.5 text-xs font-dm text-ink/70 hover:bg-burgundy/5 hover:text-ink transition-colors">
+                            {t.label}
+                          </button>
+                        ))}
+                        <div className="px-3 pt-1 pb-1 text-[9px] text-ink/30 border-t border-border mt-1">Adds to the current plan</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="h-4 w-px bg-border" />
+              </>
+            )}
             {/* Grid / Snap */}
             <button onClick={() => setShowGrid(g => !g)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${showGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/40 hover:text-ink"}`}>
               GRID
@@ -732,6 +939,9 @@ export default function FloorPlanEditor({
                   selected={selected === el.id}
                   onSelect={readOnly ? () => {} : setSelected}
                   onDragStart={readOnly ? () => {} : handleDragStart}
+                  onResizeStart={handleResizeStart}
+                  onRotateStart={handleRotateStart}
+                  readOnly={readOnly}
                   customPalette={customPalette}
                 />
               ))}
@@ -818,6 +1028,9 @@ export default function FloorPlanEditor({
                 <div className="flex gap-2 pt-1">
                   <button onClick={rotateSelected} className="flex-1 flex items-center justify-center gap-1 border border-border rounded py-1.5 text-xs font-bebas tracking-wider text-ink/60 hover:text-ink hover:border-gold transition-colors">
                     <RotateCw className="w-3 h-3" /> ROTATE
+                  </button>
+                  <button onClick={duplicateSelected} title="Duplicate (⌘D)" className="flex-1 flex items-center justify-center gap-1 border border-border rounded py-1.5 text-xs font-bebas tracking-wider text-ink/60 hover:text-ink hover:border-gold transition-colors">
+                    <Copy className="w-3 h-3" /> DUPLICATE
                   </button>
                   <button onClick={deleteSelected} className="flex-1 flex items-center justify-center gap-1 border border-red-200 rounded py-1.5 text-xs font-bebas tracking-wider text-red-400 hover:text-red-600 hover:border-red-400 transition-colors">
                     <Trash2 className="w-3 h-3" /> DELETE

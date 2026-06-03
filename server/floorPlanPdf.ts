@@ -17,6 +17,40 @@ function isRound(type: string) {
   return ROUND_TYPES.has(type) || type.startsWith("custom-round");
 }
 
+/** Escape text before inserting into the SVG/HTML so labels with &, <, > don't break rendering. */
+function esc(s: any): string {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/**
+ * Coerce any stored canvasData (JSON string, missing `elements`, legacy
+ * `{ canvasSize, elements:[{w,h}] }` shape, NaN fields) into a safe object so
+ * PDF generation never crashes on bad/old data.
+ */
+function normalizeCanvasData(raw: any): { width: number; height: number; elements: any[] } {
+  let data: any = raw;
+  if (typeof data === "string") { try { data = JSON.parse(data); } catch { data = null; } }
+  if (!data || typeof data !== "object") return { width: 900, height: 600, elements: [] };
+  const num = (v: any, f: number) => (Number.isFinite(v) ? Number(v) : f);
+  const width = num(data.width, num(data.canvasSize?.width, 900));
+  const height = num(data.height, num(data.canvasSize?.height, 600));
+  const rawEls = Array.isArray(data.elements) ? data.elements : [];
+  const elements = rawEls
+    .filter((el: any) => el && typeof el === "object")
+    .map((el: any) => ({
+      type: typeof el.type === "string" ? el.type : "rect-table-6",
+      x: num(el.x, 0),
+      y: num(el.y, 0),
+      width: Math.max(4, num(el.width, num(el.w, 80))),
+      height: Math.max(4, num(el.height, num(el.h, 80))),
+      rotation: num(el.rotation, 0),
+      label: typeof el.label === "string" ? el.label : "",
+      color: typeof el.color === "string" ? el.color : "#888",
+      seats: typeof el.seats === "number" ? el.seats : 0,
+    }));
+  return { width, height, elements };
+}
+
 function elementToSvg(el: any): string {
   const cx = el.x + el.width / 2;
   const cy = el.y + el.height / 2;
@@ -37,7 +71,7 @@ function elementToSvg(el: any): string {
       <rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}"
         fill="none" stroke="#ccc" stroke-dasharray="4,3" rx="2" ${transform} />
       <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle"
-        font-size="12" font-weight="600" fill="${color}" ${transform}>${label}</text>`;
+        font-size="12" font-weight="600" fill="${color}" ${transform}>${esc(label)}</text>`;
   }
 
   const shape = round
@@ -48,7 +82,7 @@ function elementToSvg(el: any): string {
   const textY = seats > 0 ? cy - 5 : cy;
   const labelSvg = label
     ? `<text x="${cx}" y="${textY}" text-anchor="middle" dominant-baseline="middle"
-         font-size="9" font-weight="600" fill="rgba(255,255,255,0.92)" ${transform}>${label}</text>`
+         font-size="9" font-weight="600" fill="rgba(255,255,255,0.92)" ${transform}>${esc(label)}</text>`
     : "";
   const seatsSvg = seats > 0
     ? `<text x="${cx}" y="${cy + 8}" text-anchor="middle" dominant-baseline="middle"
@@ -59,8 +93,7 @@ function elementToSvg(el: any): string {
 }
 
 function buildHtml(plan: any): string {
-  const data = plan.canvasData ?? { width: 900, height: 600, elements: [] };
-  const { width, height, elements } = data;
+  const { width, height, elements } = normalizeCanvasData(plan.canvasData);
   const totalSeats = elements.reduce((s: number, el: any) => s + (el.seats ?? 0), 0);
   const tableCount = elements.filter((el: any) => el.type.includes("table")).length;
   const today = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" });
@@ -82,7 +115,7 @@ function buildHtml(plan: any): string {
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>${plan.name ?? "Floor Plan"}</title>
+<title>${esc(plan.name ?? "Floor Plan")}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'DM Sans', 'Inter', sans-serif; background: #fff; color: #1a1a1a; }
@@ -104,7 +137,7 @@ function buildHtml(plan: any): string {
 <div class="page">
   <div class="header">
     <div>
-      <div class="title">${plan.name ?? "Floor Plan"}</div>
+      <div class="title">${esc(plan.name ?? "Floor Plan")}</div>
       <div style="font-size:10pt;color:#666;margin-top:4px;">Event Floor Plan</div>
     </div>
     <div class="meta">
@@ -173,7 +206,7 @@ export async function handleFloorPlanPdf(req: Request, res: Response) {
       headless: true,
     });
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "load" });
     const pdfBuffer = await page.pdf({
       format: "A3",
       landscape: true,
