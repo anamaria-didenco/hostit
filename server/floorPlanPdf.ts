@@ -47,6 +47,7 @@ function normalizeCanvasData(raw: any): { width: number; height: number; element
       label: typeof el.label === "string" ? el.label : "",
       color: typeof el.color === "string" ? el.color : "#888",
       seats: typeof el.seats === "number" ? el.seats : 0,
+      imageUrl: typeof el.imageUrl === "string" ? el.imageUrl : "",
     }));
   return { width, height, elements };
 }
@@ -72,6 +73,14 @@ function elementToSvg(el: any): string {
         fill="none" stroke="#ccc" stroke-dasharray="4,3" rx="2" ${transform} />
       <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle"
         font-size="12" font-weight="600" fill="${color}" ${transform}>${esc(label)}</text>`;
+  }
+
+  // Furniture with a custom image — render the PNG and a caption.
+  if (el.imageUrl) {
+    const labelSvg = label
+      ? `<text x="${cx}" y="${el.y + el.height + 9}" text-anchor="middle" font-size="8" font-weight="600" fill="#374151" ${transform}>${esc(label)}</text>`
+      : "";
+    return `<image href="${esc(el.imageUrl)}" x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" preserveAspectRatio="xMidYMid meet" ${transform} />${labelSvg}`;
   }
 
   const shape = round

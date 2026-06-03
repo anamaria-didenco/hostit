@@ -2926,12 +2926,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        if (input.id) {
-          await db.update(floorPlans).set({ name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData, bookingId: input.bookingId }).where(and(eq(floorPlans.id, input.id), eq(floorPlans.ownerId, ctx.user.id)));
-          return { id: input.id };
-        } else {
-          const [result] = await db.insert(floorPlans).values({ ownerId: ctx.user.id, bookingId: input.bookingId, name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData }).returning({ id: floorPlans.id });
-          return { id: result.id };
+        try {
+          if (input.id) {
+            await db.update(floorPlans).set({ name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData, bookingId: input.bookingId, updatedAt: new Date() }).where(and(eq(floorPlans.id, input.id), eq(floorPlans.ownerId, ctx.user.id)));
+            return { id: input.id };
+          } else {
+            const [result] = await db.insert(floorPlans).values({ ownerId: ctx.user.id, bookingId: input.bookingId, name: input.name, bgImageUrl: input.bgImageUrl, canvasData: input.canvasData }).returning({ id: floorPlans.id });
+            return { id: result.id };
+          }
+        } catch (err: any) {
+          // Surface the real cause in the server logs and to the client so save
+          // failures are diagnosable instead of a generic toast.
+          console.error('[floorPlans.save] failed:', err?.message, err);
+          throw new Error(`Could not save floor plan: ${err?.message || 'database error'}`);
         }
       }),
     delete: protectedProcedure
@@ -5477,6 +5484,7 @@ Return ONLY valid JSON.`;
         seats: z.number().int().positive().optional(),
         quantity: z.number().int().positive().optional(),
         notes: z.string().optional(),
+        imageUrl: z.string().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');
@@ -5494,6 +5502,7 @@ Return ONLY valid JSON.`;
           seats: input.seats ?? null,
           quantity: input.quantity ?? null,
           notes: input.notes ?? null,
+          imageUrl: input.imageUrl ?? null,
           createdAt: now,
           updatedAt: now,
         }).returning({ id: furnitureInventory.id });
@@ -5510,6 +5519,7 @@ Return ONLY valid JSON.`;
         seats: z.number().int().positive().nullable().optional(),
         quantity: z.number().int().positive().nullable().optional(),
         notes: z.string().nullable().optional(),
+        imageUrl: z.string().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { getDb } = await import('./db');

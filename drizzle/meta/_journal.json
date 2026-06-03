@@ -294,6 +294,13 @@
       "when": 1779800000000,
       "tag": "0041_nbi_service_mappings",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1779800100000,
+      "tag": "0042_furniture_image",
+      "breakpoints": true
     }
   ]
 }

@@ -1974,7 +1974,7 @@ export default function Dashboard() {
       }
       toast.success('Floor plan saved!');
     },
-    onError: () => toast.error('Failed to save floor plan'),
+    onError: (e: any) => toast.error(e?.message ? `Save failed: ${e.message}` : 'Failed to save floor plan'),
   });
   const deleteFloorPlan = trpc.floorPlans.delete.useMutation({
     onSuccess: () => { refetchFloorPlans(); toast.success('Floor plan deleted'); },
@@ -1987,13 +1987,13 @@ export default function Dashboard() {
   );
   const [showInvForm, setShowInvForm] = useState(false);
   const [editingInvId, setEditingInvId] = useState<number | null>(null);
-  const [invForm, setInvForm] = useState({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '' });
+  const [invForm, setInvForm] = useState({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '', imageUrl: '' });
   const createFurniture = trpc.furnitureInventory.create.useMutation({
-    onSuccess: () => { refetchFurnitureInventory(); setShowInvForm(false); setEditingInvId(null); setInvForm({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '' }); toast.success('Item added'); },
+    onSuccess: () => { refetchFurnitureInventory(); setShowInvForm(false); setEditingInvId(null); setInvForm({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '', imageUrl: '' }); toast.success('Item added'); },
     onError: () => toast.error('Failed to add item'),
   });
   const updateFurniture = trpc.furnitureInventory.update.useMutation({
-    onSuccess: () => { refetchFurnitureInventory(); setEditingInvId(null); setShowInvForm(false); setInvForm({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '' }); toast.success('Item updated'); },
+    onSuccess: () => { refetchFurnitureInventory(); setEditingInvId(null); setShowInvForm(false); setInvForm({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '', imageUrl: '' }); toast.success('Item updated'); },
     onError: () => toast.error('Failed to update item'),
   });
   const deleteFurniture = trpc.furnitureInventory.delete.useMutation({
@@ -2002,7 +2002,7 @@ export default function Dashboard() {
   });
   const handleSaveFurniture = () => {
     if (!invForm.name.trim()) { toast.error('Name is required'); return; }
-    const payload = { name: invForm.name.trim(), type: invForm.type, color: invForm.color, width: invForm.width, height: invForm.height, seats: invForm.seats ? parseInt(invForm.seats) : undefined, quantity: invForm.quantity ? parseInt(invForm.quantity) : undefined, notes: invForm.notes || undefined };
+    const payload = { name: invForm.name.trim(), type: invForm.type, color: invForm.color, width: invForm.width, height: invForm.height, seats: invForm.seats ? parseInt(invForm.seats) : undefined, quantity: invForm.quantity ? parseInt(invForm.quantity) : undefined, notes: invForm.notes || undefined, imageUrl: invForm.imageUrl || null };
     if (editingInvId) { updateFurniture.mutate({ id: editingInvId, ...payload }); } else { createFurniture.mutate(payload); }
   };
 
@@ -6918,7 +6918,7 @@ export default function Dashboard() {
                         </div>
                         {!showInvForm && !editingInvId && (
                           <button
-                            onClick={() => { setShowInvForm(true); setEditingInvId(null); setInvForm({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '' }); }}
+                            onClick={() => { setShowInvForm(true); setEditingInvId(null); setInvForm({ name: '', type: 'rect_table', color: '#d4a574', width: 120, height: 60, seats: '', quantity: '', notes: '', imageUrl: '' }); }}
                             className="flex items-center gap-1.5 bg-ink text-cream font-bebas tracking-widest text-xs px-4 py-2 hover:bg-ink/80 transition-colors"
                           >
                             <Plus className="w-3 h-3" /> ADD ITEM
@@ -6986,6 +6986,42 @@ export default function Dashboard() {
                               <input value={invForm.notes} placeholder="e.g. Stored in back room" onChange={e => setInvForm(f => ({ ...f, notes: e.target.value }))}
                                 className="w-full border border-gray-200 px-3 py-1.5 text-sm font-dm focus:outline-none focus:border-burgundy" />
                             </div>
+                            <div className="col-span-2">
+                              <label className="font-bebas text-xs tracking-widest text-gray-500 block mb-1">IMAGE <span className="normal-case font-dm text-gray-300">(PNG — optional)</span></label>
+                              <div className="flex items-center gap-3">
+                                {invForm.imageUrl ? (
+                                  <div className="relative flex-shrink-0">
+                                    <img src={invForm.imageUrl} alt="" className="w-12 h-12 object-contain border border-gray-200 rounded bg-gray-50" />
+                                    <button type="button" onClick={() => setInvForm(f => ({ ...f, imageUrl: '' }))}
+                                      className="absolute -top-1.5 -right-1.5 bg-white border border-gray-300 rounded-full w-4 h-4 flex items-center justify-center text-gray-400 hover:text-red-500">
+                                      <X className="w-2.5 h-2.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="w-12 h-12 border border-dashed border-gray-300 rounded flex items-center justify-center text-gray-300 text-[10px] flex-shrink-0">none</div>
+                                )}
+                                <label className="cursor-pointer border border-dashed border-burgundy/40 hover:border-burgundy hover:bg-burgundy/5 px-3 py-1.5 rounded text-xs font-bebas tracking-wider text-gray-500 flex items-center gap-1.5 transition-colors">
+                                  <Upload className="w-3 h-3" /> UPLOAD PNG
+                                  <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e => {
+                                    const file = e.target.files?.[0]; if (!file) return;
+                                    const img = new Image();
+                                    const url = URL.createObjectURL(file);
+                                    img.onload = () => {
+                                      const MAX = 400;
+                                      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                                      const c = document.createElement('canvas');
+                                      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+                                      c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+                                      setInvForm(f => ({ ...f, imageUrl: c.toDataURL('image/png') }));
+                                      URL.revokeObjectURL(url);
+                                    };
+                                    img.onerror = () => { URL.revokeObjectURL(url); toast.error('Could not read image'); };
+                                    img.src = url;
+                                  }} />
+                                </label>
+                              </div>
+                              <p className="font-dm text-[10px] text-gray-300 mt-1">Shows in this list and on the floor plan when placed. Transparent PNGs look best.</p>
+                            </div>
                           </div>
                           <div className="flex gap-2">
                             <button onClick={() => { setShowInvForm(false); setEditingInvId(null); }} className="border border-gray-200 font-bebas tracking-widest text-xs px-4 py-2 text-gray-500 hover:text-gray-700 transition-colors">CANCEL</button>
@@ -7020,7 +7056,9 @@ export default function Dashboard() {
                               <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                                 <td className="p-3 pl-5">
                                   <div className="flex items-center gap-3">
-                                    <div style={{ width: 28, height: 28, backgroundColor: item.color, borderRadius: item.type === 'round_table' ? '50%' : 2, border: '1.5px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />
+                                    {item.imageUrl
+                                      ? <img src={item.imageUrl} alt="" style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }} className="rounded bg-gray-50 border border-gray-100" />
+                                      : <div style={{ width: 28, height: 28, backgroundColor: item.color, borderRadius: item.type === 'round_table' ? '50%' : 2, border: '1.5px solid rgba(0,0,0,0.15)', flexShrink: 0 }} />}
                                     <div>
                                       <p className="font-dm text-sm text-gray-800 font-medium">{item.name}</p>
                                       {item.notes && <p className="font-dm text-xs text-gray-400 italic">{item.notes}</p>}
@@ -7033,7 +7071,7 @@ export default function Dashboard() {
                                 <td className="p-3 font-dm text-sm text-gray-500">{item.quantity ?? '—'}</td>
                                 <td className="p-3 text-right">
                                   <div className="flex items-center justify-end gap-2">
-                                    <button onClick={() => { setEditingInvId(item.id); setShowInvForm(false); setInvForm({ name: item.name, type: item.type, color: item.color, width: item.width, height: item.height, seats: item.seats?.toString() ?? '', quantity: item.quantity?.toString() ?? '', notes: item.notes ?? '' }); }}
+                                    <button onClick={() => { setEditingInvId(item.id); setShowInvForm(false); setInvForm({ name: item.name, type: item.type, color: item.color, width: item.width, height: item.height, seats: item.seats?.toString() ?? '', quantity: item.quantity?.toString() ?? '', notes: item.notes ?? '', imageUrl: item.imageUrl ?? '' }); }}
                                       className="text-gray-400 hover:text-gray-700 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
                                     <button onClick={() => { if (confirm(`Remove "${item.name}"?`)) deleteFurniture.mutate({ id: item.id }); }}
                                       className="text-red-300 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>

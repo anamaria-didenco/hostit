@@ -486,6 +486,7 @@ export const furnitureInventory = pgTable("furniture_inventory", {
   seats: integer("seats"),
   quantity: integer("quantity"),
   notes: text("notes"),
+  imageUrl: text("image_url"),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 });

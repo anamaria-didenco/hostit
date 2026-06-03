@@ -36,7 +36,7 @@ export default function FloorPlanBuilder() {
 
   const savePlan = trpc.floorPlans.save.useMutation({
     onSuccess: (data: any) => { if (data?.id) setSavedPlanId(data.id); toast.success("Floor plan saved!"); },
-    onError: () => toast.error("Failed to save floor plan"),
+    onError: (e: any) => toast.error(e?.message ? `Save failed: ${e.message}` : "Failed to save floor plan"),
   });
 
   // Wait for an existing plan to load before mounting the editor, so its

@@ -18,6 +18,7 @@ export type FPElement = {
   label?: string;
   color?: string;
   seats?: number;
+  imageUrl?: string;
 };
 
 export type CanvasData = {
@@ -68,6 +69,7 @@ function normalizeCanvasData(raw: any): CanvasData {
       label: typeof el.label === "string" ? el.label : undefined,
       color: typeof el.color === "string" ? el.color : undefined,
       seats: typeof el.seats === "number" ? el.seats : undefined,
+      imageUrl: typeof el.imageUrl === "string" ? el.imageUrl : undefined,
     }));
   return { width, height, elements };
 }
@@ -160,6 +162,16 @@ function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRo
           borderRadius: "2px", padding: "2px 4px", whiteSpace: "nowrap", overflow: "hidden",
         }}>
           {el.label ?? "Label"}
+        </div>
+      ) : el.imageUrl ? (
+        <div style={{ width: "100%", height: "100%", position: "relative", outline: selected ? "2px solid #C8102E" : "none", outlineOffset: "2px" }}>
+          <img src={el.imageUrl} alt={el.label ?? ""} draggable={false}
+            style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", userSelect: "none" }} />
+          {el.label && (
+            <span style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", fontSize: "9px", fontWeight: 600, color: "#1a1a1a", background: "rgba(255,255,255,0.78)", padding: "0 3px", borderRadius: "2px", whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {el.label}
+            </span>
+          )}
         </div>
       ) : (
         <div style={{
@@ -736,6 +748,7 @@ export default function FloorPlanEditor({
                               label: item.name,
                               color: item.color,
                               seats: item.seats ?? 0,
+                              imageUrl: item.imageUrl ?? undefined,
                             };
                             setCanvasData(prev => ({ ...prev, elements: [...prev.elements, newEl] }));
                             setSelected(newEl.id);
@@ -743,15 +756,19 @@ export default function FloorPlanEditor({
                           }}
                           className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-burgundy/5 transition-colors group text-left"
                         >
-                          {/* Shape preview */}
-                          <div
-                            style={{
-                              width: 28, height: 28, flexShrink: 0,
-                              backgroundColor: item.color,
-                              borderRadius: round ? "50%" : 2,
-                              border: "1.5px solid rgba(0,0,0,0.2)",
-                            }}
-                          />
+                          {/* Shape / image preview */}
+                          {item.imageUrl ? (
+                            <img src={item.imageUrl} alt="" style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />
+                          ) : (
+                            <div
+                              style={{
+                                width: 28, height: 28, flexShrink: 0,
+                                backgroundColor: item.color,
+                                borderRadius: round ? "50%" : 2,
+                                border: "1.5px solid rgba(0,0,0,0.2)",
+                              }}
+                            />
+                          )}
                           <div className="flex-1 min-w-0">
                             <p className="font-dm text-xs text-ink/80 group-hover:text-ink truncate">{item.name}</p>
                             <p className="font-dm text-[10px] text-ink/40">
