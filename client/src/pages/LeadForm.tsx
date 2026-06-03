@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +65,27 @@ function isLight(hex: string) {
 export default function LeadForm() {
   const { slug } = useParams<{ slug?: string }>();
   const [submitted, setSubmitted] = useState(false);
-  const isEmbed = new URLSearchParams(window.location.search).get("embed") === "1";
+  // Embed + per-embed customisation read from the URL, e.g.
+  //   /enquire/<slug>?embed=1&accent=BE1622&font=Lora&bg=ffffff
+  // These override the venue's saved branding so the same form can be themed
+  // differently wherever it's embedded (like the NowBookIt widget).
+  const sp = new URLSearchParams(window.location.search);
+  const isEmbed = sp.get("embed") === "1";
+  const paramAccent = sp.get("accent");   // hex, no leading #
+  const paramFont = sp.get("font");       // any Google Font family name
+  const paramBg = sp.get("bg");           // hex, no leading #
+
+  // Load the requested Google Font on the fly so any family works.
+  useEffect(() => {
+    if (!paramFont || !/^[a-zA-Z0-9 ]+$/.test(paramFont)) return;
+    const id = "vf-embed-font";
+    document.getElementById(id)?.remove();
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${paramFont.trim().replace(/\s+/g, "+")}:wght@400;500;600;700&display=swap`;
+    document.head.appendChild(link);
+  }, [paramFont]);
 
   const { data: venueBySlug, isLoading: loadingBySlug } = trpc.venue.getBySlug.useQuery(
     { slug: slug ?? "" },
@@ -121,18 +141,26 @@ export default function LeadForm() {
   const venueName    = venue?.name ?? "VenueFlowHQ Venue";
   const formTitle    = venue?.leadFormTitle ?? "Book Your Event";
   const formSubtitle = venue?.leadFormSubtitle ?? "Tell us about your event and we'll get back to you within 24 hours.";
-  const primaryColor = venue?.primaryColor ?? "#2D4A3E";
+  // Validate a hex param (3–8 hex digits) → "#rrggbb", else null.
+  const hexParam = (h: string | null) => (h && /^[0-9a-fA-F]{3,8}$/.test(h)) ? `#${h}` : null;
+  const accentOverride = hexParam(paramAccent);
+  const bgOverride = hexParam(paramBg);
+
+  const primaryColor = accentOverride ?? venue?.primaryColor ?? "#2D4A3E";
   const logoUrl      = (venue as any)?.logoUrl;
   const logoScale    = (venue as any)?.logoScale ?? 100;
   const formFont     = (venue as any)?.formFont ?? 'inter';
-  const fontFamily   = FONT_MAP[formFont] ?? FONT_MAP.inter;
+  // A ?font= param wins (loaded from Google Fonts above); else the saved font.
+  const fontFamily   = (paramFont && /^[a-zA-Z0-9 ]+$/.test(paramFont))
+    ? `'${paramFont.trim()}', system-ui, sans-serif`
+    : (FONT_MAP[formFont] ?? FONT_MAP.inter);
   const textOnPrimary = isLight(primaryColor) ? "#1a1a1a" : "#ffffff";
   const galleryPhotoHeight = (venue as any)?.galleryPhotoHeight ?? 128;
   const successMsg   = (venue as any)?.formSuccessMessage || "Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.";
-  const formPageBg      = (venue as any)?.formPageBg || "#f8f5f0";
+  const formPageBg      = bgOverride || (venue as any)?.formPageBg || "#f8f5f0";
   const formPageBgImage = (venue as any)?.formPageBgImage || null;
-  const formCardBg      = (venue as any)?.formCardBg || "#ffffff";
-  const formButtonColor = (venue as any)?.formButtonColor || primaryColor;
+  const formCardBg      = bgOverride || (venue as any)?.formCardBg || "#ffffff";
+  const formButtonColor = accentOverride || (venue as any)?.formButtonColor || primaryColor;
   const textOnButton    = isLight(formButtonColor) ? "#1a1a1a" : "#ffffff";
 
   let galleryImages: string[] = [];

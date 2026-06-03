@@ -2007,6 +2007,10 @@ export default function Dashboard() {
   };
 
   const [settingsForm, setSettingsForm] = useState<any>(null);
+  // Embed customiser (Settings → enquiry form): per-embed font/colour overrides
+  const [embedAccent, setEmbedAccent] = useState("");   // hex w/o # — "" = use saved branding
+  const [embedFont, setEmbedFont] = useState("");        // Google Font family — "" = use saved
+  const [embedHeight, setEmbedHeight] = useState("640");
   const [formFields, setFormFields] = useState<FormFieldDef[] | null>(null);
   const [galleryDragIdx, setGalleryDragIdx] = useState<number | null>(null);
   const [galleryDragOverIdx, setGalleryDragOverIdx] = useState<number | null>(null);
@@ -5613,16 +5617,23 @@ export default function Dashboard() {
                     </a>
                   </div>
                 </div>
-                {/* Iframe embed code */}
+                {/* Iframe embed code + customiser */}
                 {venueSettings?.slug && (() => {
-                  const embedUrl = `${window.location.origin}/enquire/${venueSettings.slug}?embed=1`;
-                  const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="100%"\n  height="440"\n  frameborder="0"\n  style="border:none;"\n  title="Event Enquiry Form"\n></iframe>`;
+                  const cleanHex = embedAccent.replace(/^#/, "").trim();
+                  const accentValid = /^[0-9a-fA-F]{3,8}$/.test(cleanHex);
+                  const params = new URLSearchParams({ embed: "1" });
+                  if (accentValid) params.set("accent", cleanHex);
+                  if (embedFont.trim()) params.set("font", embedFont.trim());
+                  const h = parseInt(embedHeight) || 640;
+                  const embedUrl = `${window.location.origin}/enquire/${venueSettings.slug}?${params.toString()}`;
+                  const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="100%"\n  height="${h}"\n  frameborder="0"\n  style="border:none;max-width:520px;"\n  title="Event Enquiry Form"\n></iframe>`;
+                  const FONTS = ["", "Inter", "Lora", "Montserrat", "Playfair Display", "Poppins", "Roboto", "Cormorant Garamond", "DM Sans", "Open Sans"];
                   return (
                     <div className="mb-6 bg-sage-tint border border-sage-green/20 rounded-xl p-4">
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-3">
                         <div>
                           <p className="font-inter font-semibold text-sm text-gray-900">Embed on your website</p>
-                          <p className="font-inter text-xs text-gray-500 mt-0.5">Copy this code and paste it into your website HTML where you want the form to appear.</p>
+                          <p className="font-inter text-xs text-gray-500 mt-0.5">Customise the look, then copy the code into your website HTML.</p>
                         </div>
                         <button
                           onClick={() => { navigator.clipboard.writeText(iframeCode); toast.success('Embed code copied!'); }}
@@ -5630,7 +5641,40 @@ export default function Dashboard() {
                           <Copy className="w-3.5 h-3.5" /> Copy Code
                         </button>
                       </div>
+                      {/* Customiser controls */}
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div>
+                          <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">ACCENT COLOUR</label>
+                          <div className="flex items-center gap-1.5">
+                            <input type="color" value={accentValid ? `#${cleanHex}` : (venueSettings?.primaryColor || "#2D4A3E")}
+                              onChange={e => setEmbedAccent(e.target.value.replace(/^#/, ""))}
+                              className="w-8 h-8 border border-border rounded cursor-pointer flex-shrink-0" />
+                            <input type="text" value={embedAccent} onChange={e => setEmbedAccent(e.target.value)}
+                              placeholder="(saved)" className="w-full border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-sage-green" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">FONT</label>
+                          <select value={embedFont} onChange={e => setEmbedFont(e.target.value)}
+                            className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
+                            {FONTS.map(f => <option key={f} value={f}>{f || "Default (saved)"}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">HEIGHT (PX)</label>
+                          <input type="number" value={embedHeight} onChange={e => setEmbedHeight(e.target.value)} min={300}
+                            className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
+                        </div>
+                      </div>
                       <pre className="bg-white border border-border rounded-lg p-3 text-xs font-mono text-gray-700 overflow-x-auto whitespace-pre-wrap break-all select-all">{iframeCode}</pre>
+                      <div className="flex items-center gap-2 mt-2">
+                        <a href={embedUrl} target="_blank" rel="noopener noreferrer"
+                          className="font-inter text-xs text-sage-dark hover:underline flex items-center gap-1">
+                          <ExternalLink className="w-3 h-3" /> Preview this embed
+                        </a>
+                        <span className="text-gray-300">·</span>
+                        <span className="font-inter text-[11px] text-gray-400">Leave colour/font blank to use your saved branding.</span>
+                      </div>
                     </div>
                   );
                 })()}
