@@ -5626,7 +5626,7 @@ export default function Dashboard() {
                   if (embedFont.trim()) params.set("font", embedFont.trim());
                   const h = parseInt(embedHeight) || 640;
                   const embedUrl = `${window.location.origin}/enquire/${venueSettings.slug}?${params.toString()}`;
-                  const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="100%"\n  height="${h}"\n  frameborder="0"\n  style="border:none;max-width:520px;"\n  title="Event Enquiry Form"\n></iframe>`;
+                  const iframeCode = `<iframe id="vf-enquiry"\n  src="${embedUrl}"\n  width="100%"\n  height="${h}"\n  frameborder="0"\n  style="border:none;max-width:520px;"\n  title="Event Enquiry Form"></iframe>\n<script>\n  window.addEventListener('message', function (e) {\n    if (e.data && e.data.type === 'vf-embed-height' && e.data.height) {\n      var f = document.getElementById('vf-enquiry');\n      if (f) f.style.height = e.data.height + 'px';\n    }\n  });\n</script>`;
                   const FONTS = ["", "Inter", "Lora", "Montserrat", "Playfair Display", "Poppins", "Roboto", "Cormorant Garamond", "DM Sans", "Open Sans"];
                   return (
                     <div className="mb-6 bg-sage-tint border border-sage-green/20 rounded-xl p-4">
@@ -5661,7 +5661,7 @@ export default function Dashboard() {
                           </select>
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">HEIGHT (PX)</label>
+                          <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">START HEIGHT</label>
                           <input type="number" value={embedHeight} onChange={e => setEmbedHeight(e.target.value)} min={300}
                             className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                         </div>
@@ -5673,7 +5673,7 @@ export default function Dashboard() {
                           <ExternalLink className="w-3 h-3" /> Preview this embed
                         </a>
                         <span className="text-gray-300">·</span>
-                        <span className="font-inter text-[11px] text-gray-400">Leave colour/font blank to use your saved branding.</span>
+                        <span className="font-inter text-[11px] text-gray-400">The iframe auto-resizes to fit each step (the script below handles it). Leave colour/font blank to use saved branding.</span>
                       </div>
                     </div>
                   );

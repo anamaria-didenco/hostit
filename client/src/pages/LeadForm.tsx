@@ -87,6 +87,25 @@ export default function LeadForm() {
     document.head.appendChild(link);
   }, [paramFont]);
 
+  // Auto-resize: when embedded, post our content height to the parent page so a
+  // tiny script in the embed snippet can size the <iframe> to fit — no inner
+  // scrollbars, no empty space, regardless of which step is showing.
+  useEffect(() => {
+    if (!isEmbed) return;
+    const post = () => {
+      const h = Math.ceil(document.documentElement.scrollHeight);
+      try { window.parent?.postMessage({ type: "vf-embed-height", height: h }, "*"); } catch { /* cross-origin */ }
+    };
+    post();
+    const ro = new ResizeObserver(() => post());
+    ro.observe(document.documentElement);
+    // Safety posts for late reflow (custom font / images loading).
+    const t1 = setTimeout(post, 400);
+    const t2 = setTimeout(post, 1500);
+    window.addEventListener("load", post);
+    return () => { ro.disconnect(); clearTimeout(t1); clearTimeout(t2); window.removeEventListener("load", post); };
+  }, [isEmbed]);
+
   const { data: venueBySlug, isLoading: loadingBySlug } = trpc.venue.getBySlug.useQuery(
     { slug: slug ?? "" },
     { enabled: !!slug }
