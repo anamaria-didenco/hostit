@@ -10,7 +10,7 @@ import { floorPlans } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 
 const ROUND_TYPES = new Set([
-  "round-table-6", "round-table-8", "cocktail-table", "chair", "plant", "pillar",
+  "round-table-6", "round-table-8", "cocktail-table", "chair", "plant", "pillar", "round_table",
 ]);
 
 function isRound(type: string) {

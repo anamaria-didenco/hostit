@@ -98,7 +98,7 @@ const PALETTE = [
 const ELEMENT_COLORS: Record<string, string> = Object.fromEntries(PALETTE.map(p => [p.type, p.color]));
 
 function isRound(type: string) {
-  return ["round-table-6","round-table-8","cocktail-table","chair","plant","pillar"].includes(type)
+  return ["round-table-6","round-table-8","cocktail-table","chair","plant","pillar","round_table"].includes(type)
     || type.startsWith("custom-round");
 }
 
