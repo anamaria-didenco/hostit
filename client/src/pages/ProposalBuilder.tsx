@@ -266,21 +266,8 @@ export default function ProposalBuilder() {
     setHireItems(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
   const removeHireItem = (i: number) => setHireItems(prev => prev.filter((_, idx) => idx !== i));
 
-  const saveQuote = trpc.quote.save.useMutation({
-    onSuccess: () => toast.success("Quote saved!"),
-    onError: () => toast.error("Failed to save quote"),
-  });
-  const handleSaveQuote = () => {
-    if (!savedProposal) return toast.error("Save the proposal first, then save the quote.");
-    saveQuote.mutate({
-      proposalId: savedProposal.id,
-      minimumSpend: minimumSpend ? parseFloat(minimumSpend) : undefined,
-      foodTotal: foodTotalOverride ? parseFloat(foodTotalOverride) : undefined,
-      autoBarTab,
-      notes: quoteNotes,
-      items: hireItems.map((item, i) => ({ type: 'hire', name: item.name, description: item.description, qty: item.qty, unitPrice: item.unitPrice, sortOrder: i })),
-    });
-  };
+  // Quote (pricing / min-spend) now saves together with the proposal — see handleSave.
+  const saveQuote = trpc.quote.save.useMutation();
 
   // Derived: auto bar tab amount (computed after subtotal is declared below)
   const _lineSubtotal = () => lineItems.reduce((sum, item) => sum + item.total, 0);
@@ -338,8 +325,7 @@ export default function ProposalBuilder() {
   };
 
   const createProposal = trpc.proposals.create.useMutation({
-    onSuccess: (data) => { setSavedProposal(data); toast.success("Proposal saved as draft!"); },
-    onError: () => toast.error("Failed to save proposal"),
+    onSuccess: (data) => { setSavedProposal(data); },
   });
 
   const hasSmtp = !!(venueSettings as any)?.smtpHost && !!(venueSettings as any)?.smtpUser && !!(venueSettings as any)?.smtpPass;
@@ -356,7 +342,7 @@ export default function ProposalBuilder() {
     onError: () => toast.error("Failed to send proposal"),
   });
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!leadId) return toast.error("No lead selected");
     // Build enriched line items: include selected menu packages as line items
     const menuLineItems = selectedPackages.map(pkg => ({
@@ -370,24 +356,39 @@ export default function ProposalBuilder() {
     const allTax = (allSubtotal * taxPercent) / 100;
     const allTotal = allSubtotal + allTax;
     const allDeposit = (allTotal * depositPercent) / 100;
-    createProposal.mutate({
-      leadId,
-      title,
-      introMessage: introMessage || undefined,
-      eventDate: eventDate || undefined,
-      guestCount: guestCount ? parseInt(guestCount) : undefined,
-      spaceName: spaceName || undefined,
-      lineItems: allLineItems,
-      subtotalNzd: allSubtotal,
-      taxPercent,
-      taxNzd: allTax,
-      totalNzd: allTotal,
-      depositPercent,
-      depositNzd: allDeposit,
-      termsAndConditions,
-      internalNotes: internalNotes || undefined,
-      expiresAt: expiresAt || undefined,
-    });
+    try {
+      // One save = proposal + its quote (pricing / min-spend), now a single document.
+      const proposal = await createProposal.mutateAsync({
+        leadId,
+        title,
+        introMessage: introMessage || undefined,
+        eventDate: eventDate || undefined,
+        guestCount: guestCount ? parseInt(guestCount) : undefined,
+        spaceName: spaceName || undefined,
+        lineItems: allLineItems,
+        subtotalNzd: allSubtotal,
+        taxPercent,
+        taxNzd: allTax,
+        totalNzd: allTotal,
+        depositPercent,
+        depositNzd: allDeposit,
+        termsAndConditions,
+        internalNotes: internalNotes || undefined,
+        expiresAt: expiresAt || undefined,
+      });
+      setSavedProposal(proposal);
+      await saveQuote.mutateAsync({
+        proposalId: proposal.id,
+        minimumSpend: minimumSpend ? parseFloat(minimumSpend) : undefined,
+        foodTotal: foodTotalOverride ? parseFloat(foodTotalOverride) : undefined,
+        autoBarTab,
+        notes: quoteNotes,
+        items: hireItems.map((item, i) => ({ type: 'hire', name: item.name, description: item.description, qty: item.qty, unitPrice: item.unitPrice, sortOrder: i })),
+      });
+      toast.success("Proposal saved!");
+    } catch {
+      toast.error("Failed to save proposal");
+    }
   };
 
   const handleSend = () => {
@@ -1080,22 +1081,15 @@ export default function ProposalBuilder() {
 
           {/* Quote / Min-Spend Calculator */}
           <div className="bg-cream-card border border-border shadow-sm">
-            <button
-              type="button"
-              className="w-full flex items-center justify-between p-5 text-left"
-              onClick={() => setQuoteSectionOpen(o => !o)}
-            >
-              <div className="flex items-center gap-3">
-                <span className="font-bebas text-xs tracking-widest text-muted-foreground">QUOTE &amp; MINIMUM SPEND</span>
-                {Number(minimumSpend) > 0 && (
-                  <span className="font-bebas text-xs tracking-widest bg-burgundy text-cream px-2 py-0.5">
-                    MIN ${parseFloat(minimumSpend).toLocaleString("en-NZ")}
-                  </span>
-                )}
-              </div>
-              {quoteSectionOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-            </button>
-            {quoteSectionOpen && (
+            <div className="w-full flex items-center gap-3 p-5">
+              <span className="font-bebas text-xs tracking-widest text-muted-foreground">PRICING &amp; MINIMUM SPEND</span>
+              {Number(minimumSpend) > 0 && (
+                <span className="font-bebas text-xs tracking-widest bg-burgundy text-cream px-2 py-0.5">
+                  MIN ${parseFloat(minimumSpend).toLocaleString("en-NZ")}
+                </span>
+              )}
+            </div>
+            {(
               <div className="px-5 pb-5 space-y-5">
                 {/* Min Spend + Food Total */}
                 <div className="grid grid-cols-2 gap-4">
@@ -1207,10 +1201,7 @@ export default function ProposalBuilder() {
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy resize-none text-sm font-dm" />
                 </div>
 
-                <Button onClick={handleSaveQuote} disabled={saveQuote.isPending}
-                  className="w-full bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest rounded-none h-10">
-                  {saveQuote.isPending ? "SAVING QUOTE..." : "SAVE QUOTE"}
-                </Button>
+                <p className="font-dm text-xs text-muted-foreground italic">Pricing &amp; minimum spend save together with the proposal — just hit Save.</p>
               </div>
             )}
           </div>
