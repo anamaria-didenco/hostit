@@ -725,6 +725,48 @@ function PostEventSpendPrompt() {
   );
 }
 
+/**
+ * Space picker that supports selecting MULTIPLE spaces (e.g. Bar + Restaurant
+ * for a full-venue event). The value is stored as a comma-joined string in the
+ * existing `spaceName` field (e.g. "Restaurant, Bar"), so no schema change and
+ * all existing displays keep working. Includes a one-click "Full Venue"
+ * shortcut that selects every space.
+ */
+function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
+  value: string;
+  onChange: (v: string) => void;
+  spaces: any[];
+  invalid?: boolean;
+}) {
+  const names: string[] = spaces.map((s: any) => s.name);
+  const selected = (value || "").split(",").map(s => s.trim()).filter(Boolean);
+  const toggle = (name: string) => {
+    const set = new Set(selected);
+    set.has(name) ? set.delete(name) : set.add(name);
+    // Keep results in the configured space order so it's consistent.
+    onChange(names.filter(n => set.has(n)).join(", "));
+  };
+  const allSelected = names.length > 0 && names.every(n => selected.includes(n));
+  return (
+    <div className={`border rounded-md p-2.5 bg-white ${invalid ? "border-amber-500 ring-1 ring-amber-500/30" : "border-gold/30"}`}>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {spaces.map((s: any) => (
+          <label key={s.id} className="flex items-center gap-1.5 cursor-pointer text-xs font-dm text-ink/80 hover:text-ink">
+            <input type="checkbox" checked={selected.includes(s.name)} onChange={() => toggle(s.name)} className="accent-forest w-3.5 h-3.5" />
+            {s.name}
+          </label>
+        ))}
+      </div>
+      {spaces.length > 1 && (
+        <button type="button" onClick={() => onChange(allSelected ? "" : names.join(", "))}
+          className="mt-2 font-bebas tracking-widest text-[10px] text-forest hover:underline">
+          {allSelected ? "✕ CLEAR ALL" : "⛶ FULL VENUE (ALL SPACES)"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user, isAuthenticated, loading, isTeamMember } = useAuth();
   const [, setLocation] = useLocation();
@@ -8191,18 +8233,12 @@ export default function Dashboard() {
                     {/* Always-on space picker (no click-to-edit dance) so the
                         user can never get stuck unable to set one. */}
                     {spaces && spaces.length > 0 ? (
-                      <Select value={selectedBooking.spaceName || "__none__"}
-                        onValueChange={v => saveDrawerField("spaceName", v === "__none__" ? "" : v)}>
-                        <SelectTrigger className={`h-8 text-xs ${!selectedBooking.spaceName?.trim() ? 'border-amber-500 ring-1 ring-amber-500/30' : 'border-gold/30'}`}>
-                          <SelectValue placeholder="Pick a space" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__" className="text-xs italic text-ink/50">— None —</SelectItem>
-                          {spaces.map((s: any) => (
-                            <SelectItem key={s.id} value={s.name} className="text-xs">{s.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SpaceMultiSelect
+                        value={selectedBooking.spaceName || ""}
+                        onChange={(v) => saveDrawerField("spaceName", v)}
+                        spaces={spaces}
+                        invalid={!selectedBooking.spaceName?.trim()}
+                      />
                     ) : (
                       <div className="text-xs text-ink/60 italic">No spaces yet — add one in Settings → Spaces</div>
                     )}
@@ -8912,14 +8948,7 @@ export default function Dashboard() {
             <div>
               <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-500">*</span></label>
               {spaces && spaces.length > 0 ? (
-                <Select value={quickCreateForm.spaceName} onValueChange={v => setQuickCreateForm(f => ({ ...f, spaceName: v }))}>
-                  <SelectTrigger className="rounded-xl border-gray-200 text-sm"><SelectValue placeholder="Pick a space" /></SelectTrigger>
-                  <SelectContent>
-                    {spaces.map((s: any) => (
-                      <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SpaceMultiSelect value={quickCreateForm.spaceName} onChange={v => setQuickCreateForm(f => ({ ...f, spaceName: v }))} spaces={spaces} />
               ) : (
                 <Input value={quickCreateForm.spaceName}
                   onChange={e => setQuickCreateForm(f => ({ ...f, spaceName: e.target.value }))}
@@ -9333,14 +9362,7 @@ export default function Dashboard() {
               <div>
                 <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE <span className="text-red-500">*</span></label>
                 {spaces && spaces.length > 0 ? (
-                  <Select value={addEnquiryForm.spaceName} onValueChange={v => setAddEnquiryForm(f => ({ ...f, spaceName: v }))}>
-                    <SelectTrigger className="rounded-none border border-gold/30 focus:ring-0"><SelectValue placeholder="Pick a space" /></SelectTrigger>
-                    <SelectContent>
-                      {spaces.map((s: any) => (
-                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SpaceMultiSelect value={addEnquiryForm.spaceName} onChange={v => setAddEnquiryForm(f => ({ ...f, spaceName: v }))} spaces={spaces} />
                 ) : (
                   <Input value={addEnquiryForm.spaceName}
                     onChange={e => setAddEnquiryForm(f => ({ ...f, spaceName: e.target.value }))}
