@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, memo } from "react";
 import {
   Trash2, RotateCw, ZoomIn, ZoomOut, MousePointer,
   Save, Plus, Share2, Copy, Check, Download, Upload, X,
@@ -111,7 +111,7 @@ function getLabel(type: string, customPalette: CustomPaletteItem[]) {
 }
 
 // ─── Render a single element on the canvas ───────────────────────────────────
-function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRotateStart, readOnly, customPalette }: {
+const ElementShape = memo(function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRotateStart, readOnly, customPalette }: {
   el: FPElement;
   selected: boolean;
   onSelect: (id: string) => void;
@@ -210,7 +210,7 @@ function ElementShape({ el, selected, onSelect, onDragStart, onResizeStart, onRo
       )}
     </div>
   );
-}
+});
 
 // ─── Main Editor ──────────────────────────────────────────────────────────────
 interface FloorPlanEditorProps {
@@ -273,80 +273,98 @@ export default function FloorPlanEditor({
 
   const snap = useCallback((v: number) => snapToGrid ? Math.round(v / GRID) * GRID : v, [snapToGrid]);
 
+  // Always-current refs so the drag/resize/rotate START handlers can stay
+  // referentially STABLE (deps = [readOnly] only). If they depended on
+  // canvasData.elements they'd be re-created on every drag frame, which would
+  // defeat ElementShape's memo and re-render every element each mouse move.
+  const elementsRef = useRef(canvasData.elements);
+  elementsRef.current = canvasData.elements;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+
   // ── Drag element ────────────────────────────────────────────────────────
   const handleDragStart = useCallback((e: React.MouseEvent, id: string) => {
     if (readOnly) return;
     e.preventDefault();
-    const el = canvasData.elements.find(x => x.id === id);
+    const el = elementsRef.current.find(x => x.id === id);
     if (!el) return;
     dragRef.current = { id, startX: e.clientX, startY: e.clientY, origX: el.x, origY: el.y };
-  }, [canvasData.elements, readOnly]);
+  }, [readOnly]);
 
   // ── Resize element (corner handles) ───────────────────────────────────────
   const handleResizeStart = useCallback((e: React.MouseEvent, id: string, corner: string) => {
     if (readOnly) return;
     e.preventDefault(); e.stopPropagation();
-    const el = canvasData.elements.find(x => x.id === id);
+    const el = elementsRef.current.find(x => x.id === id);
     if (!el) return;
     resizeRef.current = { id, corner, startX: e.clientX, startY: e.clientY, origX: el.x, origY: el.y, origW: el.width, origH: el.height };
-  }, [canvasData.elements, readOnly]);
+  }, [readOnly]);
 
   // ── Rotate element (top handle) ───────────────────────────────────────────
   const handleRotateStart = useCallback((e: React.MouseEvent, id: string) => {
     if (readOnly) return;
     e.preventDefault(); e.stopPropagation();
-    const el = canvasData.elements.find(x => x.id === id);
+    const el = elementsRef.current.find(x => x.id === id);
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!el || !rect) return;
     // Element centre in screen coordinates (canvas is scaled from top-left).
-    const cx = rect.left + (el.x + el.width / 2) * zoom;
-    const cy = rect.top + (el.y + el.height / 2) * zoom;
+    const z = zoomRef.current;
+    const cx = rect.left + (el.x + el.width / 2) * z;
+    const cy = rect.top + (el.y + el.height / 2) * z;
     rotateRef.current = { id, cx, cy };
-  }, [canvasData.elements, readOnly, zoom]);
+  }, [readOnly]);
 
   useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
-      // Rotate takes priority, then resize, then drag.
+    let raf = 0;
+    let lx = 0, ly = 0; // latest pointer position
+    // Apply at most ONE update per animation frame using the latest position.
+    // A raw mousemove handler firing setCanvasData 100+×/sec floods the main
+    // thread and freezes the tab; coalescing to ~60fps keeps it smooth.
+    const apply = () => {
+      raf = 0;
       if (rotateRef.current) {
         const { id, cx, cy } = rotateRef.current;
-        let deg = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI + 90;
+        let deg = Math.atan2(ly - cy, lx - cx) * 180 / Math.PI + 90;
         deg = ((Math.round(deg / 15) * 15) % 360 + 360) % 360; // snap to 15°
         setCanvasData(prev => ({ ...prev, elements: prev.elements.map(el => el.id === id ? { ...el, rotation: deg } : el) }));
         return;
       }
       if (resizeRef.current) {
         const r = resizeRef.current;
-        const dx = (e.clientX - r.startX) / zoom;
-        const dy = (e.clientY - r.startY) / zoom;
-        let { origX: x, origY: y, origW: w, origH: h } = r;
+        const dx = (lx - r.startX) / zoom;
+        const dy = (ly - r.startY) / zoom;
         const west = r.corner.includes("w");
         const north = r.corner.includes("n");
-        let nw = west ? w - dx : w + dx;
-        let nh = north ? h - dy : h + dy;
-        nw = Math.max(GRID, snap(nw));
-        nh = Math.max(GRID, snap(nh));
-        const nx = west ? snap(x + (w - nw)) : x;
-        const ny = north ? snap(y + (h - nh)) : y;
+        const nw = Math.max(GRID, snap(west ? r.origW - dx : r.origW + dx));
+        const nh = Math.max(GRID, snap(north ? r.origH - dy : r.origH + dy));
+        const nx = west ? snap(r.origX + (r.origW - nw)) : r.origX;
+        const ny = north ? snap(r.origY + (r.origH - nh)) : r.origY;
         setCanvasData(prev => ({ ...prev, elements: prev.elements.map(el => el.id === r.id ? { ...el, x: nx, y: ny, width: nw, height: nh } : el) }));
         return;
       }
       if (dragRef.current) {
-        const dx = (e.clientX - dragRef.current.startX) / zoom;
-        const dy = (e.clientY - dragRef.current.startY) / zoom;
-        setCanvasData(prev => ({
-          ...prev,
-          elements: prev.elements.map(el =>
-            el.id === dragRef.current!.id
-              ? { ...el, x: snap(dragRef.current!.origX + dx), y: snap(dragRef.current!.origY + dy) }
-              : el
-          ),
-        }));
+        const dr = dragRef.current;
+        const dx = (lx - dr.startX) / zoom;
+        const dy = (ly - dr.startY) / zoom;
+        setCanvasData(prev => ({ ...prev, elements: prev.elements.map(el => el.id === dr.id ? { ...el, x: snap(dr.origX + dx), y: snap(dr.origY + dy) } : el) }));
       }
     };
-    const onMouseUp = () => { dragRef.current = null; resizeRef.current = null; rotateRef.current = null; };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragRef.current && !resizeRef.current && !rotateRef.current) return;
+      lx = e.clientX; ly = e.clientY;
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    const onMouseUp = () => {
+      dragRef.current = null; resizeRef.current = null; rotateRef.current = null;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    };
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-    return () => { window.removeEventListener("mousemove", onMouseMove); window.removeEventListener("mouseup", onMouseUp); };
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [zoom, snap]);
 
   // ── Drop from palette ────────────────────────────────────────────────────
