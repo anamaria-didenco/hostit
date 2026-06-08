@@ -433,6 +433,8 @@ export default function RunsheetBuilder() {
     { key: 'drinks',   label: 'Drinks / bar' },
     { key: 'totals',   label: 'Running totals' },
     { key: 'payment',  label: 'Payment instructions' },
+    { key: 'financials', label: 'Financials (quote / min spend)', beoOnly: true },
+    { key: 'footer',   label: 'Footer note / message' },
     { key: 'menus',    label: 'Linked menu PDFs (chef appendix)', beoOnly: true },
   ];
   const PRINT_PREFS_KEY = 'vf:printHide:v1';
@@ -445,6 +447,12 @@ export default function RunsheetBuilder() {
     } catch { return new Set(); }
   });
   const [printEditorOpen, setPrintEditorOpen] = useState(false);
+  // ── BEO PREVIEW & PRINT MODAL ──────────────────────────────────────
+  // Live, in-app preview of the EXACT BEO that prints, with the same
+  // section toggles + an inline footer-note editor. previewNonce forces
+  // the iframe to reload after a save so edits show up immediately.
+  const [beoPreviewOpen, setBeoPreviewOpen] = useState(false);
+  const [previewNonce, setPreviewNonce] = useState(0);
   useEffect(() => {
     try { localStorage.setItem(PRINT_PREFS_KEY, JSON.stringify(Array.from(printHide))); } catch {}
   }, [printHide]);
@@ -1944,13 +1952,22 @@ export default function RunsheetBuilder() {
           >
             <Printer className="w-4 h-4" /> <span>PRINT</span>
           </button>
+          {effectiveBookingId && (
+            <button
+              onClick={() => setBeoPreviewOpen(true)}
+              className="flex font-bebas tracking-widest text-xs bg-gold text-ink hover:bg-gold/90 px-3 py-1.5 items-center gap-1.5 transition-colors"
+              title="See exactly how the BEO will look, adjust which sections show, then print or download"
+            >
+              <Eye className="w-3.5 h-3.5" /> PREVIEW &amp; PRINT BEO
+            </button>
+          )}
           {effectiveBookingId ? (
             <a
               href={`/api/beo/${effectiveBookingId}${beoHideQuery}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden md:flex font-bebas tracking-widest text-xs border border-cream/20 text-cream/70 hover:border-gold/40 hover:text-gold px-3 py-1.5 items-center gap-1.5 transition-colors"
-              title="Open the BEO — the single staff-facing document (respects Print View)"
+              className="hidden lg:flex font-bebas tracking-widest text-xs border border-cream/20 text-cream/70 hover:border-gold/40 hover:text-gold px-3 py-1.5 items-center gap-1.5 transition-colors"
+              title="Download the BEO PDF directly (respects Print View)"
             >
               <FileText className="w-3.5 h-3.5" /> BEO PDF
             </a>
@@ -4553,13 +4570,99 @@ export default function RunsheetBuilder() {
         {/* Print footer */}
         <div className="hidden print:block mt-8 border-t-2 border-gold/40 pt-4 space-y-2">
           {footerText && (
-            <div className="font-dm text-sm text-ink/80 bg-linen/60 border border-gold/20 px-4 py-3" dangerouslySetInnerHTML={{ __html: footerText }} />
+            <div data-print-section="footer" className="font-dm text-sm text-ink/80 bg-linen/60 border border-gold/20 px-4 py-3" dangerouslySetInnerHTML={{ __html: footerText }} />
           )}
           <div className="text-xs text-ink/40 font-dm text-center">
             Prepared by VenueFlowHQ — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
           </div>
         </div>
       </div>
+
+      {/* ── BEO PREVIEW & PRINT MODAL ────────────────────────────────────── */}
+      {beoPreviewOpen && effectiveBookingId && (
+        <div className="fixed inset-0 z-[70] bg-ink/70 backdrop-blur-sm flex flex-col no-print">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3 bg-forest text-cream shadow-lg shrink-0">
+            <div className="flex items-center gap-2.5">
+              <Eye className="w-5 h-5 text-gold shrink-0" />
+              <div>
+                <div className="font-bebas tracking-widest text-sm leading-none">PREVIEW &amp; PRINT BEO</div>
+                <div className="font-dm text-[11px] text-cream/60 mt-0.5">This is exactly what will print. Choose what to include on the left.</div>
+              </div>
+            </div>
+            <button onClick={() => setBeoPreviewOpen(false)} className="text-cream/70 hover:text-gold p-1.5 transition-colors" title="Close">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Body: controls rail + live preview */}
+          <div className="flex-1 flex flex-col md:flex-row min-h-0">
+            {/* Controls */}
+            <div className="w-full md:w-80 shrink-0 bg-white border-r border-gold/20 overflow-y-auto">
+              <div className="px-4 py-3 border-b border-gold/15">
+                <div className="font-bebas tracking-widest text-xs text-forest mb-1">WHAT TO INCLUDE</div>
+                <p className="font-dm text-[11px] text-ink/45 mb-2">Untick anything you don't want on this BEO — the preview updates instantly.</p>
+                {PRINT_SECTIONS.map(s => {
+                  const checked = !printHide.has(s.key);
+                  return (
+                    <label key={s.key} className="flex items-start gap-2 px-1 py-1.5 hover:bg-linen/50 cursor-pointer rounded-sm">
+                      <input type="checkbox" checked={checked} onChange={() => togglePrintSection(s.key)} className="mt-0.5 accent-forest" />
+                      <span className="font-dm text-sm text-ink leading-tight">{s.label}</span>
+                    </label>
+                  );
+                })}
+                <button onClick={() => setPrintHide(new Set())} className="mt-2 font-bebas tracking-widest text-[10px] text-ink/40 hover:text-forest transition-colors">RESET — SHOW EVERYTHING</button>
+              </div>
+              {/* Footer note editor */}
+              <div className="px-4 py-3">
+                <div className="font-bebas tracking-widest text-xs text-forest mb-1">FOOTER NOTE / MESSAGE</div>
+                <p className="font-dm text-[11px] text-ink/45 mb-2">The closing note at the very bottom — payment terms, a thank-you, anything. Keep “Footer note” ticked above to show it.</p>
+                <RichTextarea value={footerText} onChange={setFooterText} placeholder="e.g. Final payment of $2,400 due on the day. Grazie!" minHeight="80px" />
+                <button
+                  onClick={async () => { try { await handleSave(); } catch {} setPreviewNonce(n => n + 1); }}
+                  disabled={saving}
+                  className="mt-2 w-full font-bebas tracking-widest text-xs bg-forest text-cream hover:bg-forest/90 disabled:opacity-50 px-3 py-2 flex items-center justify-center gap-1.5 transition-colors"
+                  title="Save your changes and refresh the preview"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${saving ? 'animate-spin' : ''}`} /> {saving ? 'SAVING…' : 'SAVE & UPDATE PREVIEW'}
+                </button>
+              </div>
+            </div>
+
+            {/* Live preview */}
+            <div className="flex-1 min-h-0 bg-ink/20 overflow-auto p-3 md:p-6 flex justify-center">
+              <iframe
+                id="vf-beo-frame"
+                key={previewNonce}
+                title="BEO preview"
+                src={`/api/beo/${effectiveBookingId}?format=html${printHide.size ? `&hide=${encodeURIComponent(Array.from(printHide).join(','))}` : ''}&_=${previewNonce}`}
+                className="bg-white shadow-2xl w-full max-w-[820px] h-full border-0 rounded-sm"
+              />
+            </div>
+          </div>
+
+          {/* Footer actions */}
+          <div className="flex items-center justify-between gap-2 px-5 py-3 bg-white border-t border-gold/20 shrink-0">
+            <button onClick={() => setBeoPreviewOpen(false)} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink px-3 py-2 transition-colors">CLOSE</button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.open(`/api/beo/${effectiveBookingId}${beoHideQuery}`, '_blank')}
+                className="font-bebas tracking-widest text-xs border border-forest/30 text-forest hover:bg-forest/5 px-4 py-2 flex items-center gap-1.5 transition-colors"
+                title="Download the BEO as a PDF file"
+              >
+                <Download className="w-3.5 h-3.5" /> DOWNLOAD PDF
+              </button>
+              <button
+                onClick={() => { const f = document.getElementById('vf-beo-frame') as HTMLIFrameElement | null; try { f?.contentWindow?.focus(); f?.contentWindow?.print(); } catch {} }}
+                className="font-bebas tracking-widest text-xs bg-gold text-ink hover:bg-gold/90 px-5 py-2 flex items-center gap-1.5 transition-colors"
+                title="Print this BEO"
+              >
+                <Printer className="w-3.5 h-3.5" /> PRINT
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── SMART PASTE IMPORT MODAL ─────────────────────────────────────── */}
       {showPasteImport && (

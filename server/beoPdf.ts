@@ -449,7 +449,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     ${barNotes ? `
     <div style="margin-top:8px;padding:8px 10px;background:#f5f2eb;border-left:3px solid ${venuePrimaryColor}">
       <div class="detail-label" style="margin-bottom:4px">Bar Notes</div>
-      <div style="font-size:9.5px;line-height:1.55;color:#1a1209;white-space:pre-wrap">${(barNotes as string).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>
+      <div style="font-size:11px;line-height:1.6;color:#1a1209;white-space:pre-wrap">${(barNotes as string).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>
     </div>` : ""}
   </div>
 </div>` : "";
@@ -488,8 +488,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 
     // F&B grid columns — drop trailing STAFF / PREP column on public view.
     const fnbGridCols = isPublic
-      ? (showQty ? "65px 1fr 32px 50px 70px" : "65px 1fr 50px 70px")
-      : (showQty ? "65px 1fr 32px 50px 70px 1fr" : "65px 1fr 50px 70px 1fr");
+      ? (showQty ? "74px 1fr 40px 62px 80px" : "74px 1fr 62px 80px")
+      : (showQty ? "74px 1fr 40px 62px 80px 1fr" : "74px 1fr 62px 80px 1fr");
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -503,7 +503,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'DM Sans', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 9.5px;
+    font-size: 11px;
     color: #1a1209;
     background: #f9f5ef;
     padding: 0;
@@ -525,7 +525,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .doc-header-left {}
   .doc-type {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
+    font-size: 10.5px;
     letter-spacing: 0.18em;
     color: rgba(255,255,255,0.55);
     margin-bottom: 2px;
@@ -540,14 +540,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   }
   .doc-sub {
     font-family: 'DM Sans', sans-serif;
-    font-size: 9px;
+    font-size: 10.5px;
     color: rgba(255,255,255,0.65);
     margin-top: 3px;
   }
   .doc-header-right { text-align: right; }
   .doc-beo-num {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.1em;
     color: rgba(255,255,255,0.45);
     margin-bottom: 4px;
@@ -570,7 +570,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     background: #c9a84c;
     color: #1a1209;
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.12em;
     padding: 2px 7px;
     margin-top: 6px;
@@ -593,13 +593,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .detail-cell:last-child { border-right: none; }
   .cell-label {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 7px;
+    font-size: 8px;
     letter-spacing: 0.12em;
     color: rgba(26,18,9,0.4);
     margin-bottom: 2px;
   }
   .cell-value {
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 600;
     color: #1a1209;
     word-break: break-word;
@@ -630,7 +630,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   }
   .card-header {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
+    font-size: 10.5px;
     letter-spacing: 0.16em;
     color: white;
     background: ${venuePrimaryColor};
@@ -639,7 +639,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .card-header-dark { background: #3a3530; }
   .card-body { padding: 9px 12px; }
   .notes-text {
-    font-size: 9.5px;
+    font-size: 11px;
     line-height: 1.65;
     color: #3a2e1e;
   }
@@ -653,14 +653,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .detail-row:last-child { border-bottom: none; }
   .detail-label {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.08em;
     color: rgba(26,18,9,0.4);
     flex-shrink: 0;
     width: 120px;
   }
   .detail-value {
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 600;
     color: #1a1209;
   }
@@ -690,36 +690,36 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     line-height: 1;
     font-weight: 700;
   }
-  .dietary-name { font-size: 9.5px; font-weight: 700; color: #78350f; }
-  .dietary-notes { font-size: 8.5px; color: #92400e; margin-top: 2px; font-style: italic; }
+  .dietary-name { font-size: 11px; font-weight: 700; color: #78350f; }
+  .dietary-notes { font-size: 9.5px; color: #92400e; margin-top: 2px; font-style: italic; }
 
   /* ── Timeline ── */
   .tl-head {
     display: grid;
-    grid-template-columns: 64px 1fr 36px 90px;
+    grid-template-columns: 72px 1fr 44px 104px;
     gap: 6px;
     padding: 4px 12px;
     background: rgba(201,168,76,0.12);
     border-bottom: 1px solid rgba(201,168,76,0.3);
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 7.5px;
+    font-size: 8.5px;
     letter-spacing: 0.1em;
     color: rgba(26,18,9,0.45);
   }
   .tl-row {
     display: grid;
-    grid-template-columns: 64px 1fr 36px 90px;
+    grid-template-columns: 72px 1fr 44px 104px;
     gap: 6px;
     padding: 5px 12px;
     border-bottom: 1px solid rgba(201,168,76,0.12);
     align-items: start;
   }
   .tl-row:last-child { border-bottom: none; }
-  .tl-time { font-weight: 700; font-size: 9.5px; }
-  .tl-dur { font-size: 8px; color: rgba(26,18,9,0.4); }
-  .tl-staff { font-size: 8.5px; color: ${venuePrimaryColor}; }
-  .item-title { font-weight: 600; font-size: 9.5px; }
-  .item-desc { font-size: 8px; color: rgba(26,18,9,0.5); margin-top: 1px; }
+  .tl-time { font-weight: 700; font-size: 11px; }
+  .tl-dur { font-size: 9px; color: rgba(26,18,9,0.4); }
+  .tl-staff { font-size: 9.5px; color: ${venuePrimaryColor}; }
+  .item-title { font-weight: 600; font-size: 11px; }
+  .item-desc { font-size: 10px; color: rgba(26,18,9,0.65); margin-top: 2px; line-height: 1.5; white-space: pre-wrap; }
 
   /* ── F&B table ── */
   .fnb-head {
@@ -730,7 +730,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     background: rgba(201,168,76,0.12);
     border-bottom: 1px solid rgba(201,168,76,0.3);
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 7.5px;
+    font-size: 8.5px;
     letter-spacing: 0.1em;
     color: rgba(26,18,9,0.45);
   }
@@ -745,7 +745,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .fnb-row:last-child { border-bottom: none; }
   .course-group {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
+    font-size: 10.5px;
     letter-spacing: 0.12em;
     color: #8b6914;
     background: rgba(201,168,76,0.14);
@@ -762,8 +762,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     border-bottom-color: rgba(58,53,48,0.18);
   }
   .fnb-row.is-drink { background: rgba(58,53,48,0.03); }
-  .dish-name { font-weight: 600; font-size: 9.5px; }
-  .dish-desc { font-size: 8px; color: rgba(26,18,9,0.45); margin-top: 1px; }
+  .dish-name { font-weight: 600; font-size: 11px; }
+  .dish-desc { font-size: 10.5px; color: rgba(26,18,9,0.72); margin-top: 3px; line-height: 1.55; white-space: pre-wrap; }
   /* Dietary tag — amber alert colour so chefs spot allergies/diets instantly.
      Stands out against neutral rows AND against any venue header colour. */
   .diet-tag {
@@ -772,14 +772,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     color: #92400e;
     border: 1px solid #f59e0b;
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.08em;
     font-weight: 700;
     padding: 2px 6px;
     border-radius: 3px;
   }
-  .prep-note { font-size: 8.5px; color: rgba(26,18,9,0.6); }
-  .plating-note { font-size: 8px; color: rgba(26,18,9,0.4); margin-top: 1px; font-style: italic; }
+  .prep-note { font-size: 9.5px; color: rgba(26,18,9,0.6); }
+  .plating-note { font-size: 9px; color: rgba(26,18,9,0.4); margin-top: 1px; font-style: italic; }
 
   /* ── Footer ── */
   .doc-footer {
@@ -792,13 +792,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   }
   .footer-l {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 0.1em;
     color: rgba(26,18,9,0.3);
   }
   .footer-r {
     font-family: 'DM Sans', sans-serif;
-    font-size: 7.5px;
+    font-size: 8.5px;
     color: rgba(26,18,9,0.3);
   }
 
@@ -857,7 +857,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   ${show('food', renderFnbSection("FOOD &amp; BEVERAGE SELECTION", fohItems, false))}
   ${show('kitchen', renderFnbSection("KITCHEN — PREP &amp; PRODUCTION", kitchenItemsArr, true))}
   ${show('drinks', barSection)}
-  ${financialsSection}
+  ${show('financials', financialsSection)}
   ${hideSet.has('totals') ? '' : (() => {
     // Running totals from F&B selection (qty × unit price), split food vs
     // drinks. Mirrors what staff see on the runsheet so the BEO matches.
@@ -890,7 +890,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 </div>`;
   })()}
   ${show('notes', notesSection)}
-  ${footerNoteSection}
+  ${show('footer', footerNoteSection)}
 
   <div class="doc-footer">
     <div class="footer-l">POWERED BY VENUEFLOWHQ · BANQUET EVENT ORDER</div>
@@ -900,6 +900,16 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 </div>
 </body>
 </html>`;
+
+    // ── Live in-app preview ──────────────────────────────────────────
+    // The "Preview & Print BEO" modal loads this exact HTML in an iframe
+    // (?format=html) so what the operator sees on screen is what prints.
+    // Auth route only — the public event-pack always renders the PDF.
+    if (mode === "auth" && String((req.query.format as string) || "").toLowerCase() === "html") {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      return res.send(html);
+    }
 
     let puppeteer: any;
     try {
