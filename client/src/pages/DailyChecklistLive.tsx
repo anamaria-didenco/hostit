@@ -363,6 +363,11 @@ export default function DailyChecklistLive() {
                   )}
                 </div>
               </div>
+              {item.photoUrl && (
+                <a href={item.photoUrl} target="_blank" rel="noopener noreferrer" className="block px-4 pb-3 -mt-1" title="Tap to view full size">
+                  <img src={item.photoUrl} alt="Reference photo" className="max-h-52 w-auto rounded-lg border border-stone-200 object-contain" />
+                </a>
+              )}
             </div>
           );
         })}

@@ -499,7 +499,7 @@ export const checklistTemplates = pgTable("checklist_templates", {
   ownerId: integer("ownerId").notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  items: json("items").$type<Array<{ id: string; text: string; category?: string; required?: boolean }>>().notNull(),
+  items: json("items").$type<Array<{ id: string; text: string; category?: string; required?: boolean; imageUrl?: string }>>().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -513,7 +513,7 @@ export const checklistInstances = pgTable("checklist_instances", {
   runsheetId: integer("runsheetId"),
   ownerId: integer("ownerId").notNull(),
   name: varchar("name", { length: 255 }).notNull(),
-  items: json("items").$type<Array<{ id: string; text: string; category?: string; required?: boolean; checked: boolean; checkedAt?: string; notes?: string }>>().notNull(),
+  items: json("items").$type<Array<{ id: string; text: string; category?: string; required?: boolean; checked: boolean; checkedAt?: string; notes?: string; imageUrl?: string }>>().notNull(),
   shareToken: varchar("shareToken", { length: 64 }),
   completedAt: timestamp("completedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

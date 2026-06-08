@@ -471,10 +471,10 @@ export default function ShiftRunsheetLive() {
               {items.map((item: any) => {
                 const isChecked = optimistic[item.id] !== undefined ? optimistic[item.id] : (item.checked === 1);
                 return (
+                  <div key={item.id}>
                   <button
-                    key={item.id}
                     onClick={() => handleToggle(cl.token, item.id, isChecked)}
-                    className={`w-full text-left flex items-start gap-3 px-4 py-3.5 border-b border-stone-100 last:border-0 transition-colors active:scale-[0.99] ${isChecked ? "bg-green-50/70" : "bg-white hover:bg-stone-50 active:bg-stone-100"}`}
+                    className={`w-full text-left flex items-start gap-3 px-4 py-3.5 ${item.photoUrl ? "" : "border-b border-stone-100 last:border-0"} transition-colors active:scale-[0.99] ${isChecked ? "bg-green-50/70" : "bg-white hover:bg-stone-50 active:bg-stone-100"}`}
                   >
                     <div className="mt-0.5 flex-shrink-0">
                       {isChecked
@@ -492,6 +492,12 @@ export default function ShiftRunsheetLive() {
                       )}
                     </div>
                   </button>
+                  {item.photoUrl && (
+                    <a href={item.photoUrl} target="_blank" rel="noopener noreferrer" className="block px-4 pb-3 bg-white border-b border-stone-100 last:border-0" title="Tap to view full size">
+                      <img src={item.photoUrl} alt="Reference photo" className="max-h-52 w-auto rounded-lg border border-stone-200 object-contain ml-8" />
+                    </a>
+                  )}
+                  </div>
                 );
               })}
             </div>

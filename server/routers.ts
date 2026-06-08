@@ -3271,7 +3271,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     saveItemsForRunsheet: protectedProcedure
       .input(z.object({
         runsheetId: z.number(),
-        items: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), checked: z.boolean(), checkedAt: z.string().optional(), notes: z.string().optional() })),
+        items: z.array(z.object({ id: z.string(), text: z.string(), category: z.string().optional(), checked: z.boolean(), checkedAt: z.string().optional(), notes: z.string().optional(), imageUrl: z.string().optional() })),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');

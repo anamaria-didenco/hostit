@@ -672,24 +672,30 @@ export default function StaffPortal() {
                 </div>
                 <div className="divide-y divide-gold/20">
                   {localItems.map((item: any) => (
-                    <button
-                      key={item.id}
-                      onClick={() => handleToggle(item.id, item.checked)}
-                      disabled={toggleItem.isPending}
-                      className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-linen/50 transition-colors"
-                    >
-                      <span className={`flex-shrink-0 transition-colors ${item.checked ? "text-forest" : "text-ink/25"}`}>
-                        {item.checked ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6" />}
-                      </span>
-                      <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? "line-through text-ink/35" : "text-ink"}`}>
-                        {item.text}
-                      </span>
-                      {item.category && (
-                        <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 flex-shrink-0 ${CATEGORY_STYLES[item.category] ?? CATEGORY_STYLES.other}`}>
-                          {item.category}
+                    <div key={item.id}>
+                      <button
+                        onClick={() => handleToggle(item.id, item.checked)}
+                        disabled={toggleItem.isPending}
+                        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-linen/50 transition-colors"
+                      >
+                        <span className={`flex-shrink-0 transition-colors ${item.checked ? "text-forest" : "text-ink/25"}`}>
+                          {item.checked ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6" />}
                         </span>
+                        <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? "line-through text-ink/35" : "text-ink"}`}>
+                          {item.text}
+                        </span>
+                        {item.category && (
+                          <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 flex-shrink-0 ${CATEGORY_STYLES[item.category] ?? CATEGORY_STYLES.other}`}>
+                            {item.category}
+                          </span>
+                        )}
+                      </button>
+                      {item.imageUrl && (
+                        <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" className="block px-5 pb-3 -mt-1" title="Tap to view full size">
+                          <img src={item.imageUrl} alt="Reference photo" className="max-h-52 w-auto rounded-lg border border-gold/20 object-contain" />
+                        </a>
                       )}
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>

@@ -129,13 +129,30 @@ export default function DailyChecklists() {
     setNewItemText(p => ({ ...p, [checklistId]: "" }));
     setNewItemNote(p => ({ ...p, [checklistId]: "" }));
   }
-  function handlePhotoUpload(itemId: number, e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePhotoUpload(itemId: number, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be re-picked later
     if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please choose an image file (JPG, PNG…)"); return; }
     setUploadingFor(itemId);
-    const reader = new FileReader();
-    reader.onload = ev => { updateItemMut.mutate({ id: itemId, photoUrl: ev.target?.result as string }); setUploadingFor(null); };
-    reader.readAsDataURL(file);
+    try {
+      // Upload to /api/upload-image (writes to /uploads, returns a small URL)
+      // instead of embedding the whole image as base64 in the DB row — phone
+      // photos are multiple MB and were bloating/failing the save.
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload-image", { method: "POST", body: fd, credentials: "include" });
+      if (!res.ok) {
+        const msg = (await res.json().catch(() => null))?.error;
+        throw new Error(msg || "Upload failed");
+      }
+      const { url } = await res.json();
+      updateItemMut.mutate({ id: itemId, photoUrl: url });
+    } catch (err: any) {
+      toast.error(err?.message || "Couldn't upload that photo — please try again");
+    } finally {
+      setUploadingFor(null);
+    }
   }
 
   // ─── Shift Runsheets state ────────────────────────────────────────────────

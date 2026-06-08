@@ -13,7 +13,7 @@ import {
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
   Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine, Package,
-  Eye, EyeOff, DollarSign, Download, ClipboardList, Calendar, Pencil,
+  Eye, EyeOff, DollarSign, Download, ClipboardList, Calendar, Pencil, Camera,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -710,9 +710,14 @@ export default function RunsheetBuilder() {
     if (applied.length > 0) toast.success(`Applied: ${applied.join(', ')}`);
   }
 
-  const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string }[]>([]);
+  const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; checked: boolean; category: string; imageUrl?: string }[]>([]);
   const [checklistInstance, setChecklistInstance] = useState<any>(null);
   const [newChecklistText, setNewChecklistText] = useState("");
+  // Per-item reference photo (uploaded to /api/upload-image, stored as a URL
+  // in the checklist item JSON). Shown to staff in the shared checklist view.
+  const checklistPhotoInputRef = useRef<HTMLInputElement>(null);
+  const [pendingChecklistPhotoId, setPendingChecklistPhotoId] = useState<string | null>(null);
+  const [checklistPhotoUploading, setChecklistPhotoUploading] = useState<string | null>(null);
 
   // ── Dirty-state tracking ──────────────────────────────────────────────
   // Watches the main editable state. On the first render after data loads
@@ -1711,6 +1716,34 @@ export default function RunsheetBuilder() {
     const updated = checklistItems.filter(item => item.id !== id);
     setChecklistItems(updated);
     if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+  }
+
+  function setChecklistItemImage(id: string, imageUrl: string) {
+    const updated = checklistItems.map(item => item.id === id ? { ...item, imageUrl: imageUrl || undefined } : item);
+    setChecklistItems(updated);
+    if (sheetId) saveChecklistItems.mutate({ runsheetId: sheetId, items: updated as any });
+  }
+
+  async function handleChecklistPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const id = pendingChecklistPhotoId;
+    e.target.value = ""; // allow re-picking the same file later
+    setPendingChecklistPhotoId(null);
+    if (!file || !id) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please choose an image file (JPG, PNG…)"); return; }
+    setChecklistPhotoUploading(id);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload-image", { method: "POST", body: fd, credentials: "include" });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Upload failed");
+      const { url } = await res.json();
+      setChecklistItemImage(id, url);
+    } catch (err: any) {
+      toast.error(err?.message || "Couldn't upload that photo — please try again");
+    } finally {
+      setChecklistPhotoUploading(null);
+    }
   }
 
   function pullDrinksFromFnb() {
@@ -3872,36 +3905,70 @@ export default function RunsheetBuilder() {
 
             <div className="divide-y divide-gold/20">
               {checklistItems.map(item => (
-                <div key={item.id} className="flex items-center gap-3 px-5 py-3 group hover:bg-linen/50 transition-colors">
-                  <button
-                    onClick={() => toggleChecklistItem(item.id)}
-                    className={`flex-shrink-0 transition-colors ${item.checked ? 'text-forest' : 'text-ink/30 hover:text-ink/60'}`}
-                  >
-                    {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                  </button>
-                  <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? 'line-through text-ink/40' : 'text-ink'}`}>
-                    {item.text}
-                  </span>
-                  <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${
-                    item.category === 'admin' ? 'bg-blue-100 text-blue-700' :
-                    item.category === 'staff' ? 'bg-purple-100 text-purple-700' :
-                    item.category === 'setup' ? 'bg-amber-100 text-amber-700' :
-                    item.category === 'bar' ? 'bg-blue-100 text-blue-700' :
-                    item.category === 'kitchen' ? 'bg-red-100 text-red-700' :
-                    item.category === 'guest' ? 'bg-pink-100 text-pink-700' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
-                    {item.category}
-                  </span>
-                  <button
-                    onClick={() => removeChecklistItem(item.id)}
-                    className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-500 transition-all"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                <div key={item.id} className="px-5 py-3 group hover:bg-linen/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => toggleChecklistItem(item.id)}
+                      className={`flex-shrink-0 transition-colors ${item.checked ? 'text-forest' : 'text-ink/30 hover:text-ink/60'}`}
+                    >
+                      {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                    </button>
+                    <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? 'line-through text-ink/40' : 'text-ink'}`}>
+                      {item.text}
+                    </span>
+                    <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${
+                      item.category === 'admin' ? 'bg-blue-100 text-blue-700' :
+                      item.category === 'staff' ? 'bg-purple-100 text-purple-700' :
+                      item.category === 'setup' ? 'bg-amber-100 text-amber-700' :
+                      item.category === 'bar' ? 'bg-blue-100 text-blue-700' :
+                      item.category === 'kitchen' ? 'bg-red-100 text-red-700' :
+                      item.category === 'guest' ? 'bg-pink-100 text-pink-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {item.category}
+                    </span>
+                    <button
+                      onClick={() => { setPendingChecklistPhotoId(item.id); checklistPhotoInputRef.current?.click(); }}
+                      disabled={checklistPhotoUploading === item.id}
+                      className={`flex-shrink-0 transition-all ${item.imageUrl ? 'text-forest hover:text-forest/70' : 'opacity-0 group-hover:opacity-100 text-ink/30 hover:text-forest'}`}
+                      title={item.imageUrl ? 'Replace reference photo' : 'Add a reference photo for staff'}
+                    >
+                      {checklistPhotoUploading === item.id
+                        ? <RefreshCw className="w-4 h-4 animate-spin" />
+                        : <Camera className="w-4 h-4" />}
+                    </button>
+                    <button
+                      onClick={() => removeChecklistItem(item.id)}
+                      className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-500 transition-all flex-shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {item.imageUrl && (
+                    <div className="mt-2 ml-8 flex items-start gap-2">
+                      <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" title="View full size">
+                        <img src={item.imageUrl} alt="Reference" className="max-h-36 w-auto rounded border border-gold/30 object-contain" />
+                      </a>
+                      <button
+                        onClick={() => setChecklistItemImage(item.id, '')}
+                        className="text-ink/30 hover:text-red-500 transition-colors"
+                        title="Remove photo"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
+            {/* Hidden file input shared by all checklist item photo buttons */}
+            <input
+              ref={checklistPhotoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleChecklistPhotoUpload}
+            />
 
             {/* Add checklist item */}
             <div className="px-5 py-4 border-t border-gold/20 flex gap-2">
