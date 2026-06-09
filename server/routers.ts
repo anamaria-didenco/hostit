@@ -784,6 +784,9 @@ export const appRouter = router({
               if (newId) {
                 const { pushBookingToNbi } = await import('./nowbookit');
                 await pushBookingToNbi(newId, ctx.user.id, { source: 'leads.updateStatus→booked' });
+                // Event confirmed → remind the events manager to send the deposit.
+                const { sendDepositPromptEmail } = await import('./depositPrompt');
+                await sendDepositPromptEmail(newId, ctx.user.id, { source: 'leads.updateStatus→booked' });
               }
             }
           }
@@ -1468,6 +1471,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             if (newId) {
               const { pushBookingToNbi } = await import('./nowbookit');
               await pushBookingToNbi(newId, proposal.ownerId, { source: 'proposals.respond→accepted' });
+              // Event confirmed → remind the events manager to send the deposit.
+              const { sendDepositPromptEmail } = await import('./depositPrompt');
+              await sendDepositPromptEmail(newId, proposal.ownerId, { source: 'proposals.respond→accepted' });
             }
             await updateLeadStatus(proposal.leadId, proposal.ownerId, "booked");
             await addLeadActivity({
@@ -1657,6 +1663,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const { id, ...rest } = input;
+        // Prior status, captured before the update so the deposit-prompt email
+        // only fires on a real transition INTO "confirmed" (not on every save).
+        let priorBookingStatus: string | null = null;
         // Rule: every event must have a space selected. Block any update that
         // would either clear the space or set the booking to a live status
         // (confirmed/tentative) while no space is set on the row.
@@ -1664,10 +1673,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           throw new Error('Every event must have a space — pick one instead of clearing it.');
         }
         if (rest.status === 'confirmed' || rest.status === 'tentative') {
-          const [current] = await db.select({ spaceName: bookings.spaceName })
+          const [current] = await db.select({ spaceName: bookings.spaceName, status: bookings.status })
             .from(bookings)
             .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)))
             .limit(1);
+          priorBookingStatus = current?.status ?? null;
           const finalSpace = rest.spaceName !== undefined ? rest.spaceName : current?.spaceName;
           if (!finalSpace?.trim()) {
             throw new Error('Please select an event space before changing this event to ' + rest.status + '.');
@@ -1745,6 +1755,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.status === 'confirmed') {
           const { pushBookingToNbi } = await import('./nowbookit');
           await pushBookingToNbi(id, ctx.user.id, { source: 'bookings.update' });
+          // Only on a real transition into confirmed → remind the events
+          // manager to send the deposit (don't re-send on every later save).
+          if (priorBookingStatus !== 'confirmed') {
+            const { sendDepositPromptEmail } = await import('./depositPrompt');
+            await sendDepositPromptEmail(id, ctx.user.id, { source: 'bookings.update' });
+          }
         }
         return { success: true };
       }),
