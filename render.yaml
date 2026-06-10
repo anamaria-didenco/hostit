@@ -16,7 +16,9 @@ services:
     region: singapore           # closest Render region to NZ (change in dashboard if preferred)
     branch: main
     autoDeploy: true            # redeploy automatically on every push to main → real "push = live"
-    buildCommand: npm install && npm run build
+    # --include=dev is required: the build uses vite + esbuild (devDependencies),
+    # and NODE_ENV=production would otherwise make npm skip them → build fails.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /
     envVars:
