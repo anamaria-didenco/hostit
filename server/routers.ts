@@ -3785,6 +3785,23 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
   }),
 
+  // ─── Reports ──────────────────────────────────────────────────────────────
+  reports: router({
+    // Send the weekly enquiry/pipeline summary immediately (for testing or an
+    // on-demand send). The automatic weekly send runs on the server scheduler.
+    sendEnquirySummaryNow: protectedProcedure.mutation(async ({ ctx }) => {
+      const { sendEnquiryReport } = await import('./enquiryReport');
+      const result = await sendEnquiryReport(ctx.user.id, { source: 'manual' });
+      if (!result.sent) {
+        const msg = result.reason === 'smtp_not_configured'
+          ? 'Email isn\'t set up yet — add your SMTP details in Settings before sending reports.'
+          : `Could not send report (${result.reason ?? 'unknown'}).`;
+        throw new Error(msg);
+      }
+      return { success: true };
+    }),
+  }),
+
   // ─── Analytics ────────────────────────────────────────────────────────────
   analytics: router({
     revenueByMonth: protectedProcedure
