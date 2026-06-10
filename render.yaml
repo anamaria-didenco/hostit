@@ -1,0 +1,50 @@
+# Render Blueprint for VenueFlowHQ
+# ---------------------------------
+# Deploys the app from GitHub with a managed Postgres database.
+# In Render: New → "Blueprint" → connect the anamaria-didenco/hostit repo →
+# Render reads this file and creates the web service + database for you.
+#
+# Why the "starter" plan: it's always-on (never sleeps), so the weekly
+# enquiry-report scheduler fires reliably and there are no cold starts.
+# (Render's free web service sleeps when idle — same problem as Replit Autoscale.)
+
+services:
+  - type: web
+    name: venueflowhq
+    runtime: node
+    plan: starter
+    region: singapore           # closest Render region to NZ (change in dashboard if preferred)
+    branch: main
+    autoDeploy: true            # redeploy automatically on every push to main → real "push = live"
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: venueflowhq-db
+          property: connectionString
+      - key: JWT_SECRET           # signs login sessions; Render generates a strong value
+        generateValue: true
+      - key: PUBLIC_BASE_URL      # used in email links etc.
+        value: https://venueflowhq.com
+      - key: REPORT_EMAIL         # weekly pipeline report recipient
+        value: anamaria@barfranco.nz
+      - key: DEPOSIT_PROMPT_EMAIL # "send the deposit" reminder recipient
+        value: anamaria@barfranco.nz
+      # ── Set these yourself in the Render dashboard (sync:false = kept out of git) ──
+      - key: ADMIN_PASSWORD       # REQUIRED — your login password for the app
+        sync: false
+      # Optional — only needed for the AI "paste-to-parse" helpers (set a real OpenAI key):
+      - key: AI_INTEGRATIONS_OPENAI_API_KEY
+        sync: false
+      - key: AI_INTEGRATIONS_OPENAI_BASE_URL
+        sync: false
+
+databases:
+  - name: venueflowhq-db
+    plan: starter               # managed Postgres, daily backups
+    region: singapore
+    databaseName: venueflow
