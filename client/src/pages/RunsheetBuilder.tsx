@@ -2285,6 +2285,36 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-dm text-sm">{contactEmail || "—"}</div>
               </div>
             </div>
+
+            {/* Deposit & balance — so staff can see what's already been paid and
+                only collect the remaining balance (don't re-charge the deposit). */}
+            {booking && (() => {
+              const dep = Number((booking as any).depositNzd ?? 0);
+              const paid = !!(booking as any).depositPaid;
+              if (!(dep > 0 || paid)) return null;
+              const totalRef = Number((booking as any).totalNzd ?? 0) || Number((booking as any).minimumSpend ?? 0) || 0;
+              const balance = totalRef > 0 ? Math.max(0, totalRef - (paid ? dep : 0)) : null;
+              const money = (n: number) => `$${Number(n).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              return (
+                <div className={`mt-4 px-4 py-3 rounded border ${paid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-300'}`}>
+                  <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+                    <div>
+                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">DEPOSIT {paid ? '✓ PAID' : '— OUTSTANDING'}</div>
+                      <div className="font-cormorant text-xl font-semibold text-ink leading-tight">{dep > 0 ? money(dep) : '—'}</div>
+                    </div>
+                    {balance != null && (
+                      <div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">BALANCE TO COLLECT</div>
+                        <div className="font-cormorant text-xl font-semibold text-ink leading-tight">{money(balance)}</div>
+                      </div>
+                    )}
+                    <div className={`font-dm text-xs ${paid ? 'text-forest/80' : 'text-amber-700'}`}>
+                      {paid ? 'Deposit already received — only collect the balance, don’t re-charge it.' : 'Deposit not yet received.'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 

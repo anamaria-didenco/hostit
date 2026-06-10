@@ -3478,6 +3478,31 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         updateData.updatedAt = new Date();
         await db.update(runsheets).set(updateData)
           .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)));
+
+        // Cascade shared event fields back to the linked booking + lead. The
+        // dashboard / events table read from bookings & leads (NOT the
+        // runsheet), so without this an edit here — e.g. changing the guest
+        // count — would never show up on the dashboard.
+        const sharedBooking: Record<string, any> = {};
+        const sharedLead: Record<string, any> = {};
+        if (fields.guestCount !== undefined) { sharedBooking.guestCount = fields.guestCount; sharedLead.guestCount = fields.guestCount; }
+        if (fields.eventType !== undefined) { sharedBooking.eventType = fields.eventType; sharedLead.eventType = fields.eventType; }
+        if (fields.spaceName !== undefined) { sharedBooking.spaceName = fields.spaceName; sharedLead.spaceName = fields.spaceName; }
+        if (Object.keys(sharedBooking).length > 0) {
+          const { bookings, leads } = await import('../drizzle/schema');
+          const [rs] = await db.select({ bookingId: runsheets.bookingId, leadId: runsheets.leadId })
+            .from(runsheets)
+            .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)))
+            .limit(1);
+          if (rs?.bookingId) {
+            await db.update(bookings).set({ ...sharedBooking, updatedAt: new Date() })
+              .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id)));
+          }
+          if (rs?.leadId) {
+            await db.update(leads).set({ ...sharedLead, updatedAt: new Date() })
+              .where(and(eq(leads.id, rs.leadId), eq(leads.ownerId, ctx.user.id)));
+          }
+        }
         return { success: true };
       }),
 
