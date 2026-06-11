@@ -294,9 +294,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   });
 
   const requestParams: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
-    model: "gpt-4o",
+    model: "gpt-5",
     messages: messages.map(normalizeMessage) as OpenAI.Chat.ChatCompletionMessageParam[],
-    max_tokens: 4096,
+    max_completion_tokens: 4096,
   };
 
   if (tools && tools.length > 0) {
