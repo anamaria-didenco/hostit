@@ -851,6 +851,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     </div>`).join("")}
   </div>
 
+  ${show('notes', notesSection)}
   ${show('setup', setupSection)}
   ${show('dietary', dietarySection)}
   ${show('timeline', timelineSection)}
@@ -859,23 +860,17 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   ${show('drinks', barSection)}
   ${show('financials', financialsSection)}
   ${hideSet.has('totals') ? '' : (() => {
-    // Running totals from F&B selection (qty × unit price), split food vs
-    // drinks. Mirrors what staff see on the runsheet so the BEO matches.
+    // FOOD running total only (qty × unit price). Beverages are billed on
+    // consumption / bar tab, so we deliberately do NOT total the drinks
+    // selection here.
     const food = fnbList.filter(i => (i.course ?? '') !== 'Drinks')
       .reduce((s, i) => s + (Number(i.qty ?? 0) * Number((i as any).unitPrice ?? 0)), 0);
-    const drinks = fnbList.filter(i => (i.course ?? '') === 'Drinks')
-      .reduce((s, i) => s + (Number(i.qty ?? 0) * Number((i as any).unitPrice ?? 0)), 0);
-    const tab = (runsheet as any)?.drinksData?.tabAmount ? Number((runsheet as any).drinksData.tabAmount) : 0;
-    const grand = food + drinks + tab;
-    if (grand <= 0) return "";
+    if (food <= 0) return "";
     return `
 <div class="card">
-  <div class="card-header">RUNNING TOTALS</div>
+  <div class="card-header">FOOD RUNNING TOTAL</div>
   <div class="card-body">
-    ${food > 0 ? `<div class="detail-row"><span class="detail-label">Food</span><span class="detail-value">${fmtCurrency(food)}</span></div>` : ""}
-    ${drinks > 0 ? `<div class="detail-row"><span class="detail-label">Drinks</span><span class="detail-value">${fmtCurrency(drinks)}</span></div>` : ""}
-    ${tab > 0 ? `<div class="detail-row"><span class="detail-label">Bar Tab</span><span class="detail-value">${fmtCurrency(tab)}</span></div>` : ""}
-    <div class="detail-row" style="border-top:1px solid rgba(201,168,76,0.3);margin-top:6px;padding-top:6px;font-weight:600"><span class="detail-label">Running Total</span><span class="detail-value">${fmtCurrency(grand)}</span></div>
+    <div class="detail-row" style="font-weight:600"><span class="detail-label">Food</span><span class="detail-value">${fmtCurrency(food)}</span></div>
   </div>
 </div>`;
   })()}
@@ -889,7 +884,6 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   <div class="card-body notes-text">${esc}</div>
 </div>`;
   })()}
-  ${show('notes', notesSection)}
   ${show('footer', footerNoteSection)}
 
   <div class="doc-footer">
