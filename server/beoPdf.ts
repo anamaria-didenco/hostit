@@ -234,11 +234,25 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       : [];
     timelineItems.sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
 
-    const fnbList = runsheet
+    const fnbListRaw = runsheet
       ? await db.select().from(fnbItems)
           .where(and(eq(fnbItems.runsheetId, runsheet.id), eq(fnbItems.ownerId, userId)))
       : [];
-    fnbList.sort((a, b) => a.sortOrder - b.sortOrder);
+    fnbListRaw.sort((a, b) => a.sortOrder - b.sortOrder);
+    // Legacy runsheets sometimes saved service/bar TIMINGS ("Welcome drinks",
+    // "Last drinks") as Drinks-course F&B items. Those are timeline moments, not
+    // menu items — the F&B sheet UI already hides the legacy Drinks course, but
+    // this orphaned data still prints on the BEO with no way to delete it. Drop
+    // these timing labels from the BEO drinks list (real wines/beers stay).
+    const SERVICE_TIMING_DRINK_NAMES = new Set([
+      "welcome drinks", "welcome drink", "arrival drinks", "drinks on arrival",
+      "last drinks", "last drink", "last call", "bar opens", "bar open",
+      "bar closes", "bar close",
+    ]);
+    const fnbList = fnbListRaw.filter(
+      i => !(((i.course ?? "") === "Drinks") &&
+             SERVICE_TIMING_DRINK_NAMES.has(String((i as any).dishName ?? "").trim().toLowerCase()))
+    );
 
     // Linked proposal
     let proposal: any = null;
