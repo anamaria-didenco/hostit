@@ -1238,6 +1238,12 @@ export default function RunsheetBuilder() {
         serviceTime: it.serviceTime ?? '',
         prepNotes: it.prepNotes ?? '',
         staffAssigned: '',
+        // Carry the AI-parsed price through so a pasted menu (food OR drinks)
+        // lands WITH prices that feed the running total — previously the parser
+        // read the price but applyFnbParsed dropped it, so every item came in
+        // unpriced. Drinks parse as course "Drinks"; the bar/beverage package
+        // (a separate section) is untouched.
+        unitPrice: it.price != null && it.price !== '' && Number(it.price) > 0 ? Number(it.price) : null,
         sortOrder: fnbItems.length + i,
         _tempId: `ai-fnb-${Date.now()}-${i}`,
       }));
