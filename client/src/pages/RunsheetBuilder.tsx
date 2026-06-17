@@ -3622,7 +3622,9 @@ export default function RunsheetBuilder() {
               const costFood = costItems
                 .filter(ci => (ci.category || '').toLowerCase().includes('food') || (ci.category || '').toLowerCase().includes('beverage'))
                 .reduce((s, ci) => s + Number(ci.qty) * Number(ci.unitPrice), 0);
-              const grandTotal = fnbFoodTotal + fnbDrinkTotal + costFood + (rsTabAmount ? Number(rsTabAmount) : 0);
+              // Beverages are billed on consumption / bar tab, so the drinks
+              // selection is deliberately NOT totalled or rolled into the total.
+              const grandTotal = fnbFoodTotal + costFood + (rsTabAmount ? Number(rsTabAmount) : 0);
               const paymentInstructions = (venueSettings as any)?.paymentInstructions as string | null;
               const showBlock = booking?.minimumSpend || rsTabAmount || costItems.length > 0 || booking?.depositNzd
                 || fnbFoodTotal > 0 || fnbDrinkTotal > 0 || (paymentInstructions && paymentInstructions.trim().length > 0);
@@ -3644,12 +3646,8 @@ export default function RunsheetBuilder() {
                         <div className="font-cormorant text-lg font-semibold text-ink">{fmt(fnbFoodTotal)}</div>
                       </div>
                     )}
-                    {fnbDrinkTotal > 0 && (
-                      <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">DRINKS ({fnbItems.filter(it => (it.course ?? '') === 'Drinks' && Number(it.unitPrice ?? 0) > 0).length} items)</div>
-                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(fnbDrinkTotal)}</div>
-                      </div>
-                    )}
+                    {/* Drinks subtotal intentionally removed — beverages are not
+                        totalled here (billed on consumption / bar tab). */}
                     {costFood > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/40">EXTRA F&amp;B (COSTS TAB)</div>
