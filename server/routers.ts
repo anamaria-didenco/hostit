@@ -1746,9 +1746,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               .where(and(eq(leads.id, bookingRow.leadId), eq(leads.ownerId, ctx.user.id)));
           }
         }
-        // Re-sync depositPaid whenever the deposit amount or flag is touched,
-        // so the badge can never drift out of step with recorded payments.
-        if (rest.depositNzd !== undefined || rest.depositPaid !== undefined) {
+        // Re-sync depositPaid from recorded payments ONLY when the deposit
+        // amount changes and the user isn't explicitly setting the flag. A
+        // manual "Deposit paid" tick must stick — previously this ran on every
+        // flag change and instantly reverted it to unpaid when no matching
+        // payment was logged. Adding/removing a payment still re-syncs the flag
+        // via the payments mutation, so the badge stays correct either way.
+        if (rest.depositNzd !== undefined && rest.depositPaid === undefined) {
           await syncDepositPaidFlag(id, ctx.user.id);
         }
         // ── NowBookIt sync — fires when the booking transitions into 'confirmed' ──

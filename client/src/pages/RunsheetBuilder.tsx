@@ -2298,7 +2298,23 @@ export default function RunsheetBuilder() {
               const dep = Number((booking as any).depositNzd ?? 0);
               const paid = !!(booking as any).depositPaid;
               if (!(dep > 0 || paid)) return null;
-              const totalRef = Number((booking as any).totalNzd ?? 0) || Number((booking as any).minimumSpend ?? 0) || 0;
+              // Balance is based on the ACTUAL event total — F&B sheet + Costs-tab
+              // food/beverage items + bar tab — not just the minimum spend, so it
+              // reflects what's really been quoted. Falls back to the booking total
+              // or minimum spend when nothing's itemised yet.
+              const fnbFood = fnbItems
+                .filter(it => (it.course ?? '') !== 'Drinks')
+                .reduce((s, it) => s + Number(it.qty || 0) * Number(it.unitPrice ?? 0), 0);
+              const costFb = costItems
+                .filter(ci => (ci.category || '').toLowerCase().includes('food') || (ci.category || '').toLowerCase().includes('beverage'))
+                .reduce((s, ci) => s + Number(ci.qty) * Number(ci.unitPrice), 0);
+              const tab = rsTabAmount ? Number(rsTabAmount) : 0;
+              const actualTotal = fnbFood + costFb + tab;
+              const totalRef = Math.max(
+                Number((booking as any).totalNzd ?? 0),
+                Number((booking as any).minimumSpend ?? 0),
+                actualTotal,
+              );
               const balance = totalRef > 0 ? Math.max(0, totalRef - (paid ? dep : 0)) : null;
               const money = (n: number) => `$${Number(n).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
               return (

@@ -319,7 +319,32 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const fnbCols = (runsheet as any)?.fnbColumns ?? {};
     const showQty = fnbCols.qty !== false;
 
-    const fohItems = fnbList.filter(i => i.section === "foh");
+    const escHtml = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // Drinks source of truth: if the operator built a drinks list on the
+    // dedicated DRINKS tab (selectedDrinks / customDrinks), render THOSE and
+    // suppress any legacy "Drinks"-course F&B rows. Older runsheets pulled the
+    // whole bar list into the F&B sheet, so the BEO printed every drink instead
+    // of the chosen ones. With no DRINKS-tab selection we fall back to the
+    // legacy F&B Drinks rows, so older events are unchanged.
+    const parseDrinkArr = (v: any): any[] => {
+      if (Array.isArray(v)) return v;
+      if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
+      return [];
+    };
+    // Source the selection from the RUNSHEET's Drinks tab (rsDrinks), NOT the
+    // merged `drinks` object. The runsheet stores human-readable drink names,
+    // whereas a linked proposal stores internal codes (e.g. "house_wine") that
+    // would print raw and would also wrongly suppress the legacy fnb Drinks
+    // rows. Proposal-only events therefore keep their existing fnb fallback.
+    const selectedDrinkNames: string[] = parseDrinkArr((rsDrinks as any)?.selectedDrinks)
+      .map((d: any) => (typeof d === "string" ? d : d?.name ?? "")).filter(Boolean);
+    const customDrinkList = parseDrinkArr((rsDrinks as any)?.customDrinks)
+      .map((d: any) => (typeof d === "string" ? { name: d, description: "" } : d))
+      .filter((d: any) => d && d.name);
+    const hasDrinkSelection = selectedDrinkNames.length > 0 || customDrinkList.length > 0;
+
+    const fohItems = fnbList.filter(i => i.section === "foh" && !(hasDrinkSelection && (i.course ?? "") === "Drinks"));
     const kitchenItemsArr = fnbList.filter(i => i.section === "kitchen");
 
     // ── HTML helpers ─────────────────────────────────────────────────────────
@@ -404,10 +429,28 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       // Menu") were sliding in after Drinks because they weren't in
       // COURSE_ORDER. Pin Drinks to the tail no matter what.
       const isDrinks = (c: string) => c.toLowerCase() === 'drinks';
-      const food = COURSE_ORDER.filter(c => !isDrinks(c) && grouped[c]);
-      const custom = Object.keys(grouped).filter(c => !isDrinks(c) && !COURSE_ORDER.includes(c));
+      // Order non-drink courses by their earliest service TIME, but ONLY when
+      // EVERY food course is timed (e.g. Victoria: platters 8pm before cake
+      // 9:30pm). If any course is untimed, keep the standard COURSE_ORDER +
+      // custom-courses ordering so partially-timed events print exactly as
+      // before — a single late timed course must NOT jump to the top. Drinks
+      // always print last.
+      const toMins = (t: any) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t ?? "")); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+      const courseTime = (c: string) => {
+        const mins = (grouped[c] ?? []).map((i: any) => toMins(i.serviceTime)).filter((n): n is number => n != null);
+        return mins.length ? Math.min(...mins) : null;
+      };
+      const orderIdx = (c: string) => { const i = COURSE_ORDER.indexOf(c); return i === -1 ? 999 : i; };
+      const nonDrink = Object.keys(grouped).filter(c => !isDrinks(c));
+      const allTimed = nonDrink.length > 0 && nonDrink.every(c => courseTime(c) != null);
+      if (allTimed) {
+        nonDrink.sort((a, b) => (courseTime(a)! - courseTime(b)!) || (orderIdx(a) - orderIdx(b)));
+      } else {
+        // COURSE_ORDER courses first (by their defined order), then custom courses.
+        nonDrink.sort((a, b) => orderIdx(a) - orderIdx(b));
+      }
       const drinkKeys = Object.keys(grouped).filter(isDrinks);
-      const allCourses = [...food, ...custom, ...drinkKeys];
+      const allCourses = [...nonDrink, ...drinkKeys];
       const showLastCol = !isPublic;
       const lastColHeader = isKitchen ? "PREP / PLATING" : "STAFF";
 
@@ -468,19 +511,52 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   </div>
 </div>` : "";
 
-    // Financials section — hidden on public event-pack to avoid exposing
-    // deposit status / margin breakdown / pricing line items to anyone with
-    // the link. The customer already has their proposal for that.
-    const financialsSection = !isPublic && (quoteSettingsRow || quoteItemsList.length > 0 || booking.totalNzd) ? `
+    // Drinks list rendered from the DRINKS-tab selection (see fohItems note
+    // above). Only shown when the operator actually picked drinks there.
+    const selectedDrinksSection = hasDrinkSelection ? `
 <div class="card">
-  <div class="card-header">FINANCIALS</div>
+  <div class="card-header">DRINKS SELECTION</div>
   <div class="card-body">
-    ${quoteSettingsRow?.minimumSpend ? `<div class="detail-row"><span class="detail-label">Minimum Spend</span><span class="detail-value">${fmtCurrency(quoteSettingsRow.minimumSpend)}</span></div>` : ""}
-    ${booking.totalNzd ? `<div class="detail-row"><span class="detail-label">Total</span><span class="detail-value">${fmtCurrency(booking.totalNzd)}</span></div>` : ""}
-    ${booking.depositNzd ? `<div class="detail-row"><span class="detail-label">Deposit</span><span class="detail-value">${fmtCurrency(booking.depositNzd)} ${booking.depositPaid ? "✓ Paid" : "— Outstanding"}</span></div>` : ""}
+    ${selectedDrinkNames.map(n => `<div class="detail-row"><span class="detail-value">${escHtml(n)}</span></div>`).join("")}
+    ${customDrinkList.map((d: any) => `<div class="detail-row"><span class="detail-value">${escHtml(d.name)}${d.description ? ` <span style="color:#6b6256">— ${escHtml(d.description)}</span>` : ""}</span></div>`).join("")}
+  </div>
+</div>` : "";
+
+    // Cost summary — hidden on the public event-pack to avoid exposing deposit
+    // status / pricing to anyone with the link. Works for events WITHOUT a
+    // linked proposal too: falls back to the booking's minimum spend, the F&B
+    // sheet food total and the Costs-tab food/beverage items, so the BEO always
+    // carries a cost summary + balance to collect.
+    const costList: any[] = Array.isArray((runsheet as any)?.costItems) ? (runsheet as any).costItems : [];
+    const fnbFoodTotal = fnbList
+      .filter(i => (i.course ?? "") !== "Drinks")
+      .reduce((s, i) => s + Number(i.qty ?? 0) * Number((i as any).unitPrice ?? 0), 0);
+    const costFbTotal = costList
+      .filter(ci => /food|beverage/i.test(String(ci.category ?? "")))
+      .reduce((s, ci) => s + Number(ci.qty ?? 0) * Number(ci.unitPrice ?? 0), 0);
+    const barTabAmt = Number((drinks as any)?.tabAmount ?? 0);
+    const minSpendAmt = Number((booking as any).minimumSpend ?? quoteSettingsRow?.minimumSpend ?? 0);
+    // Balance is based on the ACTUAL total (minimum spend vs itemised F&B +
+    // costs, whichever is higher), with the deposit subtracted only once paid.
+    const eventTotal = Math.max(
+      Number(booking.totalNzd ?? 0),
+      minSpendAmt,
+      fnbFoodTotal + costFbTotal + barTabAmt,
+    );
+    const depAmt = Number(booking.depositNzd ?? 0);
+    const balanceToCollect = eventTotal > 0 ? Math.max(0, eventTotal - (booking.depositPaid ? depAmt : 0)) : 0;
+    const showFinancials = !isPublic && (minSpendAmt > 0 || eventTotal > 0 || depAmt > 0 || quoteItemsList.length > 0);
+    const financialsSection = showFinancials ? `
+<div class="card">
+  <div class="card-header">COST SUMMARY</div>
+  <div class="card-body">
+    ${minSpendAmt > 0 ? `<div class="detail-row"><span class="detail-label">Minimum Spend</span><span class="detail-value">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
+    ${eventTotal > 0 ? `<div class="detail-row"><span class="detail-label">Total</span><span class="detail-value">${fmtCurrency(eventTotal)}</span></div>` : ""}
+    ${depAmt > 0 ? `<div class="detail-row"><span class="detail-label">Deposit</span><span class="detail-value">${fmtCurrency(depAmt)} ${booking.depositPaid ? "✓ Paid" : "— Outstanding"}</span></div>` : ""}
+    ${balanceToCollect > 0 ? `<div class="detail-row" style="font-weight:600;border-top:1px solid rgba(201,168,76,0.3);margin-top:6px;padding-top:6px"><span class="detail-label">Balance to Collect</span><span class="detail-value">${fmtCurrency(balanceToCollect)}</span></div>` : ""}
     ${quoteItemsList.length > 0 ? `
     <div style="margin-top:8px;border-top:1px solid rgba(201,168,76,0.3);padding-top:8px">
-      ${quoteItemsList.map(qi => `<div class="detail-row"><span class="detail-label">${qi.name ?? qi.label}</span><span class="detail-value">${fmtCurrency(qi.unitPrice ?? qi.amount)}</span></div>`).join("")}
+      ${quoteItemsList.map(qi => `<div class="detail-row"><span class="detail-label">${escHtml(qi.name ?? qi.label)}</span><span class="detail-value">${fmtCurrency(qi.unitPrice ?? qi.amount)}</span></div>`).join("")}
     </div>` : ""}
   </div>
 </div>` : "";
@@ -871,7 +947,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   ${show('timeline', timelineSection)}
   ${show('food', renderFnbSection("FOOD &amp; BEVERAGE SELECTION", fohItems, false))}
   ${show('kitchen', renderFnbSection("KITCHEN — PREP &amp; PRODUCTION", kitchenItemsArr, true))}
-  ${show('drinks', barSection)}
+  ${show('drinks', selectedDrinksSection + barSection)}
   ${show('financials', financialsSection)}
   ${hideSet.has('totals') ? '' : (() => {
     // FOOD running total only (qty × unit price). Beverages are billed on
