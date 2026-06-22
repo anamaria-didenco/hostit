@@ -310,6 +310,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const eventType = booking.eventType ?? (runsheet as any)?.eventType ?? "";
     const dietaries: { name: string; count: number; notes?: string }[] = (runsheet as any)?.dietaries ?? [];
     const venueSetup = (runsheet as any)?.venueSetup ?? "";
+    // Concise one-line setup summary for the booking band (e.g. "Seated · 2 × tables of 8").
+    const setupSummary = ((runsheet as any)?.setupSummary ?? "").toString().trim();
+    // Drink type tags (SPARK/WHITE/RED/BEER) keyed by drink name, if the operator set them.
+    const drinkTypesMap: Record<string, string> = (rsDrinks as any)?.drinkTypes ?? {};
     // Internal-only fields — never surfaced via the public event-pack link.
     const rsNotes = isPublic ? "" : ((runsheet as any)?.notes ?? "");
     const bookingNotes = isPublic ? "" : ((booking as any).notes ?? "");
@@ -352,181 +356,253 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       ? `<img src="${venueLogoUrl}" alt="${venueName}" style="height:40px;max-width:120px;object-fit:contain;display:block;">`
       : `<div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:white;letter-spacing:0.04em;">${venueName}</div>`;
 
-    // Details grid — public event-pack hides financials (DEPOSIT), internal
-    // workflow info (STATUS), and contact PII (EMAIL/PHONE) since the link
-    // may be forwarded beyond the original recipient.
-    const detailCells = [
-      { label: "CLIENT", value: clientName },
-      { label: "EVENT TYPE", value: eventType || "—" },
-      { label: "DATE", value: eventDate || "—" },
-      { label: "TIME", value: timeRange },
-      { label: "GUESTS", value: guestCount ? String(guestCount) : "—" },
-      { label: "SPACE / ROOM", value: [venueAreaLabel, spaceName].filter(Boolean).join(" · ") || "—" },
-      ...(isPublic ? [] : [
-        { label: "EMAIL", value: leadEmail || "—" },
-        { label: "PHONE", value: leadPhone || booking.phone || "—" },
-        { label: "DEPOSIT", value: booking.depositNzd ? fmtCurrency(booking.depositNzd) + (booking.depositPaid ? " ✓ Paid" : " — Outstanding") : "—" },
-        { label: "STATUS", value: (booking.status ?? "").replace(/_/g, " ").toUpperCase() },
-      ]),
-    ].filter(c => c.value && c.value !== "—");
+    // ═══════════════════════════════════════════════════════════════════════
+    // Two-page "kitchen + service" BEO. Page 1 is the kitchen copy (booking
+    // band, allergies, menu changes, menu); page 2 is the service copy (run of
+    // night, notes, contact, beverages, cost). RED (#c0202a) is reserved
+    // strictly for attention items — allergies, CHANGED tags, CONFIRMED.
+    // ═══════════════════════════════════════════════════════════════════════
+    const RED = "#c0202a";
 
-    // Venue setup section
-    const setupSection = venueSetup ? `
-<div class="card">
-  <div class="card-header">VENUE SETUP</div>
-  <div class="card-body notes-text">${venueSetup}</div>
-</div>` : "";
+    // ── Running header (both pages) ──────────────────────────────────────
+    const headerBits = [
+      `BEO #${booking.id}`,
+      escHtml(venueName),
+      guestCount ? `${escHtml(String(guestCount))} guests` : "",
+      eventDate ? escHtml(eventDate) : "",
+    ].filter(Boolean);
+    const runningHeaderText = headerBits.join(" · ");
+    const runningHeader = `<div class="run-head">${runningHeaderText}</div>`;
+    const isConfirmed = String(booking.status ?? "").toLowerCase() === "confirmed";
 
-    // Dietary section — high-attention amber treatment so chefs can scan
-    // allergies/diets in one glance.
+    // ── Page-1 booking-summary band cells ────────────────────────────────
+    const roomLabel = venueAreaLabel || spaceName || "";
+    const bandCells: { label: string; value: string; big?: boolean }[] = [
+      { label: "GUESTS", value: guestCount ? String(guestCount) : "—", big: true },
+      ...(eventDate ? [{ label: "DATE", value: escHtml(eventDate) }] : []),
+      ...(timeRange && timeRange !== "—" ? [{ label: "SERVICE", value: escHtml(timeRange) }] : []),
+      ...(roomLabel ? [{ label: "ROOM", value: escHtml(roomLabel) }] : []),
+      ...(setupSummary ? [{ label: "SETUP", value: escHtml(setupSummary) }] : []),
+    ];
+
+    // ── Severity detection for allergy/dietary cards ─────────────────────
+    // \bnuts?\b matches "nut"/"nuts"/"nut allergy"/"tree nut" but NOT
+    // coconut / butternut / nutmeg / nutrition (no leading word boundary there).
+    const SEVERE_RE = /allerg|anaphyla|\bnuts?\b|pregnan|coeliac|celiac|epipen|severe/i;
+    const isSevere = (d: { name: string; notes?: string }) =>
+      SEVERE_RE.test(d.name || "") || SEVERE_RE.test(d.notes || "");
     const dietarySection = dietaries.length > 0 ? `
-<div class="card dietary-card">
-  <div class="card-header dietary-header">⚠ DIETARY REQUIREMENTS</div>
-  <div class="card-body">
-    <div class="dietary-grid">
-      ${dietaries.map(d => `
-      <div class="dietary-item">
-        <div class="dietary-badge">${d.count}×</div>
-        <div>
-          <div class="dietary-name">${d.name}</div>
-          ${d.notes ? `<div class="dietary-notes">${d.notes}</div>` : ""}
-        </div>
-      </div>`).join("")}
-    </div>
+<section class="block">
+  <div class="block-label red"><span class="warn">⚠</span> Dietary &amp; Allergies</div>
+  <div class="diet-grid">
+    ${dietaries.map(d => {
+      const sev = isSevere(d);
+      return `
+    <div class="diet-card${sev ? " severe" : ""}">
+      <div class="diet-top">
+        <span class="diet-name">${escHtml(d.name)}</span>
+        ${d.count > 1 ? `<span class="diet-count">×${d.count}</span>` : ""}
+      </div>
+      ${d.notes ? `<div class="diet-notes">${escHtml(d.notes)}</div>` : ""}
+    </div>`;
+    }).join("")}
   </div>
-</div>` : "";
+</section>` : "";
 
-    // Timeline section
-    const timelineSection = timelineItems.length > 0 ? `
-<div class="card">
-  <div class="card-header">EVENT TIMELINE</div>
-  <div class="tl-head">
-    <div class="tl-time">TIME</div>
-    <div class="tl-title">ITEM</div>
-    <div class="tl-dur">DUR.</div>
-    <div class="tl-staff">ASSIGNED TO</div>
+    // ── Menu-change strip (page 1) — only when a foh dish was changed ─────
+    const changedItems = fohItems.filter((i: any) => i.previousDishName && (i.course ?? "") !== "Drinks");
+    const menuChangesSection = changedItems.length > 0 ? `
+<section class="block">
+  <div class="block-label red">Menu Changes</div>
+  <div class="changes-card">
+    <div class="changes-sub">Applies to all ${escHtml(String(guestCount || "—"))} covers</div>
+    ${changedItems.map((f: any) => `
+    <div class="change-row">
+      <span class="change-old">${escHtml(f.previousDishName)}</span>
+      <span class="change-arrow">→</span>
+      <span class="change-new">${escHtml(f.dishName)}</span>
+    </div>`).join("")}
   </div>
-  ${timelineItems.map((item: any) => `
-  <div class="tl-row">
-    <div class="tl-time"><strong>${fmt12(item.time)}</strong></div>
-    <div class="tl-title">
-      <div class="item-title">${item.title || "—"}</div>
-      ${item.description ? `<div class="item-desc">${item.description}</div>` : ""}
-    </div>
-    <div class="tl-dur">${item.duration ? item.duration + "m" : ""}</div>
-    <div class="tl-staff">${item.assignedTo || "—"}</div>
-  </div>`).join("")}
-</div>` : "";
+</section>` : "";
 
-    // F&B section renderer
-    const renderFnbSection = (title: string, items: any[], isKitchen = false) => {
-      if (!items.length) return "";
-      // Public event-pack hides internal kitchen prep/plating + staff
-      // assignments — guests don't need (and shouldn't see) operational detail.
-      if (isPublic && isKitchen) return "";
-      const grouped = groupByCourse(items);
-      // Food first, drinks last — always. Custom courses (e.g. "Shared
-      // Menu") were sliding in after Drinks because they weren't in
-      // COURSE_ORDER. Pin Drinks to the tail no matter what.
-      const isDrinks = (c: string) => c.toLowerCase() === 'drinks';
-      // Order non-drink courses by their earliest service TIME, but ONLY when
-      // EVERY food course is timed (e.g. Victoria: platters 8pm before cake
-      // 9:30pm). If any course is untimed, keep the standard COURSE_ORDER +
-      // custom-courses ordering so partially-timed events print exactly as
-      // before — a single late timed course must NOT jump to the top. Drinks
-      // always print last.
+    // ── Menu courses (page 1) — food courses only, EXCLUDE Drinks ────────
+    // Reuse the existing course time-ordering logic: order by earliest
+    // service TIME only when EVERY food course is timed, else COURSE_ORDER.
+    const orderFoodCourses = (grouped: Record<string, any[]>) => {
       const toMins = (t: any) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t ?? "")); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
       const courseTime = (c: string) => {
         const mins = (grouped[c] ?? []).map((i: any) => toMins(i.serviceTime)).filter((n): n is number => n != null);
         return mins.length ? Math.min(...mins) : null;
       };
       const orderIdx = (c: string) => { const i = COURSE_ORDER.indexOf(c); return i === -1 ? 999 : i; };
-      const nonDrink = Object.keys(grouped).filter(c => !isDrinks(c));
-      const allTimed = nonDrink.length > 0 && nonDrink.every(c => courseTime(c) != null);
-      if (allTimed) {
-        nonDrink.sort((a, b) => (courseTime(a)! - courseTime(b)!) || (orderIdx(a) - orderIdx(b)));
-      } else {
-        // COURSE_ORDER courses first (by their defined order), then custom courses.
-        nonDrink.sort((a, b) => orderIdx(a) - orderIdx(b));
-      }
-      const drinkKeys = Object.keys(grouped).filter(isDrinks);
-      const allCourses = [...nonDrink, ...drinkKeys];
-      const showLastCol = !isPublic;
-      const lastColHeader = isKitchen ? "PREP / PLATING" : "STAFF";
-
-      return `
-<div class="card">
-  <div class="card-header ${isKitchen ? 'card-header-dark' : ''}">${title}</div>
-  <div class="fnb-head">
-    <div class="fnb-course">COURSE</div>
-    <div class="fnb-dish">DISH</div>
-    ${showQty ? `<div class="fnb-qty">QTY</div>` : ""}
-    <div class="fnb-time">TIME</div>
-    <div class="fnb-diet">DIETARY</div>
-    ${showLastCol ? `<div class="fnb-last">${lastColHeader}</div>` : ""}
-  </div>
-  ${allCourses.map(course => {
-    const isDrink = course === "Drinks";
-    return `
-  <div class="course-block">
-    <div class="course-group${isDrink ? ' is-drink' : ''}">${course}</div>
-    ${(grouped[course] ?? []).map((f: any) => `
-    <div class="fnb-row${isDrink ? ' is-drink' : ''}">
-      <div class="fnb-course"></div>
-      <div class="fnb-dish">
-        <div class="dish-name">${f.dishName}</div>
-        ${f.description ? `<div class="dish-desc">${f.description}</div>` : ""}
-      </div>
-      ${showQty ? `<div class="fnb-qty">${course === "Drinks" ? "" : (f.qty ?? 1)}</div>` : ""}
-      <div class="fnb-time">${f.serviceTime ? fmt12(f.serviceTime) : ""}</div>
-      <div class="fnb-diet">${f.dietary ? `<span class="diet-tag">${f.dietary}</span>` : ""}</div>
-      ${showLastCol ? `<div class="fnb-last">
-        ${isKitchen
-          ? `${f.prepNotes ? `<div class="prep-note">${f.prepNotes}</div>` : ""}${f.platingNotes ? `<div class="plating-note">${f.platingNotes}</div>` : ""}`
-          : (f.staffAssigned || "")
-        }
-      </div>` : ""}
+      const courses = Object.keys(grouped);
+      const allTimed = courses.length > 0 && courses.every(c => courseTime(c) != null);
+      if (allTimed) courses.sort((a, b) => (courseTime(a)! - courseTime(b)!) || (orderIdx(a) - orderIdx(b)));
+      else courses.sort((a, b) => orderIdx(a) - orderIdx(b));
+      return courses;
+    };
+    const foodItems = fohItems.filter((i: any) => (i.course ?? "") !== "Drinks");
+    const foodGrouped = groupByCourse(foodItems);
+    const foodCourses = orderFoodCourses(foodGrouped);
+    const menuSection = foodItems.length > 0 ? `
+<section class="block">
+  <div class="block-label">Menu</div>
+  <div class="menu-cols">
+    ${foodCourses.map(course => `
+    <div class="course">
+      <div class="course-name">${escHtml(course)}</div>
+      ${(foodGrouped[course] ?? []).map((f: any) => `
+      <div class="dish">
+        <div class="dish-line">
+          <span class="dish-name">${escHtml(f.dishName)}</span>
+          ${f.serviceTime ? `<span class="dish-time">${fmt12(f.serviceTime)}</span>` : ""}
+          ${showQty && f.qty ? `<span class="dish-qty">×${escHtml(String(f.qty))}</span>` : ""}
+        </div>
+        ${f.description ? `<div class="dish-desc">${escHtml(f.description)}</div>` : ""}
+        ${f.dietary ? `<span class="dish-diet">${escHtml(f.dietary)}</span>` : ""}
+        ${f.previousDishName ? `<span class="changed-tag">CHANGED · was ${escHtml(f.previousDishName)}</span>` : ""}
+        ${(!isPublic && (f.prepNotes || f.platingNotes)) ? `<div class="prep-line">${[f.prepNotes, f.platingNotes].filter(Boolean).map((n: string) => escHtml(n)).join(" · ")}</div>` : ""}
+      </div>`).join("")}
     </div>`).join("")}
-  </div>`;
-  }).join("")}
-</div>`;
-    }
-
-    // Bar section — arrangement & notes only. The actual drinks list is
-    // rendered inside the Food & Beverage Selection table above, so we
-    // intentionally don't duplicate it here.
-    const barNotes = (drinks as any)?.barNotes as string | undefined;
-    const hasBarInfo = drinks && (drinks.barOption || drinks.tabAmount || barNotes);
-    const barSection = hasBarInfo ? `
-<div class="card">
-  <div class="card-header">BAR ARRANGEMENT</div>
-  <div class="card-body">
-    ${drinks.barOption ? `<div class="detail-row"><span class="detail-label">Bar Arrangement</span><span class="detail-value">${BAR_LABELS[drinks.barOption] ?? drinks.barOption}</span></div>` : ""}
-    ${drinks.tabAmount ? `<div class="detail-row"><span class="detail-label">Bar Tab Amount</span><span class="detail-value">${fmtCurrency(drinks.tabAmount)}</span></div>` : ""}
-    ${barNotes ? `
-    <div style="margin-top:8px;padding:8px 10px;background:#f5f2eb;border-left:3px solid ${venuePrimaryColor}">
-      <div class="detail-label" style="margin-bottom:4px">Bar Notes</div>
-      <div style="font-size:11px;line-height:1.6;color:#1a1209;white-space:pre-wrap">${(barNotes as string).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>
-    </div>` : ""}
   </div>
-</div>` : "";
+</section>` : "";
 
-    // Drinks list rendered from the DRINKS-tab selection (see fohItems note
-    // above). Only shown when the operator actually picked drinks there.
-    const selectedDrinksSection = hasDrinkSelection ? `
-<div class="card">
-  <div class="card-header">DRINKS SELECTION</div>
-  <div class="card-body">
-    ${selectedDrinkNames.map(n => `<div class="detail-row"><span class="detail-value">${escHtml(n)}</span></div>`).join("")}
-    ${customDrinkList.map((d: any) => `<div class="detail-row"><span class="detail-value">${escHtml(d.name)}${d.description ? ` <span style="color:#6b6256">— ${escHtml(d.description)}</span>` : ""}</span></div>`).join("")}
+    // ── Run of night (page 2) — vertical timeline ────────────────────────
+    const timelineSection = timelineItems.length > 0 ? `
+<section class="block">
+  <div class="block-label">Run of Night</div>
+  <div class="timeline">
+    ${timelineItems.map((item: any) => `
+    <div class="tl-item">
+      <div class="tl-anchor">
+        <div class="tl-time">${fmt12(item.time) || "—"}</div>
+        ${item.duration ? `<div class="tl-dur">${escHtml(String(item.duration))} min</div>` : ""}
+      </div>
+      <div class="tl-body">
+        <div class="tl-title">${escHtml(item.title || "—")}</div>
+        ${item.description ? `<div class="tl-desc">${escHtml(item.description)}</div>` : ""}
+        ${item.assignedTo ? `<div class="tl-staff">${escHtml(item.assignedTo)}</div>` : ""}
+      </div>
+    </div>`).join("")}
   </div>
-</div>` : "";
+</section>` : "";
 
-    // Cost summary — hidden on the public event-pack to avoid exposing deposit
-    // status / pricing to anyone with the link. Works for events WITHOUT a
-    // linked proposal too: falls back to the booking's minimum spend, the F&B
-    // sheet food total and the Costs-tab food/beverage items, so the BEO always
-    // carries a cost summary + balance to collect.
+    // ── Key notes (page 2) — bullet lines from rs/booking notes ──────────
+    const allNotes = [rsNotes, bookingNotes].filter(Boolean).join("\n").trim();
+    const noteLines = allNotes.split(/\n+/).map(l => l.trim()).filter(Boolean);
+    const notesSection = noteLines.length > 0 ? `
+<section class="block">
+  <div class="block-label">Key Notes</div>
+  <div class="notes-box">
+    ${noteLines.map(l => `<div class="note-line">${escHtml(l)}</div>`).join("")}
+  </div>
+</section>` : "";
+
+    // ── Client contact (page 2) ──────────────────────────────────────────
+    const contactBits = isPublic
+      ? []
+      : [
+          leadEmail ? `<div class="contact-line">${escHtml(leadEmail)}</div>` : "",
+          (leadPhone || booking.phone) ? `<div class="contact-line">${escHtml(leadPhone || booking.phone)}</div>` : "",
+        ].filter(Boolean);
+    const contactSection = `
+<section class="block">
+  <div class="block-label">Client Contact</div>
+  <div class="contact-card">
+    <div class="contact-name">${escHtml(clientName)}</div>
+    ${contactBits.join("")}
+  </div>
+</section>`;
+
+    // ── Beverages (page 2) — typed chips ─────────────────────────────────
+    // Type derivation: explicit drinkTypes map wins, else infer from name.
+    const drinkType = (name: string): string => {
+      const explicit = drinkTypesMap[name];
+      // "other" is a real selection but has no colour in the palette — render
+      // it as no-tag (like an untyped drink) instead of an unstyled chip.
+      if (explicit) { const e = String(explicit).toLowerCase(); return e === "other" ? "" : e.toUpperCase(); }
+      const n = name.toLowerCase();
+      if (/prosecco|champagne|cava|cliquot|spumante|sparkling/.test(n)) return "SPARK";
+      if (/sauvignon|pinot grigio|chardonnay|riesling|blanc|pinot gris|gewurz/.test(n)) return "WHITE";
+      if (/nero|shiraz|cabernet|merlot|pinot noir|malbec|rosso|rosato|tempranillo|sangiovese/.test(n)) return "RED";
+      if (/beer|pilsner|lager|ale|ipa|peroni|stout/.test(n)) return "BEER";
+      return "";
+    };
+    const drinkChip = (name: string, desc?: string) => {
+      const t = drinkType(name);
+      return `
+    <div class="bev-row">
+      ${t ? `<span class="bev-tag bev-${t.toLowerCase()}">${t}</span>` : `<span class="bev-tag bev-none"></span>`}
+      <span class="bev-name">${escHtml(name)}${desc ? ` <span class="bev-desc">— ${escHtml(desc)}</span>` : ""}</span>
+    </div>`;
+    };
+    // Drinks source: DRINKS-tab selection if present, else legacy fnb Drinks course.
+    const legacyDrinkRows = fohItems.filter((i: any) => (i.course ?? "") === "Drinks");
+    const bevRows = hasDrinkSelection
+      ? [
+          ...selectedDrinkNames.map(n => drinkChip(n)),
+          ...customDrinkList.map((d: any) => drinkChip(d.name, d.description)),
+        ]
+      : legacyDrinkRows.map((f: any) => drinkChip(f.dishName, f.description));
+    const beveragesSection = bevRows.length > 0 ? `
+<section class="block">
+  <div class="block-label">Beverages</div>
+  <div class="bev-list">
+    ${bevRows.join("")}
+  </div>
+</section>` : "";
+
+    // ── Kitchen prep & production (page 1, INTERNAL copy only) ───────────
+    // Restores the legacy KITCHEN section: F&B rows the operator placed in the
+    // 'kitchen' section (prep/production), which the menu (foh only) excludes.
+    const kitchenGrouped = groupByCourse(kitchenItemsArr);
+    const kitchenCourses = orderFoodCourses(kitchenGrouped);
+    const kitchenSection = (!isPublic && kitchenItemsArr.length > 0) ? `
+<section class="block">
+  <div class="block-label">Kitchen — Prep &amp; Production</div>
+  <div class="menu-cols">
+    ${kitchenCourses.map(course => `
+    <div class="course">
+      <div class="course-name">${escHtml(course)}</div>
+      ${(kitchenGrouped[course] ?? []).map((f: any) => `
+      <div class="dish">
+        <div class="dish-line">
+          <span class="dish-name">${escHtml(f.dishName)}</span>
+          ${f.serviceTime ? `<span class="dish-time">${fmt12(f.serviceTime)}</span>` : ""}
+          ${showQty && f.qty ? `<span class="dish-qty">×${escHtml(String(f.qty))}</span>` : ""}
+        </div>
+        ${f.description ? `<div class="dish-desc">${escHtml(f.description)}</div>` : ""}
+        ${(f.prepNotes || f.platingNotes) ? `<div class="prep-line">${[f.prepNotes, f.platingNotes].filter(Boolean).map((n: string) => escHtml(n)).join(" · ")}</div>` : ""}
+      </div>`).join("")}
+    </div>`).join("")}
+  </div>
+</section>` : "";
+
+    // ── Venue setup (rich text: room layout / AV / decor / deliveries) ───
+    // Distinct from the one-line setupSummary band cell — this is the full
+    // operator-entered setup brief and must not be silently dropped.
+    const setupSection = (venueSetup && String(venueSetup).trim()) ? `
+<section class="block">
+  <div class="block-label">Setup</div>
+  <div class="notes-box">${venueSetup}</div>
+</section>` : "";
+
+    // ── Bar arrangement + notes (page 2) ────────────────────────────────
+    // Restores bar option / tab / free-text bar notes (service instructions).
+    const barNotesText = ((drinks as any)?.barNotes ?? "").toString();
+    const barOpt = (drinks as any)?.barOption as string | undefined;
+    const barTabVal = (drinks as any)?.tabAmount;
+    const barSection = (barOpt || (!isPublic && barTabVal) || barNotesText.trim()) ? `
+<section class="block">
+  <div class="block-label">Bar Arrangement</div>
+  <div class="notes-box">
+    ${barOpt ? `<div class="note-line"><strong>${escHtml(BAR_LABELS[barOpt] ?? barOpt)}</strong></div>` : ""}
+    ${(!isPublic && barTabVal) ? `<div class="note-line">Bar tab: ${fmtCurrency(barTabVal)}</div>` : ""}
+    ${barNotesText.trim() ? `<div class="note-line">${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : ""}
+  </div>
+</section>` : "";
+
+    // ── Cost summary (page 2) — internal only, never public ──────────────
     const costList: any[] = Array.isArray((runsheet as any)?.costItems) ? (runsheet as any).costItems : [];
     const fnbFoodTotal = fnbList
       .filter(i => (i.course ?? "") !== "Drinks")
@@ -545,41 +621,30 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     );
     const depAmt = Number(booking.depositNzd ?? 0);
     const balanceToCollect = eventTotal > 0 ? Math.max(0, eventTotal - (booking.depositPaid ? depAmt : 0)) : 0;
-    const showFinancials = !isPublic && (minSpendAmt > 0 || eventTotal > 0 || depAmt > 0 || quoteItemsList.length > 0);
+    const showFinancials = !isPublic && (minSpendAmt > 0 || eventTotal > 0 || depAmt > 0);
     const financialsSection = showFinancials ? `
-<div class="card">
-  <div class="card-header">COST SUMMARY</div>
-  <div class="card-body">
-    ${minSpendAmt > 0 ? `<div class="detail-row"><span class="detail-label">Minimum Spend</span><span class="detail-value">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
-    ${eventTotal > 0 ? `<div class="detail-row"><span class="detail-label">Total</span><span class="detail-value">${fmtCurrency(eventTotal)}</span></div>` : ""}
-    ${depAmt > 0 ? `<div class="detail-row"><span class="detail-label">Deposit</span><span class="detail-value">${fmtCurrency(depAmt)} ${booking.depositPaid ? "✓ Paid" : "— Outstanding"}</span></div>` : ""}
-    ${balanceToCollect > 0 ? `<div class="detail-row" style="font-weight:600;border-top:1px solid rgba(201,168,76,0.3);margin-top:6px;padding-top:6px"><span class="detail-label">Balance to Collect</span><span class="detail-value">${fmtCurrency(balanceToCollect)}</span></div>` : ""}
-    ${quoteItemsList.length > 0 ? `
-    <div style="margin-top:8px;border-top:1px solid rgba(201,168,76,0.3);padding-top:8px">
-      ${quoteItemsList.map(qi => `<div class="detail-row"><span class="detail-label">${escHtml(qi.name ?? qi.label)}</span><span class="detail-value">${fmtCurrency(qi.unitPrice ?? qi.amount)}</span></div>`).join("")}
-    </div>` : ""}
+<section class="block cost-block">
+  <div class="block-label">Cost Summary</div>
+  <div class="cost-card">
+    ${minSpendAmt > 0 ? `<div class="cost-row"><span class="cost-k">Minimum Spend</span><span class="cost-v">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
+    ${eventTotal > 0 ? `<div class="cost-row"><span class="cost-k">Total</span><span class="cost-v">${fmtCurrency(eventTotal)}</span></div>` : ""}
+    ${depAmt > 0 ? `<div class="cost-row"><span class="cost-k">Deposit</span><span class="cost-v">${fmtCurrency(depAmt)} ${booking.depositPaid ? "✓ Paid" : "— Outstanding"}</span></div>` : ""}
+    ${balanceToCollect > 0 ? `<div class="cost-row cost-total"><span class="cost-k">Balance to Collect</span><span class="cost-v">${fmtCurrency(balanceToCollect)}</span></div>` : ""}
   </div>
-</div>` : "";
+</section>` : "";
 
-    // Notes section
-    const allNotes = [rsNotes, bookingNotes].filter(Boolean).join("\n\n").trim();
-    const notesSection = allNotes ? `
-<div class="card">
-  <div class="card-header">NOTES</div>
-  <div class="card-body notes-text">${allNotes.replace(/\n/g, "<br>")}</div>
-</div>` : "";
-
-    // Footer note section — rich HTML from the runsheet footer box.
+    // Footer note (closing message) — shown to everyone, on page 2.
     const footerNoteSection = footerNote.trim() ? `
-<div class="card">
-  <div class="card-header">FOOTER NOTE</div>
-  <div class="card-body notes-text">${footerNote}</div>
-</div>` : "";
+<section class="block">
+  <div class="block-label">Note</div>
+  <div class="notes-box"><div class="note-line">${footerNote.replace(/\n/g, "<br>")}</div></div>
+</section>` : "";
 
-    // F&B grid columns — drop trailing STAFF / PREP column on public view.
-    const fnbGridCols = isPublic
-      ? (showQty ? "74px 1fr 40px 62px 80px" : "74px 1fr 62px 80px")
-      : (showQty ? "74px 1fr 40px 62px 80px 1fr" : "74px 1fr 62px 80px 1fr");
+    const pageFooter = (label: string) => `
+  <div class="page-foot">
+    <span class="foot-l">${runningHeaderText}</span>
+    <span class="foot-r">${label}</span>
+  </div>`;
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -590,398 +655,457 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* ── Palette ──
+     RED (#c0202a) is reserved STRICTLY for attention items (allergies,
+     CHANGED tags, CONFIRMED). Everything else is neutral ink on cream.
+     ${venuePrimaryColor} (venue brand) is used for quiet branding chrome only. */
+  :root {
+    --ink: #1f1a14;
+    --ink-soft: #5c554a;
+    --ink-faint: #8b8478;
+    --line: #e3ddd1;
+    --cream: #faf7f1;
+    --card: #ffffff;
+    --red: ${RED};
+    --brand: ${venuePrimaryColor};
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'DM Sans', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 11px;
-    color: #1a1209;
-    background: #f9f5ef;
-    padding: 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--cream);
   }
-  /* Page margins are controlled by Puppeteer (12mm all sides) so .page only
-     needs minimal internal padding for visual rhythm. */
-  .page { padding: 0 4px; max-width: 210mm; margin: 0 auto; }
+  .label {
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
 
-  /* ── Header ── */
-  .doc-header {
-    background: ${venuePrimaryColor};
-    color: white;
-    padding: 14px 20px;
+  /* ── Sheet / page ── */
+  .sheet { max-width: 210mm; margin: 0 auto; padding: 0; }
+  .page-break { page-break-before: always; break-before: page; }
+
+  /* ── Running header (both pages) ── */
+  .run-head {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 0 0 8px 0;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 18px;
+  }
+
+  /* ── Top header ── */
+  .top {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 14px;
+    gap: 16px;
+    margin-bottom: 20px;
   }
-  .doc-header-left {}
+  .top-service { border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
+  .brand { margin-bottom: 8px; }
+  /* On the cream page the logoHtml fallback renders white text — recolour it. */
+  .brand div { color: var(--brand) !important; }
   .doc-type {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 10.5px;
-    letter-spacing: 0.18em;
-    color: rgba(255,255,255,0.55);
-    margin-bottom: 2px;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
   }
-  .doc-title {
+  .venue-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 34px;
+    line-height: 1.02;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    margin-top: 2px;
+  }
+  .service-title { font-size: 30px; }
+  .sub-line { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+  .top-right { text-align: right; flex-shrink: 0; }
+  .beo-num {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 22px;
     letter-spacing: 0.04em;
-    color: white;
-    line-height: 1.1;
+    color: var(--ink);
+  }
+  .status {
+    display: inline-block;
+    margin-top: 6px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+    padding: 2px 8px;
+  }
+  .status.confirmed {
+    color: #fff;
+    background: var(--red);
+    border-color: var(--red);
+  }
+
+  /* ── Booking summary band ── */
+  .band {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    background: var(--card);
+    border: 1px solid var(--line);
+    margin-bottom: 22px;
+  }
+  .band-cell {
+    flex: 1;
+    min-width: 90px;
+    padding: 10px 14px;
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .band-cell:last-child { border-right: none; }
+  .band-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 3px;
+  }
+  .band-val { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .band-big {
+    flex: 0 0 auto;
+    background: var(--ink);
+    color: #fff;
+    align-items: center;
+    text-align: center;
+    min-width: 96px;
+  }
+  .band-big .band-label { color: rgba(255,255,255,0.6); }
+  .band-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 46px;
+    line-height: 0.9;
+    color: #fff;
+  }
+
+  /* ── Generic block ── */
+  .block { margin-bottom: 22px; page-break-inside: avoid; break-inside: avoid; }
+  .block-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink);
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 12px;
+  }
+  .block-label.red { color: var(--red); border-bottom-color: var(--red); }
+  .block-label .warn { font-family: 'DM Sans', sans-serif; }
+
+  /* ── Dietary & allergies ── */
+  .diet-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .diet-card {
+    flex: 1 1 160px;
+    min-width: 150px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--ink-faint);
+    padding: 9px 12px;
+  }
+  .diet-card.severe {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+  }
+  .diet-top { display: flex; align-items: baseline; gap: 8px; }
+  .diet-name { font-size: 13px; font-weight: 700; }
+  .diet-count {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 15px;
+    margin-left: auto;
+  }
+  .diet-notes { font-size: 11px; margin-top: 4px; line-height: 1.45; opacity: 0.85; }
+  .diet-card:not(.severe) .diet-notes { color: var(--ink-soft); }
+
+  /* ── Menu changes strip ── */
+  .changes-card {
+    background: var(--card);
+    border: 1px solid var(--red);
+    border-left: 4px solid var(--red);
+    padding: 10px 14px;
+  }
+  .changes-sub {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: 8px;
+  }
+  .change-row { font-size: 12.5px; padding: 3px 0; line-height: 1.5; }
+  .change-old { color: var(--ink-faint); text-decoration: line-through; }
+  .change-arrow { color: var(--red); margin: 0 6px; font-weight: 700; }
+  .change-new { font-weight: 700; color: var(--ink); }
+
+  /* ── Menu ── two-column course blocks ── */
+  .menu-cols { columns: 2; column-gap: 26px; }
+  .course { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; }
+  .course-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--brand);
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 7px;
+  }
+  .dish { margin-bottom: 9px; break-inside: avoid; }
+  .dish-line { display: flex; align-items: baseline; gap: 8px; }
+  .dish-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .dish-time {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    margin-left: auto;
+  }
+  .dish-qty {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .dish-desc { font-size: 11px; color: var(--ink-soft); margin-top: 2px; line-height: 1.45; white-space: pre-wrap; }
+  .dish-diet {
+    display: inline-block;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+    padding: 1px 6px;
     margin-top: 4px;
   }
-  .doc-sub {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 10.5px;
-    color: rgba(255,255,255,0.65);
-    margin-top: 3px;
-  }
-  .doc-header-right { text-align: right; }
-  .doc-beo-num {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    color: rgba(255,255,255,0.45);
-    margin-bottom: 4px;
-  }
-  .doc-date {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    color: white;
-    line-height: 1.2;
-  }
-  .doc-time {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 11px;
-    color: rgba(255,255,255,0.8);
-    margin-top: 2px;
-  }
-  .status-badge {
+  .changed-tag {
     display: inline-block;
-    background: #c9a84c;
-    color: #1a1209;
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
-    letter-spacing: 0.12em;
-    padding: 2px 7px;
-    margin-top: 6px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: #fff;
+    background: var(--red);
+    padding: 1px 7px;
+    margin-top: 4px;
+    margin-left: 4px;
   }
+  .prep-line { font-size: 10px; color: var(--ink-faint); font-style: italic; margin-top: 3px; }
 
-  /* ── Detail cells ── */
-  .details-row {
+  /* ── Run of night (timeline) ── */
+  .timeline { border-left: 2px solid var(--line); }
+  .tl-item {
     display: flex;
-    flex-wrap: wrap;
-    background: white;
-    border: 1px solid rgba(201,168,76,0.35);
-    margin-bottom: 10px;
-  }
-  .detail-cell {
-    padding: 7px 12px;
-    border-right: 1px solid rgba(201,168,76,0.2);
-    min-width: 80px;
-    flex: 1;
-  }
-  .detail-cell:last-child { border-right: none; }
-  .cell-label {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 8px;
-    letter-spacing: 0.12em;
-    color: rgba(26,18,9,0.4);
-    margin-bottom: 2px;
-  }
-  .cell-value {
-    font-size: 11px;
-    font-weight: 600;
-    color: #1a1209;
-    word-break: break-word;
-  }
-
-  /* ── Venue area badge (header chip - prominent) ── */
-  .venue-area-chip {
-    display: inline-block;
-    background: #ffffff;
-    color: ${venuePrimaryColor};
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 14px;
-    letter-spacing: 0.16em;
-    padding: 4px 12px;
-    margin-left: 10px;
-    vertical-align: middle;
-    border: 2px solid #ffffff;
-    font-weight: 700;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
-  }
-
-  /* ── Cards ── */
-  .card {
-    background: white;
-    border: 1px solid rgba(201,168,76,0.35);
-    margin-bottom: 10px;
+    gap: 16px;
+    padding: 0 0 16px 18px;
+    position: relative;
+    break-inside: avoid;
     page-break-inside: avoid;
   }
-  .card-header {
+  .tl-item:before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    top: 4px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--brand);
+  }
+  .tl-anchor { flex: 0 0 70px; text-align: left; }
+  .tl-time {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 10.5px;
-    letter-spacing: 0.16em;
-    color: white;
-    background: ${venuePrimaryColor};
-    padding: 5px 12px;
-  }
-  .card-header-dark { background: #3a3530; }
-  .card-body { padding: 9px 12px; }
-  .notes-text {
-    font-size: 11px;
-    line-height: 1.65;
-    color: #3a2e1e;
-  }
-  .detail-row {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 3px 0;
-    border-bottom: 1px solid rgba(201,168,76,0.15);
-  }
-  .detail-row:last-child { border-bottom: none; }
-  .detail-label {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
-    letter-spacing: 0.08em;
-    color: rgba(26,18,9,0.4);
-    flex-shrink: 0;
-    width: 120px;
-  }
-  .detail-value {
-    font-size: 11px;
-    font-weight: 600;
-    color: #1a1209;
-  }
-
-  /* ── Dietary ── amber alert palette for chef/kitchen visibility */
-  .dietary-card { border: 2px solid #f59e0b; }
-  .dietary-header { background: #d97706 !important; color: white; }
-  .dietary-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .dietary-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    background: #fffbeb;
-    border: 1px solid #fbbf24;
-    border-left: 4px solid #d97706;
-    padding: 6px 10px;
-    min-width: 120px;
-  }
-  .dietary-badge {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 16px;
-    color: #b45309;
+    font-size: 19px;
     line-height: 1;
-    font-weight: 700;
+    color: var(--ink);
   }
-  .dietary-name { font-size: 11px; font-weight: 700; color: #78350f; }
-  .dietary-notes { font-size: 9.5px; color: #92400e; margin-top: 2px; font-style: italic; }
+  .tl-dur { font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
+  .tl-body { flex: 1; }
+  .tl-title { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .tl-desc { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; line-height: 1.45; white-space: pre-wrap; }
+  .tl-staff { font-size: 11px; color: var(--brand); margin-top: 3px; font-weight: 600; }
 
-  /* ── Timeline ── */
-  .tl-head {
-    display: grid;
-    grid-template-columns: 72px 1fr 44px 104px;
-    gap: 6px;
-    padding: 4px 12px;
-    background: rgba(201,168,76,0.12);
-    border-bottom: 1px solid rgba(201,168,76,0.3);
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 8.5px;
-    letter-spacing: 0.1em;
-    color: rgba(26,18,9,0.45);
+  /* ── Key notes ── */
+  .notes-box {
+    background: var(--card);
+    border: 1px solid var(--line);
+    padding: 11px 14px;
   }
-  .tl-row {
-    display: grid;
-    grid-template-columns: 72px 1fr 44px 104px;
-    gap: 6px;
-    padding: 5px 12px;
-    border-bottom: 1px solid rgba(201,168,76,0.12);
-    align-items: start;
-  }
-  .tl-row:last-child { border-bottom: none; }
-  .tl-time { font-weight: 700; font-size: 11px; }
-  .tl-dur { font-size: 9px; color: rgba(26,18,9,0.4); }
-  .tl-staff { font-size: 9.5px; color: ${venuePrimaryColor}; }
-  .item-title { font-weight: 600; font-size: 11px; }
-  .item-desc { font-size: 10px; color: rgba(26,18,9,0.65); margin-top: 2px; line-height: 1.5; white-space: pre-wrap; }
+  .note-line { font-size: 12px; line-height: 1.55; color: var(--ink); padding: 2px 0; }
+  .note-line + .note-line { border-top: 1px solid var(--line); }
 
-  /* ── F&B table ── */
-  .fnb-head {
-    display: grid;
-    grid-template-columns: ${fnbGridCols};
-    gap: 6px;
-    padding: 4px 12px;
-    background: rgba(201,168,76,0.12);
-    border-bottom: 1px solid rgba(201,168,76,0.3);
+  /* ── Client contact ── */
+  .contact-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    padding: 11px 14px;
+  }
+  .contact-name { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 3px; }
+  .contact-line { font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
+
+  /* ── Beverages ── */
+  .bev-list { display: flex; flex-direction: column; gap: 6px; }
+  .bev-row { display: flex; align-items: center; gap: 10px; }
+  .bev-tag {
+    flex: 0 0 auto;
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 8.5px;
+    font-size: 10px;
     letter-spacing: 0.1em;
-    color: rgba(26,18,9,0.45);
-  }
-  .fnb-row {
-    display: grid;
-    grid-template-columns: ${fnbGridCols};
-    gap: 6px;
-    padding: 4px 12px;
-    border-bottom: 1px solid rgba(201,168,76,0.1);
-    align-items: start;
-  }
-  .fnb-row:last-child { border-bottom: none; }
-  .course-group {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 10.5px;
-    letter-spacing: 0.12em;
-    color: #8b6914;
-    background: rgba(201,168,76,0.14);
-    padding: 4px 12px;
-    border-bottom: 1px solid rgba(201,168,76,0.28);
-    page-break-after: avoid;
-  }
-  .course-group + .fnb-row { page-break-before: avoid; }
-  /* Subtle distinction for drink rows — uses neutral grey so it works with
-     any venue primary colour (red, blue, green, etc.) without clashing. */
-  .course-group.is-drink {
-    color: #5a544a;
-    background: rgba(58,53,48,0.08);
-    border-bottom-color: rgba(58,53,48,0.18);
-  }
-  .fnb-row.is-drink { background: rgba(58,53,48,0.03); }
-  .dish-name { font-weight: 600; font-size: 11px; }
-  .dish-desc { font-size: 10.5px; color: rgba(26,18,9,0.72); margin-top: 3px; line-height: 1.55; white-space: pre-wrap; }
-  /* Dietary tag — amber alert colour so chefs spot allergies/diets instantly.
-     Stands out against neutral rows AND against any venue header colour. */
-  .diet-tag {
-    display: inline-block;
-    background: #fef3c7;
-    color: #92400e;
-    border: 1px solid #f59e0b;
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
-    letter-spacing: 0.08em;
-    font-weight: 700;
+    min-width: 48px;
+    text-align: center;
     padding: 2px 6px;
-    border-radius: 3px;
+    border-radius: 2px;
   }
-  .prep-note { font-size: 9.5px; color: rgba(26,18,9,0.6); }
-  .plating-note { font-size: 9px; color: rgba(26,18,9,0.4); margin-top: 1px; font-style: italic; }
+  .bev-spark { background: #e8c766; color: #4a3a06; }
+  .bev-white { background: #f2ecdc; color: #6b5f3a; }
+  .bev-red   { background: var(--red); color: #fff; }
+  .bev-beer  { background: #3a2f24; color: #f5e9d6; }
+  .bev-none  { background: transparent; min-width: 48px; }
+  .bev-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+  .bev-desc { font-weight: 400; color: var(--ink-soft); }
 
-  /* ── Footer ── */
-  .doc-footer {
-    margin-top: 16px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(201,168,76,0.35);
+  /* ── Cost summary (small card, internal only) ── */
+  .cost-block { margin-top: auto; }
+  .cost-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    padding: 10px 14px;
+    max-width: 320px;
+  }
+  .cost-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+    padding: 3px 0;
+  }
+  .cost-k { color: var(--ink-soft); }
+  .cost-v { font-weight: 600; color: var(--ink); }
+  .cost-total {
+    border-top: 1px solid var(--ink);
+    margin-top: 5px;
+    padding-top: 6px;
+    font-weight: 700;
+  }
+  .cost-total .cost-k { color: var(--ink); font-weight: 700; }
+
+  /* ── Page footer ── */
+  .page-foot {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    margin-top: 24px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
   }
-  .footer-l {
+  .foot-l, .foot-r {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 9px;
-    letter-spacing: 0.1em;
-    color: rgba(26,18,9,0.3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
   }
-  .footer-r {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 8.5px;
-    color: rgba(26,18,9,0.3);
-  }
-
-  /* A course-block keeps a course header + its first row together; if the
-     whole block fits on the remaining page it stays whole, otherwise it
-     breaks at a row boundary (rather than orphaning the course header). */
-  .course-block { page-break-inside: auto; break-inside: auto; }
 
   @media print {
-    /* Page size only — margins are controlled by Puppeteer's PDF options
-       (server/beoPdf.ts ~line 745) so leaving margin out of @page avoids
-       conflicting rules between Chromium's CSS engine and Puppeteer. */
+    /* Page size only — margins are controlled by Puppeteer's PDF options. */
     @page { size: A4 portrait; }
-    body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .card { page-break-inside: avoid; break-inside: avoid; }
-    .fnb-row, .tl-row, .dietary-item, .detail-row { page-break-inside: avoid; break-inside: avoid; }
-    .course-group { page-break-after: avoid; break-after: avoid; }
-    .doc-header { page-break-after: avoid; break-after: avoid; }
-    .details-row { page-break-inside: avoid; break-inside: avoid; }
-    .card-header { page-break-after: avoid; break-after: avoid; }
-    /* Force heavy backgrounds (forest/blue) to actually print on most browsers */
-    .doc-header, .card-header, .venue-area-chip, .status-badge { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .band-big, .status.confirmed, .diet-card.severe, .changed-tag,
+    .bev-spark, .bev-white, .bev-red, .bev-beer, .tl-item:before {
+      -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+    }
+    .block, .course, .tl-item, .diet-card { page-break-inside: avoid; break-inside: avoid; }
+    .block-label, .course-name { page-break-after: avoid; break-after: avoid; }
   }
 </style>
 </head>
 <body>
 
-<div class="doc-header">
-  <div class="doc-header-left">
-    <div>${logoHtml}</div>
-    <div class="doc-type" style="margin-top:8px">BANQUET EVENT ORDER</div>
-    <div class="doc-title">${clientName}${venueAreaLabel ? `<span class="venue-area-chip">${venueAreaLabel}</span>` : ""}</div>
-    <div class="doc-sub">${eventType ? `${eventType} · ` : ""}${venueName}${venueAddress ? ` · ${venueAddress}` : ""}${spaceName && venueAreaLabel ? ` · ${spaceName}` : ""}</div>
-  </div>
-  <div class="doc-header-right">
-    <div class="doc-beo-num">BEO #${booking.id}</div>
-    <div class="doc-date">${eventDate || "—"}</div>
-    ${timeRange !== "—" ? `<div class="doc-time">${timeRange}</div>` : ""}
-    <div class="status-badge" style="margin-top:8px">${(booking.status ?? "").replace(/_/g, " ").toUpperCase()}</div>
-  </div>
-</div>
+<!-- ══════════════════ PAGE 1 — KITCHEN COPY ══════════════════ -->
+<div class="sheet">
+  ${runningHeader}
 
-<div class="page">
+  <header class="top">
+    <div class="top-left">
+      <div class="brand">${logoHtml}</div>
+      <div class="doc-type">Banquet Event Order</div>
+      <div class="venue-name">${escHtml(venueName)}</div>
+      <div class="sub-line">${[eventType, clientName].filter(Boolean).map(escHtml).join(" · ")}</div>
+    </div>
+    <div class="top-right">
+      <div class="beo-num">BEO #${booking.id}</div>
+      ${isConfirmed ? `<div class="status confirmed">● CONFIRMED</div>` : (booking.status ? `<div class="status">${escHtml(String(booking.status).replace(/_/g, " ").toUpperCase())}</div>` : "")}
+    </div>
+  </header>
 
-  <div class="details-row">
-    ${detailCells.map(c => `
-    <div class="detail-cell">
-      <div class="cell-label">${c.label}</div>
-      <div class="cell-value">${c.value}</div>
+  <div class="band">
+    ${bandCells.map(c => `
+    <div class="band-cell${c.big ? " band-big" : ""}">
+      <div class="band-label">${c.label}</div>
+      ${c.big ? `<div class="band-num">${c.value}</div>` : `<div class="band-val">${c.value}</div>`}
     </div>`).join("")}
   </div>
 
-  ${show('notes', notesSection)}
-  ${show('setup', setupSection)}
   ${show('dietary', dietarySection)}
+  ${menuChangesSection}
+  ${show('food', menuSection)}
+  ${show('kitchen', kitchenSection)}
+
+  ${pageFooter("Kitchen copy · Page 1 of 2")}
+</div>
+
+<!-- ══════════════════ PAGE 2 — SERVICE COPY ══════════════════ -->
+<div class="sheet page-break">
+  ${runningHeader}
+
+  <header class="top top-service">
+    <div class="top-left">
+      <div class="doc-type">Service</div>
+      <div class="venue-name service-title">Floor &amp; Service</div>
+    </div>
+    <div class="top-right">
+      <div class="beo-num">BEO #${booking.id} · ${escHtml(venueName)}</div>
+    </div>
+  </header>
+
   ${show('timeline', timelineSection)}
-  ${show('food', renderFnbSection("FOOD &amp; BEVERAGE SELECTION", fohItems, false))}
-  ${show('kitchen', renderFnbSection("KITCHEN — PREP &amp; PRODUCTION", kitchenItemsArr, true))}
-  ${show('drinks', selectedDrinksSection + barSection)}
-  ${show('financials', financialsSection)}
-  ${hideSet.has('totals') ? '' : (() => {
-    // FOOD running total only (qty × unit price). Beverages are billed on
-    // consumption / bar tab, so we deliberately do NOT total the drinks
-    // selection here.
-    const food = fnbList.filter(i => (i.course ?? '') !== 'Drinks')
-      .reduce((s, i) => s + (Number(i.qty ?? 0) * Number((i as any).unitPrice ?? 0)), 0);
-    if (food <= 0) return "";
-    return `
-<div class="card">
-  <div class="card-header">FOOD RUNNING TOTAL</div>
-  <div class="card-body">
-    <div class="detail-row" style="font-weight:600"><span class="detail-label">Food</span><span class="detail-value">${fmtCurrency(food)}</span></div>
-  </div>
-</div>`;
-  })()}
+  ${show('setup', setupSection)}
+  ${show('notes', notesSection)}
+  ${contactSection}
+  ${show('drinks', beveragesSection)}
+  ${barSection}
   ${hideSet.has('payment') ? '' : (() => {
+    if (isPublic) return "";
     const pi = (venue as any)?.paymentInstructions as string | null | undefined;
     if (!pi || !pi.trim()) return "";
     const esc = pi.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
     return `
-<div class="card">
-  <div class="card-header">PAYMENT INSTRUCTIONS</div>
-  <div class="card-body notes-text">${esc}</div>
-</div>`;
+<section class="block">
+  <div class="block-label">Payment Instructions</div>
+  <div class="notes-box"><div class="note-line">${esc}</div></div>
+</section>`;
   })()}
   ${show('footer', footerNoteSection)}
+  ${show('financials', financialsSection)}
 
-  <div class="doc-footer">
-    <div class="footer-l">POWERED BY VENUEFLOWHQ · BANQUET EVENT ORDER</div>
-    <div class="footer-r">BEO #${booking.id} · Generated ${new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</div>
-  </div>
-
+  ${pageFooter("Service copy · Page 2 of 2")}
 </div>
+
 </body>
 </html>`;
 

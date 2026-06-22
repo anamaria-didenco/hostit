@@ -213,6 +213,7 @@ type FnbItem = {
   course?: string;
   drinkCategory?: string;
   dishName: string;
+  previousDishName?: string | null;
   description?: string;
   qty: number;
   dietary?: string;
@@ -346,6 +347,8 @@ export default function RunsheetBuilder() {
   // user clears them.
   const [rsSelectedDrinks, setRsSelectedDrinks] = useState<string[]>([]);
   const [rsCustomDrinks, setRsCustomDrinks] = useState<{ name: string; description?: string; price?: number }[]>([]);
+  // Beverage type per selected drink, keyed by drink name → 'spark' | 'white' | 'red' | 'beer' | 'other'
+  const [rsDrinkTypes, setRsDrinkTypes] = useState<Record<string, string>>({});
   const [newRsCustomDrink, setNewRsCustomDrink] = useState({ name: "", description: "" });
   const [drinksSaving, setDrinksSaving] = useState(false);
 
@@ -365,6 +368,7 @@ export default function RunsheetBuilder() {
 
   // Venue setup
   const [venueSetup, setVenueSetup] = useState("");
+  const [setupSummary, setSetupSummary] = useState("");
   const [footerText, setFooterText] = useState("");
   const [setupSectionOpen, setSetupSectionOpen] = useState(true);
 
@@ -986,6 +990,7 @@ export default function RunsheetBuilder() {
           section: item.section,
           course: item.course,
           dishName: item.dishName,
+          previousDishName: item.previousDishName ?? null,
           description: item.description,
           qty: item.qty ?? 1,
           dietary: item.dietary,
@@ -1265,6 +1270,7 @@ export default function RunsheetBuilder() {
       setNotes(existing.notes ?? "");
       setDietaries((existing.dietaries as Dietary[]) ?? []);
       setVenueSetup(existing.venueSetup ?? "");
+      setSetupSummary((existing as any).setupSummary ?? "");
       setFooterText(existing.footerText ?? "");
       setLinkedProposalId((existing as any).proposalId ?? undefined);
       setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
@@ -1290,6 +1296,7 @@ export default function RunsheetBuilder() {
         if (dd.selectedDrinks) setRsSelectedDrinks(dd.selectedDrinks);
         if (dd.customDrinks) setRsCustomDrinks(dd.customDrinks);
         if (dd.barNotes) setRsBarNotes(dd.barNotes);
+        if (dd.drinkTypes) setRsDrinkTypes(dd.drinkTypes);
       }
     }
   }, [existing]);
@@ -1507,12 +1514,13 @@ export default function RunsheetBuilder() {
         guestCount: guestCount ? Number(guestCount) : undefined,
         eventType: eventType || undefined,
         venueSetup: venueSetup || undefined,
+        setupSummary: setupSummary || undefined,
         gstInclusive,
-        drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined },
+        drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes },
       } as any);
     }, 1000);
     return () => clearTimeout(t);
-  }, [sheetId, notes, footerText, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, gstInclusive, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks]);
+  }, [sheetId, notes, footerText, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes]);
 
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
@@ -1547,11 +1555,12 @@ export default function RunsheetBuilder() {
           notes: notes || undefined,
           dietaries: dietaries.length ? dietaries : undefined,
           venueSetup: venueSetup || undefined,
+          setupSummary: setupSummary || undefined,
           footerText: footerText || undefined,
           gstInclusive,
           paymentNotes: paymentNotes || undefined,
           drinksData: (rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length)
-            ? { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined }
+            ? { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes }
             : undefined,
           items: items.map((item, i) => ({
             time: item.time,
@@ -1582,11 +1591,12 @@ export default function RunsheetBuilder() {
           notes: notes || undefined,
           dietaries: dietaries.length ? dietaries : undefined,
           venueSetup: venueSetup || undefined,
+          setupSummary: setupSummary || undefined,
           footerText: footerText || undefined,
           proposalId: linkedProposalId,
           floorPlanId: linkedFloorPlanId ?? null,
           costItems: costItems.length ? costItems : null,
-          drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined },
+          drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes },
           gstInclusive,
           paymentNotes: paymentNotes || undefined,
         } as any);
@@ -2402,6 +2412,15 @@ export default function RunsheetBuilder() {
                               {t.label}
                             </button>
                           ))}
+                        </div>
+                        <div>
+                          <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SETUP SUMMARY (ONE LINE)</label>
+                          <input
+                            value={setupSummary}
+                            onChange={e => setSetupSummary(e.target.value)}
+                            placeholder="One line — e.g. 'Seated · 2 × tables of 8'"
+                            className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                          />
                         </div>
                         <RichTextarea
                           value={venueSetup}
@@ -3557,6 +3576,10 @@ export default function RunsheetBuilder() {
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DESCRIPTION</label>
                                 <input value={item.description ?? ''} onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)} placeholder="Dish description..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
+                              <div>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">CHANGED FROM (OPTIONAL)</label>
+                                <input value={item.previousDishName ?? ''} onChange={e => updateFnbItem(originalIdx, 'previousDishName', e.target.value)} placeholder="Previous dish name..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                              </div>
                             </div>
                           )}
                         </div>
@@ -3730,7 +3753,7 @@ export default function RunsheetBuilder() {
                   try {
                     await silentUpdateMutation.mutateAsync({
                       id: sheetId,
-                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined },
+                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes },
                     } as any);
                     toast.success("Drinks selection saved!");
                   } catch { toast.error("Failed to save drinks"); }
@@ -3797,12 +3820,38 @@ export default function RunsheetBuilder() {
                     {rsSelectedDrinks.map(k => (
                       <span key={k} className="inline-flex items-center gap-1.5 bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
                         {k}
+                        <select
+                          value={rsDrinkTypes[k] ?? ''}
+                          onChange={e => setRsDrinkTypes(prev => ({ ...prev, [k]: e.target.value }))}
+                          className="border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white"
+                          title="Beverage type"
+                        >
+                          <option value="">—</option>
+                          <option value="spark">Sparkling</option>
+                          <option value="white">White</option>
+                          <option value="red">Red</option>
+                          <option value="beer">Beer</option>
+                          <option value="other">Other</option>
+                        </select>
                         <button type="button" onClick={() => setRsSelectedDrinks(prev => prev.filter(x => x !== k))} className="text-ink/40 hover:text-red-600">×</button>
                       </span>
                     ))}
                     {rsCustomDrinks.map((d, i) => (
                       <span key={`c${i}`} className="inline-flex items-center gap-1.5 bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
                         {d.name}
+                        <select
+                          value={rsDrinkTypes[d.name] ?? ''}
+                          onChange={e => setRsDrinkTypes(prev => ({ ...prev, [d.name]: e.target.value }))}
+                          className="border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white"
+                          title="Beverage type"
+                        >
+                          <option value="">—</option>
+                          <option value="spark">Sparkling</option>
+                          <option value="white">White</option>
+                          <option value="red">Red</option>
+                          <option value="beer">Beer</option>
+                          <option value="other">Other</option>
+                        </select>
                         <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/40 hover:text-red-600">×</button>
                       </span>
                     ))}
