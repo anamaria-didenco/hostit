@@ -368,12 +368,15 @@ export const runsheets = pgTable("runsheets", {
   notes: text("notes"),
   dietaries: json("dietaries").$type<{ name: string; count: number; notes?: string }[]>(),
   venueSetup: text("venueSetup"),
+  // Concise structured setup line for the BEO booking band, e.g.
+  // "Seated · 2 × tables of 8" — complements the rich-text venueSetup.
+  setupSummary: varchar("setupSummary", { length: 255 }),
   footerText: text("footerText"),
   proposalId: integer("proposalId"),
   floorPlanId: integer("floorPlanId"),
   costItems: json("costItems").$type<{ _id: string; label: string; qty: number; unitPrice: number; category?: string }[]>(),
   fnbColumns: json("fnbColumns").$type<{ dietary?: boolean; serviceTime?: boolean; staff?: boolean; notes?: boolean; qty?: boolean }>(),
-  drinksData: json("drinksData").$type<{ barOption: string; tabAmount?: number; selectedDrinks: string[]; customDrinks: { name: string; description?: string; price?: number }[]; barNotes?: string }>(),
+  drinksData: json("drinksData").$type<{ barOption: string; tabAmount?: number; selectedDrinks: string[]; customDrinks: { name: string; description?: string; price?: number }[]; barNotes?: string; drinkTypes?: Record<string, string> }>(),
   gstInclusive: boolean("gstInclusive").default(false),
   paymentNotes: text("paymentNotes"),
   venueArea: varchar("venueArea", { length: 50 }),
@@ -544,6 +547,9 @@ export const fnbItems = pgTable("fnb_items", {
   section: fnbSectionEnum("section").default("foh").notNull(),
   course: varchar("course", { length: 100 }),
   dishName: varchar("dishName", { length: 255 }).notNull(),
+  // Old dish name when an item was swapped — drives the BEO "Menu Changes"
+  // strip + inline CHANGED tag. Null = unchanged.
+  previousDishName: varchar("previousDishName", { length: 255 }),
   description: text("description"),
   qty: integer("qty").default(1).notNull(),
   dietary: varchar("dietary", { length: 255 }),

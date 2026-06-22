@@ -3356,11 +3356,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         notes: z.string().optional(),
         dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
         venueSetup: z.string().optional(),
+        setupSummary: z.string().optional(),
         footerText: z.string().optional(),
         gstInclusive: z.boolean().optional(),
         paymentNotes: z.string().optional(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).optional(),
-        drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional() }).nullable().optional(),
+        drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string()).optional() }).nullable().optional(),
         items: z.array(z.object({
           time: z.string(),
           duration: z.number().optional(),
@@ -3397,6 +3398,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           notes: input.notes ?? null,
           dietaries: input.dietaries ?? null,
           venueSetup: input.venueSetup ?? null,
+          setupSummary: input.setupSummary ?? null,
           footerText: input.footerText ?? null,
           gstInclusive: input.gstInclusive ?? false,
           paymentNotes: input.paymentNotes ?? null,
@@ -3442,12 +3444,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         notes: z.string().optional(),
         dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
         venueSetup: z.string().optional(),
+        setupSummary: z.string().optional(),
         footerText: z.string().optional(),
         proposalId: z.number().nullable().optional(),
         floorPlanId: z.number().nullable().optional(),
         fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional(), qty: z.boolean().optional() }).optional(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).nullable().optional(),
-        drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional() }).nullable().optional(),
+        drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string()).optional() }).nullable().optional(),
         gstInclusive: z.boolean().optional(),
         paymentNotes: z.string().optional().nullable(),
       }))
@@ -3471,6 +3474,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.eventDate !== undefined) updateData.eventDate = fields.eventDate ? new Date(fields.eventDate) : null;
         if (fields.dietaries !== undefined) updateData.dietaries = fields.dietaries;
         if (fields.venueSetup !== undefined) updateData.venueSetup = fields.venueSetup;
+        if (fields.setupSummary !== undefined) updateData.setupSummary = fields.setupSummary;
         if (fields.footerText !== undefined) updateData.footerText = fields.footerText;
         if (fields.proposalId !== undefined) updateData.proposalId = fields.proposalId;
         if (fields.floorPlanId !== undefined) updateData.floorPlanId = fields.floorPlanId;
@@ -3773,6 +3777,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           section: z.enum(['foh', 'kitchen']),
           course: z.string().nullable().optional(),
           dishName: z.string(),
+          previousDishName: z.string().nullable().optional(),
           description: z.string().nullable().optional(),
           qty: z.number().int().default(1),
           dietary: z.string().nullable().optional(),
@@ -3799,6 +3804,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             section: item.section,
             course: item.course,
             dishName: item.dishName,
+            previousDishName: item.previousDishName ?? null,
             description: item.description,
             qty: item.qty,
             dietary: item.dietary,
