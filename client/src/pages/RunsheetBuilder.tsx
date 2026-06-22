@@ -3827,7 +3827,7 @@ export default function RunsheetBuilder() {
                           title="Beverage type"
                         >
                           <option value="">—</option>
-                          <option value="spark">Sparkling</option>
+                          <option value="spark">Bubbles</option>
                           <option value="white">White</option>
                           <option value="red">Red</option>
                           <option value="beer">Beer</option>
@@ -3846,7 +3846,7 @@ export default function RunsheetBuilder() {
                           title="Beverage type"
                         >
                           <option value="">—</option>
-                          <option value="spark">Sparkling</option>
+                          <option value="spark">Bubbles</option>
                           <option value="white">White</option>
                           <option value="red">Red</option>
                           <option value="beer">Beer</option>

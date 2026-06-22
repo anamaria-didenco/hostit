@@ -17,7 +17,6 @@ import {
   proposals,
   proposalDrinks,
   quoteSettings,
-  quoteItems,
   leads,
   menuPackages,
   menuItems,
@@ -258,7 +257,6 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     let proposal: any = null;
     let drinks: any = null;
     let quoteSettingsRow: any = null;
-    let quoteItemsList: any[] = [];
 
     if (booking.proposalId) {
       const [p] = await db.select().from(proposals)
@@ -270,8 +268,6 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       const [qs] = await db.select().from(quoteSettings)
         .where(eq(quoteSettings.proposalId, booking.proposalId)).limit(1);
       quoteSettingsRow = qs ?? null;
-      quoteItemsList = await db.select().from(quoteItems)
-        .where(eq(quoteItems.proposalId, booking.proposalId));
     }
 
     // Prefer runsheet's drinksData (which includes barNotes saved from RunsheetBuilder).
@@ -530,9 +526,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     };
     const drinkChip = (name: string, desc?: string) => {
       const t = drinkType(name);
+      const tagLabel = t === "SPARK" ? "BUBBLES" : t;
       return `
     <div class="bev-row">
-      ${t ? `<span class="bev-tag bev-${t.toLowerCase()}">${t}</span>` : `<span class="bev-tag bev-none"></span>`}
+      ${t ? `<span class="bev-tag bev-${t.toLowerCase()}">${tagLabel}</span>` : `<span class="bev-tag bev-none"></span>`}
       <span class="bev-name">${escHtml(name)}${desc ? ` <span class="bev-desc">— ${escHtml(desc)}</span>` : ""}</span>
     </div>`;
     };
@@ -860,7 +857,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .course { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; }
   .course-name {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 13px;
+    font-size: 18px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--brand);
@@ -868,9 +865,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     border-bottom: 1px solid var(--line);
     margin-bottom: 7px;
   }
-  .dish { margin-bottom: 9px; break-inside: avoid; }
+  .dish { margin-bottom: 11px; break-inside: avoid; }
   .dish-line { display: flex; align-items: baseline; gap: 8px; }
-  .dish-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .dish-name { font-size: 16px; font-weight: 700; color: var(--ink); }
   .dish-time {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 11px;
@@ -883,7 +880,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     font-size: 12px;
     color: var(--ink-soft);
   }
-  .dish-desc { font-size: 11px; color: var(--ink-soft); margin-top: 2px; line-height: 1.45; white-space: pre-wrap; }
+  .dish-desc { font-size: 13px; color: var(--ink-soft); margin-top: 2px; line-height: 1.45; white-space: pre-wrap; }
   .dish-diet {
     display: inline-block;
     font-family: 'Bebas Neue', sans-serif;
