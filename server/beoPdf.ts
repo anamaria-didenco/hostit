@@ -347,20 +347,15 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const fohItems = fnbList.filter(i => i.section === "foh" && !(hasDrinkSelection && (i.course ?? "") === "Drinks"));
     const kitchenItemsArr = fnbList.filter(i => i.section === "kitchen");
 
-    // ── HTML helpers ─────────────────────────────────────────────────────────
-    const logoHtml = venueLogoUrl
-      ? `<img src="${venueLogoUrl}" alt="${venueName}" style="height:40px;max-width:120px;object-fit:contain;display:block;">`
-      : `<div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:white;letter-spacing:0.04em;">${venueName}</div>`;
-
     // ═══════════════════════════════════════════════════════════════════════
-    // Two-page "kitchen + service" BEO. Page 1 is the kitchen copy (booking
-    // band, allergies, menu changes, menu); page 2 is the service copy (run of
-    // night, notes, contact, beverages, cost). RED (#c0202a) is reserved
-    // strictly for attention items — allergies, CHANGED tags, CONFIRMED.
+    // Two-page BEO rendered in the "BEO-44" house design (Spectral + Hanken
+    // Grotesk; cream/ink/green with red reserved for attention items). Page 1
+    // is the kitchen copy (masthead, booking band, dietary, menu changes,
+    // menu, kitchen prep); page 2 is the service copy (run of night, room
+    // setup, key notes, bar & beverage, client contact, cost summary).
     // ═══════════════════════════════════════════════════════════════════════
-    const RED = "#c0202a";
 
-    // ── Running header (both pages) ──────────────────────────────────────
+    // ── Running footer text (both pages) ─────────────────────────────────
     const headerBits = [
       `BEO #${booking.id}`,
       escHtml(venueName),
@@ -368,18 +363,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       eventDate ? escHtml(eventDate) : "",
     ].filter(Boolean);
     const runningHeaderText = headerBits.join(" · ");
-    const runningHeader = `<div class="run-head">${runningHeaderText}</div>`;
     const isConfirmed = String(booking.status ?? "").toLowerCase() === "confirmed";
 
-    // ── Page-1 booking-summary band cells ────────────────────────────────
+    // ── Booking-band room label ──────────────────────────────────────────
     const roomLabel = venueAreaLabel || spaceName || "";
-    const bandCells: { label: string; value: string; big?: boolean }[] = [
-      { label: "GUESTS", value: guestCount ? String(guestCount) : "—", big: true },
-      ...(eventDate ? [{ label: "DATE", value: escHtml(eventDate) }] : []),
-      ...(timeRange && timeRange !== "—" ? [{ label: "SERVICE", value: escHtml(timeRange) }] : []),
-      ...(roomLabel ? [{ label: "ROOM", value: escHtml(roomLabel) }] : []),
-      ...(setupSummary ? [{ label: "SETUP", value: escHtml(setupSummary) }] : []),
-    ];
 
     // ── Severity detection for allergy/dietary cards ─────────────────────
     // \bnuts?\b matches "nut"/"nuts"/"nut allergy"/"tree nut" but NOT
@@ -387,39 +374,56 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const SEVERE_RE = /allerg|anaphyla|\bnuts?\b|pregnan|coeliac|celiac|epipen|severe/i;
     const isSevere = (d: { name: string; notes?: string }) =>
       SEVERE_RE.test(d.name || "") || SEVERE_RE.test(d.notes || "");
+    const dietaryCount = dietaries.reduce((s, d) => s + (Number(d.count) || 0), 0);
+    const severeDiet = dietaries.filter(isSevere);
+    const mildDiet = dietaries.filter(d => !isSevere(d));
+    const dietCountLabel = (d: { count: number }) =>
+      `${d.count || 0} of ${escHtml(String(guestCount || "—"))} guests`;
     const dietarySection = dietaries.length > 0 ? `
-<section class="block">
-  <div class="block-label red"><span class="warn">⚠</span> Dietary &amp; Allergies</div>
-  <div class="diet-grid">
-    ${dietaries.map(d => {
-      const sev = isSevere(d);
-      return `
-    <div class="diet-card${sev ? " severe" : ""}">
-      <div class="diet-top">
-        <span class="diet-name">${escHtml(d.name)}</span>
-        ${d.count > 1 ? `<span class="diet-count">×${d.count}</span>` : ""}
+  <div class="section">
+    <div class="sec-head">
+      <span class="label red">Dietary &amp; Allergies</span>
+      <span class="count">${dietaryCount} of ${escHtml(String(guestCount || "—"))} guests</span>
+    </div>
+    <div class="rule red"></div>
+    ${severeDiet.map(d => `
+    <div class="diet-severe">
+      <span class="sev-tag">Severe</span>
+      <div>
+        <div class="req">${escHtml(d.name)}</div>
+        <div class="name">${dietCountLabel(d)}</div>
       </div>
-      ${d.notes ? `<div class="diet-notes">${escHtml(d.notes)}</div>` : ""}
-    </div>`;
-    }).join("")}
-  </div>
-</section>` : "";
+      ${d.notes ? `<div class="action">${escHtml(d.notes)}</div>` : ""}
+    </div>`).join("")}
+    ${mildDiet.length > 0 ? `
+    <div class="diet-grid">
+      ${mildDiet.map(d => `
+      <div class="diet-card">
+        <div class="req">${escHtml(d.name)}</div>
+        <div class="name">${dietCountLabel(d)}</div>
+        ${d.notes ? `<div class="note">${escHtml(d.notes)}</div>` : ""}
+      </div>`).join("")}
+    </div>` : ""}
+  </div>` : "";
 
     // ── Menu-change strip (page 1) — only when a foh dish was changed ─────
     const changedItems = fohItems.filter((i: any) => i.previousDishName && (i.course ?? "") !== "Drinks");
     const menuChangesSection = changedItems.length > 0 ? `
-<section class="block">
-  <div class="block-label red">Menu Changes</div>
-  <div class="changes-card">
-    <div class="changes-sub">Applies to all ${escHtml(String(guestCount || "—"))} covers</div>
-    ${changedItems.map((f: any) => `
-    <div class="change-row">
-      <span class="change-old">${escHtml(f.previousDishName)}</span>
-      <span class="change-arrow">→</span>
-      <span class="change-new">${escHtml(f.dishName)}</span>
-    </div>`).join("")}
-  </div>
-</section>` : "";
+  <div class="section">
+    <div class="sec-head">
+      <span class="label red">Menu Changes</span>
+      <span class="count">Applies to all ${escHtml(String(guestCount || "—"))} covers</span>
+    </div>
+    <div class="rule red"></div>
+    <div class="changes-card">
+      ${changedItems.map((f: any) => `
+      <div class="change-row">
+        <span class="change-old">${escHtml(f.previousDishName)}</span>
+        <span class="change-arrow">→</span>
+        <span class="change-new">${escHtml(f.dishName)}</span>
+      </div>`).join("")}
+    </div>
+  </div>` : "";
 
     // ── Menu courses (page 1) — food courses only, EXCLUDE Drinks ────────
     // Reuse the existing course time-ordering logic: order by earliest
@@ -440,75 +444,82 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const foodItems = fohItems.filter((i: any) => (i.course ?? "") !== "Drinks");
     const foodGrouped = groupByCourse(foodItems);
     const foodCourses = orderFoodCourses(foodGrouped);
+    // Shared dish renderer (BEO-44 look): em-dash + bold name + lighter
+    // description; changed dishes show <old struck> → <new> + CHANGED tag.
+    const dishHtml = (f: any, opts?: { prep?: boolean }) => {
+      const det = f.description ? `<span class="det">${escHtml(f.description)}</span>` : "";
+      const nameBlock = f.previousDishName
+        ? `<span class="old">${escHtml(f.previousDishName)}</span><span class="arrow">→</span><span class="name">${escHtml(f.dishName)}</span><span class="changed">Changed</span>${det ? " " + det : ""}`
+        : `<span class="name">${escHtml(f.dishName)}</span>${det ? " " + det : ""}`;
+      const prep = (opts?.prep && (f.prepNotes || f.platingNotes))
+        ? `<div class="prep-line">${[f.prepNotes, f.platingNotes].filter(Boolean).map((n: string) => escHtml(n)).join(" · ")}</div>`
+        : "";
+      return `
+        <div class="dish"><span class="em">—</span><span class="body">${nameBlock}${prep}</span></div>`;
+    };
     const menuSection = foodItems.length > 0 ? `
-<section class="block">
-  <div class="block-label">Menu</div>
-  <div class="menu-cols">
-    ${foodCourses.map(course => `
-    <div class="course">
-      <div class="course-name">${escHtml(course)}</div>
-      ${(foodGrouped[course] ?? []).map((f: any) => `
-      <div class="dish">
-        <div class="dish-line">
-          <span class="dish-name">${escHtml(f.dishName)}</span>
-          ${f.serviceTime ? `<span class="dish-time">${fmt12(f.serviceTime)}</span>` : ""}
-          ${showQty && f.qty ? `<span class="dish-qty">×${escHtml(String(f.qty))}</span>` : ""}
-        </div>
-        ${f.description ? `<div class="dish-desc">${escHtml(f.description)}</div>` : ""}
-        ${f.dietary ? `<span class="dish-diet">${escHtml(f.dietary)}</span>` : ""}
-        ${f.previousDishName ? `<span class="changed-tag">CHANGED · was ${escHtml(f.previousDishName)}</span>` : ""}
-        ${(!isPublic && (f.prepNotes || f.platingNotes)) ? `<div class="prep-line">${[f.prepNotes, f.platingNotes].filter(Boolean).map((n: string) => escHtml(n)).join(" · ")}</div>` : ""}
+  <div class="section">
+    <div class="sec-head">
+      <span class="label" style="font-size:13px;">${escHtml(venueName)} Shared Menu</span>
+      <span class="count">${guestCount ? `${escHtml(String(guestCount))} guests` : ""}</span>
+    </div>
+    <div class="rule"></div>
+    <div class="menu-grid">
+      ${foodCourses.map(course => `
+      <div class="course">
+        <div class="course-title">${escHtml(course)}</div>
+        ${(foodGrouped[course] ?? []).map((f: any) => dishHtml(f, { prep: !isPublic })).join("")}
       </div>`).join("")}
-    </div>`).join("")}
-  </div>
-</section>` : "";
+    </div>
+  </div>` : "";
 
     // ── Run of night (page 2) — vertical timeline ────────────────────────
+    // Flag (red dot) the arrival & dinner moments, matching the BEO-44 look.
+    const TL_FLAG_RE = /arriv|welcome|dinner|service|seat|main/i;
     const timelineSection = timelineItems.length > 0 ? `
-<section class="block">
-  <div class="block-label">Run of Night</div>
-  <div class="timeline">
-    ${timelineItems.map((item: any) => `
-    <div class="tl-item">
-      <div class="tl-anchor">
-        <div class="tl-time">${fmt12(item.time) || "—"}</div>
-        ${item.duration ? `<div class="tl-dur">${escHtml(String(item.duration))} min</div>` : ""}
-      </div>
-      <div class="tl-body">
-        <div class="tl-title">${escHtml(item.title || "—")}</div>
-        ${item.description ? `<div class="tl-desc">${escHtml(item.description)}</div>` : ""}
-        ${item.assignedTo ? `<div class="tl-staff">${escHtml(item.assignedTo)}</div>` : ""}
-      </div>
-    </div>`).join("")}
-  </div>
-</section>` : "";
+      <span class="label">Run of Night</span>
+      <div class="rule"></div>
+      <div class="tl">
+        ${timelineItems.map((item: any) => `
+        <div class="tl-item${TL_FLAG_RE.test(String(item.title || "")) ? " flag" : ""}">
+          <div class="tl-anchor">
+            <div class="tl-time">${fmt12(item.time) || "—"}</div>
+            ${item.duration ? `<div class="tl-dur">${escHtml(String(item.duration))} min</div>` : ""}
+          </div>
+          <div class="tl-body">
+            <div class="tl-title">${escHtml(item.title || "—")}</div>
+            ${item.description ? `<div class="tl-desc">${escHtml(item.description)}</div>` : ""}
+            ${item.assignedTo ? `<div class="tl-desc">${escHtml(item.assignedTo)}</div>` : ""}
+          </div>
+        </div>`).join("")}
+      </div>` : "";
 
     // ── Key notes (page 2) — bullet lines from rs/booking notes ──────────
     const allNotes = [rsNotes, bookingNotes].filter(Boolean).join("\n").trim();
     const noteLines = allNotes.split(/\n+/).map(l => l.trim()).filter(Boolean);
     const notesSection = noteLines.length > 0 ? `
-<section class="block">
-  <div class="block-label">Key Notes</div>
-  <div class="notes-box">
-    ${noteLines.map(l => `<div class="note-line">${escHtml(l)}</div>`).join("")}
-  </div>
-</section>` : "";
+      <div class="blk">
+        <span class="label">Key Notes</span>
+        <ul class="notes-list">
+          ${noteLines.map(l => `<li>${escHtml(l)}</li>`).join("")}
+        </ul>
+      </div>` : "";
 
     // ── Client contact (page 2) ──────────────────────────────────────────
     const contactBits = isPublic
       ? []
       : [
-          leadEmail ? `<div class="contact-line">${escHtml(leadEmail)}</div>` : "",
           (leadPhone || booking.phone) ? `<div class="contact-line">${escHtml(leadPhone || booking.phone)}</div>` : "",
+          leadEmail ? `<div class="contact-line">${escHtml(leadEmail)}</div>` : "",
         ].filter(Boolean);
-    const contactSection = `
-<section class="block">
-  <div class="block-label">Client Contact</div>
-  <div class="contact-card">
-    <div class="contact-name">${escHtml(clientName)}</div>
-    ${contactBits.join("")}
-  </div>
-</section>`;
+    // Public event pack hides client-contact PII entirely.
+    const contactSection = isPublic ? "" : `
+      <div class="blk">
+        <span class="label">Client Contact</span>
+        <div class="rule"></div>
+        <div class="contact-name">${escHtml(clientName)}</div>
+        ${contactBits.join("")}
+      </div>`;
 
     // ── Beverages (page 2) — typed chips ─────────────────────────────────
     // Type derivation: explicit drinkTypes map wins, else infer from name.
@@ -524,14 +535,18 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       if (/beer|pilsner|lager|ale|ipa|peroni|stout/.test(n)) return "BEER";
       return "";
     };
+    // BEO-44 colour tags: SPARK→t-spark, WHITE→t-white, RED→t-red, BEER→t-beer.
+    const BEV_TAG_CLASS: Record<string, string> = {
+      SPARK: "t-spark", WHITE: "t-white", RED: "t-red", BEER: "t-beer",
+    };
     const drinkChip = (name: string, desc?: string) => {
       const t = drinkType(name);
-      const tagLabel = t === "SPARK" ? "BUBBLES" : t;
+      const tagLabel = t === "SPARK" ? "Bubbles" : (t ? t.charAt(0) + t.slice(1).toLowerCase() : "");
       return `
-    <div class="bev-row">
-      ${t ? `<span class="bev-tag bev-${t.toLowerCase()}">${tagLabel}</span>` : `<span class="bev-tag bev-none"></span>`}
-      <span class="bev-name">${escHtml(name)}${desc ? ` <span class="bev-desc">— ${escHtml(desc)}</span>` : ""}</span>
-    </div>`;
+        <div class="bev-row">
+          ${t ? `<span class="bev-tag ${BEV_TAG_CLASS[t] ?? ""}">${tagLabel}</span>` : `<span class="bev-tag" style="background:transparent;"></span>`}
+          <span>${escHtml(name)}${desc ? ` <span class="muted">— ${escHtml(desc)}</span>` : ""}</span>
+        </div>`;
     };
     // Drinks source: DRINKS-tab selection if present, else legacy fnb Drinks course.
     const legacyDrinkRows = fohItems.filter((i: any) => (i.course ?? "") === "Drinks");
@@ -541,13 +556,23 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
           ...customDrinkList.map((d: any) => drinkChip(d.name, d.description)),
         ]
       : legacyDrinkRows.map((f: any) => drinkChip(f.dishName, f.description));
-    const beveragesSection = bevRows.length > 0 ? `
-<section class="block">
-  <div class="block-label">Beverages</div>
-  <div class="bev-list">
-    ${bevRows.join("")}
-  </div>
-</section>` : "";
+    // Bar arrangement bits (label / tab / notes) live in the same block as the
+    // beverage list — matching BEO-44's single "Bar & Beverage" panel.
+    const barNotesTextEarly = ((drinks as any)?.barNotes ?? "").toString();
+    const barOptEarly = (drinks as any)?.barOption as string | undefined;
+    const barTabValEarly = (drinks as any)?.tabAmount;
+    const barArrangementHtml =
+      (barOptEarly
+        ? `<div class="kv" style="margin-bottom:7px;"><strong>Arrangement —</strong> ${escHtml(BAR_LABELS[barOptEarly] ?? barOptEarly)}${(!isPublic && barTabValEarly) ? ` <span class="muted">· tab ${fmtCurrency(barTabValEarly)}</span>` : ""}</div>`
+        : ((!isPublic && barTabValEarly) ? `<div class="kv" style="margin-bottom:7px;"><strong>Bar tab —</strong> ${fmtCurrency(barTabValEarly)}</div>` : "")) +
+      (barNotesTextEarly.trim() ? `<div class="kv muted" style="margin-bottom:7px;">${escHtml(barNotesTextEarly).replace(/\n/g, "<br>")}</div>` : "");
+    const beveragesSection = (bevRows.length > 0 || barArrangementHtml) ? `
+      <div class="blk">
+        <span class="label" style="font-size:13px;">Bar &amp; Beverage</span>
+        <div class="rule"></div>
+        ${barArrangementHtml}
+        ${bevRows.join("")}
+      </div>` : "";
 
     // ── Kitchen prep & production (page 1, INTERNAL copy only) ───────────
     // Restores the legacy KITCHEN section: F&B rows the operator placed in the
@@ -555,49 +580,33 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const kitchenGrouped = groupByCourse(kitchenItemsArr);
     const kitchenCourses = orderFoodCourses(kitchenGrouped);
     const kitchenSection = (!isPublic && kitchenItemsArr.length > 0) ? `
-<section class="block">
-  <div class="block-label">Kitchen — Prep &amp; Production</div>
-  <div class="menu-cols">
-    ${kitchenCourses.map(course => `
-    <div class="course">
-      <div class="course-name">${escHtml(course)}</div>
-      ${(kitchenGrouped[course] ?? []).map((f: any) => `
-      <div class="dish">
-        <div class="dish-line">
-          <span class="dish-name">${escHtml(f.dishName)}</span>
-          ${f.serviceTime ? `<span class="dish-time">${fmt12(f.serviceTime)}</span>` : ""}
-          ${showQty && f.qty ? `<span class="dish-qty">×${escHtml(String(f.qty))}</span>` : ""}
-        </div>
-        ${f.description ? `<div class="dish-desc">${escHtml(f.description)}</div>` : ""}
-        ${(f.prepNotes || f.platingNotes) ? `<div class="prep-line">${[f.prepNotes, f.platingNotes].filter(Boolean).map((n: string) => escHtml(n)).join(" · ")}</div>` : ""}
+  <div class="section">
+    <div class="sec-head">
+      <span class="label" style="font-size:13px;">Kitchen — Prep &amp; Production</span>
+    </div>
+    <div class="rule"></div>
+    <div class="menu-grid">
+      ${kitchenCourses.map(course => `
+      <div class="course">
+        <div class="course-title">${escHtml(course)}</div>
+        ${(kitchenGrouped[course] ?? []).map((f: any) => dishHtml(f, { prep: true })).join("")}
       </div>`).join("")}
-    </div>`).join("")}
-  </div>
-</section>` : "";
+    </div>
+  </div>` : "";
 
     // ── Venue setup (rich text: room layout / AV / decor / deliveries) ───
     // Distinct from the one-line setupSummary band cell — this is the full
     // operator-entered setup brief and must not be silently dropped.
     const setupSection = (venueSetup && String(venueSetup).trim()) ? `
-<section class="block">
-  <div class="block-label">Setup</div>
-  <div class="notes-box">${venueSetup}</div>
-</section>` : "";
+      <div class="blk" style="margin-top:22px;">
+        <span class="label">Room Setup</span>
+        <div class="kv">${venueSetup}</div>
+      </div>` : "";
 
-    // ── Bar arrangement + notes (page 2) ────────────────────────────────
-    // Restores bar option / tab / free-text bar notes (service instructions).
-    const barNotesText = ((drinks as any)?.barNotes ?? "").toString();
-    const barOpt = (drinks as any)?.barOption as string | undefined;
-    const barTabVal = (drinks as any)?.tabAmount;
-    const barSection = (barOpt || (!isPublic && barTabVal) || barNotesText.trim()) ? `
-<section class="block">
-  <div class="block-label">Bar Arrangement</div>
-  <div class="notes-box">
-    ${barOpt ? `<div class="note-line"><strong>${escHtml(BAR_LABELS[barOpt] ?? barOpt)}</strong></div>` : ""}
-    ${(!isPublic && barTabVal) ? `<div class="note-line">Bar tab: ${fmtCurrency(barTabVal)}</div>` : ""}
-    ${barNotesText.trim() ? `<div class="note-line">${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : ""}
-  </div>
-</section>` : "";
+    // ── Bar arrangement + notes ──────────────────────────────────────────
+    // Now folded into the single "Bar & Beverage" block above (BEO-44 layout),
+    // so this standalone section is intentionally empty.
+    const barSection = "";
 
     // ── Cost summary (page 2) — internal only, never public ──────────────
     const costList: any[] = Array.isArray((runsheet as any)?.costItems) ? (runsheet as any).costItems : [];
@@ -619,443 +628,219 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const depAmt = Number(booking.depositNzd ?? 0);
     const balanceToCollect = eventTotal > 0 ? Math.max(0, eventTotal - (booking.depositPaid ? depAmt : 0)) : 0;
     const showFinancials = !isPublic && (minSpendAmt > 0 || eventTotal > 0 || depAmt > 0);
+    const balanceOutstanding = !booking.depositPaid && balanceToCollect > 0;
     const financialsSection = showFinancials ? `
-<section class="block cost-block">
-  <div class="block-label">Cost Summary</div>
-  <div class="cost-card">
-    ${minSpendAmt > 0 ? `<div class="cost-row"><span class="cost-k">Minimum Spend</span><span class="cost-v">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
-    ${eventTotal > 0 ? `<div class="cost-row"><span class="cost-k">Total</span><span class="cost-v">${fmtCurrency(eventTotal)}</span></div>` : ""}
-    ${depAmt > 0 ? `<div class="cost-row"><span class="cost-k">Deposit</span><span class="cost-v">${fmtCurrency(depAmt)} ${booking.depositPaid ? "✓ Paid" : "— Outstanding"}</span></div>` : ""}
-    ${balanceToCollect > 0 ? `<div class="cost-row cost-total"><span class="cost-k">Balance to Collect</span><span class="cost-v">${fmtCurrency(balanceToCollect)}</span></div>` : ""}
-  </div>
-</section>` : "";
+      <div class="blk">
+        <span class="label">Cost Summary</span>
+        <div class="rule"></div>
+        <div class="cost">
+          ${minSpendAmt > 0 ? `<div class="cost-row"><span class="k">Minimum Spend</span><span class="v">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
+          ${eventTotal > 0 ? `<div class="cost-row"><span class="k">Total</span><span class="v">${fmtCurrency(eventTotal)}</span></div>` : ""}
+          ${depAmt > 0 ? `<div class="cost-row"><span class="k">Deposit received</span><span class="v">${fmtCurrency(depAmt)} ${booking.depositPaid ? "· Paid" : "· Outstanding"}</span></div>` : ""}
+          <div class="cost-row balance"><span class="k">Balance to collect</span><span class="v">${fmtCurrency(balanceToCollect)}${balanceOutstanding ? ` <span class="out-tag">Outstanding</span>` : ""}</span></div>
+        </div>
+      </div>` : "";
 
     // Footer note (closing message) — shown to everyone, on page 2.
     const footerNoteSection = footerNote.trim() ? `
-<section class="block">
-  <div class="block-label">Note</div>
-  <div class="notes-box"><div class="note-line">${footerNote.replace(/\n/g, "<br>")}</div></div>
-</section>` : "";
+      <div class="blk">
+        <span class="label">Note</span>
+        <div class="rule"></div>
+        <div class="kv">${footerNote.replace(/\n/g, "<br>")}</div>
+      </div>` : "";
 
     const pageFooter = (label: string) => `
-  <div class="page-foot">
-    <span class="foot-l">${runningHeaderText}</span>
-    <span class="foot-r">${label}</span>
+  <div class="foot">
+    <span>${runningHeaderText}</span>
+    <span class="copy">${label}</span>
   </div>`;
+
+    // ── Payment instructions (page 2, internal only) — BEO-44 .blk style ──
+    const paymentSection = (hideSet.has('payment') || isPublic) ? "" : (() => {
+      const pi = (venue as any)?.paymentInstructions as string | null | undefined;
+      if (!pi || !pi.trim()) return "";
+      const esc = pi.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      return `
+      <div class="blk">
+        <span class="label">Payment Instructions</span>
+        <div class="rule"></div>
+        <div class="kv">${esc}</div>
+      </div>`;
+    })();
+
+    // ── Page-2 booking sub-line (eyebrow meta) ───────────────────────────
+    const p2Meta = [`BEO #${booking.id}`, escHtml(venueName), [eventType, clientName].filter(Boolean).map(escHtml).join(" · ")]
+      .filter(Boolean).join(" · ");
+    const mastSub = [eventType, clientName].filter(Boolean).map(escHtml).join(" · ");
 
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>BEO — ${clientName} — ${eventDate}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BEO #${booking.id} · ${escHtml(venueName)} · ${escHtml(clientName)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  /* ── Palette ──
-     RED (#c0202a) is reserved STRICTLY for attention items (allergies,
-     CHANGED tags, CONFIRMED). Everything else is neutral ink on cream.
-     ${venuePrimaryColor} (venue brand) is used for quiet branding chrome only. */
-  :root {
-    --ink: #1f1a14;
-    --ink-soft: #5c554a;
-    --ink-faint: #8b8478;
-    --line: #e3ddd1;
-    --cream: #faf7f1;
-    --card: #ffffff;
-    --red: ${RED};
-    --brand: ${venuePrimaryColor};
+  :root{
+    --cream:#fffdf9; --ink:#16140f; --green:#1d3b2a; --red:#c0392b;
+    --gray:#857f70; --line:#e7e1d2; --paper-edge:#d7d1c4;
+    --serif:'Spectral',Georgia,serif; --sans:'Hanken Grotesk',Arial,sans-serif;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'DM Sans', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 11.5px;
-    line-height: 1.5;
-    color: var(--ink);
-    background: var(--cream);
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--paper-edge);font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased;}
+  .sheet{
+    width:210mm;min-height:297mm;background:var(--cream);margin:10mm auto;
+    padding:15mm 15mm 16mm;position:relative;
+    display:flex;flex-direction:column;
   }
-  .label {
-    font-family: 'Bebas Neue', sans-serif;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
+  .label{font-family:var(--sans);font-weight:600;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--green);}
+  .label.red{color:var(--red);}
+  .rule{height:2px;background:var(--green);border:0;margin:0 0 9px;}
+  .rule.red{background:var(--red);}
+  .muted{color:var(--gray);}
 
-  /* ── Sheet / page ── */
-  .sheet { max-width: 210mm; margin: 0 auto; padding: 0; }
-  .page-break { page-break-before: always; break-before: page; }
+  /* ── Masthead ── */
+  .mast{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:1px solid var(--line);}
+  .eyebrow{font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--green);font-weight:600;}
+  .venue{font-family:var(--serif);font-weight:600;font-size:36px;line-height:1.02;color:var(--ink);margin-top:4px;}
+  .mast-sub{font-size:12.5px;color:var(--gray);margin-top:5px;}
+  .mast-right{text-align:right;flex-shrink:0;padding-left:18px;}
+  .beo-num{font-family:var(--serif);font-weight:600;font-size:22px;color:var(--green);letter-spacing:.01em;}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--green);color:#fff;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-top:8px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--red);display:inline-block;}
 
-  /* ── Running header (both pages) ── */
-  .run-head {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-    padding: 0 0 8px 0;
-    border-bottom: 1px solid var(--line);
-    margin-bottom: 18px;
-  }
+  /* ── Booking band ── */
+  .band{display:grid;grid-template-columns:auto 1fr 1fr 1fr;border:1px solid var(--line);margin:16px 0 6px;}
+  .band-cell{padding:11px 16px;border-left:1px solid var(--line);}
+  .band-cell:first-child{border-left:0;}
+  .band-cell .label{margin-bottom:5px;}
+  .band-val{font-size:16.5px;font-weight:500;color:var(--ink);}
+  .band-guests{background:var(--green);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:8px 22px 8px 16px;}
+  .band-guests .label{color:rgba(255,255,255,.7);}
+  .band-num{font-family:var(--serif);font-weight:700;font-size:56px;line-height:.92;color:#fff;}
 
-  /* ── Top header ── */
-  .top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    margin-bottom: 20px;
-  }
-  .top-service { border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
-  .brand { margin-bottom: 8px; }
-  /* On the cream page the logoHtml fallback renders white text — recolour it. */
-  .brand div { color: var(--brand) !important; }
-  .doc-type {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 11px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-  }
-  .venue-name {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 34px;
-    line-height: 1.02;
-    letter-spacing: 0.02em;
-    color: var(--ink);
-    margin-top: 2px;
-  }
-  .service-title { font-size: 30px; }
-  .sub-line { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
-  .top-right { text-align: right; flex-shrink: 0; }
-  .beo-num {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 22px;
-    letter-spacing: 0.04em;
-    color: var(--ink);
-  }
-  .status {
-    display: inline-block;
-    margin-top: 6px;
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    color: var(--ink-soft);
-    border: 1px solid var(--line);
-    padding: 2px 8px;
-  }
-  .status.confirmed {
-    color: #fff;
-    background: var(--red);
-    border-color: var(--red);
-  }
+  /* ── Section ── */
+  .section{margin-top:20px;}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px;}
+  .count{font-size:11px;color:var(--gray);font-weight:500;letter-spacing:.02em;}
 
-  /* ── Booking summary band ── */
-  .band {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: stretch;
-    background: var(--card);
-    border: 1px solid var(--line);
-    margin-bottom: 22px;
-  }
-  .band-cell {
-    flex: 1;
-    min-width: 90px;
-    padding: 10px 14px;
-    border-right: 1px solid var(--line);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  .band-cell:last-child { border-right: none; }
-  .band-label {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-    margin-bottom: 3px;
-  }
-  .band-val { font-size: 13px; font-weight: 600; color: var(--ink); }
-  .band-big {
-    flex: 0 0 auto;
-    background: var(--ink);
-    color: #fff;
-    align-items: center;
-    text-align: center;
-    min-width: 96px;
-  }
-  .band-big .band-label { color: rgba(255,255,255,0.6); }
-  .band-num {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 46px;
-    line-height: 0.9;
-    color: #fff;
-  }
+  /* ── Dietary ── */
+  .diet-severe{background:var(--red);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:18px;margin-bottom:8px;}
+  .diet-severe .req{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.85);}
+  .diet-severe .name{font-family:var(--serif);font-weight:600;font-size:22px;line-height:1.05;margin-top:1px;}
+  .diet-severe .action{font-size:14px;color:#fff;border-left:2px solid rgba(255,255,255,.5);padding-left:16px;line-height:1.4;}
+  .diet-severe .sev-tag{font-size:9px;font-weight:700;letter-spacing:.12em;background:#fff;color:var(--red);padding:3px 7px;border-radius:3px;text-transform:uppercase;flex-shrink:0;}
+  .diet-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+  .diet-card{border:1px solid var(--line);background:#fff;padding:9px 13px;}
+  .diet-card .req{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#b07d12;}
+  .diet-card .name{font-family:var(--serif);font-weight:500;font-size:16.5px;margin-top:2px;}
+  .diet-card .note{font-size:13px;color:var(--gray);margin-top:3px;line-height:1.4;}
 
-  /* ── Generic block ── */
-  .block { margin-bottom: 22px; page-break-inside: avoid; break-inside: avoid; }
-  .block-label {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 13px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--ink);
-    padding-bottom: 5px;
-    border-bottom: 1px solid var(--ink);
-    margin-bottom: 12px;
-  }
-  .block-label.red { color: var(--red); border-bottom-color: var(--red); }
-  .block-label .warn { font-family: 'DM Sans', sans-serif; }
-
-  /* ── Dietary & allergies ── */
-  .diet-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-  .diet-card {
-    flex: 1 1 160px;
-    min-width: 150px;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--ink-faint);
-    padding: 9px 12px;
-  }
-  .diet-card.severe {
-    background: var(--red);
-    border-color: var(--red);
-    color: #fff;
-  }
-  .diet-top { display: flex; align-items: baseline; gap: 8px; }
-  .diet-name { font-size: 13px; font-weight: 700; }
-  .diet-count {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 15px;
-    margin-left: auto;
-  }
-  .diet-notes { font-size: 11px; margin-top: 4px; line-height: 1.45; opacity: 0.85; }
-  .diet-card:not(.severe) .diet-notes { color: var(--ink-soft); }
+  /* ── Menu ── */
+  .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 30px;margin-top:10px;}
+  .course-title{font-family:var(--serif);font-weight:600;font-size:20px;color:var(--green);padding-bottom:5px;border-bottom:1px solid var(--line);margin-bottom:7px;}
+  .dish{display:flex;gap:8px;padding:6px 0;line-height:1.5;}
+  .dish .em{color:var(--green);font-weight:700;flex-shrink:0;}
+  .dish .body{font-size:16px;}
+  .dish .name{font-weight:600;color:var(--ink);}
+  .dish .det{color:var(--gray);font-weight:400;}
+  .dish .old{color:var(--gray);text-decoration:line-through;font-weight:400;}
+  .dish .arrow{color:var(--red);font-weight:700;padding:0 3px;}
+  .changed{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.1em;background:var(--red);color:#fff;padding:2px 7px;border-radius:3px;text-transform:uppercase;margin-left:5px;vertical-align:1px;}
 
   /* ── Menu changes strip ── */
-  .changes-card {
-    background: var(--card);
-    border: 1px solid var(--red);
-    border-left: 4px solid var(--red);
-    padding: 10px 14px;
-  }
-  .changes-sub {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 10px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--red);
-    margin-bottom: 8px;
-  }
-  .change-row { font-size: 12.5px; padding: 3px 0; line-height: 1.5; }
-  .change-old { color: var(--ink-faint); text-decoration: line-through; }
-  .change-arrow { color: var(--red); margin: 0 6px; font-weight: 700; }
-  .change-new { font-weight: 700; color: var(--ink); }
+  .changes-card{border:1px solid var(--red);border-left:4px solid var(--red);background:#fff;padding:10px 14px;}
+  .change-row{font-size:13px;padding:3px 0;line-height:1.5;}
+  .change-old{color:var(--gray);text-decoration:line-through;}
+  .change-arrow{color:var(--red);font-weight:700;padding:0 6px;}
+  .change-new{font-weight:700;color:var(--ink);}
 
-  /* ── Menu ── two-column course blocks ── */
-  .menu-cols { columns: 2; column-gap: 26px; }
-  .course { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; }
-  .course-name {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 18px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--brand);
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--line);
-    margin-bottom: 7px;
-  }
-  .dish { margin-bottom: 11px; break-inside: avoid; }
-  .dish-line { display: flex; align-items: baseline; gap: 8px; }
-  .dish-name { font-size: 16px; font-weight: 700; color: var(--ink); }
-  .dish-time {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    color: var(--ink-faint);
-    margin-left: auto;
-  }
-  .dish-qty {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 12px;
-    color: var(--ink-soft);
-  }
-  .dish-desc { font-size: 13px; color: var(--ink-soft); margin-top: 2px; line-height: 1.45; white-space: pre-wrap; }
-  .dish-diet {
-    display: inline-block;
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: var(--ink-soft);
-    border: 1px solid var(--line);
-    padding: 1px 6px;
-    margin-top: 4px;
-  }
-  .changed-tag {
-    display: inline-block;
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: #fff;
-    background: var(--red);
-    padding: 1px 7px;
-    margin-top: 4px;
-    margin-left: 4px;
-  }
-  .prep-line { font-size: 10px; color: var(--ink-faint); font-style: italic; margin-top: 3px; }
+  /* ── Page 2 layout ── */
+  .p2-cols{display:grid;grid-template-columns:1.05fr 1fr;gap:26px;margin-top:14px;flex:1;}
 
-  /* ── Run of night (timeline) ── */
-  .timeline { border-left: 2px solid var(--line); }
-  .tl-item {
-    display: flex;
-    gap: 16px;
-    padding: 0 0 16px 18px;
-    position: relative;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .tl-item:before {
-    content: "";
-    position: absolute;
-    left: -6px;
-    top: 4px;
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--brand);
-  }
-  .tl-anchor { flex: 0 0 70px; text-align: left; }
-  .tl-time {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 19px;
-    line-height: 1;
-    color: var(--ink);
-  }
-  .tl-dur { font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
-  .tl-body { flex: 1; }
-  .tl-title { font-size: 13px; font-weight: 700; color: var(--ink); }
-  .tl-desc { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; line-height: 1.45; white-space: pre-wrap; }
-  .tl-staff { font-size: 11px; color: var(--brand); margin-top: 3px; font-weight: 600; }
+  /* ── Timeline ── */
+  .tl{position:relative;}
+  .tl-item{display:grid;grid-template-columns:62px 1fr;gap:14px;position:relative;padding-bottom:16px;}
+  .tl-item:last-child{padding-bottom:0;}
+  .tl-anchor{text-align:right;}
+  .tl-time{font-family:var(--serif);font-weight:600;font-size:17px;color:var(--ink);line-height:1;}
+  .tl-dur{font-size:10px;color:var(--gray);margin-top:3px;letter-spacing:.02em;}
+  .tl-body{border-left:1.5px solid var(--line);padding-left:18px;position:relative;}
+  .tl-body::before{content:"";position:absolute;left:-6.5px;top:3px;width:11px;height:11px;border-radius:50%;background:var(--cream);border:2.5px solid var(--green);}
+  .tl-item.flag .tl-body::before{border-color:var(--red);background:var(--red);}
+  .tl-title{font-weight:600;font-size:13.5px;color:var(--ink);}
+  .tl-desc{font-size:12px;color:var(--gray);margin-top:2px;line-height:1.4;}
 
-  /* ── Key notes ── */
-  .notes-box {
-    background: var(--card);
-    border: 1px solid var(--line);
-    padding: 11px 14px;
-  }
-  .note-line { font-size: 12px; line-height: 1.55; color: var(--ink); padding: 2px 0; }
-  .note-line + .note-line { border-top: 1px solid var(--line); }
+  /* ── Stacked right blocks ── */
+  .blk{margin-bottom:16px;}
+  .blk .label{margin-bottom:6px;display:block;}
+  .kv{font-size:14px;line-height:1.5;}
+  .notes-list{list-style:none;}
+  .notes-list li{font-size:12.5px;line-height:1.45;padding:3px 0 3px 14px;position:relative;}
+  .notes-list li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--green);}
+  .bev-row{display:flex;align-items:center;gap:9px;padding:4.5px 0;font-size:15px;}
+  .bev-tag{font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 7px;border-radius:3px;text-transform:uppercase;flex-shrink:0;width:66px;text-align:center;color:#fff;}
+  .t-spark{background:#b8902a;} .t-white{background:#9aa06b;} .t-red{background:var(--red);} .t-beer{background:#3a3530;}
+  .contact-name{font-family:var(--serif);font-weight:600;font-size:16px;}
+  .contact-line{font-size:12.5px;color:var(--gray);margin-top:2px;}
 
-  /* ── Client contact ── */
-  .contact-card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    padding: 11px 14px;
-  }
-  .contact-name { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 3px; }
-  .contact-line { font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
+  /* ── Cost summary ── */
+  .cost{border:1px solid var(--line);margin-top:2px;}
+  .cost-row{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);font-size:13px;}
+  .cost-row .k{color:var(--gray);font-weight:500;letter-spacing:.02em;}
+  .cost-row .v{font-weight:600;font-variant-numeric:tabular-nums;}
+  .cost-row.balance{background:var(--green);color:#fff;border-bottom:0;}
+  .cost-row.balance .k{color:rgba(255,255,255,.85);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.12em;}
+  .cost-row.balance .v{font-family:var(--serif);font-size:17px;}
+  .out-tag{font-size:8.5px;font-weight:700;letter-spacing:.1em;background:var(--red);color:#fff;padding:2px 7px;border-radius:3px;text-transform:uppercase;margin-left:8px;}
+  .draft{font-size:10.5px;color:var(--red);font-style:italic;margin-top:5px;}
 
-  /* ── Beverages ── */
-  .bev-list { display: flex; flex-direction: column; gap: 6px; }
-  .bev-row { display: flex; align-items: center; gap: 10px; }
-  .bev-tag {
-    flex: 0 0 auto;
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    min-width: 48px;
-    text-align: center;
-    padding: 2px 6px;
-    border-radius: 2px;
-  }
-  .bev-spark { background: #e8c766; color: #4a3a06; }
-  .bev-white { background: #f2ecdc; color: #6b5f3a; }
-  .bev-red   { background: var(--red); color: #fff; }
-  .bev-beer  { background: #3a2f24; color: #f5e9d6; }
-  .bev-none  { background: transparent; min-width: 48px; }
-  .bev-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
-  .bev-desc { font-weight: 400; color: var(--ink-soft); }
+  /* ── Footer ── */
+  .foot{margin-top:auto;display:flex;justify-content:space-between;font-size:9.5px;color:var(--gray);letter-spacing:.04em;padding-top:7px;border-top:1px solid var(--line);}
+  .foot .copy{color:var(--green);font-weight:600;text-transform:uppercase;letter-spacing:.12em;}
 
-  /* ── Cost summary (small card, internal only) ── */
-  .cost-block { margin-top: auto; }
-  .cost-card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    padding: 10px 14px;
-    max-width: 320px;
-  }
-  .cost-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 12px;
-    padding: 3px 0;
-  }
-  .cost-k { color: var(--ink-soft); }
-  .cost-v { font-weight: 600; color: var(--ink); }
-  .cost-total {
-    border-top: 1px solid var(--ink);
-    margin-top: 5px;
-    padding-top: 6px;
-    font-weight: 700;
-  }
-  .cost-total .cost-k { color: var(--ink); font-weight: 700; }
+  /* ── Page 2 header ── */
+  .p2-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:12px;border-bottom:1px solid var(--line);}
+  .p2-title{font-family:var(--serif);font-weight:600;font-size:26px;color:var(--ink);}
+  .p2-meta{font-size:11px;color:var(--gray);letter-spacing:.04em;}
 
-  /* ── Page footer ── */
-  .page-foot {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 24px;
-    padding-top: 8px;
-    border-top: 1px solid var(--line);
+  @page{size:A4;margin:0;}
+  @media print{
+    html,body{background:none;}
+    .sheet{margin:0;box-shadow:none;page-break-after:always;}
+    .sheet:last-child{page-break-after:auto;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
-  .foot-l, .foot-r {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 9px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-  }
-
-  @media print {
-    /* Page size only — margins are controlled by Puppeteer's PDF options. */
-    @page { size: A4 portrait; }
-    body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .band-big, .status.confirmed, .diet-card.severe, .changed-tag,
-    .bev-spark, .bev-white, .bev-red, .bev-beer, .tl-item:before {
-      -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
-    }
-    .block, .course, .tl-item, .diet-card { page-break-inside: avoid; break-inside: avoid; }
-    .block-label, .course-name { page-break-after: avoid; break-after: avoid; }
-  }
+  @media screen{ .sheet{box-shadow:0 2px 14px rgba(0,0,0,.14);} }
 </style>
 </head>
 <body>
 
-<!-- ══════════════════ PAGE 1 — KITCHEN COPY ══════════════════ -->
-<div class="sheet">
-  ${runningHeader}
-
-  <header class="top">
-    <div class="top-left">
-      <div class="brand">${logoHtml}</div>
-      <div class="doc-type">Banquet Event Order</div>
-      <div class="venue-name">${escHtml(venueName)}</div>
-      <div class="sub-line">${[eventType, clientName].filter(Boolean).map(escHtml).join(" · ")}</div>
+<!-- ═══════════════ PAGE 1 — KITCHEN ═══════════════ -->
+<section class="sheet">
+  <header class="mast">
+    <div>
+      <div class="eyebrow">Banquet Event Order</div>
+      <div class="venue">${escHtml(venueName)}</div>
+      ${mastSub ? `<div class="mast-sub">${mastSub}</div>` : ""}
     </div>
-    <div class="top-right">
+    <div class="mast-right">
       <div class="beo-num">BEO #${booking.id}</div>
-      ${isConfirmed ? `<div class="status confirmed">● CONFIRMED</div>` : (booking.status ? `<div class="status">${escHtml(String(booking.status).replace(/_/g, " ").toUpperCase())}</div>` : "")}
+      ${isConfirmed ? `<div class="pill"><span class="dot"></span>Confirmed</div>` : (booking.status ? `<div class="pill" style="background:var(--gray);">${escHtml(String(booking.status).replace(/_/g, " "))}</div>` : "")}
     </div>
   </header>
 
   <div class="band">
-    ${bandCells.map(c => `
-    <div class="band-cell${c.big ? " band-big" : ""}">
-      <div class="band-label">${c.label}</div>
-      ${c.big ? `<div class="band-num">${c.value}</div>` : `<div class="band-val">${c.value}</div>`}
-    </div>`).join("")}
+    <div class="band-cell band-guests">
+      <div class="label">Guests</div>
+      <div class="band-num">${guestCount ? escHtml(String(guestCount)) : "—"}</div>
+    </div>
+    ${eventDate ? `<div class="band-cell"><div class="label">Date</div><div class="band-val">${escHtml(eventDate)}</div></div>` : ""}
+    ${(timeRange && timeRange !== "—") ? `<div class="band-cell"><div class="label">Service</div><div class="band-val">${escHtml(timeRange)}</div></div>` : ""}
+    ${roomLabel ? `<div class="band-cell"><div class="label">Room</div><div class="band-val">${escHtml(roomLabel)}</div></div>` : ""}
+    ${setupSummary ? `<div class="band-cell"><div class="label">Setup</div><div class="band-val">${escHtml(setupSummary)}</div></div>` : ""}
   </div>
 
   ${show('dietary', dietarySection)}
@@ -1064,44 +849,36 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   ${show('kitchen', kitchenSection)}
 
   ${pageFooter("Kitchen copy · Page 1 of 2")}
-</div>
+</section>
 
-<!-- ══════════════════ PAGE 2 — SERVICE COPY ══════════════════ -->
-<div class="sheet page-break">
-  ${runningHeader}
-
-  <header class="top top-service">
-    <div class="top-left">
-      <div class="doc-type">Service</div>
-      <div class="venue-name service-title">Floor &amp; Service</div>
-    </div>
-    <div class="top-right">
-      <div class="beo-num">BEO #${booking.id} · ${escHtml(venueName)}</div>
-    </div>
+<!-- ═══════════════ PAGE 2 — SERVICE & BILLING ═══════════════ -->
+<section class="sheet">
+  <header class="p2-head">
+    <div class="p2-title">Floor &amp; Service</div>
+    <div class="p2-meta">${p2Meta}</div>
   </header>
 
-  ${show('timeline', timelineSection)}
-  ${show('setup', setupSection)}
-  ${show('notes', notesSection)}
-  ${contactSection}
-  ${show('drinks', beveragesSection)}
-  ${barSection}
-  ${hideSet.has('payment') ? '' : (() => {
-    if (isPublic) return "";
-    const pi = (venue as any)?.paymentInstructions as string | null | undefined;
-    if (!pi || !pi.trim()) return "";
-    const esc = pi.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-    return `
-<section class="block">
-  <div class="block-label">Payment Instructions</div>
-  <div class="notes-box"><div class="note-line">${esc}</div></div>
-</section>`;
-  })()}
-  ${show('footer', footerNoteSection)}
-  ${show('financials', financialsSection)}
+  <div class="p2-cols">
+    <!-- Left: run of night, room setup, key notes -->
+    <div>
+      ${show('timeline', timelineSection)}
+      ${show('setup', setupSection)}
+      ${show('notes', notesSection)}
+    </div>
+
+    <!-- Right: bar & beverage, contact, cost -->
+    <div>
+      ${show('drinks', beveragesSection)}
+      ${barSection}
+      ${contactSection}
+      ${paymentSection}
+      ${show('footer', footerNoteSection)}
+      ${show('financials', financialsSection)}
+    </div>
+  </div>
 
   ${pageFooter("Service copy · Page 2 of 2")}
-</div>
+</section>
 
 </body>
 </html>`;
@@ -1133,22 +910,16 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: "networkidle0" });
-      // Symmetric 12mm margins so multi-page BEOs have proper breathing
-      // room on every page (top/left/right used to be 0mm which made
-      // page 2+ feel cramped against the printable edge). Footer template
-      // adds page numbers + BEO ref so detached pages stay identifiable.
-      const footerTemplate = `
-        <div style="font-family:'DM Sans',Helvetica,Arial,sans-serif;font-size:7pt;color:#8a7c66;width:100%;padding:0 12mm;display:flex;justify-content:space-between;">
-          <span>BEO #${booking.id} · ${clientName.replace(/[<>&"']/g,'')}</span>
-          <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-        </div>`;
+      // The design owns its own layout: `@page{size:A4;margin:0}` + each
+      // `.sheet` is sized to A4 (210×297mm) with its own 15mm internal
+      // padding and an absolutely-positioned in-sheet footer. So we zero
+      // Puppeteer's margins, honour the page CSS size, and drop the
+      // header/footer template — this makes the downloaded PDF match the
+      // on-screen `?format=html` preview 1:1.
       const pdf = await page.pdf({
-        format: "A4",
         printBackground: true,
-        margin: { top: "12mm", right: "10mm", bottom: "16mm", left: "10mm" },
-        displayHeaderFooter: true,
-        headerTemplate: `<div></div>`,
-        footerTemplate,
+        preferCSSPageSize: true,
+        margin: { top: "0", right: "0", bottom: "0", left: "0" },
       });
 
       // Append linked menu PDFs (chef-facing) to the end of the internal
