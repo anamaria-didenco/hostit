@@ -2,6 +2,22 @@
  * BEO (Banquet Event Order) PDF Generator
  * VenueFlow branded, comprehensive event order document.
  * Route: GET /api/beo/:bookingId
+ *
+ * ── Presentation refresh ──────────────────────────────────────────────────
+ * The HTML/CSS below is rebuilt to match the approved "BEO #44 — Bar Franco"
+ * reference design 1:1 (handoff/BEO-template-reference.html):
+ *   • Masthead: eyebrow + Spectral venue name + sub-line; BEO # + status pill
+ *     (green pill, light-green dot) over a 2.5px green rule.
+ *   • Booking band: rounded bordered strip, green GUESTS cell + light cells.
+ *   • Dietary: 3-up card grid, severe cards solid red, mild cards bordered.
+ *   • Menu changes: amber callout strip with struck → new rows.
+ *   • Menu: 2-col, italic-serif course titles, red em-dash, bold dish + grey
+ *     detail, inline "CHANGED · was X" tag.
+ *   • Page 2: "Floor & Service" head; left RUN OF NIGHT timeline (time gutter +
+ *     dot-and-rail), right boxed stack (Key Notes fill box, Client Contact,
+ *     Cost Summary w/ green balance bar, Bar Arrangement); BEVERAGES 3-col grid
+ *     below; Room Setup / Payment / Footer note as full-width blocks.
+ * ALL data extraction / business logic is unchanged from the previous version.
  */
 import type { Request, Response } from "express";
 import path from "path";
@@ -348,11 +364,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const kitchenItemsArr = fnbList.filter(i => i.section === "kitchen");
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Two-page BEO rendered in the "BEO-44" house design (Spectral + Hanken
-    // Grotesk; cream/ink/green with red reserved for attention items). Page 1
-    // is the kitchen copy (masthead, booking band, dietary, menu changes,
-    // menu, kitchen prep); page 2 is the service copy (run of night, room
-    // setup, key notes, bar & beverage, client contact, cost summary).
+    // Two-page BEO in the approved "BEO #44 — Bar Franco" reference design.
+    // Page 1 = kitchen copy (masthead, booking band, dietary, menu changes,
+    // menu, kitchen prep). Page 2 = service copy (run of night, boxed stack:
+    // key notes / contact / cost / bar, beverages, room setup, notes).
     // ═══════════════════════════════════════════════════════════════════════
 
     // ── Running footer text (both pages) ─────────────────────────────────
@@ -368,6 +383,21 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     // ── Booking-band room label ──────────────────────────────────────────
     const roomLabel = venueAreaLabel || spaceName || "";
 
+    // ── Booking band cells (Guests cell is always rendered separately) ────
+    const bandCells: Array<[string, string]> = [];
+    if (eventDate) bandCells.push(["Date", escHtml(eventDate)]);
+    if (timeRange && timeRange !== "—") bandCells.push(["Service", escHtml(timeRange)]);
+    if (roomLabel) bandCells.push(["Room", escHtml(roomLabel)]);
+    if (setupSummary) bandCells.push(["Setup", escHtml(setupSummary)]);
+    const bandHtml = `
+  <div class="band" style="grid-template-columns:auto repeat(${bandCells.length}, 1fr);">
+    <div class="band-cell band-guests">
+      <div class="blabel">Guests</div>
+      <div class="band-num">${guestCount ? escHtml(String(guestCount)) : "—"}</div>
+    </div>
+    ${bandCells.map(([k, v]) => `<div class="band-cell"><div class="blabel">${k}</div><div class="band-val">${v}</div></div>`).join("")}
+  </div>`;
+
     // ── Severity detection for allergy/dietary cards ─────────────────────
     // \bnuts?\b matches "nut"/"nuts"/"nut allergy"/"tree nut" but NOT
     // coconut / butternut / nutmeg / nutrition (no leading word boundary there).
@@ -377,49 +407,44 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const dietaryCount = dietaries.reduce((s, d) => s + (Number(d.count) || 0), 0);
     const severeDiet = dietaries.filter(isSevere);
     const mildDiet = dietaries.filter(d => !isSevere(d));
+    const orderedDiet = [...severeDiet, ...mildDiet];
     const dietCountLabel = (d: { count: number }) =>
       `${d.count || 0} of ${escHtml(String(guestCount || "—"))} guests`;
+    const dietCard = (d: { name: string; count: number; notes?: string }) => {
+      const severe = isSevere(d);
+      return `
+      <div class="diet-card${severe ? " severe" : ""}">
+        <div class="dlabel">${severe ? "Allergy · Severe" : "Dietary"}</div>
+        <div class="dname">${escHtml(d.name)}</div>
+        <div class="dcount">${dietCountLabel(d)}</div>
+        ${d.notes ? `<div class="dnote">${escHtml(d.notes)}</div>` : ""}
+      </div>`;
+    };
     const dietarySection = dietaries.length > 0 ? `
   <div class="section">
     <div class="sec-head">
-      <span class="label red">Dietary &amp; Allergies</span>
-      <span class="count">${dietaryCount} of ${escHtml(String(guestCount || "—"))} guests</span>
+      <span class="sec-title red">&#9888; Dietary &amp; Allergies</span>
+      <span class="sec-line red thick"></span>
+      <span class="sec-meta">${dietaryCount} of ${escHtml(String(guestCount || "—"))} guests</span>
     </div>
-    <div class="rule red"></div>
-    ${severeDiet.map(d => `
-    <div class="diet-severe">
-      <span class="sev-tag">Severe</span>
-      <div>
-        <div class="req">${escHtml(d.name)}</div>
-        <div class="name">${dietCountLabel(d)}</div>
-      </div>
-      ${d.notes ? `<div class="action">${escHtml(d.notes)}</div>` : ""}
-    </div>`).join("")}
-    ${mildDiet.length > 0 ? `
     <div class="diet-grid">
-      ${mildDiet.map(d => `
-      <div class="diet-card">
-        <div class="req">${escHtml(d.name)}</div>
-        <div class="name">${dietCountLabel(d)}</div>
-        ${d.notes ? `<div class="note">${escHtml(d.notes)}</div>` : ""}
-      </div>`).join("")}
-    </div>` : ""}
+      ${orderedDiet.map(dietCard).join("")}
+    </div>
   </div>` : "";
 
     // ── Menu-change strip (page 1) — only when a foh dish was changed ─────
     const changedItems = fohItems.filter((i: any) => i.previousDishName && (i.course ?? "") !== "Drinks");
     const menuChangesSection = changedItems.length > 0 ? `
-  <div class="section">
-    <div class="sec-head">
-      <span class="label red">Menu Changes</span>
-      <span class="count">Applies to all ${escHtml(String(guestCount || "—"))} covers</span>
+  <div class="changes">
+    <div class="changes-head">
+      <span class="changes-tag">Menu Changes</span>
+      <span class="changes-meta">Applies to all ${escHtml(String(guestCount || "—"))} covers</span>
     </div>
-    <div class="rule red"></div>
-    <div class="changes-card">
+    <div class="changes-grid">
       ${changedItems.map((f: any) => `
       <div class="change-row">
         <span class="change-old">${escHtml(f.previousDishName)}</span>
-        <span class="change-arrow">→</span>
+        <span class="change-arrow">&rarr;</span>
         <span class="change-new">${escHtml(f.dishName)}</span>
       </div>`).join("")}
     </div>
@@ -444,26 +469,26 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const foodItems = fohItems.filter((i: any) => (i.course ?? "") !== "Drinks");
     const foodGrouped = groupByCourse(foodItems);
     const foodCourses = orderFoodCourses(foodGrouped);
-    // Shared dish renderer (BEO-44 look): em-dash + bold name + lighter
-    // description; changed dishes show <old struck> → <new> + CHANGED tag.
+    // Shared dish renderer (reference look): red em-dash + bold name + grey
+    // detail; changed dishes show the new name with an inline "CHANGED · was X" tag.
     const dishHtml = (f: any, opts?: { prep?: boolean }) => {
-      const det = f.description ? `<span class="det">${escHtml(f.description)}</span>` : "";
-      const nameBlock = f.previousDishName
-        ? `<span class="old">${escHtml(f.previousDishName)}</span><span class="arrow">→</span><span class="name">${escHtml(f.dishName)}</span><span class="changed">Changed</span>${det ? " " + det : ""}`
-        : `<span class="name">${escHtml(f.dishName)}</span>${det ? " " + det : ""}`;
+      const det = f.description ? `<span class="det"> ${escHtml(f.description)}</span>` : "";
+      const tag = f.previousDishName
+        ? `<span class="changed">Changed &middot; was ${escHtml(f.previousDishName)}</span>`
+        : "";
       const prep = (opts?.prep && (f.prepNotes || f.platingNotes))
         ? `<div class="prep-line">${[f.prepNotes, f.platingNotes].filter(Boolean).map((n: string) => escHtml(n)).join(" · ")}</div>`
         : "";
       return `
-        <div class="dish"><span class="em">—</span><span class="body">${nameBlock}${prep}</span></div>`;
+        <div class="dish"><span class="em">&mdash;</span><span class="body"><span class="dname">${escHtml(f.dishName)}</span>${det}${tag}${prep}</span></div>`;
     };
     const menuSection = foodItems.length > 0 ? `
   <div class="section">
     <div class="sec-head">
-      <span class="label" style="font-size:13px;">${escHtml(venueName)} Shared Menu</span>
-      <span class="count">${guestCount ? `${escHtml(String(guestCount))} guests` : ""}</span>
+      <span class="sec-title">${escHtml(venueName)} Shared Menu</span>
+      <span class="sec-line"></span>
+      <span class="sec-meta">${guestCount ? `&times; ${escHtml(String(guestCount))} &middot; served shared to table` : ""}</span>
     </div>
-    <div class="rule"></div>
     <div class="menu-grid">
       ${foodCourses.map(course => `
       <div class="course">
@@ -473,18 +498,21 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     </div>
   </div>` : "";
 
-    // ── Run of night (page 2) — vertical timeline ────────────────────────
-    // Flag (red dot) the arrival & dinner moments, matching the BEO-44 look.
+    // ── Run of night (page 2) — time gutter + dot-and-rail timeline ───────
+    // Flag (red dot) the arrival & dinner moments, matching the reference.
     const TL_FLAG_RE = /arriv|welcome|dinner|service|seat|main/i;
     const timelineSection = timelineItems.length > 0 ? `
-      <span class="label">Run of Night</span>
-      <div class="rule"></div>
+      <div class="col-title">Run of Night</div>
       <div class="tl">
-        ${timelineItems.map((item: any) => `
+        ${timelineItems.map((item: any, i: number) => `
         <div class="tl-item${TL_FLAG_RE.test(String(item.title || "")) ? " flag" : ""}">
           <div class="tl-anchor">
             <div class="tl-time">${fmt12(item.time) || "—"}</div>
             ${item.duration ? `<div class="tl-dur">${escHtml(String(item.duration))} min</div>` : ""}
+          </div>
+          <div class="tl-rail">
+            <div class="tl-dot"></div>
+            ${i < timelineItems.length - 1 ? `<div class="tl-line"></div>` : ""}
           </div>
           <div class="tl-body">
             <div class="tl-title">${escHtml(item.title || "—")}</div>
@@ -494,34 +522,33 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
         </div>`).join("")}
       </div>` : "";
 
-    // ── Key notes (page 2) — bullet lines from rs/booking notes ──────────
+    // ── Key notes (page 2) — fill box with bullet lines ──────────────────
     const allNotes = [rsNotes, bookingNotes].filter(Boolean).join("\n").trim();
     const noteLines = allNotes.split(/\n+/).map(l => l.trim()).filter(Boolean);
     const notesSection = noteLines.length > 0 ? `
-      <div class="blk">
-        <span class="label">Key Notes</span>
+      <div class="box fill">
+        <div class="box-title">Key Notes</div>
         <ul class="notes-list">
-          ${noteLines.map(l => `<li>${escHtml(l)}</li>`).join("")}
+          ${noteLines.map(l => `<li><span class="b">&bull;</span><span>${escHtml(l)}</span></li>`).join("")}
         </ul>
       </div>` : "";
 
-    // ── Client contact (page 2) ──────────────────────────────────────────
+    // ── Client contact (page 2) — bordered box ───────────────────────────
     const contactBits = isPublic
       ? []
       : [
-          (leadPhone || booking.phone) ? `<div class="contact-line">${escHtml(leadPhone || booking.phone)}</div>` : "",
-          leadEmail ? `<div class="contact-line">${escHtml(leadEmail)}</div>` : "",
+          (leadPhone || booking.phone) ? `${escHtml(leadPhone || booking.phone)}` : "",
+          leadEmail ? `${escHtml(leadEmail)}` : "",
         ].filter(Boolean);
     // Public event pack hides client-contact PII entirely.
     const contactSection = isPublic ? "" : `
-      <div class="blk">
-        <span class="label">Client Contact</span>
-        <div class="rule"></div>
+      <div class="box">
+        <div class="box-title">Client Contact</div>
         <div class="contact-name">${escHtml(clientName)}</div>
-        ${contactBits.join("")}
+        ${contactBits.length ? `<div class="contact-lines">${contactBits.join("<br>")}</div>` : ""}
       </div>`;
 
-    // ── Beverages (page 2) — typed chips ─────────────────────────────────
+    // ── Beverages (page 2) — typed chips in a 3-col grid ─────────────────
     // Type derivation: explicit drinkTypes map wins, else infer from name.
     const drinkType = (name: string): string => {
       const explicit = drinkTypesMap[name];
@@ -535,17 +562,19 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       if (/beer|pilsner|lager|ale|ipa|peroni|stout/.test(n)) return "BEER";
       return "";
     };
-    // BEO-44 colour tags: SPARK→t-spark, WHITE→t-white, RED→t-red, BEER→t-beer.
+    // Reference colour tags: SPARK→t-spark, WHITE→t-white, RED→t-red, BEER→t-beer.
     const BEV_TAG_CLASS: Record<string, string> = {
       SPARK: "t-spark", WHITE: "t-white", RED: "t-red", BEER: "t-beer",
     };
+    const BEV_TAG_LABEL: Record<string, string> = {
+      SPARK: "Spark", WHITE: "White", RED: "Red", BEER: "Beer",
+    };
     const drinkChip = (name: string, desc?: string) => {
       const t = drinkType(name);
-      const tagLabel = t === "SPARK" ? "Bubbles" : (t ? t.charAt(0) + t.slice(1).toLowerCase() : "");
       return `
         <div class="bev-row">
-          ${t ? `<span class="bev-tag ${BEV_TAG_CLASS[t] ?? ""}">${tagLabel}</span>` : `<span class="bev-tag" style="background:transparent;"></span>`}
-          <span>${escHtml(name)}${desc ? ` <span class="muted">— ${escHtml(desc)}</span>` : ""}</span>
+          ${t ? `<span class="bev-tag ${BEV_TAG_CLASS[t] ?? ""}">${BEV_TAG_LABEL[t] ?? t}</span>` : ""}
+          <span class="bev-name">${escHtml(name)}${desc ? ` <span class="bev-desc">&mdash; ${escHtml(desc)}</span>` : ""}</span>
         </div>`;
     };
     // Drinks source: DRINKS-tab selection if present, else legacy fnb Drinks course.
@@ -556,22 +585,27 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
           ...customDrinkList.map((d: any) => drinkChip(d.name, d.description)),
         ]
       : legacyDrinkRows.map((f: any) => drinkChip(f.dishName, f.description));
-    // Bar arrangement bits (label / tab / notes) live in the same block as the
-    // beverage list — matching BEO-44's single "Bar & Beverage" panel.
-    const barNotesTextEarly = ((drinks as any)?.barNotes ?? "").toString();
-    const barOptEarly = (drinks as any)?.barOption as string | undefined;
-    const barTabValEarly = (drinks as any)?.tabAmount;
-    const barArrangementHtml =
-      (barOptEarly
-        ? `<div class="kv" style="margin-bottom:7px;"><strong>Arrangement —</strong> ${escHtml(BAR_LABELS[barOptEarly] ?? barOptEarly)}${(!isPublic && barTabValEarly) ? ` <span class="muted">· tab ${fmtCurrency(barTabValEarly)}</span>` : ""}</div>`
-        : ((!isPublic && barTabValEarly) ? `<div class="kv" style="margin-bottom:7px;"><strong>Bar tab —</strong> ${fmtCurrency(barTabValEarly)}</div>` : "")) +
-      (barNotesTextEarly.trim() ? `<div class="kv muted" style="margin-bottom:7px;">${escHtml(barNotesTextEarly).replace(/\n/g, "<br>")}</div>` : "");
-    const beveragesSection = (bevRows.length > 0 || barArrangementHtml) ? `
-      <div class="blk">
-        <span class="label" style="font-size:13px;">Bar &amp; Beverage</span>
-        <div class="rule"></div>
-        ${barArrangementHtml}
-        ${bevRows.join("")}
+    const beveragesSection = bevRows.length > 0 ? `
+      <div class="bev">
+        <div class="sec-head">
+          <span class="sec-title">Beverages</span>
+          <span class="sec-line"></span>
+        </div>
+        <div class="bev-grid">${bevRows.join("")}</div>
+      </div>` : "";
+
+    // ── Bar arrangement (page 2) — bordered box w/ green tag + notes ──────
+    const barNotesText = ((drinks as any)?.barNotes ?? "").toString();
+    const barOpt = (drinks as any)?.barOption as string | undefined;
+    const barTabVal = (drinks as any)?.tabAmount;
+    const barTagLabel = barOpt ? (BAR_LABELS[barOpt] ?? barOpt) : "";
+    const barTabBit = (!isPublic && barTabVal) ? `<span class="bar-tab-amt">Tab ${fmtCurrency(barTabVal)}</span>` : "";
+    const barArrangementSection = (barOpt || barTabBit || barNotesText.trim()) ? `
+      <div class="box">
+        <div class="box-title">Bar Arrangement</div>
+        ${barTagLabel ? `<span class="bar-tag">${escHtml(barTagLabel)}</span>` : ""}
+        ${barTabBit}
+        ${barNotesText.trim() ? `<div class="bar-note">${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : ""}
       </div>` : "";
 
     // ── Kitchen prep & production (page 1, INTERNAL copy only) ───────────
@@ -582,9 +616,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const kitchenSection = (!isPublic && kitchenItemsArr.length > 0) ? `
   <div class="section">
     <div class="sec-head">
-      <span class="label" style="font-size:13px;">Kitchen — Prep &amp; Production</span>
+      <span class="sec-title">Kitchen &mdash; Prep &amp; Production</span>
+      <span class="sec-line"></span>
     </div>
-    <div class="rule"></div>
     <div class="menu-grid">
       ${kitchenCourses.map(course => `
       <div class="course">
@@ -598,15 +632,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     // Distinct from the one-line setupSummary band cell — this is the full
     // operator-entered setup brief and must not be silently dropped.
     const setupSection = (venueSetup && String(venueSetup).trim()) ? `
-      <div class="blk" style="margin-top:22px;">
-        <span class="label">Room Setup</span>
+      <div class="blk">
+        <div class="blk-title">Room Setup</div>
         <div class="kv">${venueSetup}</div>
       </div>` : "";
-
-    // ── Bar arrangement + notes ──────────────────────────────────────────
-    // Now folded into the single "Bar & Beverage" block above (BEO-44 layout),
-    // so this standalone section is intentionally empty.
-    const barSection = "";
 
     // ── Cost summary (page 2) — internal only, never public ──────────────
     const costList: any[] = Array.isArray((runsheet as any)?.costItems) ? (runsheet as any).costItems : [];
@@ -630,40 +659,35 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const showFinancials = !isPublic && (minSpendAmt > 0 || eventTotal > 0 || depAmt > 0);
     const balanceOutstanding = !booking.depositPaid && balanceToCollect > 0;
     const financialsSection = showFinancials ? `
-      <div class="blk">
-        <span class="label">Cost Summary</span>
-        <div class="rule"></div>
-        <div class="cost">
-          ${minSpendAmt > 0 ? `<div class="cost-row"><span class="k">Minimum Spend</span><span class="v">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
-          ${eventTotal > 0 ? `<div class="cost-row"><span class="k">Total</span><span class="v">${fmtCurrency(eventTotal)}</span></div>` : ""}
-          ${depAmt > 0 ? `<div class="cost-row"><span class="k">Deposit received</span><span class="v">${fmtCurrency(depAmt)} ${booking.depositPaid ? "· Paid" : "· Outstanding"}</span></div>` : ""}
-          <div class="cost-row balance"><span class="k">Balance to collect</span><span class="v">${fmtCurrency(balanceToCollect)}${balanceOutstanding ? ` <span class="out-tag">Outstanding</span>` : ""}</span></div>
-        </div>
+      <div class="cost">
+        <div class="cost-title">Cost Summary</div>
+        ${minSpendAmt > 0 ? `<div class="cost-row"><span class="k">Minimum Spend</span><span class="v">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
+        ${eventTotal > 0 ? `<div class="cost-row"><span class="k">Total</span><span class="v">${fmtCurrency(eventTotal)}</span></div>` : ""}
+        ${depAmt > 0 ? `<div class="cost-row"><span class="k">Deposit received</span><span class="v small">${fmtCurrency(depAmt)} ${booking.depositPaid ? "&middot; Paid" : "&middot; Outstanding"}</span></div>` : ""}
+        <div class="cost-row balance"><span class="k">Balance to collect</span><span class="v">${fmtCurrency(balanceToCollect)}${balanceOutstanding ? ` <span class="out-tag">Outstanding</span>` : ""}</span></div>
       </div>` : "";
 
     // Footer note (closing message) — shown to everyone, on page 2.
     const footerNoteSection = footerNote.trim() ? `
       <div class="blk">
-        <span class="label">Note</span>
-        <div class="rule"></div>
+        <div class="blk-title">Note</div>
         <div class="kv">${footerNote.replace(/\n/g, "<br>")}</div>
       </div>` : "";
 
     const pageFooter = (label: string) => `
   <div class="foot">
-    <span>${runningHeaderText}</span>
+    <span class="biz">${runningHeaderText}</span>
     <span class="copy">${label}</span>
   </div>`;
 
-    // ── Payment instructions (page 2, internal only) — BEO-44 .blk style ──
+    // ── Payment instructions (page 2, internal only) — full-width block ──
     const paymentSection = (hideSet.has('payment') || isPublic) ? "" : (() => {
       const pi = (venue as any)?.paymentInstructions as string | null | undefined;
       if (!pi || !pi.trim()) return "";
       const esc = pi.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
       return `
       <div class="blk">
-        <span class="label">Payment Instructions</span>
-        <div class="rule"></div>
+        <div class="blk-title">Payment Instructions</div>
         <div class="kv">${esc}</div>
       </div>`;
     })();
@@ -678,142 +702,166 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BEO #${booking.id} · ${escHtml(venueName)} · ${escHtml(clientName)}</title>
+<title>BEO #${booking.id} &middot; ${escHtml(venueName)} &middot; ${escHtml(clientName)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --cream:#fffdf9; --ink:#16140f; --green:#1d3b2a; --red:#c0392b;
-    --gray:#857f70; --line:#e7e1d2; --paper-edge:#d7d1c4;
+    --cream:#fffdf9; --ink:#16140f; --ink2:#211d18; --green:#1d3b2a; --red:#c0392b;
+    --gray:#6a6256; --gray2:#8a8073; --faint:#a39684;
+    --line:#e3ddd0; --line2:#e6dccb; --hair:#eee6d8; --amber:#b07c25;
+    --fill:#f4efe6; --change-fill:#fbf3e8; --change-line:#e6d9bf;
+    --paper-edge:#ddd8cf;
     --serif:'Spectral',Georgia,serif; --sans:'Hanken Grotesk',Arial,sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
-  html,body{background:var(--paper-edge);font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased;}
+  html,body{background:var(--paper-edge);font-family:var(--sans);color:var(--ink2);-webkit-font-smoothing:antialiased;}
   .sheet{
     width:210mm;min-height:297mm;background:var(--cream);margin:10mm auto;
-    padding:15mm 15mm 16mm;position:relative;
-    display:flex;flex-direction:column;
+    padding:16mm 15mm 14mm;position:relative;display:flex;flex-direction:column;
   }
-  .label{font-family:var(--sans);font-weight:600;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--green);}
-  .label.red{color:var(--red);}
-  .rule{height:2px;background:var(--green);border:0;margin:0 0 9px;}
-  .rule.red{background:var(--red);}
   .muted{color:var(--gray);}
 
-  /* ── Masthead ── */
-  .mast{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:1px solid var(--line);}
-  .eyebrow{font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--green);font-weight:600;}
-  .venue{font-family:var(--serif);font-weight:600;font-size:36px;line-height:1.02;color:var(--ink);margin-top:4px;}
-  .mast-sub{font-size:12.5px;color:var(--gray);margin-top:5px;}
-  .mast-right{text-align:right;flex-shrink:0;padding-left:18px;}
-  .beo-num{font-family:var(--serif);font-weight:600;font-size:22px;color:var(--green);letter-spacing:.01em;}
-  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--green);color:#fff;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-top:8px;}
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--red);display:inline-block;}
+  /* ── Masthead (page 1) ── */
+  .mast{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid var(--green);padding-bottom:14px;}
+  .eyebrow{font-size:10px;letter-spacing:.32em;font-weight:700;color:var(--green);text-transform:uppercase;}
+  .venue{font-family:var(--serif);font-size:34px;font-weight:600;line-height:1.05;margin-top:6px;color:var(--ink);}
+  .mast-sub{font-size:14px;color:var(--gray);margin-top:3px;}
+  .mast-right{text-align:right;flex:none;padding-left:18px;}
+  .beo-num{font-family:var(--serif);font-size:30px;font-weight:600;color:var(--ink);line-height:1;}
+  .pill{display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--green);color:#fff;font-size:10px;font-weight:700;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase;}
+  .pill .dot{width:6px;height:6px;border-radius:50%;background:#7dd6a3;}
+  .pill.is-muted{background:var(--gray2);}
 
   /* ── Booking band ── */
-  .band{display:grid;grid-template-columns:auto 1fr 1fr 1fr;border:1px solid var(--line);margin:16px 0 6px;}
-  .band-cell{padding:11px 16px;border-left:1px solid var(--line);}
-  .band-cell:first-child{border-left:0;}
-  .band-cell .label{margin-bottom:5px;}
-  .band-val{font-size:16.5px;font-weight:500;color:var(--ink);}
-  .band-guests{background:var(--green);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:8px 22px 8px 16px;}
-  .band-guests .label{color:rgba(255,255,255,.7);}
-  .band-num{font-family:var(--serif);font-weight:700;font-size:56px;line-height:.92;color:#fff;}
+  .band{display:grid;margin-top:18px;border:1px solid var(--line);border-radius:6px;overflow:hidden;}
+  .band-cell{padding:13px 15px;border-right:1px solid var(--line);}
+  .band-cell:last-child{border-right:0;}
+  .blabel{font-size:9px;letter-spacing:.16em;font-weight:700;color:var(--gray2);text-transform:uppercase;}
+  .band-val{font-size:15px;font-weight:600;margin-top:4px;line-height:1.2;}
+  .band-guests{background:var(--green);color:#fff;}
+  .band-guests .blabel{color:rgba(255,255,255,.75);}
+  .band-num{font-family:var(--serif);font-size:32px;font-weight:600;line-height:1;margin-top:4px;}
 
-  /* ── Section ── */
+  /* ── Section heads ── */
   .section{margin-top:20px;}
-  .sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px;}
-  .count{font-size:11px;color:var(--gray);font-weight:500;letter-spacing:.02em;}
+  .sec-head{display:flex;align-items:center;gap:9px;margin-bottom:12px;}
+  .sec-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none;}
+  .sec-title.red{color:var(--red);}
+  .sec-line{flex:1;height:1.5px;background:var(--green);}
+  .sec-line.thick{height:2px;}
+  .sec-line.red{background:var(--red);}
+  .sec-meta{font-size:11px;color:var(--gray2);font-weight:600;flex:none;}
 
   /* ── Dietary ── */
-  .diet-severe{background:var(--red);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:18px;margin-bottom:8px;}
-  .diet-severe .req{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.85);}
-  .diet-severe .name{font-family:var(--serif);font-weight:600;font-size:22px;line-height:1.05;margin-top:1px;}
-  .diet-severe .action{font-size:14px;color:#fff;border-left:2px solid rgba(255,255,255,.5);padding-left:16px;line-height:1.4;}
-  .diet-severe .sev-tag{font-size:9px;font-weight:700;letter-spacing:.12em;background:#fff;color:var(--red);padding:3px 7px;border-radius:3px;text-transform:uppercase;flex-shrink:0;}
-  .diet-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
-  .diet-card{border:1px solid var(--line);background:#fff;padding:9px 13px;}
-  .diet-card .req{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#b07d12;}
-  .diet-card .name{font-family:var(--serif);font-weight:500;font-size:16.5px;margin-top:2px;}
-  .diet-card .note{font-size:13px;color:var(--gray);margin-top:3px;line-height:1.4;}
-
-  /* ── Menu ── */
-  .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 30px;margin-top:10px;}
-  .course-title{font-family:var(--serif);font-weight:600;font-size:20px;color:var(--green);padding-bottom:5px;border-bottom:1px solid var(--line);margin-bottom:7px;}
-  .dish{display:flex;gap:8px;padding:6px 0;line-height:1.5;}
-  .dish .em{color:var(--green);font-weight:700;flex-shrink:0;}
-  .dish .body{font-size:16px;}
-  .dish .name{font-weight:600;color:var(--ink);}
-  .dish .det{color:var(--gray);font-weight:400;}
-  .dish .old{color:var(--gray);text-decoration:line-through;font-weight:400;}
-  .dish .arrow{color:var(--red);font-weight:700;padding:0 3px;}
-  .changed{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.1em;background:var(--red);color:#fff;padding:2px 7px;border-radius:3px;text-transform:uppercase;margin-left:5px;vertical-align:1px;}
+  .diet-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .diet-card{background:#fff;border:1.5px solid var(--line2);border-radius:6px;padding:14px 16px;}
+  .diet-card .dlabel{font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--amber);text-transform:uppercase;}
+  .diet-card .dname{font-family:var(--serif);font-size:22px;font-weight:600;margin-top:5px;color:var(--ink);line-height:1.05;}
+  .diet-card .dcount{font-size:12px;color:var(--gray);margin-top:5px;font-weight:500;}
+  .diet-card .dnote{font-size:12px;color:var(--gray);margin-top:5px;font-weight:500;line-height:1.4;}
+  .diet-card.severe{background:var(--red);border-color:var(--red);color:#fff;}
+  .diet-card.severe .dlabel{color:rgba(255,255,255,.85);}
+  .diet-card.severe .dname{color:#fff;}
+  .diet-card.severe .dcount,.diet-card.severe .dnote{color:#fff;opacity:.92;}
 
   /* ── Menu changes strip ── */
-  .changes-card{border:1px solid var(--red);border-left:4px solid var(--red);background:#fff;padding:10px 14px;}
-  .change-row{font-size:13px;padding:3px 0;line-height:1.5;}
-  .change-old{color:var(--gray);text-decoration:line-through;}
-  .change-arrow{color:var(--red);font-weight:700;padding:0 6px;}
+  .changes{margin-top:18px;background:var(--change-fill);border:1.5px solid var(--change-line);border-radius:6px;padding:13px 16px;}
+  .changes-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .changes-tag{background:var(--red);color:#fff;font-size:9px;font-weight:800;letter-spacing:.12em;padding:3px 7px;border-radius:3px;text-transform:uppercase;}
+  .changes-meta{font-size:11px;color:var(--gray2);font-weight:500;}
+  .changes-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;}
+  .change-row{display:flex;align-items:center;gap:8px;font-size:14px;}
+  .change-old{color:var(--faint);text-decoration:line-through;font-weight:500;}
+  .change-arrow{color:var(--red);font-weight:700;}
   .change-new{font-weight:700;color:var(--ink);}
 
-  /* ── Page 2 layout ── */
-  .p2-cols{display:grid;grid-template-columns:1.05fr 1fr;gap:26px;margin-top:14px;flex:1;}
-
-  /* ── Timeline ── */
-  .tl{position:relative;}
-  .tl-item{display:grid;grid-template-columns:62px 1fr;gap:14px;position:relative;padding-bottom:16px;}
-  .tl-item:last-child{padding-bottom:0;}
-  .tl-anchor{text-align:right;}
-  .tl-time{font-family:var(--serif);font-weight:600;font-size:17px;color:var(--ink);line-height:1;}
-  .tl-dur{font-size:10px;color:var(--gray);margin-top:3px;letter-spacing:.02em;}
-  .tl-body{border-left:1.5px solid var(--line);padding-left:18px;position:relative;}
-  .tl-body::before{content:"";position:absolute;left:-6.5px;top:3px;width:11px;height:11px;border-radius:50%;background:var(--cream);border:2.5px solid var(--green);}
-  .tl-item.flag .tl-body::before{border-color:var(--red);background:var(--red);}
-  .tl-title{font-weight:600;font-size:13.5px;color:var(--ink);}
-  .tl-desc{font-size:12px;color:var(--gray);margin-top:2px;line-height:1.4;}
-
-  /* ── Stacked right blocks ── */
-  .blk{margin-bottom:16px;}
-  .blk .label{margin-bottom:6px;display:block;}
-  .kv{font-size:14px;line-height:1.5;}
-  .notes-list{list-style:none;}
-  .notes-list li{font-size:12.5px;line-height:1.45;padding:3px 0 3px 14px;position:relative;}
-  .notes-list li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--green);}
-  .bev-row{display:flex;align-items:center;gap:9px;padding:4.5px 0;font-size:15px;}
-  .bev-tag{font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 7px;border-radius:3px;text-transform:uppercase;flex-shrink:0;width:66px;text-align:center;color:#fff;}
-  .t-spark{background:#b8902a;} .t-white{background:#9aa06b;} .t-red{background:var(--red);} .t-beer{background:#3a3530;}
-  .contact-name{font-family:var(--serif);font-weight:600;font-size:16px;}
-  .contact-line{font-size:12.5px;color:var(--gray);margin-top:2px;}
-
-  /* ── Cost summary ── */
-  .cost{border:1px solid var(--line);margin-top:2px;}
-  .cost-row{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);font-size:13px;}
-  .cost-row .k{color:var(--gray);font-weight:500;letter-spacing:.02em;}
-  .cost-row .v{font-weight:600;font-variant-numeric:tabular-nums;}
-  .cost-row.balance{background:var(--green);color:#fff;border-bottom:0;}
-  .cost-row.balance .k{color:rgba(255,255,255,.85);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.12em;}
-  .cost-row.balance .v{font-family:var(--serif);font-size:17px;}
-  .out-tag{font-size:8.5px;font-weight:700;letter-spacing:.1em;background:var(--red);color:#fff;padding:2px 7px;border-radius:3px;text-transform:uppercase;margin-left:8px;}
-  .draft{font-size:10.5px;color:var(--red);font-style:italic;margin-top:5px;}
+  /* ── Menu ── */
+  .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 32px;margin-top:2px;}
+  .course{break-inside:avoid;margin-bottom:10px;}
+  .course-title{font-family:var(--serif);font-style:italic;font-size:16px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:7px;}
+  .dish{display:flex;gap:8px;padding:3px 0;align-items:baseline;}
+  .dish .em{color:var(--red);font-size:13px;line-height:1.4;flex:none;}
+  .dish .body{flex:1;}
+  .dish .dname{font-size:13.5px;font-weight:700;color:var(--ink);}
+  .dish .det{font-size:13px;color:#736a5d;}
+  .changed{background:var(--red);color:#fff;font-size:8.5px;font-weight:800;letter-spacing:.08em;padding:1.5px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;white-space:nowrap;text-transform:uppercase;}
+  .prep-line{font-size:11.5px;color:var(--gray2);margin-top:2px;font-style:italic;}
 
   /* ── Footer ── */
-  .foot{margin-top:auto;display:flex;justify-content:space-between;font-size:9.5px;color:var(--gray);letter-spacing:.04em;padding-top:7px;border-top:1px solid var(--line);}
-  .foot .copy{color:var(--green);font-weight:600;text-transform:uppercase;letter-spacing:.12em;}
+  .foot{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:10px;color:var(--faint);letter-spacing:.04em;}
+  .foot .biz{font-weight:700;color:var(--green);}
 
-  /* ── Page 2 header ── */
-  .p2-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:12px;border-bottom:1px solid var(--line);}
-  .p2-title{font-family:var(--serif);font-weight:600;font-size:26px;color:var(--ink);}
-  .p2-meta{font-size:11px;color:var(--gray);letter-spacing:.04em;}
+  /* ── Page 2 head + columns ── */
+  .p2-head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:12px;}
+  .p2-title{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--ink);}
+  .p2-meta{font-size:12px;color:var(--gray);font-weight:600;}
+  .p2-cols{display:grid;grid-template-columns:1.25fr 1fr;gap:28px;margin-top:22px;}
+  .col-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:14px;}
+
+  /* ── Timeline ── */
+  .tl-item{display:flex;gap:14px;padding-bottom:18px;}
+  .tl-item:last-child{padding-bottom:0;}
+  .tl-anchor{width:74px;flex:none;text-align:right;}
+  .tl-time{font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink);line-height:1;}
+  .tl-dur{font-size:10px;color:var(--faint);font-weight:600;margin-top:3px;}
+  .tl-rail{flex:none;display:flex;flex-direction:column;align-items:center;}
+  .tl-dot{width:11px;height:11px;border-radius:50%;background:var(--green);border:2px solid var(--cream);box-shadow:0 0 0 1.5px var(--green);margin-top:3px;flex:none;}
+  .tl-item.flag .tl-dot{background:var(--red);box-shadow:0 0 0 1.5px var(--red);}
+  .tl-line{width:2px;flex:1;background:var(--line);margin-top:3px;min-height:14px;}
+  .tl-body{flex:1;padding-bottom:2px;}
+  .tl-title{font-size:15px;font-weight:700;color:var(--ink);}
+  .tl-desc{font-size:12.5px;color:#736a5d;margin-top:2px;line-height:1.35;}
+
+  /* ── Right-column boxes ── */
+  .rcol{display:flex;flex-direction:column;gap:18px;}
+  .box{border:1.5px solid var(--line2);border-radius:6px;padding:15px 16px;}
+  .box.fill{background:var(--fill);border:0;}
+  .box-title{font-size:11px;letter-spacing:.16em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:9px;}
+  .notes-list{list-style:none;display:flex;flex-direction:column;gap:8px;}
+  .notes-list li{display:flex;gap:8px;font-size:13px;line-height:1.4;color:#332e26;}
+  .notes-list li .b{color:var(--red);font-weight:700;flex:none;}
+  .contact-name{font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);}
+  .contact-lines{font-size:13px;color:#736a5d;margin-top:6px;line-height:1.7;}
+  .bar-tag{display:inline-block;background:var(--green);color:#fff;font-size:9px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:3px;text-transform:uppercase;}
+  .bar-tab-amt{display:inline-block;margin-left:7px;font-size:11px;font-weight:600;color:var(--gray);}
+  .bar-note{font-size:13px;color:#332e26;margin-top:8px;line-height:1.4;}
+
+  /* ── Cost summary ── */
+  .cost{border:1.5px solid var(--line2);border-radius:6px;overflow:hidden;}
+  .cost-title{font-size:11px;letter-spacing:.16em;font-weight:800;color:var(--green);text-transform:uppercase;padding:15px 16px 9px;}
+  .cost-row{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;font-size:13px;border-top:1px solid var(--hair);}
+  .cost-row .k{color:var(--gray);font-weight:500;}
+  .cost-row .v{font-family:var(--serif);font-size:16px;font-weight:600;color:var(--ink);}
+  .cost-row .v.small{font-size:14px;}
+  .cost-row.balance{background:var(--green);color:#fff;border-top:0;padding:11px 16px;}
+  .cost-row.balance .k{color:#fff;font-size:12px;font-weight:700;}
+  .cost-row.balance .v{color:#fff;font-size:17px;}
+  .out-tag{background:var(--red);color:#fff;font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:7px;}
+
+  /* ── Beverages ── */
+  .bev{margin-top:24px;}
+  .bev-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px 22px;}
+  .bev-row{display:flex;gap:10px;align-items:baseline;border-bottom:1px solid var(--hair);padding-bottom:7px;}
+  .bev-tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:#fff;padding:3px 6px;border-radius:3px;flex:none;text-transform:uppercase;}
+  .bev-name{font-size:13.5px;font-weight:600;color:var(--ink);}
+  .bev-desc{font-size:12px;color:#736a5d;font-weight:400;}
+  .t-spark{background:#b07c25;} .t-white{background:#a98f2a;} .t-red{background:#7a2420;} .t-beer{background:var(--green);}
+
+  /* ── Full-width blocks below the grid (setup / payment / note) ── */
+  .blk{margin-top:22px;}
+  .blk-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:8px;}
+  .blk .kv{font-size:13.5px;line-height:1.5;color:#332e26;}
 
   @page{size:A4;margin:0;}
   @media print{
     html,body{background:none;}
-    .sheet{margin:0;box-shadow:none;page-break-after:always;}
+    .sheet{margin:0;page-break-after:always;}
     .sheet:last-child{page-break-after:auto;}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
-  @media screen{ .sheet{box-shadow:0 2px 14px rgba(0,0,0,.14);} }
+  @media screen{ .sheet{box-shadow:0 8px 40px rgba(0,0,0,.16);} }
 </style>
 </head>
 <body>
@@ -828,27 +876,16 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     </div>
     <div class="mast-right">
       <div class="beo-num">BEO #${booking.id}</div>
-      ${isConfirmed ? `<div class="pill"><span class="dot"></span>Confirmed</div>` : (booking.status ? `<div class="pill" style="background:var(--gray);">${escHtml(String(booking.status).replace(/_/g, " "))}</div>` : "")}
+      ${isConfirmed ? `<div class="pill"><span class="dot"></span>Confirmed</div>` : (booking.status ? `<div class="pill is-muted">${escHtml(String(booking.status).replace(/_/g, " "))}</div>` : "")}
     </div>
   </header>
-
-  <div class="band">
-    <div class="band-cell band-guests">
-      <div class="label">Guests</div>
-      <div class="band-num">${guestCount ? escHtml(String(guestCount)) : "—"}</div>
-    </div>
-    ${eventDate ? `<div class="band-cell"><div class="label">Date</div><div class="band-val">${escHtml(eventDate)}</div></div>` : ""}
-    ${(timeRange && timeRange !== "—") ? `<div class="band-cell"><div class="label">Service</div><div class="band-val">${escHtml(timeRange)}</div></div>` : ""}
-    ${roomLabel ? `<div class="band-cell"><div class="label">Room</div><div class="band-val">${escHtml(roomLabel)}</div></div>` : ""}
-    ${setupSummary ? `<div class="band-cell"><div class="label">Setup</div><div class="band-val">${escHtml(setupSummary)}</div></div>` : ""}
-  </div>
-
+${bandHtml}
   ${show('dietary', dietarySection)}
   ${menuChangesSection}
   ${show('food', menuSection)}
   ${show('kitchen', kitchenSection)}
 
-  ${pageFooter("Kitchen copy · Page 1 of 2")}
+  ${pageFooter("Kitchen copy &middot; Page 1 of 2")}
 </section>
 
 <!-- ═══════════════ PAGE 2 — SERVICE & BILLING ═══════════════ -->
@@ -859,25 +896,26 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   </header>
 
   <div class="p2-cols">
-    <!-- Left: run of night, room setup, key notes -->
+    <!-- Left: run of night -->
     <div>
       ${show('timeline', timelineSection)}
-      ${show('setup', setupSection)}
-      ${show('notes', notesSection)}
     </div>
 
-    <!-- Right: bar & beverage, contact, cost -->
-    <div>
-      ${show('drinks', beveragesSection)}
-      ${barSection}
+    <!-- Right: key notes, contact, cost, bar arrangement -->
+    <div class="rcol">
+      ${show('notes', notesSection)}
       ${contactSection}
-      ${paymentSection}
-      ${show('footer', footerNoteSection)}
       ${show('financials', financialsSection)}
+      ${show('drinks', barArrangementSection)}
     </div>
   </div>
 
-  ${pageFooter("Service copy · Page 2 of 2")}
+  ${show('drinks', beveragesSection)}
+  ${show('setup', setupSection)}
+  ${paymentSection}
+  ${show('footer', footerNoteSection)}
+
+  ${pageFooter("Service copy &middot; Page 2 of 2")}
 </section>
 
 </body>
@@ -911,11 +949,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: "networkidle0" });
       // The design owns its own layout: `@page{size:A4;margin:0}` + each
-      // `.sheet` is sized to A4 (210×297mm) with its own 15mm internal
-      // padding and an absolutely-positioned in-sheet footer. So we zero
-      // Puppeteer's margins, honour the page CSS size, and drop the
-      // header/footer template — this makes the downloaded PDF match the
-      // on-screen `?format=html` preview 1:1.
+      // `.sheet` is sized to A4 (210×297mm) with its own internal padding and
+      // an in-sheet footer. So we zero Puppeteer's margins, honour the page
+      // CSS size, and drop the header/footer template — this makes the
+      // downloaded PDF match the on-screen `?format=html` preview 1:1.
       const pdf = await page.pdf({
         printBackground: true,
         preferCSSPageSize: true,
@@ -952,7 +989,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       await browser.close();
     }
   } catch (err) {
-    console.error("[BEO PDF]", err);
-    res.status(500).send("Failed to generate BEO");
+    console.error("[BEO PDF] render failed:", err);
+    if (!res.headersSent) res.status(500).send("Failed to generate BEO PDF");
   }
 }
