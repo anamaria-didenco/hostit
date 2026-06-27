@@ -5,6 +5,7 @@ import { ChevronLeft, Printer, CheckSquare, Square, Plus, Trash2 } from "lucide-
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
+import { SectionHead } from "@/components/ui/section-head";
 
 interface ChecklistItem {
   id: string;
@@ -151,7 +152,8 @@ export default function Checklist() {
             {/* Header */}
             <div className="flex items-start justify-between gap-3 mb-6 print:mb-4">
               <div className="min-w-0">
-                <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink print:text-2xl break-words">{selectedInstance.name}</h1>
+                <div className="font-bebas text-[10px] font-extrabold uppercase tracking-[0.32em] text-primary mb-1">CHECKLIST</div>
+                <h1 className="font-cormorant text-2xl md:text-3xl font-semibold text-ink tracking-[-0.01em] print:text-2xl break-words">{selectedInstance.name}</h1>
                 <p className="font-dm text-sm text-muted-foreground mt-1">
                   {completedCount(selectedInstance)} of {(selectedInstance.items as ChecklistItem[]).length} tasks completed
                 </p>
@@ -174,6 +176,11 @@ export default function Checklist() {
             </div>
 
             {/* Items */}
+            <SectionHead
+              title="Setup Checklist"
+              meta={`${completedCount(selectedInstance)}/${(selectedInstance.items as ChecklistItem[]).length}`}
+              className="mb-3"
+            />
             <div className="space-y-2">
               {(selectedInstance.items as ChecklistItem[]).map((item) => (
                 <div
@@ -193,7 +200,7 @@ export default function Checklist() {
                     {item.text}
                   </span>
                   {item.category && (
-                    <span className="font-bebas text-xs tracking-widest text-muted-foreground bg-stone-100 px-2 py-0.5 print:border print:border-stone-300">
+                    <span className="font-bebas text-xs tracking-widest text-muted-foreground bg-secondary rounded-[3px] px-2 py-0.5 print:border print:border-stone-300">
                       {item.category}
                     </span>
                   )}

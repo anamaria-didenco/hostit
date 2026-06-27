@@ -153,7 +153,7 @@ export function ThemeSwitcher() {
 
 function getFontFamily(id: string, role: "heading" | "body"): string {
   const map: Record<string, { heading: string; body: string }> = {
-    modern:    { heading: "'Inter', sans-serif",              body: "'Inter', sans-serif" },
+    modern:    { heading: "'Spectral', serif",                body: "'Hanken Grotesk', sans-serif" },
     editorial: { heading: "'Playfair Display', serif",        body: "'Lato', sans-serif" },
     luxe:      { heading: "'Cormorant Garamond', serif",      body: "'Jost', sans-serif" },
     dm:        { heading: "'DM Serif Display', serif",        body: "'DM Sans', sans-serif" },
@@ -161,5 +161,5 @@ function getFontFamily(id: string, role: "heading" | "body"): string {
     literary:  { heading: "'Fraunces', serif",                body: "'Nunito', sans-serif" },
     bold:      { heading: "'Bebas Neue', sans-serif",         body: "'Montserrat', sans-serif" },
   };
-  return map[id]?.[role] ?? "'Inter', sans-serif";
+  return map[id]?.[role] ?? "'Hanken Grotesk', sans-serif";
 }

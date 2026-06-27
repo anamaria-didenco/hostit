@@ -25,6 +25,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { getLoginUrl } from "@/const";
 import EventSpendSection from "@/components/EventSpendSection";
+import { SectionHead } from "@/components/ui/section-head";
+import { StatusBadge } from "@/components/ui/badge";
 
 function SortableSection({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -60,6 +62,23 @@ const CATEGORIES = [
   { value: "packdown", label: "Packdown", color: "bg-gray-100 text-gray-700" },
   { value: "other", label: "Other", color: "bg-cream text-ink/70" },
 ];
+
+// Editorial owner tones for the run-of-day timeline — maps a timeline item's
+// category to the rebrand's owner colours (Floor = blue, Kitchen = amber,
+// Bar = wine, AV/other = warm grey). Presentation only.
+const CATEGORY_TONE: Record<string, string> = {
+  setup: "#2f5488",        // Floor
+  guest: "#2f5488",        // Floor
+  food: "#b07c25",         // Kitchen
+  beverage: "#7a2420",     // Bar
+  speech: "#6a6256",       // AV / grey
+  entertainment: "#7a2420",// Bar
+  packdown: "#6a6256",
+  other: "#6a6256",
+};
+function categoryTone(cat?: string): string {
+  return CATEGORY_TONE[cat ?? "other"] ?? "#6a6256";
+}
 
 const COMMON_DIETARIES = [
   "Vegetarian", "Vegan", "Gluten Free", "Dairy Free", "Nut Allergy",
@@ -2029,7 +2048,7 @@ export default function RunsheetBuilder() {
               }}
               disabled={pushRunsheetToNbi.isPending}
               title="Push this booking to NowBookIt"
-              className="hidden lg:flex font-bebas tracking-widest text-xs bg-[#6b98e7] hover:bg-[#5a85d4] text-white px-3 py-1.5 items-center gap-1.5 transition-colors disabled:opacity-50"
+              className="hidden lg:flex font-bebas tracking-widest text-xs bg-[#2f5488] hover:bg-[#25426c] text-white px-3 py-1.5 items-center gap-1.5 transition-colors disabled:opacity-50"
             >
               <span className="font-bebas text-[10px] tracking-wider">NBI</span>
               {pushRunsheetToNbi.isPending ? 'PUSHING…' : 'PUSH TO NOWBOOKIT'}
@@ -2175,8 +2194,8 @@ export default function RunsheetBuilder() {
         <div className="hidden print:block mb-6 pb-4 border-b-2 border-ink">
           <div className="flex items-start justify-between">
             <div>
-              <div className="font-bebas text-2xl tracking-widest text-[var(--brand)] mb-1">FUNCTION RUNSHEET</div>
-              <div className="font-cormorant text-3xl font-semibold text-ink">{title}</div>
+              <div className="font-sans text-[10px] font-extrabold uppercase tracking-[0.32em] text-[var(--brand)] mb-1.5">RUNSHEET{sheetId ? ` · BEO #${sheetId}` : ""}</div>
+              <div className="font-serif text-3xl font-semibold text-ink tracking-[-0.01em]">{title}</div>
             </div>
             <div className="text-right">
               <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">PREPARED BY</div>
@@ -2188,19 +2207,23 @@ export default function RunsheetBuilder() {
 
         {/* ── Event Details Card ──────────────────────────────────────────── */}
         <div className="dante-card p-6 mb-6 print:shadow-none print:border-0 print:mb-2 print:p-0">
-          {/* Section header */}
-          <div className="flex items-center justify-between mb-4 no-print">
-            <div className="gold-rule max-w-xs"><span>EVENT DETAILS</span></div>
+          {/* Editorial event header — eyebrow + lifecycle status pill */}
+          <div className="flex items-end justify-between gap-3 mb-2 no-print">
+            <div className="font-sans text-[10px] font-extrabold uppercase tracking-[0.32em] text-primary">
+              RUNSHEET{sheetId ? ` · BEO #${sheetId}` : ""}
+            </div>
+            <StatusBadge status={booking ? "confirmed" : "draft"} tone={booking ? "blue" : "grey"} label={booking ? "Confirmed" : "Draft"} />
           </div>
-          {/* Editable title */}
+          {/* Editable title (venue / event name in Spectral) */}
           <div className="pb-4 no-print">
             <Input
               value={title}
               onChange={e => setTitle(e.target.value)}
-              className="text-2xl font-cormorant font-semibold text-ink border-0 border-b-2 border-ink/15 focus-visible:border-forest rounded-none px-0 bg-transparent"
+              className="text-2xl font-serif font-semibold text-ink tracking-[-0.01em] border-0 border-b-2 border-ink/15 focus-visible:border-forest rounded-none px-0 bg-transparent"
               placeholder="Event Runsheet Title"
             />
           </div>
+          <SectionHead title="Event Details" className="mb-4 no-print" />
 
           <div>
             {/* Event details grid */}
@@ -2213,7 +2236,7 @@ export default function RunsheetBuilder() {
                   onChange={e => setEventDate(e.target.value)}
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
                 />
-                <div className="hidden print:block font-dm text-sm font-semibold">{formattedEventDate || "—"}</div>
+                <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{formattedEventDate || "—"}</div>
               </div>
               <div>
                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">EVENT TYPE</label>
@@ -2237,9 +2260,9 @@ export default function RunsheetBuilder() {
                   value={guestCount}
                   onChange={e => setGuestCount(e.target.value)}
                   placeholder="0"
-                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print font-serif [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]"
                 />
-                <div className="hidden print:block font-dm text-sm font-semibold">{guestCount || "—"}</div>
+                <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{guestCount || "—"}</div>
               </div>
             </div>
             {/* Event time row — venue/space lives in the grid above; this is times only */}
@@ -2251,9 +2274,9 @@ export default function RunsheetBuilder() {
                   step={900}
                   value={eventStartTime}
                   onChange={e => setEventStartTime(roundTimeToQuarter(e.target.value))}
-                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print font-serif [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]"
                 />
-                <div className="hidden print:block font-dm text-sm font-semibold">{eventStartTime || "—"}</div>
+                <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{eventStartTime || "—"}</div>
               </div>
               <div>
                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">END TIME</label>
@@ -2262,9 +2285,9 @@ export default function RunsheetBuilder() {
                   step={900}
                   value={eventEndTime}
                   onChange={e => setEventEndTime(roundTimeToQuarter(e.target.value))}
-                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print"
+                  className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 no-print font-serif [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]"
                 />
-                <div className="hidden print:block font-dm text-sm font-semibold">{eventEndTime || "—"}</div>
+                <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{eventEndTime || "—"}</div>
               </div>
             </div>
 
@@ -2332,12 +2355,12 @@ export default function RunsheetBuilder() {
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
                     <div>
                       <div className="font-bebas tracking-widest text-[10px] text-ink/40">DEPOSIT {paid ? '✓ PAID' : '— OUTSTANDING'}</div>
-                      <div className="font-cormorant text-xl font-semibold text-ink leading-tight">{dep > 0 ? money(dep) : '—'}</div>
+                      <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{dep > 0 ? money(dep) : '—'}</div>
                     </div>
                     {balance != null && (
                       <div>
                         <div className="font-bebas tracking-widest text-[10px] text-ink/40">BALANCE TO COLLECT</div>
-                        <div className="font-cormorant text-xl font-semibold text-ink leading-tight">{money(balance)}</div>
+                        <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{money(balance)}</div>
                       </div>
                     )}
                     <div className={`font-dm text-xs ${paid ? 'text-forest/80' : 'text-amber-700'}`}>
@@ -2523,9 +2546,9 @@ export default function RunsheetBuilder() {
                                     type="number" min={1}
                                     value={d.count}
                                     onChange={e => updateDietary(idx, "count", Number(e.target.value))}
-                                    className="font-cormorant text-3xl font-semibold text-forest bg-transparent border-0 focus:outline-none w-16 no-print leading-none"
+                                    className="font-serif text-3xl font-semibold text-forest [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] bg-transparent border-0 focus:outline-none w-16 no-print leading-none"
                                   />
-                                  <div className="hidden print:block font-cormorant text-3xl font-semibold text-forest leading-none">{d.count}</div>
+                                  <div className="hidden print:block font-serif text-3xl font-semibold text-forest [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] leading-none">{d.count}</div>
                                   <span className="font-bebas tracking-widest text-xs text-ink/40 mb-1">GUESTS</span>
                                 </div>
                                 <input
@@ -2635,12 +2658,12 @@ export default function RunsheetBuilder() {
             {/* Timeline header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
               <div className="flex items-center gap-3">
-                <h2 className="font-bebas tracking-widest text-ink/60 text-sm">EVENT TIMELINE</h2>
+                <h2 className="font-sans text-[10px] tracking-[0.2em] font-extrabold uppercase text-ink/60">EVENT TIMELINE</h2>
                 {items.length > 0 && (() => {
                   const sorted = [...items].sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
                   const first = sorted[0]; const last = sorted[sorted.length - 1];
                   return (
-                    <span className="font-dm text-xs text-ink/40">
+                    <span className="font-serif text-sm text-ink/50 [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">
                       {formatTime12(first.time)} – {formatTime12(addMinutes(last.time, last.duration))}
                     </span>
                   );
@@ -2718,8 +2741,12 @@ export default function RunsheetBuilder() {
                     >
                       {/* Main row */}
                       <div className="flex items-center gap-0 print:gap-3">
+                        {/* Run-of-day timeline dot — deep blue normally, red for flagged / key moments */}
+                        <div className="flex-none w-5 self-stretch flex items-center justify-center" aria-hidden>
+                          <span className={`size-2.5 rounded-full ${item.highlight ? 'bg-destructive' : 'bg-primary'}`} />
+                        </div>
                         {/* Time column — wider + bolder for service-time scannability */}
-                        <div className={`w-[110px] flex-shrink-0 px-4 py-3 border-r border-gold/15 print:border-0 relative ${isNow ? 'bg-emerald-100' : ''}`}>
+                        <div className={`w-[100px] flex-shrink-0 px-4 py-3 border-r border-gold/15 print:border-0 relative ${isNow ? 'bg-emerald-100' : ''}`}>
                           {isNow && (
                             <span className="no-print absolute -top-1 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[9px] font-bebas tracking-widest px-1.5 py-0.5 rounded-sm shadow-sm">NOW</span>
                           )}
@@ -2727,9 +2754,9 @@ export default function RunsheetBuilder() {
                             type="time"
                             value={item.time}
                             onChange={e => updateItemField(idx, "time", e.target.value)}
-                            className={`font-dm text-base font-bold bg-transparent border-0 focus:outline-none w-full no-print ${isNow ? 'text-emerald-700' : 'text-ink'}`}
+                            className={`font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] bg-transparent border-0 focus:outline-none w-full no-print ${isNow ? 'text-emerald-700' : 'text-ink'}`}
                           />
-                          <div className="hidden print:block font-dm text-base font-bold">{formatTime12(item.time)}</div>
+                          <div className="hidden print:block font-serif text-lg font-semibold tracking-[-0.01em] [font-variant-numeric:tabular-nums_lining-nums]">{formatTime12(item.time)}</div>
                           {item.duration > 0 && (
                             <div className={`text-[11px] font-dm no-print ${isNow ? 'text-emerald-700/70 font-semibold' : 'text-ink/30'}`}>{item.duration}m</div>
                           )}
@@ -2741,7 +2768,7 @@ export default function RunsheetBuilder() {
                             value={item.title}
                             onChange={e => updateItemField(idx, "title", e.target.value)}
                             placeholder="Item title..."
-                            className={`w-full font-dm text-sm text-ink bg-transparent border-0 focus:outline-none no-print ${item.bold ? 'font-bold' : 'font-semibold'} ${item.italic ? 'italic' : ''}`}
+                            className={`w-full font-sans text-sm text-ink bg-transparent border-0 focus:outline-none no-print ${item.bold ? 'font-bold' : 'font-semibold'} ${item.italic ? 'italic' : ''}`}
                           />
                           <div className={`hidden print:block font-dm text-sm ${item.bold ? 'font-bold' : 'font-semibold'} ${item.italic ? 'italic' : ''}`}>{item.title || "—"}</div>
                           <input
@@ -2753,10 +2780,15 @@ export default function RunsheetBuilder() {
                           {item.description && <div className="hidden print:block font-dm text-xs text-ink/50 mt-0.5 whitespace-normal">{item.description}</div>}
                         </div>
 
-                        {/* Assigned to */}
+                        {/* Assigned to — editorial owner tag, coloured by category */}
                         {item.assignedTo && (
-                          <div className="px-3 py-3 hidden md:block">
-                            <span className="font-dm text-xs text-ink/50 bg-linen px-2 py-0.5">{item.assignedTo}</span>
+                          <div className="px-3 py-3 hidden md:block print:block">
+                            <span
+                              className="inline-flex items-center gap-1 font-sans text-[9px] font-extrabold uppercase tracking-[0.1em]"
+                              style={{ color: categoryTone(item.category) }}
+                            >
+                              <Users className="w-3 h-3" />{item.assignedTo}
+                            </span>
                           </div>
                         )}
 
@@ -3052,7 +3084,7 @@ export default function RunsheetBuilder() {
                             type="number" min={1}
                             value={d.count}
                             onChange={e => updateDietary(idx, "count", Number(e.target.value))}
-                            className="font-cormorant text-3xl font-semibold text-forest bg-transparent border-0 focus:outline-none w-16 leading-none"
+                            className="font-serif text-3xl font-semibold text-forest [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] bg-transparent border-0 focus:outline-none w-16 leading-none"
                           />
                           <span className="font-bebas tracking-widest text-xs text-ink/40 mb-1">GUESTS</span>
                         </div>
@@ -3676,13 +3708,13 @@ export default function RunsheetBuilder() {
                     {booking?.minimumSpend != null && Number(booking.minimumSpend) > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/40">MINIMUM SPEND</div>
-                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(Number(booking.minimumSpend))}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(Number(booking.minimumSpend))}</div>
                       </div>
                     )}
                     {fnbFoodTotal > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/40">FOOD ({fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && Number(it.unitPrice ?? 0) > 0).length} items)</div>
-                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(fnbFoodTotal)}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(fnbFoodTotal)}</div>
                       </div>
                     )}
                     {/* Drinks subtotal intentionally removed — beverages are not
@@ -3690,25 +3722,25 @@ export default function RunsheetBuilder() {
                     {costFood > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/40">EXTRA F&amp;B (COSTS TAB)</div>
-                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(costFood)}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(costFood)}</div>
                       </div>
                     )}
                     {rsTabAmount && Number(rsTabAmount) > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/40">BAR TAB</div>
-                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(Number(rsTabAmount))}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(Number(rsTabAmount))}</div>
                       </div>
                     )}
                     {grandTotal > 0 && (
                       <div className="bg-forest text-cream border border-forest px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-cream/70">RUNNING TOTAL</div>
-                        <div className="font-cormorant text-lg font-semibold">{fmt(grandTotal)}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{fmt(grandTotal)}</div>
                       </div>
                     )}
                     {booking?.depositNzd != null && Number(booking.depositNzd) > 0 && (
                       <div className={`border px-3 py-2 ${booking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-200'}`}>
                         <div className="font-bebas tracking-widest text-[10px] text-ink/40">DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
-                        <div className="font-cormorant text-lg font-semibold text-ink">{fmt(Number(booking.depositNzd))}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(Number(booking.depositNzd))}</div>
                       </div>
                     )}
                   </div>
@@ -4015,14 +4047,14 @@ export default function RunsheetBuilder() {
                     <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? 'line-through text-ink/40' : 'text-ink'}`}>
                       {item.text}
                     </span>
-                    <span className={`font-bebas tracking-widest text-[10px] px-2 py-0.5 ${
-                      item.category === 'admin' ? 'bg-blue-100 text-blue-700' :
-                      item.category === 'staff' ? 'bg-purple-100 text-purple-700' :
-                      item.category === 'setup' ? 'bg-amber-100 text-amber-700' :
-                      item.category === 'bar' ? 'bg-blue-100 text-blue-700' :
-                      item.category === 'kitchen' ? 'bg-red-100 text-red-700' :
-                      item.category === 'guest' ? 'bg-pink-100 text-pink-700' :
-                      'bg-gray-100 text-gray-600'
+                    <span className={`font-bebas tracking-widest text-[10px] rounded-[3px] px-2 py-0.5 ${
+                      item.category === 'admin' ? 'bg-accent text-primary' :
+                      item.category === 'staff' ? 'bg-accent text-primary' :
+                      item.category === 'setup' ? 'bg-[#f3e8d4] text-[#8a5e15]' :
+                      item.category === 'bar' ? 'bg-[#f3e8d4] text-[#8a5e15]' :
+                      item.category === 'kitchen' ? 'bg-[#f9e3e0] text-[#a02b1f]' :
+                      item.category === 'guest' ? 'bg-accent text-primary' :
+                      'bg-secondary text-muted-foreground'
                     }`}>
                       {item.category}
                     </span>

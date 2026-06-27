@@ -16,7 +16,7 @@ const TABS = [
   { key: "proposals", label: "Proposals" },
 ];
 
-const BRAND_COLORS = ["#6b98e7", "#4a7dd4", "#8ab2ee", "#2d5fa8", "#b8ccf4"];
+const BRAND_COLORS = ["#2f5488", "#4a7dd4", "#8ab2ee", "#2d5fa8", "#b8ccf4"];
 
 export default function Reports() {
   const [tab, setTab] = useState("overview");
@@ -166,7 +166,7 @@ export default function Reports() {
                     <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
-                    <Bar dataKey="revenue" fill="#6b98e7" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="revenue" fill="#2f5488" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -359,7 +359,7 @@ export default function Reports() {
                   <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
                   <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="enquiries" stroke="#6b98e7" strokeWidth={2} dot={{ fill: "#6b98e7", r: 3 }} />
+                  <Line type="monotone" dataKey="enquiries" stroke="#2f5488" strokeWidth={2} dot={{ fill: "#2f5488", r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -438,7 +438,7 @@ export default function Reports() {
                   <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
-                  <Bar dataKey="revenue" fill="#6b98e7" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="revenue" fill="#2f5488" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -509,7 +509,7 @@ export default function Reports() {
         // Pipeline funnel data
         const funnelData = [
           { stage: "New Enquiry", count: (allLeads ?? []).filter((l: any) => l.status === "new").length, color: "#94a3b8" },
-          { stage: "Contacted", count: (allLeads ?? []).filter((l: any) => l.status === "contacted").length, color: "#6b98e7" },
+          { stage: "Contacted", count: (allLeads ?? []).filter((l: any) => l.status === "contacted").length, color: "#2f5488" },
           { stage: "Proposal Sent", count: (allLeads ?? []).filter((l: any) => l.status === "proposal_sent").length, color: "#8b5cf6" },
           { stage: "Negotiating", count: inNegotiation, color: "#f59e0b" },
           { stage: "Booked", count: booked, color: "#10b981" },

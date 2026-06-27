@@ -8,6 +8,8 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-display);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -43,79 +45,82 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   VenueFlowHQ — Blue & White Design System
+   VenueFlow — Editorial Paper Design System
    ─────────────────────────────────────────────────────────────────────────────
-   Primary pairing:
-     Blue Primary  #6b98e7  → primary accent, CTAs, active states
-     White         #FFFFFF  → all surfaces, cards, nav
-
-   Supporting palette:
-     Blue Secondary #9cabca  → tints, hover fills, light accents
-     Blue Dark      #5580cc  → hover/pressed states
-     Blue Tint      #e8edf6  → subtle fills, selected bg
-     Blue Bg        #f2f5fa  → page background
-     Charcoal       #2D3028  oklch(0.210 0.015 255)  → primary text
-     Mid Grey       #6B7280  oklch(0.520 0.010 220)  → secondary text, borders
-     Border         #dde3ee  → borders, dividers
+   An editorial, print-like look in VenueFlow blue:
+     Cream surface  #fffdf9  → page, cards, popovers (warm paper)
+     Deep blue      #2f5488  → primary, CTAs, active states, sidebar
+     Ink            #211d18  → primary text
+     Warm grey      #6a6256  → secondary text
+     Sand fill      #f4efe6  → secondary / muted fills
+     Blue tint      #e8edf6  → accent fills, selected bg
+     Warm border    #e3ddd0  → borders / dividers
+     Amber          #b07c25  → dietary / quoted / figures accent
+     Red            #c0392b  → alerts / overdue / destructive
    ─────────────────────────────────────────────────────────────────────────────
-   Typography: Inter
+   Typography:
+     Spectral (serif)        → display, figures, venue names, $ amounts, times
+     Hanken Grotesk (sans)   → all UI: body, eyebrows, labels, section heads
 ─────────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  --radius: 0.75rem;
+  /* Sharp, print-like geometry */
+  --radius: 0.375rem;
 
-  /* ── Surfaces ── */
-  /* Page background = very pale sage tint (almost white, slight warmth) */
-  --background:             #f2f5fa;
-  --foreground:             oklch(0.210 0.015 255);   /* Warm charcoal */
+  /* Editorial type families */
+  --font-display: 'Spectral', Georgia, serif;
+  --font-body:    'Hanken Grotesk', system-ui, sans-serif;
 
-  /* Cards & popovers = pure white */
-  --card:                   oklch(1.000 0.000 0);
-  --card-foreground:        oklch(0.210 0.015 255);
-  --popover:                oklch(1.000 0.000 0);
-  --popover-foreground:     oklch(0.210 0.015 255);
+  /* ── Surfaces = warm cream paper ── */
+  --background:             #fffdf9;
+  --foreground:             #211d18;   /* Ink */
 
-  /* ── Primary = VenueFlow Blue ── */
-  --primary:                #6b98e7;   /* VenueFlow Blue */
-  --primary-foreground:     oklch(1.000 0.000 0);
+  --card:                   #fffdf9;
+  --card-foreground:        #211d18;
+  --popover:                #fffdf9;
+  --popover-foreground:     #211d18;
 
-  /* Secondary = pale sage fill */
-  --secondary:              #edf0f7;
-  --secondary-foreground:   oklch(0.210 0.015 255);
+  /* ── Primary = VenueFlow deep blue ── */
+  --primary:                #2f5488;
+  --primary-foreground:     #ffffff;
 
-  /* Muted = cool light grey */
-  --muted:                  #edf0f7;
-  --muted-foreground:       oklch(0.520 0.010 220);
+  /* Secondary = warm sand fill */
+  --secondary:              #f4efe6;
+  --secondary-foreground:   #211d18;
 
-  /* Accent = sage tint */
+  /* Muted = warm sand + warm grey text */
+  --muted:                  #f4efe6;
+  --muted-foreground:       #6a6256;
+
+  /* Accent = cool blue tint */
   --accent:                 #e8edf6;
-  --accent-foreground:      #5580cc;   /* Sage Dark */
+  --accent-foreground:      #2f5488;
 
   /* ── Utility ── */
-  --destructive:            oklch(0.580 0.200 25);
-  --destructive-foreground: oklch(1.000 0.000 0);
+  --destructive:            #c0392b;
+  --destructive-foreground: #ffffff;
 
-  /* Borders = light sage-grey */
-  --border:                 #dde3ee;
-  --input:                  #edf0f7;
-  --ring:                   #6b98e7;   /* Sage Green focus ring */
+  /* Borders = warm paper-grey */
+  --border:                 #e3ddd0;
+  --input:                  #e6dccb;
+  --ring:                   #2f5488;
 
   /* ── Charts ── */
-  --chart-1: #6b98e7;   /* Sage Green */
-  --chart-2: oklch(0.460 0.120 40);    /* Burnt Sienna (supporting) */
-  --chart-3: oklch(0.560 0.022 220);   /* Stormy Sky (supporting) */
-  --chart-4: oklch(0.720 0.140 65);    /* Warm amber */
-  --chart-5: oklch(0.580 0.200 25);    /* Red */
+  --chart-1: #2f5488;   /* deep blue */
+  --chart-2: #b07c25;   /* amber */
+  --chart-3: #6b98e7;   /* light blue */
+  --chart-4: #c0392b;   /* red */
+  --chart-5: #8a8073;   /* warm grey */
 
-  /* ── Sidebar = white with sage border ── */
-  --sidebar:                    oklch(1.000 0.000 0);
-  --sidebar-foreground:         oklch(0.210 0.015 255);
-  --sidebar-primary:            #6b98e7;
-  --sidebar-primary-foreground: oklch(1.000 0.000 0);
-  --sidebar-accent:             #e8edf6;
-  --sidebar-accent-foreground:  #5580cc;
-  --sidebar-border:             #dde3ee;
-  --sidebar-ring:               #6b98e7;
+  /* ── Sidebar = light text on deep blue ── */
+  --sidebar:                    #2f5488;
+  --sidebar-foreground:         #eef2f8;
+  --sidebar-primary:            #ffffff;
+  --sidebar-primary-foreground: #2f5488;
+  --sidebar-accent:             rgba(255,255,255,0.14);
+  --sidebar-accent-foreground:  #ffffff;
+  --sidebar-border:             rgba(255,255,255,0.10);
+  --sidebar-ring:               #a9c8f2;
 }
 
 /* ── Base Layer ──────────────────────────────────────────────────────────── */
@@ -133,56 +138,59 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    font-size: 15px;
-    line-height: 1.6;
-    letter-spacing: -0.01em;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.55;
+    letter-spacing: 0;
   }
 
+  /* Display headings = Spectral serif */
   h1 {
-    font-family: 'Inter', -apple-system, system-ui, sans-serif;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    line-height: 1.05;
-    color: oklch(0.210 0.015 255);
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.08;
+    color: var(--foreground);
   }
   h2 {
-    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    font-family: var(--font-display);
     font-weight: 600;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.01em;
     line-height: 1.15;
-    color: oklch(0.210 0.015 255);
+    color: var(--foreground);
   }
   h3 {
-    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    font-family: var(--font-display);
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
     line-height: 1.25;
+    color: var(--foreground);
   }
   h4, h5 {
-    font-family: 'Inter', -apple-system, system-ui, sans-serif;
-    font-weight: 600;
-    letter-spacing: -0.015em;
+    font-family: var(--font-body);
+    font-weight: 700;
+    letter-spacing: 0.01em;
     line-height: 1.3;
   }
+  /* Eyebrow / section label = tracked uppercase Hanken */
   h6 {
-    font-family: 'Inter', -apple-system, system-ui, sans-serif;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    font-size: 0.7rem;
+    font-family: var(--font-body);
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    font-size: 0.6875rem;
     text-transform: uppercase;
-    color: #6b98e7;  /* Sage Green for section labels */
+    color: var(--primary);
   }
 
   label {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--font-body);
     font-size: 0.8125rem;
-    font-weight: 500;
-    letter-spacing: -0.005em;
+    font-weight: 600;
+    letter-spacing: 0;
   }
 
   input, textarea, select {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--font-body);
   }
 
   button:not(:disabled),
@@ -196,7 +204,7 @@
 
   hr {
     border: none;
-    border-top: 1px solid #dde3ee;
+    border-top: 1px solid var(--border);
     margin: 1.5rem 0;
   }
 }
@@ -204,125 +212,136 @@
 /* ── Utility Classes ─────────────────────────────────────────────────────── */
 @layer utilities {
 
-  /* ── Font families ── */
-  .font-inter     { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
-  .font-cormorant { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-weight: 600; }
-  .font-playfair  { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-weight: 600; }
-  .font-bebas     { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-  .font-dm        { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
-  .font-pinyon    { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-style: italic; }
-  .font-fell      { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
-  .font-alfa      { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-weight: 700; }
-  .font-pacifico  { font-family: 'Inter', -apple-system, system-ui, sans-serif; font-style: italic; font-weight: 600; }
+  /* ── Font families ──
+     Editorial rebrand: serif = Spectral (display/figures), sans = Hanken Grotesk (UI).
+     Legacy decorative class names are kept and repointed onto the two brand faces. */
+  .font-inter     { font-family: var(--font-body); }
+  .font-cormorant { font-family: var(--font-display); font-weight: 500; }
+  .font-playfair  { font-family: var(--font-display); font-weight: 600; }
+  .font-bebas     { font-family: var(--font-body); font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; }
+  .font-dm        { font-family: var(--font-body); }
+  .font-pinyon    { font-family: var(--font-display); font-style: italic; font-weight: 500; }
+  .font-fell      { font-family: var(--font-display); }
+  .font-alfa      { font-family: var(--font-display); font-weight: 700; }
+  .font-pacifico  { font-family: var(--font-display); font-style: italic; font-weight: 600; }
+  /* Editorial helpers */
+  .font-serif     { font-family: var(--font-display); }
+  .font-sans      { font-family: var(--font-body); }
+  .font-display   { font-family: var(--font-display); }
+  .figure         { font-family: var(--font-display); font-variant-numeric: tabular-nums lining-nums; letter-spacing: -0.01em; }
+  .eyebrow        { font-family: var(--font-body); font-weight: 800; text-transform: uppercase; letter-spacing: 0.22em; font-size: 0.625rem; }
 
-  /* ── Sage Green palette (text) ── */
-  .text-sage-green  { color: #6b98e7; }
-  .text-sage-dark   { color: #5580cc; }
-  .text-sage-light  { color: #9cabca; }
+  /* ── Editorial palette (text) ──
+     Brand roles: blue = primary, ink = text, amber = figures/dietary, red = alerts. */
+  .text-sage-green  { color: #2f5488; }   /* primary blue */
+  .text-sage-dark   { color: #1f3a63; }   /* deep blue */
+  .text-sage-light  { color: #6b98e7; }   /* light blue */
 
-  /* Legacy aliases → all map to sage/charcoal roles */
-  .text-forest    { color: #6b98e7; }
-  .text-teal      { color: #6b98e7; }
-  .text-burgundy  { color: #6b98e7; }
-  .text-terra     { color: #6b98e7; }
-  .text-blue      { color: #6b98e7; }
-  .text-gold      { color: #6b98e7; }
-  .text-sienna    { color: #6b98e7; }
-  .text-sage      { color: oklch(0.520 0.010 220); }
-  .text-stone     { color: oklch(0.520 0.010 220); }
-  .text-taupe     { color: oklch(0.520 0.010 220); }
-  .text-stormy    { color: oklch(0.520 0.010 220); }
-  .text-ink       { color: oklch(0.210 0.015 255); }
-  .text-brown     { color: oklch(0.210 0.015 255); }
-  .text-cream     { color: oklch(1.000 0.000 0); }
-  .text-warm-white { color: oklch(1.000 0.000 0); }
-  .text-ivory     { color: oklch(1.000 0.000 0); }
-  .text-parchment { color: oklch(1.000 0.000 0); }
-  .text-tomato    { color: oklch(0.580 0.200 25); }
-  .text-amber     { color: oklch(0.720 0.140 65); }
+  /* Legacy aliases → editorial roles */
+  .text-forest    { color: #2f5488; }
+  .text-teal      { color: #2f5488; }
+  .text-burgundy  { color: #2f5488; }
+  .text-terra     { color: #b07c25; }   /* terracotta → amber */
+  .text-blue      { color: #2f5488; }
+  .text-gold      { color: #b07c25; }   /* gold → amber */
+  .text-sienna    { color: #b07c25; }
+  .text-sage      { color: #6a6256; }
+  .text-stone     { color: #6a6256; }
+  .text-taupe     { color: #6a6256; }
+  .text-stormy    { color: #6a6256; }
+  .text-ink       { color: #211d18; }
+  .text-brown     { color: #211d18; }
+  .text-cream     { color: #fffdf9; }
+  .text-warm-white { color: #fffdf9; }
+  .text-ivory     { color: #fffdf9; }
+  .text-parchment { color: #fffdf9; }
+  .text-tomato    { color: #c0392b; }
+  .text-amber     { color: #b07c25; }
 
-  /* ── Sage Green palette (bg) ── */
-  .bg-sage-green  { background-color: #6b98e7; }
-  .bg-sage-dark   { background-color: #5580cc; }
+  /* ── Editorial palette (bg) ── */
+  .bg-sage-green  { background-color: #2f5488; }
+  .bg-sage-dark   { background-color: #1f3a63; }
   .bg-sage-tint   { background-color: #e8edf6; }
-  .bg-sage-light  { background-color: #9cabca; }
+  .bg-sage-light  { background-color: #6b98e7; }
 
   /* Legacy aliases */
-  .bg-forest      { background-color: #6b98e7; }
-  .bg-forest-dark { background-color: #5580cc; }
-  .bg-teal        { background-color: #6b98e7; }
-  .bg-teal-dark   { background-color: #5580cc; }
-  .bg-terra       { background-color: #6b98e7; }
-  .bg-burgundy    { background-color: #6b98e7; }
-  .bg-burg-dark   { background-color: #5580cc; }
-  .bg-blue        { background-color: #6b98e7; }
-  .bg-gold        { background-color: #6b98e7; }
-  .bg-sienna      { background-color: #6b98e7; }
-  .bg-sienna-tint { background-color: #e8edf6; }
-  .bg-cream       { background-color: oklch(1.000 0.000 0); }
-  .bg-ivory       { background-color: oklch(1.000 0.000 0); }
-  .bg-ivory-sand  { background-color: #edf0f8; }
-  .bg-linen       { background-color: #edf0f8; }
-  .bg-warm-white  { background-color: #f5f8fc; }
-  .bg-parchment   { background-color: oklch(1.000 0.000 0); }
-  .bg-ink         { background-color: oklch(0.210 0.015 255); }
-  .bg-stormy      { background-color: oklch(0.560 0.022 220); }
-  .bg-stormy-tint { background-color: oklch(0.940 0.010 220); }
-  .bg-tomato      { background-color: oklch(0.580 0.200 25); }
-  .bg-amber       { background-color: oklch(0.720 0.140 65); }
+  .bg-forest      { background-color: #2f5488; }
+  .bg-forest-dark { background-color: #1f3a63; }
+  .bg-teal        { background-color: #2f5488; }
+  .bg-teal-dark   { background-color: #1f3a63; }
+  .bg-terra       { background-color: #b07c25; }
+  .bg-burgundy    { background-color: #2f5488; }
+  .bg-burg-dark   { background-color: #1f3a63; }
+  .bg-blue        { background-color: #2f5488; }
+  .bg-gold        { background-color: #b07c25; }
+  .bg-sienna      { background-color: #b07c25; }
+  .bg-sienna-tint { background-color: #f3e8d4; }
+  .bg-cream       { background-color: #fffdf9; }
+  .bg-ivory       { background-color: #fffdf9; }
+  .bg-ivory-sand  { background-color: #f4efe6; }
+  .bg-linen       { background-color: #f4efe6; }
+  .bg-warm-white  { background-color: #fffdf9; }
+  .bg-parchment   { background-color: #fffdf9; }
+  .bg-ink         { background-color: #211d18; }
+  .bg-stormy      { background-color: #6a6256; }
+  .bg-stormy-tint { background-color: #f4efe6; }
+  .bg-tomato      { background-color: #c0392b; }
+  .bg-amber       { background-color: #b07c25; }
 
-  /* ── Sage Green palette (border) ── */
-  .border-sage-green { border-color: #6b98e7; }
-  .border-sage-dark  { border-color: #5580cc; }
+  /* ── Editorial palette (border) ── */
+  .border-sage-green { border-color: #2f5488; }
+  .border-sage-dark  { border-color: #1f3a63; }
 
   /* Legacy aliases */
-  .border-forest   { border-color: #6b98e7; }
-  .border-teal     { border-color: #6b98e7; }
-  .border-terra    { border-color: #6b98e7; }
-  .border-burgundy { border-color: #6b98e7; }
-  .border-gold     { border-color: oklch(0.590 0.040 264 / 0.25); }
-  .border-sienna   { border-color: #6b98e7; }
-  .border-stormy   { border-color: oklch(0.560 0.022 220); }
-  .border-ink      { border-color: oklch(0.210 0.015 255); }
-  .border-amber    { border-color: oklch(0.720 0.140 65); }
-  .border-tomato   { border-color: oklch(0.580 0.200 25); }
+  .border-forest   { border-color: #2f5488; }
+  .border-teal     { border-color: #2f5488; }
+  .border-terra    { border-color: #b07c25; }
+  .border-burgundy { border-color: #2f5488; }
+  .border-gold     { border-color: rgba(176, 124, 37, 0.35); }
+  .border-sienna   { border-color: #b07c25; }
+  .border-stormy   { border-color: #6a6256; }
+  .border-ink      { border-color: #211d18; }
+  .border-amber    { border-color: #b07c25; }
+  .border-tomato   { border-color: #c0392b; }
 
-  /* ── Divider rules ── */
+  /* ── Divider rules — tracked-uppercase eyebrow + warm rule ── */
   .terra-rule, .gold-rule {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: 0.10em;
-    font-size: 0.65rem;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-weight: 700;
-    color: oklch(0.590 0.040 264 / 0.55);
+    letter-spacing: 0.22em;
+    font-size: 0.625rem;
+    font-family: var(--font-body);
+    font-weight: 800;
+    color: #2f5488;
   }
   .terra-rule::before, .terra-rule::after,
   .gold-rule::before, .gold-rule::after {
     content: '';
     flex: 1;
-    height: 1px;
-    background: #dde3ee;
+    height: 1.5px;
+    background: #2f5488;
   }
 
-  /* ── Cards — white on sage-tint page bg ── */
+  /* ── Cards — cream paper, warm border, no resting shadow ── */
   .paradiso-card, .dante-card, .cream-card {
-    background-color: oklch(1.000 0.000 0);
-    border: 1px solid #dde3ee;
-    border-radius: 0.875rem;
-    box-shadow:
-      0 1px 3px oklch(0.210 0.020 140 / 0.06),
-      0 1px 2px oklch(0.210 0.020 140 / 0.04);
+    background-color: #fffdf9;
+    border: 1.5px solid #e6dccb;
+    border-radius: 8px;
+    box-shadow: none;
+    transition: box-shadow 0.15s ease;
+  }
+  .paradiso-card:hover, .dante-card:hover, .cream-card:hover {
+    box-shadow: 0 6px 18px rgba(22, 20, 15, 0.09);
   }
 
   /* ── Stripe / texture motif ── */
   .stripe-pattern {
     background-image: repeating-linear-gradient(
       90deg,
-      #dde3ee 0px,
-      #dde3ee 1px,
+      #e3ddd0 0px,
+      #e3ddd0 1px,
       transparent 1px,
       transparent 12px
     );
@@ -330,110 +349,110 @@
   .stripe-pattern-v {
     background-image: repeating-linear-gradient(
       180deg,
-      #dde3ee 0px,
-      #dde3ee 1px,
+      #e3ddd0 0px,
+      #e3ddd0 1px,
       transparent 1px,
       transparent 12px
     );
   }
 
-  /* ── Sidebar nav item ── */
+  /* ── Sidebar nav item — light text on deep blue ── */
   .nav-item {
     display: flex;
     align-items: center;
     gap: 0.625rem;
     padding: 0.5rem 0.75rem;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--font-body);
     font-size: 0.8125rem;
-    font-weight: 500;
-    letter-spacing: -0.005em;
-    color: oklch(0.520 0.010 220);   /* Mid grey — inactive */
+    font-weight: 600;
+    letter-spacing: 0;
+    color: rgba(238, 242, 248, 0.78);
     transition: color 0.12s ease, background-color 0.12s ease;
-    border-radius: 0.5rem;
+    border-radius: 6px;
     cursor: pointer;
   }
   .nav-item:hover {
-    color: oklch(0.210 0.015 255);
-    background-color: #e8edf6;  /* sage tint */
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.10);
   }
   .nav-item.active {
-    color: #5580cc;   /* Sage Dark */
-    background-color: #e8edf6;
-    font-weight: 600;
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.16);
+    font-weight: 700;
   }
 
-  /* ── Status pill badges ── */
-  .status-new       { background: #e8edf6; color: #5580cc; }
-  .status-quoted    { background: oklch(0.940 0.040 65 / 0.50); color: oklch(0.500 0.120 65); }
-  .status-confirmed { background: #e8edf6; color: #5580cc; }
-  .status-cancelled { background: oklch(0.940 0.008 220); color: oklch(0.520 0.010 220); }
+  /* ── Status pill badges — tracked-uppercase, lifecycle tones ── */
+  .status-new       { background: #e8edf6; color: #2f5488; }
+  .status-quoted    { background: #f3e8d4; color: #8a5e15; }
+  .status-confirmed { background: #e8edf6; color: #2f5488; }
+  .status-cancelled { background: #f0ede6; color: #6a6256; }
 
   /* ── Stat card ── */
   .stat-card {
-    background: oklch(1.000 0.000 0);
-    border: 1px solid #dde3ee;
-    border-radius: 0.875rem;
+    background: #fffdf9;
+    border: 1.5px solid #e6dccb;
+    border-radius: 8px;
     padding: 1.25rem;
-    box-shadow: 0 1px 4px oklch(0.210 0.020 140 / 0.05);
+    box-shadow: none;
   }
 
-  /* ── Primary button = Sage Green ── */
+  /* ── Primary button = deep blue ── */
   .btn-teal, .btn-forest {
-    background-color: #6b98e7;
-    color: oklch(1.000 0.000 0);
-    border-radius: 0.625rem;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-weight: 600;
+    background-color: #2f5488;
+    color: #ffffff;
+    border-radius: 6px;
+    font-family: var(--font-body);
+    font-weight: 700;
     font-size: 0.875rem;
-    letter-spacing: -0.01em;
-    transition: background-color 0.15s ease, transform 0.1s ease;
+    letter-spacing: 0;
+    transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
   }
-  .btn-teal:hover, .btn-forest:hover { background-color: #5580cc; }
-  .btn-teal:active, .btn-forest:active { transform: scale(0.98); }
+  .btn-teal:hover, .btn-forest:hover { background-color: #25426c; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(22, 20, 15, 0.12); }
+  .btn-teal:active, .btn-forest:active { transform: translateY(0); }
 
-  /* ── Outline button = Sage Green outline ── */
+  /* ── Outline button = blue rule ── */
   .btn-terra-outline, .btn-gold-outline {
-    background-color: oklch(1.000 0.000 0);
-    color: #5580cc;
-    border: 1.5px solid oklch(0.590 0.040 264 / 0.50);
-    border-radius: 0.625rem;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-weight: 500;
+    background-color: #fffdf9;
+    color: #2f5488;
+    border: 1.5px solid #2f5488;
+    border-radius: 6px;
+    font-family: var(--font-body);
+    font-weight: 700;
     font-size: 0.875rem;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
     transition: background-color 0.15s ease, border-color 0.15s ease;
   }
   .btn-terra-outline:hover, .btn-gold-outline:hover {
     background-color: #e8edf6;
-    border-color: oklch(0.590 0.040 264 / 0.80);
+    border-color: #25426c;
   }
 
-  /* ── Input focus = Sage ring ── */
+  /* ── Input focus = blue ring ── */
   .input-paradiso, .input-dante {
-    border: 1px solid #dde3ee;
-    border-radius: 0.625rem;
-    background: oklch(1.000 0.000 0);
-    font-family: 'Inter', system-ui, sans-serif;
+    border: 1.5px solid #e6dccb;
+    border-radius: 4px;
+    background: #fffdf9;
+    font-family: var(--font-body);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
   .input-paradiso:focus, .input-dante:focus {
     outline: none;
-    border-color: #6b98e7;
-    box-shadow: 0 0 0 3px oklch(0.590 0.040 264 / 0.15);
+    border-color: #2f5488;
+    box-shadow: 0 0 0 3px rgba(47, 84, 136, 0.18);
   }
 
-  /* ── Logo ── */
+  /* ── Logo — Spectral wordmark ── */
   .logo-script {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-weight: 700;
-    letter-spacing: -0.04em;
-    color: oklch(0.210 0.015 255);
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--foreground);
     line-height: 1;
   }
 
   /* ── Dot grid texture ── */
   .checkerboard {
-    background-image: radial-gradient(circle, #dde3ee 1px, transparent 1px);
+    background-image: radial-gradient(circle, #e3ddd0 1px, transparent 1px);
     background-size: 20px 20px;
   }
 
@@ -459,42 +478,49 @@
    Applied via data-theme="..." on <html> element
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Theme: Sage (default — already in :root, kept for explicitness) ── */
+/* ── Theme: Sage (APP DEFAULT — renders the editorial VenueFlow blue look) ── */
 [data-theme="sage"] {
-  --background:             #f2f5fa;
-  --foreground:             oklch(0.210 0.015 255);
-  --card:                   oklch(1.000 0.000 0);
-  --card-foreground:        oklch(0.210 0.015 255);
-  --popover:                oklch(1.000 0.000 0);
-  --popover-foreground:     oklch(0.210 0.015 255);
-  --primary:                #6b98e7;
-  --primary-foreground:     oklch(1.000 0.000 0);
-  --secondary:              #edf0f7;
-  --secondary-foreground:   oklch(0.210 0.015 255);
-  --muted:                  #edf0f7;
-  --muted-foreground:       oklch(0.520 0.010 220);
+  --background:             #fffdf9;
+  --foreground:             #211d18;
+  --card:                   #fffdf9;
+  --card-foreground:        #211d18;
+  --popover:                #fffdf9;
+  --popover-foreground:     #211d18;
+  --primary:                #2f5488;
+  --primary-foreground:     #ffffff;
+  --secondary:              #f4efe6;
+  --secondary-foreground:   #211d18;
+  --muted:                  #f4efe6;
+  --muted-foreground:       #6a6256;
   --accent:                 #e8edf6;
-  --accent-foreground:      #5580cc;
-  --border:                 #dde3ee;
-  --input:                  #edf0f7;
-  --ring:                   #6b98e7;
-  --sidebar:                oklch(1.000 0.000 0);
-  --sidebar-foreground:     oklch(0.210 0.015 255);
-  --sidebar-primary:        #6b98e7;
-  --sidebar-primary-foreground: oklch(1.000 0.000 0);
-  --sidebar-accent:         #e8edf6;
-  --sidebar-accent-foreground: #5580cc;
-  --sidebar-border:         #dde3ee;
-  --sidebar-ring:           #6b98e7;
+  --accent-foreground:      #2f5488;
+  --destructive:            #c0392b;
+  --destructive-foreground: #ffffff;
+  --border:                 #e3ddd0;
+  --input:                  #e6dccb;
+  --ring:                   #2f5488;
+  --chart-1: #2f5488;
+  --chart-2: #b07c25;
+  --chart-3: #6b98e7;
+  --chart-4: #c0392b;
+  --chart-5: #8a8073;
+  --sidebar:                #2f5488;
+  --sidebar-foreground:     #eef2f8;
+  --sidebar-primary:        #ffffff;
+  --sidebar-primary-foreground: #2f5488;
+  --sidebar-accent:         rgba(255,255,255,0.14);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border:         rgba(255,255,255,0.10);
+  --sidebar-ring:           #a9c8f2;
   /* Brand tokens */
-  --brand-primary:   #8D957E;
-  --brand-accent:    #6e7862;
-  --brand-surface:   #F0F2EE;
-  --brand-text:      #2D3028;
-  --brand-border:    #E8EAE6;
-  --brand-header-bg: #2D3028;
+  --brand-primary:   #2f5488;
+  --brand-accent:    #b07c25;
+  --brand-surface:   #fffdf9;
+  --brand-text:      #211d18;
+  --brand-border:    #e3ddd0;
+  --brand-header-bg: #2f5488;
   --brand-header-fg: #ffffff;
-  --brand-gold:      #8D957E;
+  --brand-gold:      #b07c25;
 }
 
 /* ── Theme: Forest (deep green + gold + cream — original VenueFlowHQ brand) ── */
@@ -687,10 +713,11 @@
   --brand-gold:      #e8734a;
 }
 
-/* ── Font CSS variables (set dynamically by ThemeContext) ────────────────── */
+/* ── Font CSS variables (set dynamically by ThemeContext) ──────────────────
+   Editorial brand defaults: Spectral display / Hanken Grotesk body. */
 :root {
-  --font-heading: 'Inter', -apple-system, system-ui, sans-serif;
-  --font-body:    'Inter', -apple-system, system-ui, sans-serif;
+  --font-heading: var(--font-display);
+  --font-body:    'Hanken Grotesk', system-ui, sans-serif;
 }
 
 /* ── Theme: Seafoam ── */

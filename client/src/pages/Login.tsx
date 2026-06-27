@@ -38,20 +38,21 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f2f5fa] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[#fffdf9] flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <img src="/logo-icon.png" alt="VenueFlow" className="h-12 w-auto" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Sign in</h1>
-          <p className="text-gray-500 text-sm mt-1">Enter your details to continue</p>
+          <div className="font-sans text-[10px] font-extrabold uppercase tracking-[0.32em] text-[#2f5488] mb-2">VenueFlow</div>
+          <h1 className="font-serif text-3xl font-semibold tracking-[-0.01em] text-[#211d18]">Sign in</h1>
+          <p className="text-[#6a6256] text-sm mt-1">Enter your details to continue</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-[#dde3ee] shadow-sm p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="bg-[#fffdf9] rounded-lg border-[1.5px] border-[#e6dccb] p-6 space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Email <span className="text-gray-400 font-normal">(leave blank for owner)</span>
+            <label htmlFor="email" className="block font-sans text-[9px] font-extrabold uppercase tracking-[0.16em] text-[#6a6256] mb-1.5">
+              Email <span className="text-[#a39684] font-medium normal-case tracking-normal">(leave blank for owner)</span>
             </label>
             <input
               id="email"
@@ -60,11 +61,11 @@ export default function Login() {
               onChange={e => setEmail(e.target.value)}
               placeholder="you@venue.co.nz"
               autoComplete="username"
-              className="w-full px-3 py-2.5 rounded-lg border border-[#dde3ee] text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6b98e7]/40 focus:border-[#6b98e7] transition"
+              className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#a39684] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label htmlFor="password" className="block font-sans text-[9px] font-extrabold uppercase tracking-[0.16em] text-[#6a6256] mb-1.5">
               Password
             </label>
             <input
@@ -76,18 +77,18 @@ export default function Login() {
               required
               autoFocus
               autoComplete="current-password"
-              className="w-full px-3 py-2.5 rounded-lg border border-[#dde3ee] text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#6b98e7]/40 focus:border-[#6b98e7] transition"
+              className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#a39684] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            <p className="text-sm text-[#a02b1f] bg-[#f9e3e0] rounded-[4px] px-3 py-2">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={loading || !password}
-            className="w-full bg-[#6b98e7] text-white font-semibold py-2.5 rounded-lg text-sm hover:bg-[#5580cc] transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-[#2f5488] text-white font-sans font-bold py-2.5 rounded-[6px] text-sm hover:bg-[#25426c] hover:-translate-y-px transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>

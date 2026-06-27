@@ -26,7 +26,7 @@ export type FontTheme =
   | "bold"        // Bebas Neue + Montserrat
 
 export const COLOUR_THEMES: { id: ColourTheme; label: string; swatches: string[] }[] = [
-  { id: "sage",          label: "Sage",          swatches: ["#8D957E", "#f5f2eb", "#5a6b52", "#c9a84c"] },
+  { id: "sage",          label: "VenueFlow",      swatches: ["#2f5488", "#fffdf9", "#b07c25", "#211d18"] },
   { id: "forest",        label: "Forest",         swatches: ["#2d5a27", "#FBF7E8", "#c9a84c", "#1a3d15"] },
   { id: "dusty-merlot",  label: "Dusty Merlot",   swatches: ["#62202F", "#FBF7E8", "#BFAD0E", "#C9DAA8"] },
   { id: "brique",        label: "Brique",          swatches: ["#741D28", "#FFF0F3", "#B9AC39", "#FF88BE"] },
@@ -41,7 +41,7 @@ export const COLOUR_THEMES: { id: ColourTheme; label: string; swatches: string[]
 ];
 
 export const FONT_THEMES: { id: FontTheme; label: string; heading: string; body: string }[] = [
-  { id: "modern",    label: "Modern",    heading: "Inter",               body: "Inter" },
+  { id: "modern",    label: "Editorial", heading: "Spectral",            body: "Hanken Grotesk" },
   { id: "editorial", label: "Editorial", heading: "Playfair Display",    body: "Lato" },
   { id: "luxe",      label: "Luxe",      heading: "Cormorant Garamond",  body: "Jost" },
   { id: "dm",        label: "DM",        heading: "DM Serif Display",    body: "DM Sans" },
@@ -52,7 +52,7 @@ export const FONT_THEMES: { id: FontTheme; label: string; heading: string; body:
 
 // ─── Font CSS variable maps ───────────────────────────────────────────────────
 const FONT_HEADING_MAP: Record<FontTheme, string> = {
-  modern:    "'Inter', -apple-system, system-ui, sans-serif",
+  modern:    "'Spectral', Georgia, serif",
   editorial: "'Playfair Display', Georgia, serif",
   luxe:      "'Cormorant Garamond', Georgia, serif",
   dm:        "'DM Serif Display', Georgia, serif",
@@ -62,7 +62,7 @@ const FONT_HEADING_MAP: Record<FontTheme, string> = {
 };
 
 const FONT_BODY_MAP: Record<FontTheme, string> = {
-  modern:    "'Inter', -apple-system, system-ui, sans-serif",
+  modern:    "'Hanken Grotesk', system-ui, sans-serif",
   editorial: "'Lato', -apple-system, system-ui, sans-serif",
   luxe:      "'Jost', -apple-system, system-ui, sans-serif",
   dm:        "'DM Sans', -apple-system, system-ui, sans-serif",

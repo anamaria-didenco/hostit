@@ -299,7 +299,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const venueLogoUrl = venue?.logoUrl ?? "";
     // White-label the BEO header / accents to the operator's brand colour.
     // Falls back to VenueFlow's default brand blue when none is configured.
-    const venuePrimaryColor = (venue as any)?.primaryColor ?? "#6b98e7";
+    const venuePrimaryColor = (venue as any)?.primaryColor ?? "#2f5488";
     const clientName = `${booking.firstName}${booking.lastName ? " " + booking.lastName : ""}`;
     const eventDate = fmtDate(booking.eventDate);
     const eventTime = booking.eventDate ? fmt12(new Date(booking.eventDate).toTimeString().slice(0,5)) : "";
@@ -708,7 +708,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --cream:#fffdf9; --ink:#16140f; --ink2:#211d18; --green:#1d3b2a; --red:#c0392b;
+    /* Editorial rebrand: the document accent is VenueFlow deep blue.
+       (--green is kept as the variable name the layout already references.) */
+    --cream:#fffdf9; --ink:#16140f; --ink2:#211d18; --green:#2f5488; --red:#c0392b;
     --gray:#6a6256; --gray2:#8a8073; --faint:#a39684;
     --line:#e3ddd0; --line2:#e6dccb; --hair:#eee6d8; --amber:#b07c25;
     --fill:#f4efe6; --change-fill:#fbf3e8; --change-line:#e6d9bf;
@@ -731,7 +733,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .mast-right{text-align:right;flex:none;padding-left:18px;}
   .beo-num{font-family:var(--serif);font-size:30px;font-weight:600;color:var(--ink);line-height:1;}
   .pill{display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--green);color:#fff;font-size:10px;font-weight:700;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase;}
-  .pill .dot{width:6px;height:6px;border-radius:50%;background:#7dd6a3;}
+  .pill .dot{width:6px;height:6px;border-radius:50%;background:#a9c8f2;}
   .pill.is-muted{background:var(--gray2);}
 
   /* ── Booking band ── */

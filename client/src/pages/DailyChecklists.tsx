@@ -220,7 +220,7 @@ export default function DailyChecklists() {
   return (
     <div className="min-h-screen bg-[#f9f5ef]">
       {/* Header */}
-      <div className="bg-[#6b98e7] text-white px-4 md:px-6 py-4 md:py-5">
+      <div className="bg-[#2f5488] text-white px-4 md:px-6 py-4 md:py-5">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="min-w-0">
             <a href="/dashboard" className="text-white/60 text-xs font-dm hover:text-white transition-colors mb-1 block">← Back to Dashboard</a>
@@ -278,7 +278,7 @@ export default function DailyChecklists() {
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key as any)}
-              className={`font-bebas tracking-widest text-xs md:text-sm px-3 md:px-5 py-3 border-b-2 transition-colors min-h-[44px] ${activeTab === t.key ? 'border-[#6b98e7] text-[#6b98e7]' : 'border-transparent text-[#8a7a60] hover:text-[#1a1209]'}`}
+              className={`font-bebas tracking-widest text-xs md:text-sm px-3 md:px-5 py-3 border-b-2 transition-colors min-h-[44px] ${activeTab === t.key ? 'border-[#2f5488] text-[#2f5488]' : 'border-transparent text-[#8a7a60] hover:text-[#1a1209]'}`}
             >
               {t.label}
             </button>
@@ -300,30 +300,30 @@ export default function DailyChecklists() {
                     <input autoFocus value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
                       onKeyDown={e => e.key === 'Enter' && createMut.mutate(createForm)}
                       placeholder="e.g. Bar Opening Checklist"
-                      className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7]" />
+                      className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
                   </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-[#8a7a60] block mb-1">CATEGORY</label>
                     <select value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}
-                      className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] bg-white">
+                      className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] bg-white">
                       {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-[#8a7a60] block mb-1">DATE (optional)</label>
                     <input type="date" value={createForm.assignedDate} onChange={e => setCreateForm(f => ({ ...f, assignedDate: e.target.value }))}
-                      className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] bg-white" />
+                      className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] bg-white" />
                   </div>
                   <div className="col-span-2">
                     <label className="font-bebas text-xs tracking-widest text-[#8a7a60] block mb-1">DESCRIPTION (optional)</label>
                     <input value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))}
                       placeholder="Brief description..."
-                      className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7]" />
+                      className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => createMut.mutate(createForm)} disabled={!createForm.name || createMut.isPending}
-                    className="font-bebas tracking-widest text-sm px-6 py-2 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6] disabled:opacity-50">CREATE</button>
+                    className="font-bebas tracking-widest text-sm px-6 py-2 bg-[#2f5488] text-white rounded hover:bg-[#25426c] disabled:opacity-50">CREATE</button>
                   <button onClick={() => setShowCreate(false)} className="font-bebas tracking-widest text-sm px-6 py-2 border border-[#c9a84c]/30 text-[#8a7a60] rounded hover:bg-[#f9f5ef]">CANCEL</button>
                 </div>
               </div>
@@ -333,7 +333,7 @@ export default function DailyChecklists() {
                 <div className="text-4xl mb-3">✅</div>
                 <h2 className="font-bebas text-2xl tracking-wider text-[#1a1209] mb-2">No Checklists Yet</h2>
                 <p className="font-dm text-sm text-[#8a7a60] mb-6">Create your first checklist — bar setup, opening procedures, cleaning rounds.</p>
-                <button onClick={() => setShowCreate(true)} className="font-bebas tracking-widest text-sm px-8 py-3 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6]">CREATE FIRST CHECKLIST</button>
+                <button onClick={() => setShowCreate(true)} className="font-bebas tracking-widest text-sm px-8 py-3 bg-[#2f5488] text-white rounded hover:bg-[#25426c]">CREATE FIRST CHECKLIST</button>
               </div>
             )}
             <div className="space-y-3">
@@ -349,7 +349,7 @@ export default function DailyChecklists() {
                           <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 rounded flex-shrink-0 ${cat.color}`}>{cat.label}</span>
                           <div className="min-w-0">
                             <div className="font-bebas text-lg tracking-wider text-[#1a1209] truncate">{cl.name}</div>
-                            {cl.assignedDate && <div className="font-dm text-xs text-[#6b98e7] font-medium truncate">{new Date(cl.assignedDate + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>}
+                            {cl.assignedDate && <div className="font-dm text-xs text-[#2f5488] font-medium truncate">{new Date(cl.assignedDate + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>}
                             {cl.description && <div className="font-dm text-xs text-[#8a7a60] truncate">{cl.description}</div>}
                           </div>
                         </div>
@@ -358,12 +358,12 @@ export default function DailyChecklists() {
                             <div className="text-right">
                               <div className="font-dm text-xs text-[#8a7a60]">{cl.checkedCount}/{cl.itemCount}</div>
                               <div className="w-16 h-1.5 bg-[#f9f5ef] rounded-full mt-1 overflow-hidden">
-                                <div className="h-full bg-[#6b98e7] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                <div className="h-full bg-[#2f5488] rounded-full transition-all" style={{ width: `${pct}%` }} />
                               </div>
                             </div>
                           )}
-                          <button onClick={e => { e.stopPropagation(); copyLink(cl.token); }} className="p-1.5 text-[#6b98e7] hover:bg-[#6b98e7]/10 rounded" title="Copy live link"><Copy className="w-3.5 h-3.5" /></button>
-                          <a href={getLiveLink(cl.token)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="p-1.5 text-[#6b98e7] hover:bg-[#6b98e7]/10 rounded" title="Open live view"><ExternalLink className="w-3.5 h-3.5" /></a>
+                          <button onClick={e => { e.stopPropagation(); copyLink(cl.token); }} className="p-1.5 text-[#2f5488] hover:bg-[#2f5488]/10 rounded" title="Copy live link"><Copy className="w-3.5 h-3.5" /></button>
+                          <a href={getLiveLink(cl.token)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="p-1.5 text-[#2f5488] hover:bg-[#2f5488]/10 rounded" title="Open live view"><ExternalLink className="w-3.5 h-3.5" /></a>
                           <button onClick={e => { e.stopPropagation(); duplicateMut.mutate({ id: cl.id }); }} disabled={duplicateMut.isPending} className="p-1.5 text-[#8a7a60] hover:bg-[#8a7a60]/10 rounded disabled:opacity-50" title="Duplicate"><CopyPlus className="w-3.5 h-3.5" /></button>
                           <button onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cl.name}"?`)) deleteMut.mutate({ id: cl.id }); }} className="p-1.5 text-red-400 hover:bg-red-50 rounded" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                           {isExpanded ? <ChevronDown className="w-4 h-4 text-[#8a7a60]" /> : <ChevronRight className="w-4 h-4 text-[#8a7a60]" />}
@@ -372,12 +372,12 @@ export default function DailyChecklists() {
                     </div>
                     {isExpanded && (
                       <div className="border-t border-[#c9a84c]/20">
-                        <div className="bg-[#6b98e7]/8 border-b border-[#6b98e7]/20 px-4 py-2 flex items-center justify-between gap-2">
-                          <span className="font-dm text-xs text-[#6b98e7]">Live staff link:</span>
+                        <div className="bg-[#2f5488]/8 border-b border-[#2f5488]/20 px-4 py-2 flex items-center justify-between gap-2">
+                          <span className="font-dm text-xs text-[#2f5488]">Live staff link:</span>
                           <div className="flex items-center gap-1 min-w-0">
-                            <span className="font-dm text-xs text-[#6b98e7] truncate">{getLiveLink(cl.token)}</span>
-                            <button onClick={() => copyLink(cl.token)} className="flex-shrink-0 text-[#6b98e7] hover:text-[#5a87d6]"><Copy className="w-3 h-3" /></button>
-                            <a href={getLiveLink(cl.token)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-[#6b98e7] hover:text-[#5a87d6]"><ExternalLink className="w-3 h-3" /></a>
+                            <span className="font-dm text-xs text-[#2f5488] truncate">{getLiveLink(cl.token)}</span>
+                            <button onClick={() => copyLink(cl.token)} className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><Copy className="w-3 h-3" /></button>
+                            <a href={getLiveLink(cl.token)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><ExternalLink className="w-3 h-3" /></a>
                           </div>
                         </div>
                         {(expandedChecklist?.items ?? []).length === 0 && <div className="px-5 py-4 text-center font-dm text-sm text-[#8a7a60]">No items yet — add your first task below.</div>}
@@ -385,25 +385,25 @@ export default function DailyChecklists() {
                           <div key={item.id} className="border-b border-[#c9a84c]/10 last:border-0">
                             {editingItem === item.id ? (
                               <div className="px-5 py-3 bg-[#f9f5ef]/60 space-y-2">
-                                <input autoFocus value={editItemText} onChange={e => setEditItemText(e.target.value)} className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 font-dm text-sm focus:outline-none focus:border-[#6b98e7]" />
-                                <input value={editItemNote} onChange={e => setEditItemNote(e.target.value)} placeholder="Note (optional)" className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 font-dm text-xs text-[#8a7a60] focus:outline-none focus:border-[#6b98e7]" />
+                                <input autoFocus value={editItemText} onChange={e => setEditItemText(e.target.value)} className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
+                                <input value={editItemNote} onChange={e => setEditItemNote(e.target.value)} placeholder="Note (optional)" className="w-full border border-[#c9a84c]/30 rounded px-3 py-1.5 font-dm text-xs text-[#8a7a60] focus:outline-none focus:border-[#2f5488]" />
                                 <div className="flex gap-2">
-                                  <button onClick={() => updateItemMut.mutate({ id: item.id, text: editItemText, note: editItemNote || undefined })} className="font-bebas tracking-widest text-xs px-4 py-1.5 bg-[#6b98e7] text-white rounded">SAVE</button>
+                                  <button onClick={() => updateItemMut.mutate({ id: item.id, text: editItemText, note: editItemNote || undefined })} className="font-bebas tracking-widest text-xs px-4 py-1.5 bg-[#2f5488] text-white rounded">SAVE</button>
                                   <button onClick={() => setEditingItem(null)} className="font-bebas tracking-widest text-xs px-4 py-1.5 border border-[#c9a84c]/30 text-[#8a7a60] rounded">CANCEL</button>
                                 </div>
                               </div>
                             ) : (
                               <div className="flex items-start gap-3 px-5 py-3 group hover:bg-[#f9f5ef]/50 transition-colors">
-                                <div className={`w-4 h-4 rounded border flex-shrink-0 mt-0.5 flex items-center justify-center ${item.checked ? 'bg-[#6b98e7] border-[#6b98e7]' : 'border-[#c9a84c]/40'}`}>{item.checked ? <Check className="w-3 h-3 text-white" /> : null}</div>
+                                <div className={`w-4 h-4 rounded border flex-shrink-0 mt-0.5 flex items-center justify-center ${item.checked ? 'bg-[#2f5488] border-[#2f5488]' : 'border-[#c9a84c]/40'}`}>{item.checked ? <Check className="w-3 h-3 text-white" /> : null}</div>
                                 <div className="flex-1 min-w-0">
                                   <div className={`font-dm text-sm ${item.checked ? 'line-through text-[#8a7a60]' : 'text-[#1a1209]'}`}>{item.text}</div>
                                   {item.note && <div className="font-dm text-xs text-[#8a7a60] mt-0.5">{item.note}</div>}
                                   {item.photoUrl && <div className="mt-2"><img src={item.photoUrl} alt="step" className="w-24 h-16 object-cover rounded border border-[#c9a84c]/20" /></div>}
                                 </div>
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                                  <button onClick={() => { setPendingPhotoItemId(item.id); fileInputRef.current?.click(); }} className="p-1 text-[#8a7a60] hover:text-[#6b98e7] rounded" title={item.photoUrl ? "Replace photo" : "Add photo"}><Camera className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => { setPendingPhotoItemId(item.id); fileInputRef.current?.click(); }} className="p-1 text-[#8a7a60] hover:text-[#2f5488] rounded" title={item.photoUrl ? "Replace photo" : "Add photo"}><Camera className="w-3.5 h-3.5" /></button>
                                   {item.photoUrl && <button onClick={() => updateItemMut.mutate({ id: item.id, photoUrl: "" })} className="p-1 text-[#8a7a60] hover:text-red-400 rounded" title="Remove photo"><X className="w-3 h-3" /></button>}
-                                  <button onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#8a7a60] hover:text-[#6b98e7] rounded"><Edit2 className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#8a7a60] hover:text-[#2f5488] rounded"><Edit2 className="w-3.5 h-3.5" /></button>
                                   <button onClick={() => { if (confirm('Delete this item?')) deleteItemMut.mutate({ id: item.id }); }} className="p-1 text-[#8a7a60] hover:text-red-400 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
                                 </div>
                               </div>
@@ -413,10 +413,10 @@ export default function DailyChecklists() {
                         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => { if (pendingPhotoItemId !== null) handlePhotoUpload(pendingPhotoItemId, e); }} />
                         <div className="px-5 py-3 bg-[#f9f5ef]/40 border-t border-[#c9a84c]/10">
                           <div className="flex gap-2 mb-2">
-                            <input value={newItemText[cl.id] ?? ""} onChange={e => setNewItemText(p => ({ ...p, [cl.id]: e.target.value }))} onKeyDown={e => e.key === 'Enter' && handleAddItem(cl.id)} placeholder="Add a task..." className="flex-1 border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7]" />
-                            <button onClick={() => handleAddItem(cl.id)} disabled={!newItemText[cl.id]?.trim() || addItemMut.isPending} className="font-bebas tracking-widest text-xs px-4 py-2 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6] disabled:opacity-50">ADD</button>
+                            <input value={newItemText[cl.id] ?? ""} onChange={e => setNewItemText(p => ({ ...p, [cl.id]: e.target.value }))} onKeyDown={e => e.key === 'Enter' && handleAddItem(cl.id)} placeholder="Add a task..." className="flex-1 border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
+                            <button onClick={() => handleAddItem(cl.id)} disabled={!newItemText[cl.id]?.trim() || addItemMut.isPending} className="font-bebas tracking-widest text-xs px-4 py-2 bg-[#2f5488] text-white rounded hover:bg-[#25426c] disabled:opacity-50">ADD</button>
                           </div>
-                          <input value={newItemNote[cl.id] ?? ""} onChange={e => setNewItemNote(p => ({ ...p, [cl.id]: e.target.value }))} placeholder="Optional note for this task..." className="w-full border border-[#c9a84c]/20 rounded px-3 py-1.5 font-dm text-xs text-[#8a7a60] focus:outline-none focus:border-[#6b98e7]" />
+                          <input value={newItemNote[cl.id] ?? ""} onChange={e => setNewItemNote(p => ({ ...p, [cl.id]: e.target.value }))} placeholder="Optional note for this task..." className="w-full border border-[#c9a84c]/20 rounded px-3 py-1.5 font-dm text-xs text-[#8a7a60] focus:outline-none focus:border-[#2f5488]" />
                         </div>
                       </div>
                     )}
@@ -449,7 +449,7 @@ export default function DailyChecklists() {
                 <div className="text-4xl mb-3">📋</div>
                 <h2 className="font-bebas text-2xl tracking-wider text-[#1a1209] mb-2">No Shift Runsheets Yet</h2>
                 <p className="font-dm text-sm text-[#8a7a60] mb-6">Create a daily briefing for your team — who's on where, specials, budget, VIP notes and more.</p>
-                <button onClick={() => setShowShiftCreate(true)} className="font-bebas tracking-widest text-sm px-8 py-3 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6]">CREATE FIRST SHIFT RUNSHEET</button>
+                <button onClick={() => setShowShiftCreate(true)} className="font-bebas tracking-widest text-sm px-8 py-3 bg-[#2f5488] text-white rounded hover:bg-[#25426c]">CREATE FIRST SHIFT RUNSHEET</button>
               </div>
             )}
 
@@ -493,7 +493,7 @@ export default function DailyChecklists() {
       {showAiPaste && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl rounded">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#c9a84c]/30 bg-[#6b98e7]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#c9a84c]/30 bg-[#2f5488]">
               <div>
                 <div className="font-bebas tracking-widest text-white text-lg flex items-center gap-2">
                   <Sparkles className="w-5 h-5" /> AI SMART PASTE
@@ -515,7 +515,7 @@ export default function DailyChecklists() {
                     onChange={e => setAiPasteText(e.target.value)}
                     placeholder={"e.g.\n- Wipe down bar tops\n- Restock garnish trays\n- Polish wine glasses\n- Check ice machine\n- Set float to $200"}
                     rows={12}
-                    className="w-full border border-[#c9a84c]/30 rounded font-dm text-sm focus:outline-none focus:border-[#6b98e7] p-3 resize-none"
+                    className="w-full border border-[#c9a84c]/30 rounded font-dm text-sm focus:outline-none focus:border-[#2f5488] p-3 resize-none"
                   />
                   <p className="font-dm text-xs text-[#8a7a60]">Bullet points, numbered lists, or just plain lines all work.</p>
                 </div>
@@ -527,7 +527,7 @@ export default function DailyChecklists() {
                       <input
                         value={aiParsed.name}
                         onChange={e => setAiParsed(p => p ? { ...p, name: e.target.value } : p)}
-                        className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7]"
+                        className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488]"
                       />
                     </div>
                     <div>
@@ -535,7 +535,7 @@ export default function DailyChecklists() {
                       <select
                         value={aiParsed.category}
                         onChange={e => setAiParsed(p => p ? { ...p, category: e.target.value } : p)}
-                        className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] bg-white"
+                        className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] bg-white"
                       >
                         {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                       </select>
@@ -549,7 +549,7 @@ export default function DailyChecklists() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => setAiParsed(p => p ? { ...p, items: p.items.map(i => ({ ...i, _selected: true })) } : p)}
-                        className="font-bebas tracking-widest text-[10px] text-[#6b98e7] hover:underline">SELECT ALL</button>
+                        className="font-bebas tracking-widest text-[10px] text-[#2f5488] hover:underline">SELECT ALL</button>
                       <button
                         onClick={() => setAiParsed(p => p ? { ...p, items: p.items.map(i => ({ ...i, _selected: false })) } : p)}
                         className="font-bebas tracking-widest text-[10px] text-[#8a7a60] hover:underline">NONE</button>
@@ -563,19 +563,19 @@ export default function DailyChecklists() {
                           type="checkbox"
                           checked={it._selected !== false}
                           onChange={e => setAiParsed(p => p ? { ...p, items: p.items.map((x, i) => i === idx ? { ...x, _selected: e.target.checked } : x) } : p)}
-                          className="mt-1.5 w-4 h-4 accent-[#6b98e7] flex-shrink-0"
+                          className="mt-1.5 w-4 h-4 accent-[#2f5488] flex-shrink-0"
                         />
                         <div className="flex-1 space-y-1">
                           <input
                             value={it.text}
                             onChange={e => setAiParsed(p => p ? { ...p, items: p.items.map((x, i) => i === idx ? { ...x, text: e.target.value } : x) } : p)}
-                            className="w-full font-dm text-sm border-0 border-b border-transparent hover:border-[#c9a84c]/30 focus:border-[#6b98e7] focus:outline-none bg-transparent py-0.5"
+                            className="w-full font-dm text-sm border-0 border-b border-transparent hover:border-[#c9a84c]/30 focus:border-[#2f5488] focus:outline-none bg-transparent py-0.5"
                           />
                           <input
                             value={it.note ?? ""}
                             onChange={e => setAiParsed(p => p ? { ...p, items: p.items.map((x, i) => i === idx ? { ...x, note: e.target.value } : x) } : p)}
                             placeholder="Note (optional)"
-                            className="w-full font-dm text-xs text-[#8a7a60] border-0 border-b border-transparent hover:border-[#c9a84c]/30 focus:border-[#6b98e7] focus:outline-none bg-transparent py-0.5"
+                            className="w-full font-dm text-xs text-[#8a7a60] border-0 border-b border-transparent hover:border-[#c9a84c]/30 focus:border-[#2f5488] focus:outline-none bg-transparent py-0.5"
                           />
                         </div>
                         <button
@@ -608,7 +608,7 @@ export default function DailyChecklists() {
                 <button
                   onClick={() => parseChecklistMut.mutate({ text: aiPasteText.trim() })}
                   disabled={!aiPasteText.trim() || parseChecklistMut.isPending}
-                  className="font-bebas tracking-widest text-sm bg-[#6b98e7] hover:bg-[#5a87d6] disabled:opacity-40 text-white rounded px-6 py-2 flex items-center gap-2"
+                  className="font-bebas tracking-widest text-sm bg-[#2f5488] hover:bg-[#25426c] disabled:opacity-40 text-white rounded px-6 py-2 flex items-center gap-2"
                 >
                   <Sparkles className="w-4 h-4" />
                   {parseChecklistMut.isPending ? "PARSING..." : "PARSE WITH AI"}
@@ -654,13 +654,13 @@ function ShiftForm({
         <div>
           <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-1">DATE</label>
           <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] bg-white" />
+            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] bg-white" />
         </div>
         <div>
           <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-1">DUTY MANAGER / MANAGER HOST</label>
           <input value={form.dutyManager} onChange={e => setForm(f => ({ ...f, dutyManager: e.target.value }))}
             placeholder="e.g. James"
-            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7]" />
+            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488]" />
         </div>
       </div>
 
@@ -689,31 +689,31 @@ function ShiftForm({
           <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-1">SPECIALS</label>
           <textarea value={form.specials} onChange={e => setForm(f => ({ ...f, specials: e.target.value }))}
             placeholder="Today's food specials..."
-            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] resize-none" rows={3} />
+            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] resize-none" rows={3} />
         </div>
         <div>
           <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-1">BUDGET</label>
           <textarea value={form.budget} onChange={e => setForm(f => ({ ...f, budget: e.target.value }))}
             placeholder="e.g. Tonight's target $8,500. Bar spend average $45pp."
-            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] resize-none" rows={3} />
+            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] resize-none" rows={3} />
         </div>
         <div>
           <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-1">SPECIAL NOTES / VIP</label>
           <textarea value={form.specialNotes} onChange={e => setForm(f => ({ ...f, specialNotes: e.target.value }))}
             placeholder="e.g. Table 4 is the Henderson party — VIP. Allergies: nut allergy on table 7."
-            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] resize-none" rows={3} />
+            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] resize-none" rows={3} />
         </div>
         <div>
           <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-1">MARKET FISH</label>
           <textarea value={form.marketFish} onChange={e => setForm(f => ({ ...f, marketFish: e.target.value }))}
             placeholder="e.g. Tonight: Groper, Snapper, Kingfish. Cooking method: pan-fried. Price: $38."
-            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] resize-none" rows={3} />
+            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] resize-none" rows={3} />
         </div>
         <div className="col-span-2">
           <label className="font-bebas text-[10px] tracking-widest text-[#8a7a60] block mb-1">THINGS TO PUSH / OUT OF STOCK / LIMITED QUANTITIES</label>
           <textarea value={form.thingsToPush} onChange={e => setForm(f => ({ ...f, thingsToPush: e.target.value }))}
             placeholder="e.g. Push the Pinot Gris — 3 bottles left. Ribeye limited to 8 covers. Oysters sold out."
-            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7] resize-none" rows={3} />
+            className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] resize-none" rows={3} />
         </div>
       </div>
 
@@ -736,8 +736,8 @@ function ShiftForm({
                   }))}
                   className={`flex items-center gap-1.5 font-dm text-xs px-3 py-1.5 rounded border transition-colors ${
                     selected
-                      ? 'bg-[#6b98e7] border-[#6b98e7] text-white'
-                      : 'bg-white border-[#c9a84c]/30 text-[#8a7a60] hover:border-[#6b98e7] hover:text-[#6b98e7]'
+                      ? 'bg-[#2f5488] border-[#2f5488] text-white'
+                      : 'bg-white border-[#c9a84c]/30 text-[#8a7a60] hover:border-[#2f5488] hover:text-[#2f5488]'
                   }`}
                 >
                   {selected && <Check className="w-3 h-3" />}
@@ -751,7 +751,7 @@ function ShiftForm({
 
       <div className="flex gap-2">
         <button onClick={onSave} disabled={saving}
-          className="font-bebas tracking-widest text-sm px-6 py-2 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6] disabled:opacity-50 flex items-center gap-2">
+          className="font-bebas tracking-widest text-sm px-6 py-2 bg-[#2f5488] text-white rounded hover:bg-[#25426c] disabled:opacity-50 flex items-center gap-2">
           <Save className="w-3.5 h-3.5" /> {saving ? "SAVING..." : "SAVE"}
         </button>
         <button onClick={onCancel} className="font-bebas tracking-widest text-sm px-6 py-2 border border-[#c9a84c]/30 text-[#8a7a60] rounded hover:bg-[#f9f5ef]">CANCEL</button>
@@ -785,8 +785,8 @@ function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableCheck
           {sr.dutyManager && <div className="font-dm text-xs text-[#8a7a60] mt-0.5">Manager: <span className="text-[#1a1209]">{sr.dutyManager}</span></div>}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button onClick={onCopyLink} className="p-1.5 text-[#6b98e7] hover:bg-[#6b98e7]/10 rounded" title="Copy staff link"><Copy className="w-3.5 h-3.5" /></button>
-          <a href={shiftLink} target="_blank" rel="noopener noreferrer" className="p-1.5 text-[#6b98e7] hover:bg-[#6b98e7]/10 rounded" title="Open staff view"><ExternalLink className="w-3.5 h-3.5" /></a>
+          <button onClick={onCopyLink} className="p-1.5 text-[#2f5488] hover:bg-[#2f5488]/10 rounded" title="Copy staff link"><Copy className="w-3.5 h-3.5" /></button>
+          <a href={shiftLink} target="_blank" rel="noopener noreferrer" className="p-1.5 text-[#2f5488] hover:bg-[#2f5488]/10 rounded" title="Open staff view"><ExternalLink className="w-3.5 h-3.5" /></a>
           <button onClick={onEdit} className="p-1.5 text-[#8a7a60] hover:bg-[#8a7a60]/10 rounded" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
           <button onClick={onDelete} className="p-1.5 text-red-400 hover:bg-red-50 rounded" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
@@ -800,7 +800,7 @@ function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableCheck
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {effectiveSections.filter(s => sections[s.key]).map(s => (
                 <div key={s.key} className="font-dm text-xs text-[#1a1209]">
-                  <span className="text-[#6b98e7] font-medium">{s.label}:</span> {sections[s.key]}
+                  <span className="text-[#2f5488] font-medium">{s.label}:</span> {sections[s.key]}
                 </div>
               ))}
             </div>
@@ -821,7 +821,7 @@ function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableCheck
               <div className="font-bebas text-[10px] tracking-widest text-[#8a7a60] mb-1.5">ATTACHED CHECKLISTS</div>
               <div className="flex flex-wrap gap-1.5">
                 {names.map((name, i) => (
-                  <span key={i} className="font-dm text-[11px] bg-[#6b98e7]/10 text-[#6b98e7] border border-[#6b98e7]/20 px-2 py-0.5 rounded">
+                  <span key={i} className="font-dm text-[11px] bg-[#2f5488]/10 text-[#2f5488] border border-[#2f5488]/20 px-2 py-0.5 rounded">
                     {name}
                   </span>
                 ))}
@@ -832,12 +832,12 @@ function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableCheck
       </div>
 
       {/* Staff link banner */}
-      <div className="border-t border-[#c9a84c]/10 bg-[#6b98e7]/5 px-4 py-2 flex items-center justify-between gap-2">
-        <span className="font-dm text-xs text-[#6b98e7]">Staff link:</span>
+      <div className="border-t border-[#c9a84c]/10 bg-[#2f5488]/5 px-4 py-2 flex items-center justify-between gap-2">
+        <span className="font-dm text-xs text-[#2f5488]">Staff link:</span>
         <div className="flex items-center gap-1 min-w-0">
-          <span className="font-dm text-xs text-[#6b98e7] truncate">{shiftLink}</span>
-          <button onClick={onCopyLink} className="flex-shrink-0 text-[#6b98e7] hover:text-[#5a87d6]"><Copy className="w-3 h-3" /></button>
-          <a href={shiftLink} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-[#6b98e7] hover:text-[#5a87d6]"><ExternalLink className="w-3 h-3" /></a>
+          <span className="font-dm text-xs text-[#2f5488] truncate">{shiftLink}</span>
+          <button onClick={onCopyLink} className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><Copy className="w-3 h-3" /></button>
+          <a href={shiftLink} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><ExternalLink className="w-3 h-3" /></a>
         </div>
       </div>
     </div>
@@ -899,7 +899,7 @@ function SettingsPanel({
       <div className="absolute inset-0 bg-black/30" />
       <div className="relative z-10 bg-white w-full max-w-md h-full overflow-y-auto shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="bg-[#6b98e7] px-5 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="bg-[#2f5488] px-5 py-4 flex items-center justify-between flex-shrink-0">
           <h2 className="font-bebas text-xl tracking-wider text-white">Daily Operations Settings</h2>
           <button onClick={onClose} className="text-white/80 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
@@ -914,7 +914,7 @@ function SettingsPanel({
                 <img src={logo} alt="Logo" className="h-12 w-auto max-w-[140px] object-contain rounded" />
                 <div>
                   <p className="font-dm text-xs text-[#1a1209] font-medium">Logo set</p>
-                  <a href="/dashboard#settings" className="font-dm text-xs text-[#6b98e7] hover:underline">Change in Venue Settings →</a>
+                  <a href="/dashboard#settings" className="font-dm text-xs text-[#2f5488] hover:underline">Change in Venue Settings →</a>
                 </div>
               </div>
             ) : (
@@ -922,7 +922,7 @@ function SettingsPanel({
                 <Image className="w-8 h-8 text-[#c9a84c]/50" />
                 <div>
                   <p className="font-dm text-xs text-[#8a7a60]">No logo uploaded yet.</p>
-                  <a href="/dashboard#settings" className="font-dm text-xs text-[#6b98e7] hover:underline">Upload logo in Venue Settings →</a>
+                  <a href="/dashboard#settings" className="font-dm text-xs text-[#2f5488] hover:underline">Upload logo in Venue Settings →</a>
                 </div>
               </div>
             )}
@@ -952,14 +952,14 @@ function SettingsPanel({
                       value={editLabel}
                       onChange={e => setEditLabel(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') saveEdit(i); if (e.key === 'Escape') setEditingIdx(null); }}
-                      className="flex-1 font-dm text-sm border-b border-[#6b98e7] px-1 py-0.5 focus:outline-none"
+                      className="flex-1 font-dm text-sm border-b border-[#2f5488] px-1 py-0.5 focus:outline-none"
                     />
                   ) : (
                     <span className="flex-1 font-dm text-sm text-[#1a1209]">{sec.label}</span>
                   )}
                   {/* Actions */}
                   {editingIdx === i ? (
-                    <button onClick={() => saveEdit(i)} className="text-[#6b98e7] hover:text-[#5a87d6]"><Check className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => saveEdit(i)} className="text-[#2f5488] hover:text-[#25426c]"><Check className="w-3.5 h-3.5" /></button>
                   ) : (
                     <button onClick={() => { setEditingIdx(i); setEditLabel(sec.label); }} className="opacity-0 group-hover:opacity-100 text-[#8a7a60] hover:text-[#1a1209] transition-opacity">
                       <Pencil className="w-3 h-3" />
@@ -979,9 +979,9 @@ function SettingsPanel({
                 onChange={e => setNewLabel(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') addSection(); }}
                 placeholder="New section name..."
-                className="flex-1 border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#6b98e7]"
+                className="flex-1 border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488]"
               />
-              <button onClick={addSection} disabled={!newLabel.trim()} className="font-bebas tracking-widest text-xs px-4 py-2 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6] disabled:opacity-40 flex items-center gap-1">
+              <button onClick={addSection} disabled={!newLabel.trim()} className="font-bebas tracking-widest text-xs px-4 py-2 bg-[#2f5488] text-white rounded hover:bg-[#25426c] disabled:opacity-40 flex items-center gap-1">
                 <Plus className="w-3.5 h-3.5" /> ADD
               </button>
             </div>
@@ -994,7 +994,7 @@ function SettingsPanel({
           <button
             onClick={() => { onSave(JSON.stringify(sections)); }}
             disabled={saving}
-            className="font-bebas tracking-widest text-sm px-6 py-2 bg-[#6b98e7] text-white rounded hover:bg-[#5a87d6] disabled:opacity-50 flex items-center gap-2"
+            className="font-bebas tracking-widest text-sm px-6 py-2 bg-[#2f5488] text-white rounded hover:bg-[#25426c] disabled:opacity-50 flex items-center gap-2"
           >
             <Save className="w-3.5 h-3.5" /> {saving ? "SAVING..." : "SAVE CHANGES"}
           </button>
