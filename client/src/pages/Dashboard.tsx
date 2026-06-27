@@ -882,7 +882,7 @@ export default function Dashboard() {
   // ── Color-code calendar events by space, so it's easy to see *where* a booking
   // is at a glance. Hash the space name into a fixed palette of soft accents
   // (returns a CSS color string usable as borderLeftColor / a small dot).
-  const SPACE_PALETTE = ['#6b98e7','#e4a25b','#7fb069','#c97b9c','#9b8acc','#5fb6ad','#d97a5b','#b88e4a','#8aa9d6','#a07cc5'];
+  const SPACE_PALETTE = ['#2f5488','#e4a25b','#7fb069','#c97b9c','#9b8acc','#5fb6ad','#d97a5b','#b88e4a','#8aa9d6','#a07cc5'];
   const spaceColor = (name?: string | null) => {
     if (!name) return null;
     let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
@@ -6201,7 +6201,7 @@ export default function Dashboard() {
                     <div className="p-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded bg-[#e8f0fb] flex items-center justify-center flex-shrink-0">
-                          <span className="font-bebas text-[#6b98e7] text-sm tracking-wider">NBI</span>
+                          <span className="font-bebas text-[#2f5488] text-sm tracking-wider">NBI</span>
                         </div>
                         <div>
                           <div className="font-cormorant font-semibold text-base text-ink flex items-center gap-2">
@@ -6389,7 +6389,7 @@ export default function Dashboard() {
                               verifyNbiMutation.mutate({ accountId, venueId });
                             }}
                             disabled={verifyNbiMutation.isPending}
-                            className="font-bebas tracking-widest text-xs px-4 py-2 border border-[#6b98e7] text-[#6b98e7] hover:bg-[#6b98e7]/10 rounded disabled:opacity-50"
+                            className="font-bebas tracking-widest text-xs px-4 py-2 border border-[#2f5488] text-[#2f5488] hover:bg-[#2f5488]/10 rounded disabled:opacity-50"
                           >
                             {verifyNbiMutation.isPending ? 'TESTING…' : 'TEST CONNECTION'}
                           </button>
@@ -6436,7 +6436,7 @@ export default function Dashboard() {
                                 navigator.clipboard.writeText(nbiWebhook.url);
                                 toast.success('Webhook URL copied');
                               }}
-                              className="font-bebas tracking-widest text-xs px-3 py-2 border border-[#6b98e7] text-[#6b98e7] hover:bg-[#6b98e7]/10 rounded"
+                              className="font-bebas tracking-widest text-xs px-3 py-2 border border-[#2f5488] text-[#2f5488] hover:bg-[#2f5488]/10 rounded"
                             >COPY</button>
                             <button
                               onClick={() => {
@@ -8516,7 +8516,7 @@ export default function Dashboard() {
                           <button
                             onClick={() => pushToNbiMutation.mutate({ id: selectedBooking.id, force: !!selectedBooking.nbiBookingId })}
                             disabled={pushToNbiMutation.isPending}
-                            className={`flex items-center gap-2 px-3 py-2 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50 ${selectedBooking.nbiBookingId ? 'border border-[#6b98e7]/50 text-[#6b98e7] hover:bg-[#6b98e7]/10' : 'bg-[#6b98e7] text-white hover:bg-[#5a87d6]'}`}>
+                            className={`flex items-center gap-2 px-3 py-2 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50 ${selectedBooking.nbiBookingId ? 'border border-[#2f5488]/50 text-[#2f5488] hover:bg-[#2f5488]/10' : 'bg-[#2f5488] text-white hover:bg-[#25426c]'}`}>
                             <span className="font-bebas text-[10px] tracking-wider">NBI</span>
                             {pushToNbiMutation.isPending
                               ? 'PUSHING…'

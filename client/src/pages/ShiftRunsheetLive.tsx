@@ -163,7 +163,7 @@ export default function ShiftRunsheetLive() {
   // White-label the live shift page to the operator's brand colour. Tailwind
   // arbitrary `[var(--brand)]` classes pull this from a CSS variable set on
   // the wrapper below. Falls back to VenueFlow's default brand blue.
-  const venuePrimaryColor = ((sr as any).venuePrimaryColor as string | null | undefined) || "#6b98e7";
+  const venuePrimaryColor = ((sr as any).venuePrimaryColor as string | null | undefined) || "#2f5488";
   const brandDark = (() => {
     // Derive a slightly darker shade for hover states (approx -12% lightness)
     const m = /^#([0-9a-f]{6})$/i.exec(venuePrimaryColor);

@@ -2048,7 +2048,7 @@ export default function RunsheetBuilder() {
               }}
               disabled={pushRunsheetToNbi.isPending}
               title="Push this booking to NowBookIt"
-              className="hidden lg:flex font-bebas tracking-widest text-xs bg-[#6b98e7] hover:bg-[#5a85d4] text-white px-3 py-1.5 items-center gap-1.5 transition-colors disabled:opacity-50"
+              className="hidden lg:flex font-bebas tracking-widest text-xs bg-[#2f5488] hover:bg-[#25426c] text-white px-3 py-1.5 items-center gap-1.5 transition-colors disabled:opacity-50"
             >
               <span className="font-bebas text-[10px] tracking-wider">NBI</span>
               {pushRunsheetToNbi.isPending ? 'PUSHING…' : 'PUSH TO NOWBOOKIT'}

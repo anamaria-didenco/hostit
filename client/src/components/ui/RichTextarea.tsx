@@ -12,7 +12,7 @@ const TEXT_COLORS = [
   { label: 'Default', value: '' },
   { label: 'Black', value: '#1a1a1a' },
   { label: 'Charcoal', value: '#4b5563' },
-  { label: 'Forest', value: '#5580cc' },
+  { label: 'Forest', value: '#25426c' },
   { label: 'Blue', value: '#2563eb' },
   { label: 'Red', value: '#dc2626' },
   { label: 'Gold', value: '#b4860a' },
