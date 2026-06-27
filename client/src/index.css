@@ -523,6 +523,25 @@
   --brand-gold:      #b07c25;
 }
 
+/* ── OPTIONAL: deep-blue sidebar (matches the editorial UI-kit chrome) ──────────
+   The app shell uses a cream top-nav by default. To opt a left Sidebar container
+   into the deep-blue editorial chrome (reversed white logo + light nav text),
+   add the class `vf-blue-sidebar` (or attribute data-vf-sidebar="blue") to it. */
+.vf-blue-sidebar,
+[data-vf-sidebar="blue"] {
+  --sidebar:                    #2f5488;
+  --sidebar-foreground:         #eef2f8;
+  --sidebar-primary:            #6b98e7;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent:             rgba(255,255,255,0.10);
+  --sidebar-accent-foreground:  #ffffff;
+  --sidebar-border:             rgba(255,255,255,0.12);
+  --sidebar-ring:               #6b98e7;
+}
+.vf-blue-sidebar .nav-item { color: #9fb0cc; }
+.vf-blue-sidebar .nav-item:hover { color: #ffffff; background-color: rgba(255,255,255,0.08); }
+.vf-blue-sidebar .nav-item.active { color: #ffffff; background-color: rgba(255,255,255,0.14); }
+
 /* ── Theme: Forest (deep green + gold + cream — original VenueFlowHQ brand) ── */
 [data-theme="forest"] {
   --background:             oklch(0.972 0.010 90);   /* warm cream */
@@ -1009,9 +1028,9 @@
   }
   /* Dietary alerts MUST be impossible to miss in print */
   [data-print-section="dietary"] {
-    border: 2px solid #d97706 !important;
+    border: 2px solid #b07c25 !important;   /* editorial amber */
     page-break-inside: avoid;
-    background: #fffbeb !important;
+    background: #f7efdd !important;          /* editorial amber tint */
   }
   /* Compact F&B rows in print so a 50-item menu fits on 1-2 pages */
   [data-print-section="food"] .grid {
