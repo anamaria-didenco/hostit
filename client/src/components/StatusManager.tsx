@@ -10,6 +10,7 @@ export type StatusDef = {
 };
 
 export const COLOR_PRESETS = [
+  { id: "blue",    label: "VenueFlow",classes: "border-[#2f5488] bg-[#e8edf6] text-[#2f5488]",          swatch: "#2f5488",  calClasses: "bg-[#2f5488] text-white",          barClasses: "bg-[#2f5488]",    dayClasses: "border-l-4 border-[#2f5488] bg-[#e8edf6]"   },
   { id: "amber",   label: "Gold",    classes: "border-amber-400 bg-amber-100 text-amber-900",          swatch: "#f59e0b",  calClasses: "bg-amber-400 text-amber-950",      barClasses: "bg-amber-400",    dayClasses: "border-l-4 border-amber-400 bg-amber-50"    },
   { id: "yellow",  label: "Yellow",  classes: "border-yellow-300 bg-yellow-50 text-yellow-800",        swatch: "#fef08a",  calClasses: "bg-yellow-200 text-yellow-900",    barClasses: "bg-yellow-200",   dayClasses: "border-l-4 border-yellow-300 bg-yellow-50"  },
   { id: "sky",     label: "Sky",     classes: "border-sky-400 bg-sky-100 text-sky-800",                swatch: "#38bdf8",  calClasses: "bg-sky-400 text-white",            barClasses: "bg-sky-400",      dayClasses: "border-l-4 border-sky-400 bg-sky-50"        },
@@ -26,12 +27,12 @@ export const COLOR_PRESETS = [
 ];
 
 export const DEFAULT_STATUSES: StatusDef[] = [
-  { key: "new",           label: "New Enquiry",   colorId: "amber"   },
+  { key: "new",           label: "New Enquiry",   colorId: "blue"    },
   { key: "contacted",     label: "Contacted",     colorId: "sky"     },
   { key: "proposal_sent", label: "Proposal Sent", colorId: "amber"   },
   { key: "negotiating",   label: "Negotiating",   colorId: "orange"  },
-  { key: "booked",        label: "Confirmed",     colorId: "emerald" },
-  { key: "finished",      label: "Finished",      colorId: "teal"    },
+  { key: "booked",        label: "Confirmed",     colorId: "blue"    },
+  { key: "finished",      label: "Finished",      colorId: "gray"    },
   { key: "lost",          label: "Lost",          colorId: "stone"   },
 ];
 
