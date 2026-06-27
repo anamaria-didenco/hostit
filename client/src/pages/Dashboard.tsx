@@ -72,6 +72,24 @@ const PIPELINE_STAGES = [
   { key: "lost", label: "LOST", color: "border-stone-400 bg-stone-200 text-stone-700" },
 ];
 
+// Editorial column tones for the pipeline kanban. The design keeps the board on
+// the brand blue/amber/red palette (no green/sky), so map the standard lead
+// lifecycle to editorial colours; custom stages fall back to their own swatch.
+const STAGE_TONE: Record<string, string> = {
+  new:           "#2f5488", // blue — fresh enquiry
+  contacted:     "#6b98e7", // bright blue
+  proposal_sent: "#b07c25", // amber — quoted
+  quoted:        "#b07c25",
+  negotiating:   "#b07c25",
+  tentative:     "#b07c25",
+  booked:        "#2f5488", // blue — confirmed
+  confirmed:     "#2f5488",
+  finished:      "#6a6256", // warm grey
+  lost:          "#8a8073", // grey
+  cancelled:     "#8a8073",
+  overdue:       "#c0392b", // red
+};
+
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 // Relative "time ago" for enquiry cards (uses lead.createdAt).
@@ -3136,7 +3154,7 @@ export default function Dashboard() {
                     <div className="flex gap-5 min-w-max h-full">
                       {kanbanStages.map(stage => {
                         const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
-                        const tone = (stage as any).swatch ?? '#2f5488';
+                        const tone = STAGE_TONE[stage.key] ?? (stage as any).swatch ?? '#2f5488';
                         const stageTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
                         const stageTotalLabel = stageTotal > 0 ? `$${(stageTotal / 1000).toFixed(1)}k` : null;
                         return (
