@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { SectionHead } from "@/components/ui/section-head";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -189,7 +190,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
                 }}
                 className={`group relative min-h-[44px] flex flex-col p-1 border transition-colors ${cellBg} ${(!isEmpty || onCreateEvent) ? 'cursor-pointer' : ''} ${isEmpty && onCreateEvent ? 'hover:bg-forest/5 hover:border-forest/30' : ''}`}
               >
-                <span className={`text-[11px] font-dm leading-none mb-0.5 ${isToday ? 'font-bold text-gold' : 'text-ink/70'}`}>{day}</span>
+                <span className={`font-serif text-xs leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${isToday ? 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground font-semibold' : 'text-ink/70'}`}>{day}</span>
                 {/* + icon shown on empty cells when onCreateEvent is wired */}
                 {isEmpty && onCreateEvent && (
                   <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -329,11 +330,11 @@ function PipelineSnapshotWidget({ allLeads, onViewLeads, stages }: { allLeads: a
               <div className={`h-2 transition-all ${s.color.split(' ').find(c => c.startsWith('bg-')) ?? 'bg-gold'}`}
                 style={{ width: total > 0 ? `${(s.count / total) * 100}%` : '0%' }} />
             </div>
-            <span className="font-dm text-xs text-ink/60 w-6 text-right">{s.count}</span>
+            <span className="font-serif text-sm text-ink/60 w-6 text-right [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{s.count}</span>
           </div>
         ))}
       </div>
-      <div className="mt-3 pt-3 border-t border-gold/15 font-dm text-xs text-ink/50">{total} total leads</div>
+      <div className="mt-3 pt-3 border-t border-gold/15 font-dm text-xs text-ink/50"><span className="font-serif text-sm [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{total}</span> total leads</div>
     </div>
   );
 }
@@ -2412,8 +2413,8 @@ export default function Dashboard() {
                                 } : undefined}
                               >
                                 <div className="flex items-center justify-between mb-0.5">
-                                  <span className={`font-dm text-xs font-semibold leading-none ${
-                                    isToday ? 'w-5 h-5 bg-forest text-cream rounded-full flex items-center justify-center text-[10px]' : isOverflow ? 'text-ink/30' : isWeekend ? 'text-forest' : 'text-ink/60'
+                                  <span className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
+                                    isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : isOverflow ? 'text-muted-foreground/40 font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
                                   }`}>{day}</span>
                                   {!isOverflow && (
                                     <button
@@ -2627,9 +2628,9 @@ export default function Dashboard() {
                         className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         <div className="mb-2 md:mb-3">{s.icon}</div>
-                        <div className="font-cormorant text-2xl md:text-4xl font-semibold text-ink mb-1 leading-tight">{s.value}</div>
-                        <div className="font-bebas text-[10px] md:text-xs tracking-widest text-sage leading-snug">{s.label}</div>
-                        <div className="font-dm text-[10px] md:text-xs text-sage/60 mt-0.5 leading-tight">{s.sub}</div>
+                        <div className="font-serif text-2xl md:text-4xl font-semibold text-foreground mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{s.value}</div>
+                        <div className="font-sans text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
+                        <div className="font-sans text-[10px] md:text-xs text-muted-foreground/70 mt-0.5 leading-tight">{s.sub}</div>
                       </button>
                     );
                   })}
@@ -2645,9 +2646,9 @@ export default function Dashboard() {
                 <div className="space-y-4">
                   {/* Upcoming Events */}
                   <div className="dante-card overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                      <h3 className="font-cormorant text-base font-semibold text-ink">Upcoming Events</h3>
-                      <button onClick={() => setTab('calendar')} className="font-dm text-xs text-forest hover:text-forest-dark transition-colors">View all</button>
+                    <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+                      <SectionHead title="Upcoming Events" className="flex-1" />
+                      <button onClick={() => setTab('calendar')} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {(() => {
                       const upcoming = [...(monthBookings ?? []).filter(Boolean), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id))]
@@ -2675,8 +2676,8 @@ export default function Dashboard() {
                                 className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                                 <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} />
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-dm text-xs font-semibold text-ink truncate">{e.firstName} {e.lastName}</div>
-                                  <div className="font-dm text-xs text-sage">{new Date(e.eventDate).toLocaleDateString('en-NZ', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
+                                  <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{e.firstName} {e.lastName}</div>
+                                  <div className="font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{new Date(e.eventDate).toLocaleDateString('en-NZ', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
                                 </div>
                               </button>
                             );
@@ -2688,14 +2689,9 @@ export default function Dashboard() {
 
                   {/* New Enquiries */}
                   <div className="dante-card overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-cormorant text-base font-semibold text-ink">New Enquiries</h3>
-                        {newEnquiries.length > 0 && (
-                          <span className="bg-forest text-cream font-bebas text-[10px] tracking-widest px-1.5 py-0.5">{newEnquiries.length}</span>
-                        )}
-                      </div>
-                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} className="font-dm text-xs text-forest hover:text-forest-dark transition-colors">View all</button>
+                    <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+                      <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
+                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {newEnquiries.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
@@ -2709,8 +2705,8 @@ export default function Dashboard() {
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                             <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} />
                             <div className="flex-1 min-w-0">
-                              <div className="font-dm text-xs font-semibold text-ink truncate">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-dm text-xs text-sage truncate">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
+                              <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{lead.firstName} {lead.lastName}</div>
+                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
                             </div>
                           </button>
                         ))}
@@ -3119,8 +3115,8 @@ export default function Dashboard() {
                             {/* Column header */}
                             <div className="flex items-center justify-between px-3 py-2.5 bg-white rounded-xl border border-border flex-shrink-0"
                               style={{ borderTop: `3px solid ${stage.swatch ?? '#d4c5a9'}` }}>
-                              <span className="font-inter text-xs font-bold text-gray-700 uppercase tracking-wider">{stage.label}</span>
-                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 min-w-[20px] text-center">{stageLeads.length}</span>
+                              <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.2em] text-foreground">{stage.label}</span>
+                              <span className="font-serif text-sm [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 min-w-[24px] text-center">{stageLeads.length}</span>
                             </div>
                             {/* Cards */}
                             <div className="flex flex-col gap-2 overflow-y-auto flex-1 pb-2">
@@ -3772,27 +3768,41 @@ export default function Dashboard() {
             <div className="p-6 overflow-x-auto">
               <div className="gold-rule max-w-xs mb-3"><span>CRM</span></div>
               <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Pipeline</h1>
-              <div className="flex gap-4 min-w-max">
+              <div className="flex gap-5 min-w-max">
                 {pipelineStages.slice(0, 5).map(stage => {
                   const stageLeads = (allLeads ?? []).filter(Boolean).filter((l: any) => l.status === stage.key);
+                  const colTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
+                  const totalLabel = colTotal >= 1000 ? `$${(colTotal / 1000).toFixed(1)}k` : colTotal > 0 ? `$${colTotal.toLocaleString()}` : '';
                   return (
-                    <div key={stage.key} className="w-64 flex-shrink-0">
-                      <div className={`font-bebas text-xs tracking-widest px-3 py-2 border mb-2 ${stage.color}`}>
-                        {stage.label} <span className="opacity-60">({stageLeads.length})</span>
+                    <div key={stage.key} className="w-64 flex-shrink-0 min-w-0">
+                      <div className="flex items-center gap-2 pb-2.5 mb-3 border-b-2" style={{ borderColor: stage.swatch }}>
+                        <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: stage.swatch }}>{stage.label}</span>
+                        <span className="font-serif text-[13px] font-semibold text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{stageLeads.length}</span>
+                        <span className="flex-1" />
+                        {totalLabel && <span className="font-serif text-[13px] font-semibold text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{totalLabel}</span>}
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2.5">
                         {stageLeads.map((lead: any) => (
                           <div key={lead.id} onClick={() => { selectLead(lead); setTab("enquiries"); }}
-                            className="dante-card p-3 cursor-pointer hover:border-gold/40 transition-colors">
-                            <div className="font-cormorant font-semibold text-base text-ink">{lead.firstName} {lead.lastName}</div>
-                            <div className="font-dm text-xs text-sage">{lead.eventType || "Event"}</div>
-                            {lead.eventDate && <div className="font-dm text-xs text-sage/60">{new Date(lead.eventDate).toLocaleDateString("en-NZ")}</div>}
-                            {lead.budget && <div className="font-cormorant text-base font-semibold text-forest mt-1">${Number(lead.budget).toLocaleString()}</div>}
+                            className="dante-card p-3 cursor-grab flex flex-col gap-2 hover:shadow-md hover:border-foreground/30 transition-all">
+                            <div className="font-serif font-semibold text-base text-foreground leading-tight tracking-[-0.01em]">{lead.firstName} {lead.lastName}</div>
+                            <div className="font-sans text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">{lead.eventType || "Event"}</div>
+                            {(lead.eventDate || lead.guestCount) && (
+                              <div className="flex items-center gap-3 font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">
+                                {lead.eventDate && <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(lead.eventDate).toLocaleDateString("en-NZ", { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                                {lead.guestCount ? <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />{lead.guestCount}</span> : null}
+                              </div>
+                            )}
+                            {lead.budget ? (
+                              <div className="flex items-baseline justify-between border-t border-border pt-2">
+                                <span className="font-serif text-lg font-semibold text-foreground [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">${Number(lead.budget).toLocaleString()}</span>
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                         {stageLeads.length === 0 && (
-                          <div className="border border-dashed border-gold/20 p-4 text-center">
-                            <p className="font-dm text-xs text-sage/40">No leads</p>
+                          <div className="border border-dashed border-border p-4 text-center">
+                            <p className="font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground/50">No leads</p>
                           </div>
                         )}
                       </div>
@@ -3937,10 +3947,10 @@ export default function Dashboard() {
               {calendarView === "month" && (
               <div className="hidden md:block flex-1 overflow-auto" style={{ minHeight: '600px' }}>
                 {/* Day headers - Mon to Sun like Function Tracker */}
-                <div className="grid grid-cols-7 border-b border-gold/15">
+                <div className="grid grid-cols-7 border-b border-border">
                   {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
-                    <div key={d} className={`text-center font-bebas text-xs tracking-widest py-2 border-r border-gold/10 last:border-r-0 ${
-                      d === 'SAT' || d === 'SUN' ? 'text-forest/70 bg-linen/30' : 'text-ink/60'
+                    <div key={d} className={`text-center font-sans text-[9px] font-extrabold uppercase tracking-[0.16em] py-2.5 border-r border-border/40 last:border-r-0 ${
+                      d === 'SAT' || d === 'SUN' ? 'text-muted-foreground bg-[#f4efe6]/50' : 'text-primary'
                     }`}>{d}</div>
                   ))}
                 </div>
@@ -3980,17 +3990,17 @@ export default function Dashboard() {
                           : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                         const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                         return (
-                          <div key={di} className={`border-r border-gold/10 last:border-r-0 p-1 flex flex-col gap-0.5 ${
-                            isOverflow ? 'bg-linen/40 opacity-60' : isWeekend ? 'bg-linen/20' : 'bg-white'
-                          } ${isToday ? 'ring-2 ring-inset ring-gold' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''}`}
+                          <div key={di} className={`border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
+                            isOverflow ? 'bg-[#f4efe6]/40 opacity-60' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
+                          } ${dragOverDate === dateStr ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
                             onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
                             onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
                             onDrop={!isOverflow ? (e) => {
                               e.preventDefault(); setDragOverDate(null);
                               try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
                             } : undefined}>
-                            <span className={`text-xs font-dm leading-none mb-0.5 self-start px-1 rounded ${
-                              isToday ? 'bg-forest-dark text-cream font-bold px-1.5 py-0.5' : isOverflow ? 'text-ink/30' : isWeekend ? 'text-forest/70 font-semibold' : 'text-ink/70'
+                            <span className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
+                              isToday ? 'bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground/40 font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
                             }`}>{day}</span>
                             {/* Space-split stripe — one coloured segment per distinct space
                                 booked that day (bookings + live leads), widths proportional
@@ -4471,8 +4481,8 @@ export default function Dashboard() {
                           <div className="font-bebas tracking-widest text-[10px] text-ink/50">
                             {['MON','TUE','WED','THU','FRI','SAT','SUN'][i]}
                           </div>
-                          <div className={`font-cormorant text-lg font-semibold leading-tight ${
-                            isToday ? 'text-white bg-forest rounded-full w-7 h-7 flex items-center justify-center mx-auto' : 'text-ink hover:text-forest'
+                          <div className={`font-serif text-lg font-semibold leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
+                            isToday ? 'text-primary-foreground bg-primary rounded-full w-7 h-7 flex items-center justify-center mx-auto' : 'text-ink hover:text-forest'
                           }`}>
                             {d.getDate()}
                           </div>
@@ -4565,7 +4575,7 @@ export default function Dashboard() {
                   <div className="max-w-3xl mx-auto">
                     {/* Day header */}
                     <div className={`flex items-center gap-3 mb-6 pb-4 border-b ${isToday ? 'border-gold/40' : 'border-gold/15'}`}>
-                      <div className={`text-5xl font-cormorant font-light ${isToday ? 'text-forest' : 'text-ink/70'}`}>
+                      <div className={`text-5xl font-serif font-light [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${isToday ? 'text-primary' : 'text-ink/70'}`}>
                         {calDate.getDate()}
                       </div>
                       <div>
