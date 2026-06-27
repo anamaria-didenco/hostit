@@ -74,6 +74,32 @@ const PIPELINE_STAGES = [
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+// Relative "time ago" for enquiry cards (uses lead.createdAt).
+function fmtAgo(date: any): string {
+  if (!date) return "";
+  const then = new Date(date).getTime();
+  if (isNaN(then)) return "";
+  const diff = Date.now() - then;
+  if (diff < 60000) return "just now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  const wks = Math.floor(days / 7);
+  if (wks < 5) return `${wks}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+// Format a lead budget as a NZD figure (e.g. "$18,500"); null when absent/zero.
+function fmtBudget(v: any): string | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  if (!isFinite(n) || n === 0) return null;
+  return `$${n.toLocaleString("en-NZ", { maximumFractionDigits: 0 })}`;
+}
+
 // ── Overview Widget Sub-Components ──────────────────────────────────────────────
 
 function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings, monthLeadEvents, onPrev, onNext, onDayClick, onViewCalendar, onCreateEvent }: {
@@ -3106,64 +3132,84 @@ export default function Dashboard() {
 
                 {/* ── KANBAN VIEW ──────────────────────────────────────── */}
                 {leadViewMode === "kanban" && (
-                  <div className="flex-1 overflow-x-auto p-5 bg-background">
-                    <div className="flex gap-3 min-w-max h-full">
+                  <div className="flex-1 overflow-x-auto px-6 py-5 bg-background">
+                    <div className="flex gap-5 min-w-max h-full">
                       {kanbanStages.map(stage => {
                         const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
+                        const tone = (stage as any).swatch ?? '#2f5488';
+                        const stageTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
+                        const stageTotalLabel = stageTotal > 0 ? `$${(stageTotal / 1000).toFixed(1)}k` : null;
                         return (
-                          <div key={stage.key} className="w-72 flex-shrink-0 flex flex-col gap-2">
-                            {/* Column header */}
-                            <div className="flex items-center justify-between px-3 py-2.5 bg-white rounded-xl border border-border flex-shrink-0"
-                              style={{ borderTop: `3px solid ${stage.swatch ?? '#d4c5a9'}` }}>
-                              <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.2em] text-foreground">{stage.label}</span>
-                              <span className="font-serif text-sm [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 min-w-[24px] text-center">{stageLeads.length}</span>
+                          <div key={stage.key} className="w-72 flex-shrink-0 flex flex-col min-w-0">
+                            {/* Column header — tracked title, colored rule, serif total */}
+                            <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0" style={{ borderBottom: `2px solid ${tone}` }}>
+                              <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: tone }}>{stage.label}</span>
+                              <span className="font-sans text-[11px] font-bold" style={{ color: '#8a8073' }}>{stageLeads.length}</span>
+                              <span className="flex-1" />
+                              {stageTotalLabel && (
+                                <span className="font-serif text-[13px] font-semibold text-stormy [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
+                              )}
                             </div>
                             {/* Cards */}
-                            <div className="flex flex-col gap-2 overflow-y-auto flex-1 pb-2">
-                              {stageLeads.map((lead: any) => (
-                                <button key={lead.id}
-                                  onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
-                                  className="w-full bg-white rounded-xl border border-border hover:border-sage-green hover:shadow-md transition-all text-left p-3.5 group"
-                                  style={{ borderLeft: `3px solid ${stage.swatch ?? '#d4c5a9'}` }}>
-                                  <div className="font-inter font-semibold text-sm text-gray-900 truncate group-hover:text-sage-dark">
-                                    {lead.firstName} {lead.lastName}
-                                  </div>
-                                  {lead.eventType && (
-                                    <div className="font-inter text-xs text-gray-500 mt-0.5 truncate">{lead.eventType}</div>
-                                  )}
-                                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                                    {lead.eventDate && (
-                                      <span>
-                                        {new Date(lead.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
-                                        {fmtEventTime(lead.eventDate) && ` · ${fmtEventTime(lead.eventDate)}`}
-                                      </span>
+                            <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 pb-2">
+                              {stageLeads.map((lead: any) => {
+                                const value = fmtBudget(lead.budget);
+                                const overdue = lead.followUpDate && new Date(lead.followUpDate) <= new Date() && !['booked', 'lost', 'cancelled'].includes(lead.status);
+                                return (
+                                  <button key={lead.id}
+                                    onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
+                                    className="group w-full text-left bg-cream rounded-lg p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] hover:border-[#8a8073] hover:shadow-[0_6px_18px_rgba(22,20,15,0.09)] transition-all">
+                                    {/* Name + type + BEO */}
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <div className="font-serif text-[16px] font-semibold text-ink leading-[1.2] tracking-[-0.01em] truncate">
+                                          {lead.firstName}{lead.lastName ? ` ${lead.lastName}` : ''}
+                                        </div>
+                                        {lead.eventType && (
+                                          <div className="font-sans text-[11.5px] font-semibold uppercase tracking-[0.04em] mt-1 truncate" style={{ color: '#8a8073' }}>{lead.eventType}</div>
+                                        )}
+                                      </div>
+                                      {lead.status === 'booked' && (
+                                        <span className="font-sans text-[9.5px] font-extrabold uppercase tracking-[0.1em] px-2 py-[3px] rounded-[3px] flex-shrink-0" style={{ background: '#e8edf6', color: '#2f5488' }}>BEO</span>
+                                      )}
+                                    </div>
+                                    {/* Meta — date + guests */}
+                                    {(lead.eventDate || lead.guestCount) && (
+                                      <div className="flex items-center gap-3 text-[12px]" style={{ color: '#6a6256' }}>
+                                        {lead.eventDate && (
+                                          <span className="inline-flex items-center gap-1">
+                                            <Calendar className="w-[13px] h-[13px]" />
+                                            {new Date(lead.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
+                                          </span>
+                                        )}
+                                        {lead.guestCount ? (
+                                          <span className="inline-flex items-center gap-1">
+                                            <Users className="w-[13px] h-[13px]" />
+                                            {lead.guestCount}
+                                          </span>
+                                        ) : null}
+                                      </div>
                                     )}
-                                    {lead.guestCount && <span>{lead.guestCount} guests</span>}
-                                  </div>
-                                  {lead.followUpDate && (() => {
-                                    const d = new Date(lead.followUpDate);
-                                    const overdue = d <= new Date() && !['booked', 'lost', 'cancelled'].includes(lead.status);
-                                    if (overdue) return (
-                                      <div className="mt-2 text-[10px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-md inline-block">
-                                        Overdue follow-up
-                                      </div>
-                                    );
-                                    return (
-                                      <div className="mt-2 text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md inline-block">
-                                        Follow up {d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}
-                                      </div>
-                                    );
-                                  })()}
-                                </button>
-                              ))}
+                                    {/* Footer — serif value + age / overdue flag */}
+                                    <div className="flex items-baseline justify-between pt-[9px]" style={{ borderTop: '1px solid #eee6d8' }}>
+                                      <span className="font-serif text-[18px] font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]">{value ?? '—'}</span>
+                                      {overdue ? (
+                                        <span className="text-[11px] font-semibold" style={{ color: '#c0392b' }}>Follow-up overdue</span>
+                                      ) : (
+                                        <span className="text-[11px]" style={{ color: '#a39684' }}>{fmtAgo(lead.createdAt)}</span>
+                                      )}
+                                    </div>
+                                  </button>
+                                );
+                              })}
                               {stageLeads.length === 0 && (
-                                <div className="rounded-xl border-2 border-dashed border-border p-5 text-center">
-                                  <p className="text-xs text-gray-300 font-medium">No leads</p>
+                                <div className="rounded-lg border border-dashed border-[#e6dccb] p-5 text-center">
+                                  <p className="font-sans text-[12px]" style={{ color: '#a39684' }}>No leads</p>
                                 </div>
                               )}
                               <button
                                 onClick={() => setShowAddLead(true)}
-                                className="w-full py-2 rounded-xl border border-dashed border-gray-200 text-xs text-gray-300 hover:border-sage-green hover:text-sage-green transition-colors flex items-center justify-center gap-1">
+                                className="w-full py-2 rounded-lg border border-dashed border-[#e6dccb] text-[12px] text-[#a39684] hover:border-sage-green hover:text-sage-green transition-colors flex items-center justify-center gap-1">
                                 <Plus className="w-3 h-3" /> Add
                               </button>
                             </div>
