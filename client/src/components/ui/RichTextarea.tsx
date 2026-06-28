@@ -18,13 +18,12 @@ const TEXT_COLORS = [
   { label: 'Gold', value: '#b4860a' },
 ];
 
+// Editorial highlight tints only — brand blue / amber / red / neutral cream.
 const HIGHLIGHT_COLORS = [
-  { label: 'Yellow', value: '#fef9c3' },
-  { label: 'Blue', value: '#dbeafe' },
-  { label: 'Green', value: '#d1fae5' },
-  { label: 'Pink', value: '#fce7f3' },
-  { label: 'Purple', value: '#ede9fe' },
-  { label: 'Peach', value: '#ffedd5' },
+  { label: 'Blue', value: '#e8edf6' },
+  { label: 'Amber', value: '#f7efdd' },
+  { label: 'Red', value: '#fbecea' },
+  { label: 'Cream', value: '#f4efe6' },
 ];
 
 export function RichTextarea({ value, onChange, placeholder, className = '', minHeight = '80px' }: RichTextareaProps) {

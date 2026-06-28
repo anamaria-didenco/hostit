@@ -2637,7 +2637,7 @@ export default function RunsheetBuilder() {
               onClick={() => setActiveMainTab(tab.id as any)}
               className={`flex items-center gap-1.5 px-5 py-3 font-bebas tracking-widest text-xs whitespace-nowrap border-b-2 transition-colors ${
                 activeMainTab === tab.id
-                  ? 'border-gold text-amber-700'
+                  ? 'border-[#2f5488] text-[#2f5488]'
                   : 'border-transparent text-ink/40 hover:text-ink/70'
               }`}
             >
@@ -2902,12 +2902,10 @@ export default function RunsheetBuilder() {
                             <span className="font-bebas tracking-widest text-[10px] text-ink/40 ml-2">HIGHLIGHT</span>
                             {[
                               { label: 'None', value: '' },
-                              { label: 'Yellow', value: '#fef9c3' },
-                              { label: 'Blue', value: '#dbeafe' },
-                              { label: 'Green', value: '#d1fae5' },
-                              { label: 'Pink', value: '#fce7f3' },
-                              { label: 'Purple', value: '#ede9fe' },
-                              { label: 'Peach', value: '#ffedd5' },
+                              { label: 'Blue', value: '#e8edf6' },
+                              { label: 'Amber', value: '#f7efdd' },
+                              { label: 'Red', value: '#fbecea' },
+                              { label: 'Cream', value: '#f4efe6' },
                             ].map(({ label, value }) => (
                               <button
                                 key={label}
