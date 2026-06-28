@@ -1049,3 +1049,46 @@
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Accessibility
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Always-visible keyboard focus (keyboard only — pointer users keep the clean
+   editorial look). Blue is the brand "ink"; the deep-blue sidebar gets a light
+   ring since a dark ring is invisible on it. !important so it wins over the
+   many `focus:outline-none` utilities scattered through the app. */
+:focus-visible {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 2px !important;
+}
+.vf-sidebar :focus-visible { outline-color: #a9c8f2 !important; }
+
+/* Skip-to-content link — visually hidden until focused. */
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  transform: translateY(-160%);
+  background: #2f5488;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(22, 20, 15, 0.18);
+  transition: transform 0.15s ease;
+}
+.skip-link:focus { transform: translateY(0); }
+
+/* Honour the OS "reduce motion" preference (vestibular safety). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

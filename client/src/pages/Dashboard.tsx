@@ -2514,6 +2514,7 @@ export default function Dashboard() {
   
   return (
     <div className="h-screen bg-background font-inter flex flex-col md:flex-row overflow-hidden">
+      <a href="#vf-main" className="skip-link">Skip to content</a>
       {/* ── TOP NAVIGATION BAR (mobile only — desktop uses the sidebar) ──────── */}
       <nav className="md:hidden bg-white sticky top-0 z-50 border-b border-border h-14 flex items-center px-4" style={{ boxShadow: '0 1px 0 oklch(0.850 0.025 68)' }}>
         {/* Logo */}
@@ -2591,15 +2592,15 @@ export default function Dashboard() {
       </nav>
 
       {/* ── DESKTOP SIDEBAR (deep-blue editorial) ───────────────────────────── */}
-      <aside className="hidden md:flex w-[236px] flex-shrink-0 flex-col h-full text-[#eef2f8]" style={{ background: '#2f5488' }}>
+      <aside className="vf-sidebar hidden md:flex w-[236px] flex-shrink-0 flex-col h-full text-[#eef2f8]" style={{ background: '#2f5488' }}>
         {/* Logo */}
         <div className="h-[62px] flex items-center px-[18px] border-b" style={{ borderColor: 'rgba(255,255,255,0.10)' }}>
-          <button onClick={() => setTab("overview" as any)} className="flex items-center focus:outline-none">
+          <button onClick={() => setTab("overview" as any)} aria-label="VenueFlow — go to dashboard" className="flex items-center focus:outline-none">
             <img src="/logo-full.png" alt="VenueFlow" className="h-6 w-auto" style={{ filter: 'brightness(0) invert(1)' }} />
           </button>
         </div>
         {/* Nav */}
-        <nav className="flex-1 p-3 flex flex-col gap-0.5 overflow-y-auto">
+        <nav aria-label="Main" className="flex-1 p-3 flex flex-col gap-0.5 overflow-y-auto">
           {[
             { id: "overview",  label: "Dashboard", icon: <LayoutDashboard className="w-[17px] h-[17px]" /> },
             { id: "enquiries", label: "Enquiries", icon: <Mail className="w-[17px] h-[17px]" /> },
@@ -2610,10 +2611,10 @@ export default function Dashboard() {
           ].map(item => {
             const active = tab === item.id;
             return (
-              <button key={item.id} onClick={() => setTab(item.id as any)}
+              <button key={item.id} onClick={() => setTab(item.id as any)} aria-current={active ? "page" : undefined}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors ${active ? "font-bold text-white" : "font-medium text-[#9fb0cc] hover:text-white hover:bg-white/[0.08]"}`}
                 style={active ? { background: "rgba(255,255,255,0.14)" } : undefined}>
-                <span className="grid place-items-center" style={{ opacity: active ? 1 : 0.85 }}>{item.icon}</span>
+                <span className="grid place-items-center" aria-hidden="true" style={{ opacity: active ? 1 : 0.85 }}>{item.icon}</span>
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.id === "enquiries" && unreadCount > 0 && (
                   <span className="text-[10px] font-bold px-1.5 py-px rounded-[3px]" style={{ background: "rgba(255,255,255,0.18)" }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
@@ -2626,9 +2627,10 @@ export default function Dashboard() {
         <div className="p-3 border-t flex flex-col gap-1.5" style={{ borderColor: 'rgba(255,255,255,0.10)' }}>
           <div className="flex items-center gap-1 px-1">
             <button onClick={() => { setTab("enquiries" as any); setLeadsSubTab("new"); }}
+              aria-label={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
               className="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
               title={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}>
-              <Bell className="w-4 h-4" style={{ color: unreadCount > 0 ? '#ffffff' : '#9fb0cc' }} />
+              <Bell className="w-4 h-4" aria-hidden="true" style={{ color: unreadCount > 0 ? '#ffffff' : '#9fb0cc' }} />
               {unreadCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none" style={{ background: '#c0392b' }}>{unreadCount > 99 ? '99+' : unreadCount}</span>
               )}
@@ -2651,7 +2653,7 @@ export default function Dashboard() {
         {/* Desktop nav lives in the sidebar; mobile uses the top + bottom bars */}
 
         {/* Main Content */}
-        <main className={`flex-1 ${tab === "enquiries" ? "overflow-hidden" : "overflow-auto pb-16 md:pb-0"}`}>
+        <main id="vf-main" tabIndex={-1} className={`flex-1 ${tab === "enquiries" ? "overflow-hidden" : "overflow-auto pb-16 md:pb-0"}`}>
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
           {tab === "overview" && (() => {
@@ -9516,7 +9518,7 @@ export default function Dashboard() {
       </Dialog>
 
       {/* ── MOBILE BOTTOM TAB BAR (hidden on md+) ─────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
+      <nav aria-label="Primary" className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
         {[
           { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
           { id: "enquiries", label: "Events", icon: <MessageSquare className="w-5 h-5" /> },
@@ -9541,6 +9543,7 @@ export default function Dashboard() {
             <button
               key={item.id}
               onClick={() => setTab(item.id as any)}
+              aria-current={tab === item.id ? "page" : undefined}
               className={baseClass}
             >
               {item.icon}
