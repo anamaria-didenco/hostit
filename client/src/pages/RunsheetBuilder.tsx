@@ -2024,10 +2024,10 @@ export default function RunsheetBuilder() {
           {effectiveBookingId && (
             <button
               onClick={() => setBeoPreviewOpen(true)}
-              className="flex font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 px-3 py-1.5 items-center gap-1.5 transition-colors"
+              className="flex shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 px-3 py-1.5 items-center gap-1.5 transition-colors"
               title="See exactly how the BEO will look, adjust which sections show, then print or download"
             >
-              <Eye className="w-3.5 h-3.5" /> PREVIEW &amp; PRINT BEO
+              <Eye className="w-3.5 h-3.5" /> <span className="sm:hidden">BEO</span><span className="hidden sm:inline">PREVIEW &amp; PRINT BEO</span>
             </button>
           )}
           {effectiveBookingId ? (
@@ -2218,7 +2218,7 @@ export default function RunsheetBuilder() {
             <Input
               value={title}
               onChange={e => setTitle(e.target.value)}
-              className="text-2xl font-serif font-semibold text-ink tracking-[-0.01em] border-0 border-b-2 border-ink/15 focus-visible:border-forest rounded-none px-0 bg-transparent"
+              className="text-xl sm:text-2xl font-serif font-semibold text-ink tracking-[-0.01em] border-0 border-b-2 border-ink/15 focus-visible:border-forest rounded-none px-0 bg-transparent"
               placeholder="Event Runsheet Title"
             />
           </div>
@@ -2635,7 +2635,7 @@ export default function RunsheetBuilder() {
             <button
               key={tab.id}
               onClick={() => setActiveMainTab(tab.id as any)}
-              className={`flex items-center gap-1.5 px-5 py-3 font-bebas tracking-widest text-xs whitespace-nowrap border-b-2 transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 px-3 sm:px-5 py-3 font-bebas tracking-widest text-xs whitespace-nowrap border-b-2 transition-colors ${
                 activeMainTab === tab.id
                   ? 'border-[#2f5488] text-[#2f5488]'
                   : 'border-transparent text-ink/40 hover:text-ink/70'
