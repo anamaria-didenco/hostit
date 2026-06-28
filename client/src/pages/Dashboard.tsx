@@ -2596,7 +2596,7 @@ export default function Dashboard() {
         {/* Logo */}
         <div className="h-[62px] flex items-center px-[18px] border-b" style={{ borderColor: 'rgba(255,255,255,0.10)' }}>
           <button onClick={() => setTab("overview" as any)} aria-label="VenueFlow — go to dashboard" className="flex items-center focus:outline-none">
-            <img src="/logo-full.png" alt="VenueFlow" className="h-6 w-auto" style={{ filter: 'brightness(0) invert(1)' }} />
+            <img src="/venueflow-logo-white.png" alt="VenueFlow" className="h-7 w-auto" />
           </button>
         </div>
         {/* Nav */}
