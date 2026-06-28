@@ -4101,7 +4101,7 @@ export default function Dashboard() {
                   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
                   const statusCard = (status: string) => getStatusInfo(status).calClasses;
                   return weeks.map((week, wi) => (
-                    <div key={wi} className="grid grid-cols-7 border-b border-gold/10 last:border-b-0" style={{ minHeight: '120px' }}>
+                    <div key={wi} className="grid grid-cols-7 border-b border-gold/10 last:border-b-0 min-h-[88px] sm:min-h-[120px]">
                       {week.map((cell, di) => {
                         if (!cell) return <div key={di} className="border-r border-gold/10 last:border-r-0 bg-linen/20" />;
                         const { day, isOverflow } = cell;
@@ -4169,22 +4169,24 @@ export default function Dashboard() {
                                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => setSelectedBooking(b)}
                                   style={spaceColor(b.spaceName) ? { borderLeft: `4px solid ${spaceColor(b.spaceName)}` } : undefined}
-                                  className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity cursor-move`}
+                                  className={`w-full text-left rounded font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
                                   title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
-                                  <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                                  {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
-                                  {b.startTime && <div className="opacity-70">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
-                                  {b.guestCount ? <div className="opacity-70 truncate">{b.guestCount} guests</div> : null}
-                                  {b.spaceName && (
-                                    <div className="mt-0.5">
-                                      <span
-                                        className="inline-block px-1 py-px rounded text-[9px] font-bebas tracking-wider text-white truncate max-w-full"
-                                        style={{ background: spaceColor(b.spaceName) ?? '#8b6914' }}>
-                                        {b.spaceName.toUpperCase()}
-                                      </span>
-                                    </div>
-                                  )}
-                                  <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                  <div className="hidden sm:block">
+                                    <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
+                                    {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
+                                    {b.startTime && <div className="opacity-70">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
+                                    {b.guestCount ? <div className="opacity-70 truncate">{b.guestCount} guests</div> : null}
+                                    {b.spaceName && (
+                                      <div className="mt-0.5">
+                                        <span
+                                          className="inline-block px-1 py-px rounded text-[9px] font-bebas tracking-wider text-white truncate max-w-full"
+                                          style={{ background: spaceColor(b.spaceName) ?? '#8b6914' }}>
+                                          {b.spaceName.toUpperCase()}
+                                        </span>
+                                      </div>
+                                    )}
+                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                  </div>
                                 </button>
                                 {!isOverflow && (
                                   <button
@@ -4204,21 +4206,23 @@ export default function Dashboard() {
                                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => openEventDrawer({ ...l, _isLead: true })}
                                   style={spaceColor(l.spaceName) ? { borderLeft: `4px solid ${spaceColor(l.spaceName)}` } : undefined}
-                                  className={`w-full text-left rounded px-1.5 py-1 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move`}
+                                  className={`w-full text-left rounded font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
                                   title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
-                                  <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                  {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
-                                  {l.guestCount ? <div className="opacity-70 truncate">{l.guestCount} guests</div> : null}
-                                  {l.spaceName && (
-                                    <div className="mt-0.5">
-                                      <span
-                                        className="inline-block px-1 py-px rounded text-[9px] font-bebas tracking-wider text-white truncate max-w-full"
-                                        style={{ background: spaceColor(l.spaceName) ?? '#8b6914' }}>
-                                        {l.spaceName.toUpperCase()}
-                                      </span>
-                                    </div>
-                                  )}
-                                  <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                  <div className="hidden sm:block">
+                                    <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                                    {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
+                                    {l.guestCount ? <div className="opacity-70 truncate">{l.guestCount} guests</div> : null}
+                                    {l.spaceName && (
+                                      <div className="mt-0.5">
+                                        <span
+                                          className="inline-block px-1 py-px rounded text-[9px] font-bebas tracking-wider text-white truncate max-w-full"
+                                          style={{ background: spaceColor(l.spaceName) ?? '#8b6914' }}>
+                                          {l.spaceName.toUpperCase()}
+                                        </span>
+                                      </div>
+                                    )}
+                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                  </div>
                                 </button>
                                 {!isOverflow && (
                                   <button
