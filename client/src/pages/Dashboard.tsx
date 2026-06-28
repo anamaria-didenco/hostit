@@ -2475,13 +2475,15 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { setSelectedBooking(b); }}
                                     style={spaceColor(b.spaceName) ? { borderLeft: `3px solid ${spaceColor(b.spaceName)}` } : undefined}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
+                                    className={`w-full text-left rounded font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
-                                    <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                                    {(b.guestCount || b.spaceName) && (
-                                      <div className="opacity-75 truncate text-[9px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
-                                    )}
-                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                    <div className="hidden sm:block">
+                                      <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
+                                      {(b.guestCount || b.spaceName) && (
+                                        <div className="opacity-75 truncate text-[9px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                      )}
+                                      <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                    </div>
                                   </button>
                                 ))}
                                 {dayLeads.slice(0, 1).map((l: any) => (
@@ -2490,13 +2492,15 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { openEventDrawer({ ...l, _isLead: true }); }}
                                     style={spaceColor(l.spaceName) ? { borderLeft: `3px solid ${spaceColor(l.spaceName)}` } : undefined}
-                                    className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] leading-snug font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move`}
+                                    className={`w-full text-left rounded font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
-                                    <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                    {l.guestCount && (
-                                      <div className="opacity-75 truncate text-[9px]">{l.guestCount} pax</div>
-                                    )}
-                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                    <div className="hidden sm:block">
+                                      <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
+                                      {l.guestCount && (
+                                        <div className="opacity-75 truncate text-[9px]">{l.guestCount} pax</div>
+                                      )}
+                                      <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                    </div>
                                   </button>
                                 ))}
                                 {(dayBookings.length + dayLeads.length) > 3 && (
