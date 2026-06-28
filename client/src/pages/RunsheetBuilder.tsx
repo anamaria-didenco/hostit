@@ -1939,26 +1939,26 @@ export default function RunsheetBuilder() {
           {title || 'Runsheet Builder'}
           {sheetId && <span className="ml-2 text-cream/40 text-xs font-dm">#{sheetId}</span>}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          {/* Actions — quiet white ghosts grouped by dividers; only Save is primary */}
           <button
             onClick={() => setShowTemplates(v => !v)}
-            className={`font-bebas tracking-widest text-xs hidden md:flex items-center gap-1.5 transition-colors px-3 py-1.5 border ${
-              showTemplates ? 'border-gold text-gold bg-gold/10' : 'border-cream/20 text-cream/70 hover:text-gold hover:border-gold/40'
+            className={`font-bebas tracking-widest text-xs hidden md:flex items-center gap-1.5 transition-colors px-3 py-1.5 ${
+              showTemplates ? 'text-white bg-white/10' : 'text-cream/75 hover:text-white hover:bg-white/10'
             }`}
           >
             <FileText className="w-3.5 h-3.5" /> TEMPLATES
           </button>
-          <div className="hidden md:flex items-center border border-cream/20 overflow-hidden" title="Print column layout">
+          <div className="hidden md:flex items-center" title="Print column layout">
             <button
               onClick={() => setPrintColumns(1)}
-              className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 transition-colors flex items-center gap-1 ${printColumns === 1 ? 'bg-gold text-ink' : 'text-cream/50 hover:text-gold'}`}
+              className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 transition-colors flex items-center gap-1 ${printColumns === 1 ? 'text-white bg-white/15' : 'text-cream/55 hover:text-white hover:bg-white/10'}`}
             >
               <LayoutGrid className="w-3 h-3" /> 1 COL
             </button>
-            <div className="w-px h-4 bg-cream/20" />
             <button
               onClick={() => setPrintColumns(2)}
-              className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 transition-colors flex items-center gap-1 ${printColumns === 2 ? 'bg-gold text-ink' : 'text-cream/50 hover:text-gold'}`}
+              className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 transition-colors flex items-center gap-1 ${printColumns === 2 ? 'text-white bg-white/15' : 'text-cream/55 hover:text-white hover:bg-white/10'}`}
             >
               <LayoutGrid className="w-3 h-3" /> 2 COL
             </button>
@@ -1966,13 +1966,13 @@ export default function RunsheetBuilder() {
           <div className="relative">
             <button
               onClick={() => setPrintEditorOpen(v => !v)}
-              className={`font-bebas tracking-widest text-xs items-center gap-1.5 transition-colors px-3 py-1.5 border flex ${printHide.size > 0 ? 'border-gold text-gold bg-gold/10' : 'border-cream/20 text-cream/70 hover:text-gold hover:border-gold/40'}`}
+              className={`font-bebas tracking-widest text-xs items-center gap-1.5 transition-colors px-3 py-1.5 flex ${printHide.size > 0 ? 'text-white bg-white/10' : 'text-cream/75 hover:text-white hover:bg-white/10'}`}
               title="Choose which sections appear in the print view and the BEO PDF"
             >
               <Settings2 className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">PRINT VIEW</span>
               {printHide.size > 0 && (
-                <span className="bg-gold text-ink text-[9px] font-bebas px-1.5 rounded-sm">{printHide.size}</span>
+                <span className="bg-white/20 text-white text-[9px] font-bebas px-1.5 rounded-sm">{printHide.size}</span>
               )}
             </button>
             {printEditorOpen && (
@@ -2013,9 +2013,10 @@ export default function RunsheetBuilder() {
               </>
             )}
           </div>
+          <div className="hidden md:block h-4 w-px bg-cream/15" />
           <button
             onClick={runPrint}
-            className="font-bebas tracking-widest text-xs text-cream/70 hover:text-gold hidden md:flex items-center gap-1.5 transition-colors px-2 py-1.5"
+            className="font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 hidden md:flex items-center gap-1.5 transition-colors px-3 py-1.5"
             title="Print runsheet (respects Print View)"
           >
             <Printer className="w-4 h-4" /> <span>PRINT</span>
@@ -2023,7 +2024,7 @@ export default function RunsheetBuilder() {
           {effectiveBookingId && (
             <button
               onClick={() => setBeoPreviewOpen(true)}
-              className="flex font-bebas tracking-widest text-xs bg-gold text-ink hover:bg-gold/90 px-3 py-1.5 items-center gap-1.5 transition-colors"
+              className="flex font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 px-3 py-1.5 items-center gap-1.5 transition-colors"
               title="See exactly how the BEO will look, adjust which sections show, then print or download"
             >
               <Eye className="w-3.5 h-3.5" /> PREVIEW &amp; PRINT BEO
@@ -2034,12 +2035,13 @@ export default function RunsheetBuilder() {
               href={`/api/beo/${effectiveBookingId}${beoHideQuery}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden lg:flex font-bebas tracking-widest text-xs border border-cream/20 text-cream/70 hover:border-gold/40 hover:text-gold px-3 py-1.5 items-center gap-1.5 transition-colors"
+              className="hidden lg:flex font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 px-3 py-1.5 items-center gap-1.5 transition-colors"
               title="Download the BEO PDF directly (respects Print View)"
             >
               <FileText className="w-3.5 h-3.5" /> BEO PDF
             </a>
           ) : null}
+          {effectiveBookingId && <div className="hidden lg:block h-4 w-px bg-cream/15" />}
           {effectiveBookingId && (
             <button
               onClick={() => {
@@ -2048,26 +2050,23 @@ export default function RunsheetBuilder() {
               }}
               disabled={pushRunsheetToNbi.isPending}
               title="Push this booking to NowBookIt"
-              className="hidden lg:flex font-bebas tracking-widest text-xs bg-[#2f5488] hover:bg-[#25426c] text-white px-3 py-1.5 items-center gap-1.5 transition-colors disabled:opacity-50"
+              className="hidden lg:flex font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 px-3 py-1.5 items-center gap-1.5 transition-colors disabled:opacity-50"
             >
               <span className="font-bebas text-[10px] tracking-wider">NBI</span>
               {pushRunsheetToNbi.isPending ? 'PUSHING…' : 'PUSH TO NOWBOOKIT'}
             </button>
           )}
+          <div className="h-4 w-px bg-cream/15" />
           {isDirty && !saving && (
-            <div className="no-print flex items-center gap-1.5 text-xs font-dm text-amber-700 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              Unsaved changes
-            </div>
+            <span className="no-print hidden sm:flex items-center gap-1.5 text-xs font-dm text-amber-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Unsaved
+            </span>
           )}
           <Button
             onClick={handleSave}
             disabled={saving}
-            className={`font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 transition-all ${
-              isDirty
-                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-500/40 animate-pulse'
-                : 'bg-gold hover:bg-gold/90 text-ink shadow-sm shadow-gold/30'
-            }`}
+            className="font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 transition-colors bg-[#b07c25] hover:bg-[#9a6a1f] text-white disabled:opacity-60"
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? "SAVING..." : isDirty ? "SAVE CHANGES" : "SAVED"}
@@ -2746,17 +2745,22 @@ export default function RunsheetBuilder() {
                           <span className={`size-2.5 rounded-full ${item.highlight ? 'bg-destructive' : 'bg-primary'}`} />
                         </div>
                         {/* Time column — wider + bolder for service-time scannability */}
-                        <div className={`w-[100px] flex-shrink-0 px-4 py-3 border-r border-gold/15 print:border-0 relative ${isNow ? 'bg-emerald-100' : ''}`}>
+                        <div className={`w-[116px] flex-shrink-0 px-3 py-3 border-r border-gold/15 print:border-0 relative ${isNow ? 'bg-emerald-100' : ''}`}>
                           {isNow && (
                             <span className="no-print absolute -top-1 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[9px] font-bebas tracking-widest px-1.5 py-0.5 rounded-sm shadow-sm">NOW</span>
                           )}
-                          <input
-                            type="time"
-                            value={item.time}
-                            onChange={e => updateItemField(idx, "time", e.target.value)}
-                            className={`font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] bg-transparent border-0 focus:outline-none w-full no-print ${isNow ? 'text-emerald-700' : 'text-ink'}`}
-                          />
-                          <div className="hidden print:block font-serif text-lg font-semibold tracking-[-0.01em] [font-variant-numeric:tabular-nums_lining-nums]">{formatTime12(item.time)}</div>
+                          {/* Screen: show the 12-hour time (never clipped); native picker overlaid for editing */}
+                          <div className="relative no-print">
+                            <div className={`font-serif text-base font-semibold leading-tight whitespace-nowrap [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${isNow ? 'text-emerald-700' : 'text-ink'}`}>{formatTime12(item.time)}</div>
+                            <input
+                              type="time"
+                              value={item.time}
+                              onChange={e => updateItemField(idx, "time", e.target.value)}
+                              aria-label="Start time"
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                          </div>
+                          <div className="hidden print:block font-serif text-base font-semibold tracking-[-0.01em] whitespace-nowrap [font-variant-numeric:tabular-nums_lining-nums]">{formatTime12(item.time)}</div>
                           {item.duration > 0 && (
                             <div className={`text-[11px] font-dm no-print ${isNow ? 'text-emerald-700/70 font-semibold' : 'text-ink/30'}`}>{item.duration}m</div>
                           )}
