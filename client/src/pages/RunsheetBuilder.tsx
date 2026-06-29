@@ -626,8 +626,12 @@ export default function RunsheetBuilder() {
   const [showCatalogSelector, setShowCatalogSelector] = useState(false);
   const [catalogSelectorType, setCatalogSelectorType] = useState<'food'|'drink'>('food');
   const [catalogSelectorCategoryId, setCatalogSelectorCategoryId] = useState<number|null>(null);
-  // Map<itemId, qty> for catalogue selector
-  const [catalogSelectedItems, setCatalogSelectedItems] = useState<Map<number, number>>(new Map());
+  // Catalogue selector cart: Map<itemId, {item, qty, categoryName}>. Stores the
+  // item object + its category so the selection survives switching categories
+  // (build one order across Wines + Beer + Cocktails) and still adds correctly.
+  const [catalogSelectedItems, setCatalogSelectedItems] = useState<Map<number, { item: any; qty: number; categoryName: string }>>(new Map());
+  const catalogPriceDollars = (it: any): number =>
+    it?.priceCents != null ? Number(it.priceCents) / 100 : (it?.price != null ? Number(it.price) / 100 : 0);
   const { data: catalogCategories } = trpc.menuCatalog.listCategories.useQuery(
     { type: catalogSelectorType },
     { enabled: showCatalogSelector }
@@ -661,31 +665,32 @@ export default function RunsheetBuilder() {
   });
 
   function addCatalogItemsToFnb() {
-    if (!catalogItems || catalogSelectedItems.size === 0) return;
+    if (catalogSelectedItems.size === 0) return;
     const existingNames = new Set(fnbItems.map(i => i.dishName.toLowerCase().trim()));
-    const eligible = catalogItems.filter((ci: any) => catalogSelectedItems.has(ci.id));
-    const toAdd: FnbItem[] = eligible
-      .filter((ci: any) => !existingNames.has(ci.name.toLowerCase().trim()))
-      .map((ci: any, i: number) => ({
+    // Cart entries can span multiple categories — each remembers its own course.
+    const entries = Array.from(catalogSelectedItems.values());
+    const toAdd: FnbItem[] = entries
+      .filter(e => !existingNames.has(String(e.item.name).toLowerCase().trim()))
+      .map((e, i: number) => ({
         section: 'foh' as const,
-        course: catalogSelectorType === 'food' ? (catalogCategories?.find((c: any) => c.id === catalogSelectorCategoryId)?.name ?? 'Other') : 'Drinks',
-        dishName: ci.name,
-        description: ci.description ?? '',
-        qty: catalogSelectedItems.get(ci.id) ?? 1,
+        course: catalogSelectorType === 'food' ? (e.categoryName || 'Other') : 'Drinks',
+        dishName: e.item.name,
+        description: e.item.description ?? '',
+        qty: e.qty,
         dietary: '',
         serviceTime: '',
         staffAssigned: '',
         sortOrder: fnbItems.length + i,
         // Carry catalogue pricing through so it shows up in the running total.
-        unitPrice: ci.priceCents != null ? Number(ci.priceCents) / 100 : (ci.price != null ? Number(ci.price) / 100 : null),
+        unitPrice: catalogPriceDollars(e.item) || null,
         _tempId: `cat-${Date.now()}-${i}`,
       }));
-    const skipped = eligible.length - toAdd.length;
+    const skipped = entries.length - toAdd.length;
     // For drinks, also mirror the selected names into the runsheet-level
     // "drinks selection" so they appear as chips in the Drinks tab and on
     // the BEO/live runsheet drink panel.
     if (catalogSelectorType === 'drink') {
-      const drinkNames = eligible.map((ci: any) => ci.name);
+      const drinkNames = entries.map(e => e.item.name);
       setRsSelectedDrinks(prev => Array.from(new Set([...prev, ...drinkNames])));
     }
     setCatalogSelectedItems(new Map());
@@ -695,8 +700,8 @@ export default function RunsheetBuilder() {
       setFnbItems(newItems);
       saveFnb(undefined, newItems);
       toast.success(`Added ${toAdd.length} ${catalogSelectorType === 'drink' ? 'drink' : 'item'}${toAdd.length > 1 ? 's' : ''}${skipped > 0 ? ` (${skipped} already present, skipped)` : ''}`);
-    } else if (catalogSelectorType === 'drink' && eligible.length > 0) {
-      toast.success(`Added ${eligible.length} drink${eligible.length > 1 ? 's' : ''} to selection`);
+    } else if (catalogSelectorType === 'drink' && entries.length > 0) {
+      toast.success(`Added ${entries.length} drink${entries.length > 1 ? 's' : ''} to selection`);
     } else {
       toast.warning(`All selected items already in the F&B sheet — nothing added.`);
     }
@@ -5431,7 +5436,7 @@ export default function RunsheetBuilder() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest">
               <div>
                 <div className="font-bebas tracking-widest text-gold text-lg">ADD FROM MENU CATALOGUE</div>
-                <div className="font-dm text-white/60 text-xs mt-0.5">Select items to add to the F&B sheet</div>
+                <div className="font-dm text-white/60 text-xs mt-0.5">Pick across categories — your selection is kept until you add</div>
               </div>
               <button onClick={() => setShowCatalogSelector(false)} className="text-white/50 hover:text-white transition-colors">
                 <span className="text-2xl leading-none">&times;</span>
@@ -5463,7 +5468,7 @@ export default function RunsheetBuilder() {
                   catalogCategories.map((cat: any) => (
                     <button
                       key={cat.id}
-                      onClick={() => { setCatalogSelectorCategoryId(cat.id); setCatalogSelectedItems(new Map()); }}
+                      onClick={() => { setCatalogSelectorCategoryId(cat.id); }}
                       className={`w-full text-left px-3 py-2.5 font-dm text-sm transition-colors border-b border-gold/20 ${
                         catalogSelectorCategoryId === cat.id ? 'bg-forest text-white' : 'hover:bg-linen text-ink'
                       }`}
@@ -5489,10 +5494,25 @@ export default function RunsheetBuilder() {
                   </div>
                 ) : (
                   <div className="divide-y divide-gold/20">
-                    {catalogItems.map((item: any) => {
-                      const isSelected = catalogSelectedItems.has(item.id);
-                      const qty = catalogSelectedItems.get(item.id) ?? 1;
-                      return (
+                    {(() => {
+                      const catName = catalogCategories?.find((c: any) => c.id === catalogSelectorCategoryId)?.name ?? 'Other';
+                      const toggle = (item: any) => setCatalogSelectedItems(prev => {
+                        const next = new Map(prev);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.set(item.id, { item, qty: 1, categoryName: catName });
+                        return next;
+                      });
+                      const setQty = (item: any, q: number) => setCatalogSelectedItems(prev => {
+                        const next = new Map(prev);
+                        if (q <= 0) { next.delete(item.id); return next; }
+                        next.set(item.id, { item, qty: q, categoryName: next.get(item.id)?.categoryName ?? catName });
+                        return next;
+                      });
+                      return catalogItems.map((item: any) => {
+                        const entry = catalogSelectedItems.get(item.id);
+                        const isSelected = !!entry;
+                        const qty = entry?.qty ?? 1;
+                        return (
                         <div
                           key={item.id}
                           className={`px-4 py-3 flex items-start gap-3 transition-colors ${
@@ -5501,14 +5521,7 @@ export default function RunsheetBuilder() {
                         >
                           {/* Checkbox toggle */}
                           <button
-                            onClick={() => {
-                              setCatalogSelectedItems(prev => {
-                                const next = new Map(prev);
-                                if (next.has(item.id)) next.delete(item.id);
-                                else next.set(item.id, 1);
-                                return next;
-                              });
-                            }}
+                            onClick={() => toggle(item)}
                             className={`mt-0.5 w-4 h-4 border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
                               isSelected ? 'bg-forest border-forest' : 'border-ink/30'
                             }`}
@@ -5516,14 +5529,7 @@ export default function RunsheetBuilder() {
                             {isSelected && <span className="text-white text-[10px] leading-none">✓</span>}
                           </button>
                           {/* Item info */}
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => {
-                            setCatalogSelectedItems(prev => {
-                              const next = new Map(prev);
-                              if (next.has(item.id)) next.delete(item.id);
-                              else next.set(item.id, 1);
-                              return next;
-                            });
-                          }}>
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggle(item)}>
                             <div className="font-dm text-sm font-medium text-ink">{item.name}</div>
                             {item.description && <div className="font-dm text-xs text-ink/50 mt-0.5 truncate">{item.description}</div>}
                             {item.allergens && <div className="font-dm text-[10px] text-amber-700 mt-0.5">⚠ {item.allergens}</div>}
@@ -5532,7 +5538,7 @@ export default function RunsheetBuilder() {
                           {isSelected && (
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <button
-                                onClick={e => { e.stopPropagation(); setCatalogSelectedItems(prev => { const next = new Map(prev); const cur = next.get(item.id) ?? 1; if (cur <= 1) next.delete(item.id); else next.set(item.id, cur - 1); return next; }); }}
+                                onClick={e => { e.stopPropagation(); setQty(item, qty - 1); }}
                                 className="w-5 h-5 border border-forest/40 text-forest hover:bg-forest/10 flex items-center justify-center text-xs font-bold"
                               >-</button>
                               <input
@@ -5540,11 +5546,11 @@ export default function RunsheetBuilder() {
                                 min={1}
                                 value={qty}
                                 onClick={e => e.stopPropagation()}
-                                onChange={e => { const v = Math.max(1, parseInt(e.target.value) || 1); setCatalogSelectedItems(prev => { const next = new Map(prev); next.set(item.id, v); return next; }); }}
+                                onChange={e => setQty(item, Math.max(1, parseInt(e.target.value) || 1))}
                                 className="w-10 text-center text-xs font-dm border border-gold/20 focus:border-forest focus:outline-none py-0.5"
                               />
                               <button
-                                onClick={e => { e.stopPropagation(); setCatalogSelectedItems(prev => { const next = new Map(prev); next.set(item.id, (next.get(item.id) ?? 1) + 1); return next; }); }}
+                                onClick={e => { e.stopPropagation(); setQty(item, qty + 1); }}
                                 className="w-5 h-5 border border-forest/40 text-forest hover:bg-forest/10 flex items-center justify-center text-xs font-bold"
                               >+</button>
                             </div>
@@ -5557,8 +5563,9 @@ export default function RunsheetBuilder() {
                             </div>
                           )}
                         </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </div>
@@ -5568,8 +5575,17 @@ export default function RunsheetBuilder() {
             <div className="px-6 py-4 border-t border-gold/30 flex items-center justify-between bg-linen/50">
               <span className="font-dm text-sm text-ink/60">
                 {catalogSelectedItems.size > 0
-                  ? (() => { const totalQty = Array.from(catalogSelectedItems.values()).reduce((a, b) => a + b, 0); return `${catalogSelectedItems.size} item${catalogSelectedItems.size > 1 ? 's' : ''} selected · ${totalQty} total qty`; })()
-                  : 'Select items to add'}
+                  ? (() => {
+                      const entries = Array.from(catalogSelectedItems.values());
+                      const totalQty = entries.reduce((a, e) => a + e.qty, 0);
+                      const g = Number(guestCount) || 0;
+                      const est = entries.reduce((a, e) => {
+                        const mult = e.item.pricingType === 'per_person' ? (g || e.qty) : e.qty;
+                        return a + catalogPriceDollars(e.item) * mult;
+                      }, 0);
+                      return `${catalogSelectedItems.size} item${catalogSelectedItems.size > 1 ? 's' : ''} · ${totalQty} qty${est > 0 ? ` · ~$${est.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} est.` : ''}`;
+                    })()
+                  : 'Select items to add across any category'}
               </span>
               <div className="flex gap-3">
                 <button onClick={() => setShowCatalogSelector(false)} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
