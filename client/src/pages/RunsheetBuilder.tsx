@@ -1974,30 +1974,29 @@ export default function RunsheetBuilder() {
 
   return (
     <div className="min-h-screen bg-cream print:bg-white" style={{ ['--brand' as any]: venuePrimaryColor }}>
-      {/* ── Header (matches EventDetail style) ──────────────────────────── */}
-      <nav className="no-print bg-forest-dark sticky top-0 z-50 border-b border-gold/20 h-14 flex items-center px-4 gap-3">
+      {/* ── Header — light cream bar (dark text reads clearly) ──────────── */}
+      <nav className="no-print bg-cream sticky top-0 z-50 border-b border-gold/25 h-14 flex items-center px-4 gap-3">
         <button
           onClick={() => {
             if (bookingId) navigate(`/event/${bookingId}`);
             else if (leadId) navigate("/dashboard");
             else navigate("/runsheet");
           }}
-          className="text-cream/85 hover:text-cream flex items-center gap-1.5 font-bebas tracking-widest text-xs"
+          className="text-ink/60 hover:text-forest flex items-center gap-1.5 font-bebas tracking-widest text-xs"
         >
           <ArrowLeft className="w-4 h-4" /> {bookingId ? 'EVENT' : 'BACK'}
         </button>
-        <div className="h-4 w-px bg-cream/25" />
-        <span className="font-cormorant text-cream font-semibold text-base flex-1 truncate">
-          {title || 'Runsheet Builder'}
-          {sheetId && <span className="ml-2 text-cream/55 text-xs font-dm">#{sheetId}</span>}
+        <div className="h-4 w-px bg-gold/30" />
+        <span className="font-bebas tracking-[0.2em] text-xs text-forest/70 flex-1 truncate">
+          RUNSHEET BUILDER
         </span>
         <div className="flex items-center gap-2">
           {/* ── Edit / Preview toggle ───────────────────────────────────── */}
-          <div className="hidden sm:inline-flex items-center gap-0.5 bg-black/20 border border-white/15 rounded-sm p-0.5">
+          <div className="hidden sm:inline-flex items-center gap-0.5 bg-linen border border-gold/30 rounded-sm p-0.5">
             <button
               onClick={() => setViewMode('edit')}
               className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1 rounded-sm transition-colors ${
-                viewMode === 'edit' ? 'bg-cream text-forest shadow-sm' : 'text-cream/80 hover:text-white hover:bg-white/10'
+                viewMode === 'edit' ? 'bg-forest text-cream shadow-sm' : 'text-ink/55 hover:text-forest'
               }`}
             >
               <Pencil className="w-3.5 h-3.5" /> EDIT
@@ -2007,7 +2006,7 @@ export default function RunsheetBuilder() {
               disabled={!effectiveBookingId}
               title={effectiveBookingId ? 'Read-only runsheet staff & kitchen see' : 'Link this runsheet to an event to preview'}
               className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1 rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                viewMode === 'preview' ? 'bg-cream text-forest shadow-sm' : 'text-cream/80 hover:text-white hover:bg-white/10'
+                viewMode === 'preview' ? 'bg-forest text-cream shadow-sm' : 'text-ink/55 hover:text-forest'
               }`}
             >
               <Eye className="w-3.5 h-3.5" /> PREVIEW
@@ -2018,8 +2017,8 @@ export default function RunsheetBuilder() {
           <div className="relative">
             <button
               onClick={() => setExportMenuOpen(v => !v)}
-              className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-sm transition-colors ${
-                exportMenuOpen ? 'text-white bg-white/15' : 'text-cream/85 hover:text-white hover:bg-white/10'
+              className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-sm border transition-colors ${
+                exportMenuOpen ? 'text-forest bg-linen border-gold/40' : 'text-ink/65 border-gold/30 hover:text-forest hover:bg-linen'
               }`}
               title="Print, export and share options"
             >
@@ -2135,8 +2134,8 @@ export default function RunsheetBuilder() {
 
           {/* ── Save state ──────────────────────────────────────────────── */}
           {isDirty && !saving && (
-            <span className="no-print hidden sm:flex items-center gap-1.5 text-xs font-dm text-amber-200" title="You have unsaved changes">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="no-print hidden sm:flex items-center gap-1.5 text-xs font-dm text-amber-700" title="You have unsaved changes">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
               <span className="hidden md:inline">Unsaved</span>
             </span>
           )}
@@ -2145,8 +2144,8 @@ export default function RunsheetBuilder() {
             disabled={saving}
             className={`font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 transition-colors disabled:opacity-60 ${
               isDirty
-                ? 'bg-[#f4c14b] hover:bg-[#e7b339] text-[#16140f] shadow-sm'
-                : 'bg-white/10 hover:bg-white/15 text-cream/85 ring-1 ring-white/15'
+                ? 'bg-forest hover:bg-[#264469] text-cream shadow-sm'
+                : 'bg-linen hover:bg-gold/10 text-ink/55 border border-gold/30'
             }`}
           >
             <Save className="w-3.5 h-3.5" />
