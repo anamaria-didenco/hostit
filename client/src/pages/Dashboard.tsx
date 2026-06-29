@@ -2883,8 +2883,8 @@ export default function Dashboard() {
             <div className="flex h-full overflow-hidden">
 
               {/* ── EVENTS SUB-SIDEBAR ─────────────────────────────────────── */}
-              <aside className="hidden md:flex flex-col w-48 flex-shrink-0 bg-forest-dark text-cream/90 border-r border-forest overflow-y-auto">
-                <div className="px-4 py-3 border-b border-forest/40">
+              <aside className="hidden md:flex flex-col w-48 flex-shrink-0 bg-forest-dark text-cream border-r border-forest overflow-y-auto">
+                <div className="px-4 py-3 border-b border-cream/15">
                   <div className="font-bebas tracking-widest text-xs text-gold">EVENTS</div>
                 </div>
                 {([
@@ -2899,7 +2899,7 @@ export default function Dashboard() {
                   <button
                     key={item.key}
                     onClick={item.onClick}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-left font-dm text-xs border-l-2 transition-colors ${item.active ? 'bg-forest border-gold text-cream' : 'border-transparent hover:bg-forest hover:border-gold/40'}`}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-left font-dm text-xs border-l-2 transition-colors ${item.active ? 'bg-forest border-gold text-cream font-semibold' : 'border-transparent text-cream/85 hover:text-cream hover:bg-forest hover:border-gold/40'}`}
                   >
                     {item.icon}
                     <span className="truncate">{item.label}</span>
@@ -3129,7 +3129,9 @@ export default function Dashboard() {
                         <tbody className="divide-y divide-white/50">
                           {filteredLeads.map((lead: any) => {
                             const statusStage = pipelineStages.find(s => s.key === lead.status);
-                            const rowBg = statusStage?.swatch ? statusStage.swatch + 'CC' : 'transparent';
+                            // Keep the status colour as a left-border accent + the STATUS pill;
+                            // wash the row only faintly so the dark text stays readable.
+                            const rowBg = statusStage?.swatch ? statusStage.swatch + '14' : 'transparent';
                             return (
                               <tr key={lead.id}
                                 onClick={() => { if (!bulkSelectMode) { if (lead && !lead.readAt) markRead.mutate({ id: lead.id }); openEventDrawer({ ...lead, _isLead: true }); } }}
