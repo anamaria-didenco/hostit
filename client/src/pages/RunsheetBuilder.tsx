@@ -377,7 +377,6 @@ export default function RunsheetBuilder() {
   }
 
   // F&B
-  const [activeMainTab, setActiveMainTab] = useState<'timeline' | 'fnb' | 'drinks' | 'checklist' | 'tableplan' | 'equipment' | 'costs'>('timeline');
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
   const [fnbSaving, setFnbSaving] = useState(false);
   const [expandedFnbIdx, setExpandedFnbIdx] = useState<number | null>(null);
@@ -525,6 +524,48 @@ export default function RunsheetBuilder() {
     setTimeout(() => window.print(), 0);
   };
   const beoHideQuery = printHide.size > 0 ? `?hide=${encodeURIComponent(Array.from(printHide).join(','))}` : '';
+
+  // ── REDESIGN: view mode, export menu + single-scroll section rail ─────
+  // Edit = the wired editor (single scrollable document). Preview = the
+  // read-only runsheet staff & kitchen see — reuses the server-rendered
+  // BEO HTML so there's one source of truth for the printed document.
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  // Quick-jump rail replaces the six tabs: every section is always on the
+  // page; the rail scrolls to it and highlights where you are.
+  const RUNSHEET_SECTIONS: { id: string; label: string; icon: React.ReactNode }[] = [
+    { id: 'timeline',  label: 'Run of Day', icon: <Clock className="w-4 h-4" /> },
+    { id: 'fnb',       label: 'Food',       icon: <UtensilsCrossed className="w-4 h-4" /> },
+    { id: 'drinks',    label: 'Drinks',     icon: <Wine className="w-4 h-4" /> },
+    { id: 'checklist', label: 'Checklist',  icon: <CheckSquare className="w-4 h-4" /> },
+    { id: 'tableplan', label: 'Table Plan', icon: <LayoutGrid className="w-4 h-4" /> },
+    { id: 'costs',     label: 'Costs',      icon: <DollarSign className="w-4 h-4" /> },
+  ];
+  const [activeSection, setActiveSection] = useState<string>('timeline');
+  const scrollToSection = (id: string) => {
+    setActiveSection(id);
+    const el = document.getElementById(`rb-${id}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  // Track which section is in view so the rail highlights correctly while
+  // the user scrolls the document.
+  useEffect(() => {
+    if (viewMode !== 'edit') return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter(e => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        if (visible[0]) setActiveSection(visible[0].target.id.replace('rb-', ''));
+      },
+      { rootMargin: '-120px 0px -55% 0px', threshold: [0.1, 0.5] }
+    );
+    RUNSHEET_SECTIONS.forEach(s => {
+      const el = document.getElementById(`rb-${s.id}`);
+      if (el) obs.observe(el);
+    });
+    return () => obs.disconnect();
+  }, [viewMode]);
 
   // AI F&B paste modal
   const [showFnbPaste, setShowFnbPaste] = useState(false);
@@ -1135,7 +1176,7 @@ export default function RunsheetBuilder() {
   // Floor plans
   const { data: floorPlansList } = trpc.floorPlans.list.useQuery(
     {},
-    { enabled: floorPlanSectionOpen || activeMainTab === 'tableplan' }
+    { enabled: floorPlanSectionOpen || activeSection === 'tableplan' }
   );
   const { data: linkedFloorPlan } = trpc.floorPlans.get.useQuery(
     { id: linkedFloorPlanId! },
@@ -1920,6 +1961,17 @@ export default function RunsheetBuilder() {
 
   const checkedCount = checklistItems.filter(i => i.checked).length;
 
+  // ── Section readiness (drives the DocBar progress + rail status dots) ──
+  const sectionReady: Record<string, boolean> = {
+    timeline: items.length > 0,
+    fnb: fnbItems.length > 0,
+    drinks: (rsSelectedDrinks.length + rsCustomDrinks.length) > 0 || !!rsBarNotes,
+    checklist: checklistItems.length > 0 && checkedCount === checklistItems.length,
+    tableplan: !!linkedFloorPlanId,
+    costs: costItems.length > 0,
+  };
+  const readyCount = RUNSHEET_SECTIONS.filter(s => sectionReady[s.id]).length;
+
   return (
     <div className="min-h-screen bg-cream print:bg-white" style={{ ['--brand' as any]: venuePrimaryColor }}>
       {/* ── Header (matches EventDetail style) ──────────────────────────── */}
@@ -1939,42 +1991,109 @@ export default function RunsheetBuilder() {
           {title || 'Runsheet Builder'}
           {sheetId && <span className="ml-2 text-cream/40 text-xs font-dm">#{sheetId}</span>}
         </span>
-        <div className="flex items-center gap-1">
-          {/* Actions — quiet white ghosts grouped by dividers; only Save is primary */}
-          <button
-            onClick={() => setShowTemplates(v => !v)}
-            className={`font-bebas tracking-widest text-xs hidden md:flex items-center gap-1.5 transition-colors px-3 py-1.5 ${
-              showTemplates ? 'text-white bg-white/10' : 'text-cream/75 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" /> TEMPLATES
-          </button>
-          <div className="hidden md:flex items-center" title="Print column layout">
+        <div className="flex items-center gap-2">
+          {/* ── Edit / Preview toggle ───────────────────────────────────── */}
+          <div className="hidden sm:inline-flex items-center gap-0.5 bg-white/5 border border-white/10 rounded-sm p-0.5">
             <button
-              onClick={() => setPrintColumns(1)}
-              className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 transition-colors flex items-center gap-1 ${printColumns === 1 ? 'text-white bg-white/15' : 'text-cream/55 hover:text-white hover:bg-white/10'}`}
+              onClick={() => setViewMode('edit')}
+              className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1 rounded-sm transition-colors ${
+                viewMode === 'edit' ? 'bg-cream text-forest' : 'text-cream/65 hover:text-white'
+              }`}
             >
-              <LayoutGrid className="w-3 h-3" /> 1 COL
+              <Pencil className="w-3.5 h-3.5" /> EDIT
             </button>
             <button
-              onClick={() => setPrintColumns(2)}
-              className={`font-bebas tracking-widest text-xs px-2.5 py-1.5 transition-colors flex items-center gap-1 ${printColumns === 2 ? 'text-white bg-white/15' : 'text-cream/55 hover:text-white hover:bg-white/10'}`}
+              onClick={() => { if (effectiveBookingId) setViewMode('preview'); }}
+              disabled={!effectiveBookingId}
+              title={effectiveBookingId ? 'Read-only runsheet staff & kitchen see' : 'Link this runsheet to an event to preview'}
+              className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1 rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                viewMode === 'preview' ? 'bg-cream text-forest' : 'text-cream/65 hover:text-white'
+              }`}
             >
-              <LayoutGrid className="w-3 h-3" /> 2 COL
+              <Eye className="w-3.5 h-3.5" /> PREVIEW
             </button>
           </div>
+
+          {/* ── Consolidated Export menu ────────────────────────────────── */}
           <div className="relative">
             <button
-              onClick={() => setPrintEditorOpen(v => !v)}
-              className={`font-bebas tracking-widest text-xs items-center gap-1.5 transition-colors px-3 py-1.5 flex ${printHide.size > 0 ? 'text-white bg-white/10' : 'text-cream/75 hover:text-white hover:bg-white/10'}`}
-              title="Choose which sections appear in the print view and the BEO PDF"
+              onClick={() => setExportMenuOpen(v => !v)}
+              className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-sm transition-colors ${
+                exportMenuOpen ? 'text-white bg-white/10' : 'text-cream/75 hover:text-white hover:bg-white/10'
+              }`}
+              title="Print, export and share options"
             >
-              <Settings2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">PRINT VIEW</span>
-              {printHide.size > 0 && (
-                <span className="bg-white/20 text-white text-[9px] font-bebas px-1.5 rounded-sm">{printHide.size}</span>
-              )}
+              <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">EXPORT</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${exportMenuOpen ? 'rotate-180' : ''}`} />
             </button>
+            {exportMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setExportMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-2 z-50 bg-cream border border-gold/30 shadow-2xl rounded-sm w-64 no-print py-1.5 text-left">
+                  <button
+                    onClick={() => { setExportMenuOpen(false); setShowTemplates(v => !v); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
+                  >
+                    <FileText className="w-4 h-4 text-forest" /> Templates
+                  </button>
+                  <button
+                    onClick={() => { setExportMenuOpen(false); runPrint(); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
+                  >
+                    <Printer className="w-4 h-4 text-forest" /> Print
+                  </button>
+                  {/* Print layout — 1 / 2 columns */}
+                  <div className="flex items-center justify-between px-4 py-2">
+                    <span className="font-dm text-[13px] text-ink/70 flex items-center gap-2.5"><LayoutGrid className="w-4 h-4 text-forest" /> Layout</span>
+                    <div className="inline-flex items-center bg-linen rounded-sm border border-gold/25 overflow-hidden">
+                      <button
+                        onClick={() => setPrintColumns(1)}
+                        className={`font-bebas tracking-widest text-[10px] px-2 py-1 transition-colors ${printColumns === 1 ? 'bg-forest text-cream' : 'text-ink/50 hover:text-ink'}`}
+                      >1 COL</button>
+                      <button
+                        onClick={() => setPrintColumns(2)}
+                        className={`font-bebas tracking-widest text-[10px] px-2 py-1 transition-colors ${printColumns === 2 ? 'bg-forest text-cream' : 'text-ink/50 hover:text-ink'}`}
+                      >2 COL</button>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setExportMenuOpen(false); setPrintEditorOpen(true); }}
+                    className="w-full flex items-center justify-between gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
+                  >
+                    <span className="flex items-center gap-2.5"><Settings2 className="w-4 h-4 text-forest" /> Choose print sections</span>
+                    {printHide.size > 0 && <span className="bg-forest/10 text-forest text-[10px] font-bebas px-1.5 rounded-sm">{printHide.size}</span>}
+                  </button>
+                  {effectiveBookingId && (
+                    <>
+                      <div className="my-1.5 h-px bg-gold/20" />
+                      <button
+                        onClick={() => { setExportMenuOpen(false); setBeoPreviewOpen(true); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
+                      >
+                        <Eye className="w-4 h-4 text-forest" /> Preview &amp; print BEO
+                      </button>
+                      <a
+                        href={`/api/beo/${effectiveBookingId}${beoHideQuery}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setExportMenuOpen(false)}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
+                      >
+                        <Download className="w-4 h-4 text-forest" /> Download BEO PDF
+                      </a>
+                      <button
+                        onClick={() => { setExportMenuOpen(false); pushRunsheetToNbi.mutate({ id: effectiveBookingId }); }}
+                        disabled={pushRunsheetToNbi.isPending}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors disabled:opacity-50"
+                      >
+                        <ExternalLink className="w-4 h-4 text-forest" /> {pushRunsheetToNbi.isPending ? 'Pushing to NowBookIt…' : 'Push to NowBookIt'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+            {/* Print-section chooser popover (opened from Export menu) */}
             {printEditorOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setPrintEditorOpen(false)} />
@@ -2013,66 +2132,63 @@ export default function RunsheetBuilder() {
               </>
             )}
           </div>
-          <div className="hidden md:block h-4 w-px bg-cream/15" />
-          <button
-            onClick={runPrint}
-            className="font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 hidden md:flex items-center gap-1.5 transition-colors px-3 py-1.5"
-            title="Print runsheet (respects Print View)"
-          >
-            <Printer className="w-4 h-4" /> <span>PRINT</span>
-          </button>
-          {effectiveBookingId && (
-            <button
-              onClick={() => setBeoPreviewOpen(true)}
-              className="flex shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 px-3 py-1.5 items-center gap-1.5 transition-colors"
-              title="See exactly how the BEO will look, adjust which sections show, then print or download"
-            >
-              <Eye className="w-3.5 h-3.5" /> <span className="sm:hidden">BEO</span><span className="hidden sm:inline">PREVIEW &amp; PRINT BEO</span>
-            </button>
-          )}
-          {effectiveBookingId ? (
-            <a
-              href={`/api/beo/${effectiveBookingId}${beoHideQuery}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden lg:flex font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 px-3 py-1.5 items-center gap-1.5 transition-colors"
-              title="Download the BEO PDF directly (respects Print View)"
-            >
-              <FileText className="w-3.5 h-3.5" /> BEO PDF
-            </a>
-          ) : null}
-          {effectiveBookingId && <div className="hidden lg:block h-4 w-px bg-cream/15" />}
-          {effectiveBookingId && (
-            <button
-              onClick={() => {
-                if (!effectiveBookingId) return;
-                pushRunsheetToNbi.mutate({ id: effectiveBookingId });
-              }}
-              disabled={pushRunsheetToNbi.isPending}
-              title="Push this booking to NowBookIt"
-              className="hidden lg:flex font-bebas tracking-widest text-xs text-cream/75 hover:text-white hover:bg-white/10 px-3 py-1.5 items-center gap-1.5 transition-colors disabled:opacity-50"
-            >
-              <span className="font-bebas text-[10px] tracking-wider">NBI</span>
-              {pushRunsheetToNbi.isPending ? 'PUSHING…' : 'PUSH TO NOWBOOKIT'}
-            </button>
-          )}
-          <div className="h-4 w-px bg-cream/15" />
+
+          {/* ── Save state ──────────────────────────────────────────────── */}
           {isDirty && !saving && (
-            <span className="no-print hidden sm:flex items-center gap-1.5 text-xs font-dm text-amber-200">
+            <span className="no-print hidden sm:flex items-center gap-1.5 text-xs font-dm text-amber-200" title="You have unsaved changes">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              Unsaved
+              <span className="hidden md:inline">Unsaved</span>
             </span>
           )}
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 transition-colors bg-[#b07c25] hover:bg-[#9a6a1f] text-white disabled:opacity-60"
+            className="font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 transition-colors bg-[#2f5488] hover:bg-[#264469] text-white disabled:opacity-60"
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? "SAVING..." : isDirty ? "SAVE CHANGES" : "SAVED"}
           </Button>
         </div>
       </nav>
+
+      {/* ── DocBar — document identity strip ────────────────────────────── */}
+      <div className="no-print sticky top-14 z-40 bg-cream/90 backdrop-blur border-b border-gold/20 px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
+        <div className="font-serif text-base sm:text-lg font-semibold text-ink truncate max-w-[40vw]">
+          {title || 'Untitled runsheet'}
+        </div>
+        {(eventType || sheetId) && (
+          <div className="font-dm text-xs sm:text-sm text-ink/50 truncate">
+            {eventType ? <span className="capitalize">{eventType}</span> : null}
+            {eventType && sheetId ? ' · ' : ''}
+            {sheetId ? `BEO #${sheetId}` : ''}
+          </div>
+        )}
+        {eventDate && (
+          <span className="hidden sm:inline-flex items-center gap-1.5 font-dm text-xs text-ink/45">
+            <Calendar className="w-3.5 h-3.5" />
+            {new Date(eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}
+          </span>
+        )}
+        {guestCount && (
+          <span className="hidden md:inline-flex items-center gap-1.5 font-dm text-xs text-ink/45">
+            <Users className="w-3.5 h-3.5" /> {guestCount} guests
+          </span>
+        )}
+        <div className="flex-1 min-w-[12px]" />
+        {/* Section-ready progress */}
+        <div className="flex items-center gap-2">
+          <span className="font-dm text-[11px] font-semibold text-ink/50 whitespace-nowrap">{readyCount} of {RUNSHEET_SECTIONS.length} ready</span>
+          <span className="hidden sm:inline-flex items-center gap-1">
+            {RUNSHEET_SECTIONS.map(s => (
+              <span
+                key={s.id}
+                title={`${s.label}${sectionReady[s.id] ? ' — ready' : ''}`}
+                className={`w-1.5 h-1.5 rounded-full ${sectionReady[s.id] ? 'bg-[#2f5488]' : 'bg-gold/25'}`}
+              />
+            ))}
+          </span>
+        </div>
+      </div>
 
       {/* ── Templates Panel ─────────────────────────────────────────────── */}
       {showTemplates && (
@@ -2141,52 +2257,76 @@ export default function RunsheetBuilder() {
         </div>
       )}
 
-      {/* ── Smart Paste Import Banner (collapsible) ─────────────────────────── */}
-      <div className="no-print border-b border-gold/20">
-        <button
-          onClick={() => setSmartPasteOpen(v => !v)}
-          className="w-full flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-forest/5 via-gold/5 to-forest/5 hover:from-forest/8 hover:via-gold/8 hover:to-forest/8 transition-colors"
-        >
-          <Sparkles className="w-4 h-4 text-gold" />
-          <span className="font-bebas tracking-widest text-xs text-forest">SMART PASTE IMPORT</span>
-          <span className="font-dm text-xs text-ink/40 hidden sm:inline">— paste a brief, email or doc and AI fills everything in</span>
-          <ChevronDown className={`w-3.5 h-3.5 text-ink/30 ml-auto transition-transform ${smartPasteOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {smartPasteOpen && (
-          <div className="bg-gradient-to-r from-forest/5 via-gold/5 to-forest/5 px-6 pb-4">
-            <div className="max-w-6xl mx-auto">
-              <div className="flex gap-2 items-end">
-                <textarea
-                  value={pasteText}
-                  onChange={e => setPasteText(e.target.value)}
-                  onPaste={e => {
-                    const text = e.clipboardData.getData('text');
-                    if (text) {
-                      e.preventDefault();
-                      const t = e.target as HTMLTextAreaElement;
-                      const start = t.selectionStart ?? pasteText.length;
-                      const end = t.selectionEnd ?? pasteText.length;
-                      setPasteText(pasteText.slice(0, start) + text + pasteText.slice(end));
-                    }
-                  }}
-                  placeholder={"Paste anything here — client email, booking brief, Word doc, or catering notes.\nAI will extract: event details, dietaries, F&B items, and timeline."}
-                  rows={3}
-                  className="flex-1 rounded-sm border border-gold/20 focus:outline-none focus:border-forest font-dm text-sm resize-none bg-white/80 placeholder:text-ink/30 p-3"
-                />
-                <button
-                  onClick={() => { if (pasteText.trim()) { setShowPasteImport(true); setParsedData(null); setEditedParsedTimeline([]); } }}
-                  disabled={!pasteText.trim()}
-                  className="font-bebas tracking-widest text-sm bg-forest text-cream px-5 flex flex-col items-center justify-center gap-1.5 rounded-sm hover:bg-forest/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 self-stretch"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  IMPORT
-                </button>
+      {/* ── Smart Paste Import (promoted to an inviting card) ───────────── */}
+      {viewMode === 'edit' && (
+        <div className="no-print max-w-6xl mx-auto px-4 sm:px-6 pt-5">
+          <div className="rounded-lg bg-[#2f5488] text-white overflow-hidden shadow-sm">
+            <button
+              onClick={() => setSmartPasteOpen(v => !v)}
+              className="w-full flex items-center gap-4 px-4 sm:px-5 py-4 text-left hover:bg-[#264469] transition-colors"
+            >
+              <span className="flex-none w-10 h-10 rounded-lg bg-white/15 grid place-items-center text-[#bcd2f2]">
+                <Sparkles className="w-5 h-5" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="font-dm text-sm sm:text-[15px] font-bold text-white">Smart Paste Import</div>
+                <div className="font-dm text-xs sm:text-[13px] text-[#bcd2f2] mt-0.5 hidden xs:block sm:block">
+                  Paste a brief, email or BEO and AI fills the timeline, food, drinks and dietary in seconds.
+                </div>
               </div>
-            </div>
+              <span className="flex-none inline-flex items-center gap-2 bg-white text-[#2f5488] rounded-md px-3 sm:px-4 py-2 font-bebas tracking-widest text-xs">
+                <Clipboard className="w-4 h-4" /> {smartPasteOpen ? 'CLOSE' : 'PASTE & FILL'}
+              </span>
+            </button>
+            {smartPasteOpen && (
+              <div className="px-4 sm:px-5 pb-5 pt-1">
+                <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                  <textarea
+                    value={pasteText}
+                    onChange={e => setPasteText(e.target.value)}
+                    onPaste={e => {
+                      const text = e.clipboardData.getData('text');
+                      if (text) {
+                        e.preventDefault();
+                        const t = e.target as HTMLTextAreaElement;
+                        const start = t.selectionStart ?? pasteText.length;
+                        const end = t.selectionEnd ?? pasteText.length;
+                        setPasteText(pasteText.slice(0, start) + text + pasteText.slice(end));
+                      }
+                    }}
+                    placeholder={"Paste anything here — client email, booking brief, Word doc, or catering notes.\nAI will extract: event details, dietaries, F&B items, and timeline."}
+                    rows={3}
+                    className="flex-1 rounded-md border-0 focus:outline-none focus:ring-2 focus:ring-white/50 font-dm text-sm resize-none bg-white text-ink placeholder:text-ink/35 p-3"
+                  />
+                  <button
+                    onClick={() => { if (pasteText.trim()) { setShowPasteImport(true); setParsedData(null); setEditedParsedTimeline([]); } }}
+                    disabled={!pasteText.trim()}
+                    className="font-bebas tracking-widest text-sm bg-white text-[#2f5488] px-5 py-3 sm:py-0 flex sm:flex-col items-center justify-center gap-1.5 rounded-md hover:bg-cream active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 sm:self-stretch"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    IMPORT
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
+      {/* ── PREVIEW MODE: read-only runsheet (reuses server BEO HTML) ────── */}
+      {viewMode === 'preview' && effectiveBookingId ? (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+          <div className="flex items-center gap-2 text-[11px] font-bebas tracking-widest text-forest bg-forest/5 border border-forest/15 rounded-sm px-3 py-2 mb-4">
+            <Eye className="w-4 h-4" /> PREVIEW — this is the read-only runsheet your staff &amp; kitchen see
+          </div>
+          <iframe
+            title="Runsheet preview"
+            src={`/api/beo/${effectiveBookingId}?format=html${printHide.size ? `&hide=${encodeURIComponent(Array.from(printHide).join(','))}` : ''}&_=${previewNonce}`}
+            className="w-full bg-white border border-gold/20 rounded shadow-sm"
+            style={{ height: 'calc(100vh - 220px)' }}
+          />
+        </div>
+      ) : (
       <div className={`max-w-6xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0 ${printColumns === 2 ? 'print-cols-2' : ''}`}>
 
         {/* ── Print Header ────────────────────────────────────────────────── */}
@@ -2622,37 +2762,109 @@ export default function RunsheetBuilder() {
           </SortableContext>
         </DndContext>
 
-        {/* ── Main Tab Navigation ─────────────────────────────────────────── */}
-        <div className="no-print flex border-b border-gold/20 overflow-x-auto">
-          {[
-            { id: 'timeline', label: 'TIMELINE', icon: <Clock className="w-4 h-4" />, count: items.length },
-            { id: 'fnb', label: 'FOOD', icon: <UtensilsCrossed className="w-4 h-4" />, count: fnbItems.length },
-            { id: 'drinks', label: 'DRINKS', icon: <Wine className="w-4 h-4" />, count: rsBarNotes ? ('✓' as any) : ((rsSelectedDrinks.length + rsCustomDrinks.length) || undefined) },
-            { id: 'checklist', label: 'CHECKLIST', icon: <CheckSquare className="w-4 h-4" />, count: `${checkedCount}/${checklistItems.length}` },
-            { id: 'tableplan', label: 'TABLE PLAN', icon: <LayoutGrid className="w-4 h-4" /> },
-            { id: 'costs', label: 'COSTS', icon: <DollarSign className="w-4 h-4" />, count: costItems.length || undefined },
-          ].map(tab => (
+        {/* ── Section rail / quick-jump (replaces the six tabs) ──────────── */}
+        {/* Mobile: sticky horizontal quick-jump chips */}
+        <div className="md:hidden sticky top-[100px] z-30 -mx-6 px-4 py-2 bg-cream/95 backdrop-blur border-b border-gold/20 flex gap-2 overflow-x-auto no-print">
+          {RUNSHEET_SECTIONS.map(s => (
             <button
-              key={tab.id}
-              onClick={() => setActiveMainTab(tab.id as any)}
-              className={`flex shrink-0 items-center gap-1.5 px-3 sm:px-5 py-3 font-bebas tracking-widest text-xs whitespace-nowrap border-b-2 transition-colors ${
-                activeMainTab === tab.id
-                  ? 'border-[#2f5488] text-[#2f5488]'
-                  : 'border-transparent text-ink/40 hover:text-ink/70'
+              key={s.id}
+              onClick={() => scrollToSection(s.id)}
+              className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full font-bebas tracking-widest text-[11px] transition-colors ${
+                activeSection === s.id ? 'bg-[#2f5488] text-white' : 'bg-forest/5 text-ink/55'
               }`}
             >
-              {tab.icon} {tab.label}
-              {tab.count !== undefined && tab.count !== 0 && (
-                <span className={`text-[10px] font-bebas px-1.5 py-0.5 rounded-sm ${activeMainTab === tab.id ? 'bg-gold/15 text-amber-700' : 'bg-ink/5 text-ink/40'}`}>
-                  {tab.count}
-                </span>
-              )}
+              {s.icon} {s.label}
             </button>
           ))}
         </div>
 
-        {/* ── TIMELINE TAB ────────────────────────────────────────────────── */}
-        {activeMainTab === 'timeline' && (
+        <div className="grid md:grid-cols-[210px_minmax(0,1fr)] gap-6 lg:gap-8 items-start mt-2 print:block">
+          {/* Desktop section rail + setup nudge */}
+          <nav className="hidden md:block sticky top-[120px] self-start no-print space-y-4">
+            <div>
+              <div className="font-bebas tracking-[0.2em] text-[10px] text-forest/70 px-2 mb-2">SECTIONS</div>
+              <div className="flex flex-col gap-0.5">
+                {RUNSHEET_SECTIONS.map(s => {
+                  const on = activeSection === s.id;
+                  const ready = sectionReady[s.id];
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => scrollToSection(s.id)}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-sm text-left transition-colors ${
+                        on ? 'bg-forest/10 text-[#2f5488]' : 'text-ink/55 hover:text-ink hover:bg-forest/5'
+                      }`}
+                    >
+                      <span className={on ? 'text-[#2f5488]' : 'text-ink/40'}>{s.icon}</span>
+                      <span className={`flex-1 font-dm text-sm ${on ? 'font-semibold' : 'font-medium'}`}>{s.label}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-[#2f5488]' : 'bg-gold/30'}`} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Setup completeness nudge */}
+            <div className="bg-linen/70 border border-gold/20 rounded-md p-3.5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bebas tracking-[0.2em] text-[10px] text-forest/70">SETUP</span>
+                <span className="font-dm text-[11px] font-semibold text-ink/50">{readyCount}/{RUNSHEET_SECTIONS.length}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-gold/15 overflow-hidden">
+                <div className="h-full bg-[#2f5488] transition-all" style={{ width: `${(readyCount / RUNSHEET_SECTIONS.length) * 100}%` }} />
+              </div>
+              {readyCount < RUNSHEET_SECTIONS.length ? (
+                <div className="mt-3 flex flex-col gap-2">
+                  {RUNSHEET_SECTIONS.filter(s => !sectionReady[s.id]).slice(0, 3).map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => scrollToSection(s.id)}
+                      className="flex items-center gap-2 font-dm text-[11px] text-ink/55 hover:text-forest text-left"
+                    >
+                      <span className="w-3 h-3 rounded-full border-[1.5px] border-gold/50 flex-none" />
+                      Add {s.label.toLowerCase()}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 flex items-center gap-1.5 font-dm text-[11px] text-forest">
+                  <CheckSquare className="w-3.5 h-3.5" /> All sections ready
+                </div>
+              )}
+            </div>
+          </nav>
+
+          {/* Document column — every section in one scroll */}
+          <div className="min-w-0 space-y-6">
+
+        {/* ── Dietary & allergies — surfaced for safety ───────────────────── */}
+        {dietaries.length > 0 && (
+          <div className="no-print flex items-start gap-3 bg-[#fbecea] border border-[#eccfca] rounded-md px-4 py-3">
+            <AlertCircle className="w-5 h-5 text-[#c0392b] flex-none mt-0.5" />
+            <div className="flex-1 min-w-0 font-dm text-[13px] text-[#5e2018] leading-relaxed">
+              <b className="text-[#c0392b] font-semibold">
+                {dietaries.reduce((n, d) => n + (Number(d.count) || 1), 0)} dietary cover{dietaries.reduce((n, d) => n + (Number(d.count) || 1), 0) !== 1 ? 's' : ''}
+              </b>
+              {' · '}
+              {dietaries.slice(0, 4).map((d, i) => (
+                <span key={i}>
+                  {i > 0 ? ', ' : ''}
+                  <span className="font-semibold">{d.count}×</span> {d.name}
+                </span>
+              ))}
+              {dietaries.length > 4 && <span> +{dietaries.length - 4} more</span>}
+              <span className="text-[#5e2018]/70"> — brief the floor before service.</span>
+            </div>
+            <button
+              onClick={() => { setDietarySectionOpen(true); document.getElementById('rb-fnb')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+              className="flex-none font-bebas tracking-widest text-[10px] text-[#c0392b] border border-[#eccfca] hover:bg-[#f7ddd8] rounded-sm px-2.5 py-1.5 transition-colors"
+            >
+              MANAGE
+            </button>
+          </div>
+        )}
+
+        {/* ── TIMELINE SECTION ────────────────────────────────────────────── */}
+        <section id="rb-timeline" className="scroll-mt-[120px]">
           <div data-print-section="timeline" className="dante-card border-t-0 print:shadow-none">
             {/* Timeline header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
@@ -2938,10 +3150,11 @@ export default function RunsheetBuilder() {
               {footerText && <div className="hidden print:block font-dm text-sm text-ink/60" dangerouslySetInnerHTML={{ __html: footerText }} />}
             </div>
           </div>
-        )}
+        </section>
 
-        {/* ── F&B SHEET TAB ────────────────────────────────────────────────── */}
-        <div data-print-section="food" className={activeMainTab !== 'fnb' ? 'hidden print:block' : ''}>
+        {/* ── FOOD & BEVERAGE SECTION ─────────────────────────────────────── */}
+        <section id="rb-fnb" className="scroll-mt-[120px]">
+        <div data-print-section="food">
           <div className="dante-card border-t-0 print:shadow-none">
             {/* F&B unified header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
@@ -3765,9 +3978,10 @@ export default function RunsheetBuilder() {
             </div>{/* /Items sub-tab wrapper */}
           </div>
         </div>
+        </section>
 
-        {/* ── DRINKS TAB ───────────────────────────────────────────────────── */}
-        {activeMainTab === 'drinks' && (
+        {/* ── DRINKS SECTION ──────────────────────────────────────────────── */}
+        <section id="rb-drinks" className="scroll-mt-[120px]">
           <div data-print-section="drinks" className="dante-card border-t-0">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
@@ -3978,10 +4192,10 @@ export default function RunsheetBuilder() {
               </div>
             </div>
           </div>
-        )}
+        </section>
 
-        {/* ── CHECKLIST TAB ────────────────────────────────────────────────── */}
-        {activeMainTab === 'checklist' && (
+        {/* ── CHECKLIST SECTION ───────────────────────────────────────────── */}
+        <section id="rb-checklist" className="scroll-mt-[120px]">
           <div className="dante-card border-t-0 print:shadow-none">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-3">
@@ -4120,10 +4334,10 @@ export default function RunsheetBuilder() {
               </Button>
             </div>
           </div>
-        )}
+        </section>
 
-        {/* ── TABLE PLAN TAB ──────────────────────────────────────────────── */}
-        {activeMainTab === 'tableplan' && (
+        {/* ── TABLE PLAN SECTION ──────────────────────────────────────────── */}
+        <section id="rb-tableplan" className="scroll-mt-[120px]">
           <div className="dante-card border-t-0 print:shadow-none">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
@@ -4227,7 +4441,7 @@ export default function RunsheetBuilder() {
               </div>
             )}
           </div>
-        )}
+        </section>
         {/* ── Linked Proposal (collapsible, at bottom — always shown) ───── */}
         {(() => {
           const proposalList = (leadProposals ?? allProposals ?? []) as any[];
@@ -4360,10 +4574,10 @@ export default function RunsheetBuilder() {
               {linkedFloorPlanId && (
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setActiveMainTab('tableplan')}
+                    onClick={() => scrollToSection('tableplan')}
                     className="font-bebas tracking-widest text-[10px] text-forest hover:underline flex items-center gap-1"
                   >
-                    <LayoutGrid className="w-3 h-3" /> VIEW IN TABLE PLAN TAB
+                    <LayoutGrid className="w-3 h-3" /> VIEW IN TABLE PLAN
                   </button>
                   <span className="text-ink/20">•</span>
                   <a
@@ -4550,8 +4764,8 @@ export default function RunsheetBuilder() {
           </div>
         )}
 
-        {/* ── COSTS TAB ────────────────────────────────────────────────────── */}
-        {activeMainTab === 'costs' && (
+        {/* ── COSTS SECTION ───────────────────────────────────────────────── */}
+        <section id="rb-costs" className="scroll-mt-[120px]">
           <div className="dante-card border-t-0 no-print">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
@@ -4765,7 +4979,10 @@ export default function RunsheetBuilder() {
               );
             })()}
           </div>
-        )}
+        </section>
+
+          </div>{/* /document column */}
+        </div>{/* /section grid */}
 
         {/* Print footer */}
         <div className="hidden print:block mt-8 border-t-2 border-gold/40 pt-4 space-y-2">
@@ -4777,6 +4994,7 @@ export default function RunsheetBuilder() {
           </div>
         </div>
       </div>
+      )}
 
       {/* ── BEO PREVIEW & PRINT MODAL ────────────────────────────────────── */}
       {beoPreviewOpen && effectiveBookingId && (
