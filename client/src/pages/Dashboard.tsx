@@ -8596,18 +8596,29 @@ export default function Dashboard() {
                     </>
                   ) : (
                     <>
+                      {/* Primary — the one filled action */}
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                        <FileText className="w-3 h-3 text-gold" /> OPEN EVENT
+                        className="col-span-2 flex items-center justify-center gap-2 px-3 py-2 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                        <FileText className="w-3 h-3" /> OPEN EVENT
                       </button>
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}?tab=budget`); }}
-                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                        <TrendingUp className="w-3 h-3 text-gold" /> SPEND
-                      </button>
+
+                      {/* Plan */}
+                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">PLAN</div>
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                        <Clock className="w-3 h-3 text-gold" /> RUNSHEET
+                        className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <Clock className="w-3 h-3" /> RUNSHEET
                       </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <LayoutGrid className="w-3 h-3" /> FLOOR PLAN
+                      </button>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/checklist?bookingId=${selectedBooking.id}`); }}
+                        className="col-span-2 flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <CheckCircle className="w-3 h-3" /> CHECKLIST
+                      </button>
+
+                      {/* Documents */}
+                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">DOCUMENTS</div>
                       <button onClick={() => {
                           const a = document.createElement('a');
                           a.href = `/api/beo/${selectedBooking.id}`;
@@ -8615,7 +8626,7 @@ export default function Dashboard() {
                           document.body.appendChild(a); a.click(); document.body.removeChild(a);
                           toast.success('Generating BEO PDF...');
                         }}
-                        className="flex items-center gap-2 px-3 py-2 bg-amber-700 text-white hover:bg-amber-800 transition-colors font-bebas tracking-widest text-xs">
+                        className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <Printer className="w-3 h-3" /> BEO PDF
                       </button>
                       <button
@@ -8627,27 +8638,29 @@ export default function Dashboard() {
                             toast.success('Live event pack link copied to clipboard');
                           } catch (e: any) { toast.error(e.message ?? 'Failed to create link'); }
                         }}
-                        className="flex items-center gap-2 px-3 py-2 border border-amber-700 text-amber-700 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs">
-                        <LinkIcon className="w-3 h-3" /> COPY EVENT PACK LINK
+                        className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <LinkIcon className="w-3 h-3" /> PACK LINK
                       </button>
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                        <LayoutGrid className="w-3 h-3" /> FLOOR PLAN
-                      </button>
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/checklist?bookingId=${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                        <CheckCircle className="w-3 h-3" /> CHECKLIST
+
+                      {/* Money */}
+                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">MONEY</div>
+                      <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}?tab=budget`); }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <TrendingUp className="w-3 h-3" /> SPEND
                       </button>
                       <button onClick={() => setDrawerPaymentsOpen(v => !v)}
-                        className={`flex items-center gap-2 px-3 py-2 transition-colors font-bebas tracking-widest text-xs col-span-2 ${drawerPaymentsOpen ? 'bg-forest text-cream border border-forest' : 'border border-forest/30 text-forest hover:bg-forest/10'}`}>
+                        className={`flex items-center gap-2 px-3 py-2 rounded-sm transition-colors font-bebas tracking-widest text-xs ${drawerPaymentsOpen ? 'border border-forest text-forest bg-forest/10' : 'border border-forest/30 text-forest hover:bg-forest/10'}`}>
                         <DollarSign className="w-3 h-3" /> PAYMENTS {drawerPaymentsOpen ? '▲' : '▼'}
                       </button>
+
+                      {/* Sync */}
                       {(venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
                         <>
+                          <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">SYNC</div>
                           <button
                             onClick={() => pushToNbiMutation.mutate({ id: selectedBooking.id, force: !!selectedBooking.nbiBookingId })}
                             disabled={pushToNbiMutation.isPending}
-                            className={`flex items-center gap-2 px-3 py-2 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50 ${selectedBooking.nbiBookingId ? 'border border-[#2f5488]/50 text-[#2f5488] hover:bg-[#2f5488]/10' : 'bg-[#2f5488] text-white hover:bg-[#25426c]'}`}>
+                            className="col-span-2 flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs disabled:opacity-50">
                             <span className="font-bebas text-[10px] tracking-wider">NBI</span>
                             {pushToNbiMutation.isPending
                               ? 'PUSHING…'
@@ -8666,7 +8679,7 @@ export default function Dashboard() {
                                 markNbiSyncedMutation.mutate({ id: selectedBooking.id, nbiBookingId: ref || undefined });
                               }}
                               disabled={markNbiSyncedMutation.isPending}
-                              className="flex items-center gap-2 px-3 py-2 border border-ink/20 text-ink/60 hover:bg-ink/5 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50">
+                              className="col-span-2 flex items-center gap-2 px-3 py-2 rounded-sm border border-ink/20 text-ink/55 hover:bg-ink/5 transition-colors font-bebas tracking-widest text-xs disabled:opacity-50">
                               {markNbiSyncedMutation.isPending ? 'MARKING…' : 'MARK AS ALREADY SYNCED IN NBI'}
                             </button>
                           ) : (
@@ -8677,21 +8690,25 @@ export default function Dashboard() {
                                 }
                               }}
                               disabled={clearNbiSyncMutation.isPending}
-                              className="flex items-center gap-2 px-3 py-2 border border-ink/20 text-ink/60 hover:bg-ink/5 transition-colors font-bebas tracking-widest text-xs col-span-2 disabled:opacity-50">
+                              className="col-span-2 flex items-center gap-2 px-3 py-2 rounded-sm border border-ink/20 text-ink/55 hover:bg-ink/5 transition-colors font-bebas tracking-widest text-xs disabled:opacity-50">
                               {clearNbiSyncMutation.isPending ? 'CLEARING…' : 'CLEAR NBI SYNC'}
                             </button>
                           )}
                         </>
                       )}
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
-                            deleteBooking.mutate({ id: selectedBooking.id });
-                          }
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs col-span-2">
-                        <Trash2 className="w-3 h-3" /> DELETE EVENT
-                      </button>
+
+                      {/* Delete — low-emphasis text link */}
+                      <div className="col-span-2 pt-2 text-center">
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
+                              deleteBooking.mutate({ id: selectedBooking.id });
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-dm text-red-500/70 hover:text-red-700 underline underline-offset-2">
+                          <Trash2 className="w-3 h-3" /> Delete event
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>
