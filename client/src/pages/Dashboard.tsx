@@ -90,6 +90,24 @@ const STAGE_TONE: Record<string, string> = {
   overdue:       "#c0392b", // red
 };
 
+// Lock the standard booking lifecycle to the editorial palette regardless of a
+// venue's saved status colour (so Confirmed always reads brand blue, never
+// green). Maps a status key → COLOR_PRESETS id; genuinely custom statuses keep
+// whatever colour the venue chose.
+const BRAND_STATUS_COLOR: Record<string, string> = {
+  new: "blue",
+  contacted: "blue",
+  proposal_sent: "amber",
+  quoted: "amber",
+  negotiating: "amber",
+  tentative: "amber",
+  booked: "blue",
+  confirmed: "blue",
+  finished: "gray",
+  lost: "stone",
+  cancelled: "stone",
+};
+
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 // Relative "time ago" for enquiry cards (uses lead.createdAt).
@@ -1180,7 +1198,8 @@ export default function Dashboard() {
   const pipelineStages = React.useMemo(() => {
     const defs = parseCustomStatuses((venueSettings as any)?.customStatuses);
     return defs.map(d => {
-      const preset = COLOR_PRESETS.find(c => c.id === d.colorId) ?? COLOR_PRESETS[0];
+      const colorId = BRAND_STATUS_COLOR[d.key] ?? d.colorId;
+      const preset = COLOR_PRESETS.find(c => c.id === colorId) ?? COLOR_PRESETS[0];
       return {
         key: d.key,
         label: d.label,
@@ -1198,6 +1217,20 @@ export default function Dashboard() {
     const lookupKey = key === 'confirmed' ? 'booked' : key;
     const s = pipelineStages.find(p => p.key === lookupKey);
     if (s) return s;
+    // Canonical lifecycle key not in the venue's saved statuses → still brand it.
+    const brandId = BRAND_STATUS_COLOR[lookupKey];
+    if (brandId) {
+      const preset = COLOR_PRESETS.find(c => c.id === brandId) ?? COLOR_PRESETS[0];
+      return {
+        key,
+        label: (key ?? '').replace(/_/g, ' ').toUpperCase(),
+        color: preset.classes,
+        swatch: preset.swatch,
+        calClasses: preset.calClasses,
+        barClasses: preset.barClasses,
+        dayClasses: preset.dayClasses,
+      };
+    }
     return {
       key,
       label: (key ?? '').replace(/_/g, ' ').toUpperCase(),
