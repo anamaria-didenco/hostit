@@ -89,6 +89,86 @@ function groupByCourse(items: any[]) {
   return groups;
 }
 
+// ── Embedded "shared menu" parser ──────────────────────────────────────────
+// Some bookings store a whole multi-course menu inside ONE F&B item (e.g. a
+// "Franco Shared Menu" whose description holds ANTIPASTO … SECONDI … CONTORNO
+// … DOLCE …). Rendered verbatim that reads as one run-on blob. When we detect
+// course headings inside the text we split it into proper course columns +
+// individual dishes so the BEO menu matches the rest of the document.
+const MENU_COURSE_MAP: { kw: string; label: string }[] = [
+  { kw: "canap[eé]s?|antipasti?|antipasto|to start|nibbles?", label: "Canapés" },
+  { kw: "entr[eé]es?|primi|primo|first courses?|starters?", label: "Entrée" },
+  { kw: "mains?|main courses?|secondi|secondo", label: "Main" },
+  { kw: "sides?|contorni?|contorno", label: "Sides" },
+  { kw: "desserts?|dolci?|dolce|sweets?|puddings?", label: "Dessert" },
+  { kw: "cheeses?", label: "Cheese" },
+];
+const MENU_HEADING_WORDS = MENU_COURSE_MAP.map(c => c.kw).join("|");
+const menuStartRe = (kw: string) => new RegExp("^(?:" + kw + ")\\b", "i");
+const menuAnywhereRe = (kw: string) => new RegExp("(?:^|[\\s\\n])(?:" + kw + ")\\b", "i");
+const CONNECTOR_RE = /^(to share|to start|shared|for the table|served shared)\b[\s—\-:·,]*/i;
+
+function menuCourseFor(line: string): { label: string } | null {
+  const t = line.trim();
+  for (const c of MENU_COURSE_MAP) if (menuStartRe(c.kw).test(t)) return { label: c.label };
+  return null;
+}
+function countMenuHeadings(text: string): number {
+  return MENU_COURSE_MAP.reduce((n, c) => n + (menuAnywhereRe(c.kw).test(text) ? 1 : 0), 0);
+}
+type ParsedCourse = { label: string; note: string; dishes: { name: string; det: string }[] };
+function parseMenuBlob(raw: string): ParsedCourse[] {
+  let text = String(raw || "").trim();
+  if (!text) return [];
+  // Single-line blob: insert breaks before each heading keyword and connector.
+  if (!/\n/.test(text)) {
+    text = text
+      .replace(new RegExp("\\s+(?=(?:" + MENU_HEADING_WORDS + ")\\b)", "gi"), "\n")
+      .replace(/\s+(to share|to start)\b/gi, "\n$1");
+  }
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const courses: ParsedCourse[] = [];
+  let cur: ParsedCourse | null = null;
+  for (let line of lines) {
+    const c = menuCourseFor(line);
+    if (c) {
+      cur = { label: c.label, note: "", dishes: [] };
+      courses.push(cur);
+      let rest = line.replace(menuStartRe(MENU_COURSE_MAP.find(m => m.label === c.label)!.kw), "").trim().replace(/^[—\-:·,]+/, "").trim();
+      const m = rest.match(CONNECTOR_RE);
+      if (m) { cur.note = "To share"; rest = rest.slice(m[0].length).trim(); }
+      if (rest) cur.dishes.push({ name: rest, det: "" });
+      continue;
+    }
+    if (/^(to share|to start|shared|for the table|served shared)$/i.test(line)) { if (cur) cur.note = "To share"; continue; }
+    if (!cur) { cur = { label: "Menu", note: "", dishes: [] }; courses.push(cur); }
+    const dm = line.match(CONNECTOR_RE);
+    if (dm) { cur.note = "To share"; line = line.slice(dm[0].length).trim(); }
+    if (line) cur.dishes.push({ name: line, det: "" });
+  }
+  // Bold the lead, grey a trailing " with …" detail (matches the menu look).
+  for (const c of courses) {
+    c.dishes = c.dishes.map(d => {
+      const i = d.name.search(/\swith\s/i);
+      return i > 2 ? { name: d.name.slice(0, i), det: d.name.slice(i + 1) } : { name: d.name, det: "" };
+    });
+  }
+  return courses.filter(c => c.dishes.length > 0);
+}
+// Returns parsed courses when the food list is essentially one pasted menu
+// (≤3 items whose text carries ≥2 course headings); else null → normal path.
+function detectEmbeddedMenu(foodItems: any[]): ParsedCourse[] | null {
+  if (foodItems.length === 0 || foodItems.length > 3) return null;
+  const descText = foodItems.map(i => i.description || "").filter(Boolean).join("\n");
+  let parsed: ParsedCourse[] = [];
+  if (countMenuHeadings(descText) >= 2) parsed = parseMenuBlob(descText);
+  else {
+    const allText = foodItems.map(i => [i.dishName, i.description].filter(Boolean).join("\n")).join("\n");
+    if (countMenuHeadings(allText) >= 2) parsed = parseMenuBlob(allText);
+  }
+  return parsed.length >= 2 ? parsed : null;
+}
+
 /**
  * Finds menu packages whose items appear on this booking's F&B list,
  * loads any attached PDFs from disk, and appends their pages onto the
@@ -482,13 +562,26 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       return `
         <div class="dish"><span class="em">&mdash;</span><span class="body"><span class="dname">${escHtml(f.dishName)}</span>${det}${tag}${prep}</span></div>`;
     };
-    const menuSection = foodItems.length > 0 ? `
-  <div class="section">
+    // When the food is one pasted multi-course menu, split it into columns.
+    const embeddedMenu = detectEmbeddedMenu(foodItems);
+    const menuHead = `
     <div class="sec-head">
       <span class="sec-title">${escHtml(venueName)} Shared Menu</span>
       <span class="sec-line"></span>
       <span class="sec-meta">${guestCount ? `&times; ${escHtml(String(guestCount))} &middot; served shared to table` : ""}</span>
+    </div>`;
+    const menuSection = embeddedMenu ? `
+  <div class="section">${menuHead}
+    <div class="menu-grid">
+      ${embeddedMenu.map(c => `
+      <div class="course">
+        <div class="course-title">${escHtml(c.label)}${c.note ? ` <span class="course-note">&middot; ${escHtml(c.note)}</span>` : ""}</div>
+        ${c.dishes.map(d => `
+        <div class="dish"><span class="em">&mdash;</span><span class="body"><span class="dname">${escHtml(d.name)}</span>${d.det ? `<span class="det"> ${escHtml(d.det)}</span>` : ""}</span></div>`).join("")}
+      </div>`).join("")}
     </div>
+  </div>` : (foodItems.length > 0 ? `
+  <div class="section">${menuHead}
     <div class="menu-grid">
       ${foodCourses.map(course => `
       <div class="course">
@@ -496,7 +589,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
         ${(foodGrouped[course] ?? []).map((f: any) => dishHtml(f, { prep: !isPublic })).join("")}
       </div>`).join("")}
     </div>
-  </div>` : "";
+  </div>` : "");
 
     // ── Run of night (page 2) — time gutter + dot-and-rail timeline ───────
     // Flag (red dot) the arrival & dinner moments, matching the reference.
@@ -783,6 +876,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 32px;margin-top:2px;}
   .course{break-inside:avoid;margin-bottom:10px;}
   .course-title{font-family:var(--serif);font-style:italic;font-size:16px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:7px;}
+  .course-note{font-family:var(--sans);font-style:normal;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--gray2);text-transform:uppercase;}
   .dish{display:flex;gap:8px;padding:3px 0;align-items:baseline;}
   .dish .em{color:var(--red);font-size:13px;line-height:1.4;flex:none;}
   .dish .body{flex:1;}
