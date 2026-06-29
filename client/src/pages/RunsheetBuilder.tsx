@@ -1982,22 +1982,22 @@ export default function RunsheetBuilder() {
             else if (leadId) navigate("/dashboard");
             else navigate("/runsheet");
           }}
-          className="text-cream/70 hover:text-cream flex items-center gap-1.5 font-bebas tracking-widest text-xs"
+          className="text-cream/85 hover:text-cream flex items-center gap-1.5 font-bebas tracking-widest text-xs"
         >
           <ArrowLeft className="w-4 h-4" /> {bookingId ? 'EVENT' : 'BACK'}
         </button>
-        <div className="h-4 w-px bg-gold/20" />
+        <div className="h-4 w-px bg-cream/25" />
         <span className="font-cormorant text-cream font-semibold text-base flex-1 truncate">
           {title || 'Runsheet Builder'}
-          {sheetId && <span className="ml-2 text-cream/40 text-xs font-dm">#{sheetId}</span>}
+          {sheetId && <span className="ml-2 text-cream/55 text-xs font-dm">#{sheetId}</span>}
         </span>
         <div className="flex items-center gap-2">
           {/* ── Edit / Preview toggle ───────────────────────────────────── */}
-          <div className="hidden sm:inline-flex items-center gap-0.5 bg-white/5 border border-white/10 rounded-sm p-0.5">
+          <div className="hidden sm:inline-flex items-center gap-0.5 bg-black/20 border border-white/15 rounded-sm p-0.5">
             <button
               onClick={() => setViewMode('edit')}
               className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1 rounded-sm transition-colors ${
-                viewMode === 'edit' ? 'bg-cream text-forest' : 'text-cream/65 hover:text-white'
+                viewMode === 'edit' ? 'bg-cream text-forest shadow-sm' : 'text-cream/80 hover:text-white hover:bg-white/10'
               }`}
             >
               <Pencil className="w-3.5 h-3.5" /> EDIT
@@ -2007,7 +2007,7 @@ export default function RunsheetBuilder() {
               disabled={!effectiveBookingId}
               title={effectiveBookingId ? 'Read-only runsheet staff & kitchen see' : 'Link this runsheet to an event to preview'}
               className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1 rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                viewMode === 'preview' ? 'bg-cream text-forest' : 'text-cream/65 hover:text-white'
+                viewMode === 'preview' ? 'bg-cream text-forest shadow-sm' : 'text-cream/80 hover:text-white hover:bg-white/10'
               }`}
             >
               <Eye className="w-3.5 h-3.5" /> PREVIEW
@@ -2019,7 +2019,7 @@ export default function RunsheetBuilder() {
             <button
               onClick={() => setExportMenuOpen(v => !v)}
               className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-sm transition-colors ${
-                exportMenuOpen ? 'text-white bg-white/10' : 'text-cream/75 hover:text-white hover:bg-white/10'
+                exportMenuOpen ? 'text-white bg-white/15' : 'text-cream/85 hover:text-white hover:bg-white/10'
               }`}
               title="Print, export and share options"
             >
@@ -2143,7 +2143,11 @@ export default function RunsheetBuilder() {
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 transition-colors bg-[#2f5488] hover:bg-[#264469] text-white disabled:opacity-60"
+            className={`font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 transition-colors disabled:opacity-60 ${
+              isDirty
+                ? 'bg-[#f4c14b] hover:bg-[#e7b339] text-[#16140f] shadow-sm'
+                : 'bg-white/10 hover:bg-white/15 text-cream/85 ring-1 ring-white/15'
+            }`}
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? "SAVING..." : isDirty ? "SAVE CHANGES" : "SAVED"}
