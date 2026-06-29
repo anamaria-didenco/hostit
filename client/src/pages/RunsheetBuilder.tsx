@@ -371,11 +371,6 @@ export default function RunsheetBuilder() {
   const [newRsCustomDrink, setNewRsCustomDrink] = useState({ name: "", description: "" });
   const [drinksSaving, setDrinksSaving] = useState(false);
 
-  function clearLegacyDrinkSelections() {
-    setRsSelectedDrinks([]);
-    setRsCustomDrinks([]);
-  }
-
   // F&B
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
   const [fnbSaving, setFnbSaving] = useState(false);
@@ -4171,32 +4166,6 @@ export default function RunsheetBuilder() {
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm font-dm min-h-[160px]"
                 />
                 <div className="font-dm text-[11px] text-ink/40 mt-1.5">Notes appear on the BEO and the live runsheet (Drinks panel).</div>
-
-                {/* Legacy data — only shown if a previous save left selections behind */}
-                {(rsSelectedDrinks.length > 0 || rsCustomDrinks.length > 0) && (
-                  <div className="mt-4 border border-amber-300 bg-amber-50/60 p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="font-bebas tracking-widest text-xs text-amber-700">SAVED FROM OLD DRINK PICKER</div>
-                      <button
-                        onClick={() => { if (confirm('Clear these saved drink selections? They will be removed on next save.')) clearLegacyDrinkSelections(); }}
-                        className="font-bebas tracking-widest text-[10px] text-amber-700 hover:text-red-600 underline"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {rsSelectedDrinks.map(k => (
-                        <span key={k} className="bg-white text-amber-900 text-[10px] px-2 py-0.5 font-dm border border-amber-300">
-                          {k.replace(/_/g, ' ')}
-                        </span>
-                      ))}
-                      {rsCustomDrinks.map((d, i) => (
-                        <span key={`c${i}`} className="bg-white text-amber-900 text-[10px] px-2 py-0.5 font-dm border border-amber-300">{d.name}</span>
-                      ))}
-                    </div>
-                    <div className="font-dm text-[10px] text-amber-700/70 mt-2">Tip: copy anything you want to keep into the notes above, then clear.</div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
