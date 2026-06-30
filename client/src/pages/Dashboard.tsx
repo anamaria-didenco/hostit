@@ -961,7 +961,7 @@ export default function Dashboard() {
     upcomingOnly: true,
     hideStatuses: ["lost", "finished"] as string[],
   };
-  const [eventTablePrefs, _setEventTablePrefs] = useState(() => {
+  const [eventTablePrefs, _setEventTablePrefs] = useState<typeof DEFAULT_EVENT_TABLE_PREFS>(() => {
     try {
       const raw = localStorage.getItem(`vf_events_table_prefs_v1_${user?.id ?? "default"}`);
       if (raw) return { ...DEFAULT_EVENT_TABLE_PREFS, ...JSON.parse(raw) };
@@ -969,7 +969,7 @@ export default function Dashboard() {
     return { ...DEFAULT_EVENT_TABLE_PREFS };
   });
   const setEventTablePrefs = React.useCallback((updates: Partial<typeof DEFAULT_EVENT_TABLE_PREFS>) => {
-    _setEventTablePrefs(prev => {
+    _setEventTablePrefs((prev) => {
       const next = { ...prev, ...updates };
       try { localStorage.setItem(EVENT_TABLE_PREFS_KEY, JSON.stringify(next)); } catch {}
       return next;
