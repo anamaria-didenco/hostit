@@ -47,6 +47,6 @@ services:
 
 databases:
   - name: venueflowhq-db
-    plan: starter               # managed Postgres, daily backups
+    plan: basic-256mb               # managed Postgres, daily backups
     region: singapore
     databaseName: venueflow
