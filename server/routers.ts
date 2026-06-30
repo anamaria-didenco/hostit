@@ -3361,7 +3361,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         gstInclusive: z.boolean().optional(),
         paymentNotes: z.string().optional(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).optional(),
-        drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string()).optional() }).nullable().optional(),
+        drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string(), z.string()).optional() }).nullable().optional(),
         items: z.array(z.object({
           time: z.string(),
           duration: z.number().optional(),
@@ -3450,7 +3450,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         floorPlanId: z.number().nullable().optional(),
         fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional(), qty: z.boolean().optional() }).optional(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).nullable().optional(),
-        drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string()).optional() }).nullable().optional(),
+        drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string(), z.string()).optional() }).nullable().optional(),
         gstInclusive: z.boolean().optional(),
         paymentNotes: z.string().optional().nullable(),
       }))

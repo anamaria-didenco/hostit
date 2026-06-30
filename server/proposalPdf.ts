@@ -409,7 +409,10 @@ export async function handleProposalPdf(req: Request, res: Response) {
       headless: true,
     });
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    // `networkidle0` waits for external resources (Google Fonts, venue logo) to
+    // finish loading before rendering the PDF. Puppeteer's `setContent` type omits
+    // it, but the underlying lifecycle watcher supports it identically to `goto`.
+    await page.setContent(html, { waitUntil: "networkidle0" as "load" });
     const pdfBuffer = await page.pdf({
       format: "A4",
       margin: { top: "0", right: "0", bottom: "0", left: "0" },

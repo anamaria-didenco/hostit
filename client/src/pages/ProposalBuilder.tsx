@@ -376,6 +376,10 @@ export default function ProposalBuilder() {
         internalNotes: internalNotes || undefined,
         expiresAt: expiresAt || undefined,
       });
+      if (!proposal) {
+        toast.error("Failed to save proposal");
+        return;
+      }
       setSavedProposal(proposal);
       await saveQuote.mutateAsync({
         proposalId: proposal.id,
