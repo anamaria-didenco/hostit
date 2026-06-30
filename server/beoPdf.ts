@@ -79,6 +79,25 @@ function fmtCurrency(v: string | number | null | undefined): string {
   return `$${Number(v).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Notes arrive as rich-text HTML from the runsheet/event notes editor. Turn
+// block boundaries into line breaks, strip tags + inline styles, and decode
+// common entities so Key Notes shows clean bullet lines, not raw markup.
+function htmlNotesToLines(raw: string): string[] {
+  if (!raw) return [];
+  const t = String(raw)
+    .replace(/<\s*(br|hr)\s*\/?>/gi, "\n")
+    .replace(/<\s*(div|p|li|h[1-6]|tr|ul|ol)(\s[^>]*)?>/gi, "\n")
+    .replace(/<\/\s*(div|p|li|h[1-6]|tr|ul|ol)\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'");
+  return t.split(/\n+/).map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+
 function groupByCourse(items: any[]) {
   const groups: Record<string, any[]> = {};
   for (const item of items) {
@@ -616,8 +635,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       </div>` : "";
 
     // ── Key notes (page 2) — fill box with bullet lines ──────────────────
-    const allNotes = [rsNotes, bookingNotes].filter(Boolean).join("\n").trim();
-    const noteLines = allNotes.split(/\n+/).map(l => l.trim()).filter(Boolean);
+    const noteLines = [rsNotes, bookingNotes].filter(Boolean).flatMap(htmlNotesToLines);
     const notesSection = noteLines.length > 0 ? `
       <div class="box fill">
         <div class="box-title">Key Notes</div>
