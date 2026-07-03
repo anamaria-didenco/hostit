@@ -72,42 +72,6 @@ const PIPELINE_STAGES = [
   { key: "lost", label: "LOST", color: "border-stone-400 bg-stone-200 text-stone-700" },
 ];
 
-// Editorial column tones for the pipeline kanban. The design keeps the board on
-// the brand blue/amber/red palette (no green/sky), so map the standard lead
-// lifecycle to editorial colours; custom stages fall back to their own swatch.
-const STAGE_TONE: Record<string, string> = {
-  new:           "#2f5488", // blue — fresh enquiry
-  contacted:     "#6b98e7", // bright blue
-  proposal_sent: "#b07c25", // amber — quoted
-  quoted:        "#b07c25",
-  negotiating:   "#b07c25",
-  tentative:     "#b07c25",
-  booked:        "#2f5488", // blue — confirmed
-  confirmed:     "#2f5488",
-  finished:      "#6a6256", // warm grey
-  lost:          "#8a8073", // grey
-  cancelled:     "#8a8073",
-  overdue:       "#c0392b", // red
-};
-
-// Lock the standard booking lifecycle to the editorial palette regardless of a
-// venue's saved status colour (so Confirmed always reads brand blue, never
-// green). Maps a status key → COLOR_PRESETS id; genuinely custom statuses keep
-// whatever colour the venue chose.
-const BRAND_STATUS_COLOR: Record<string, string> = {
-  new: "blue",
-  contacted: "blue",
-  proposal_sent: "amber",
-  quoted: "amber",
-  negotiating: "amber",
-  tentative: "amber",
-  booked: "blue",
-  confirmed: "blue",
-  finished: "gray",
-  lost: "stone",
-  cancelled: "stone",
-};
-
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 // Relative "time ago" for enquiry cards (uses lead.createdAt).
@@ -1195,11 +1159,11 @@ export default function Dashboard() {
     { ownerId: user?.id },
     { enabled: !!user?.id }
   );
+  const customStatusDefs = React.useMemo(() => parseCustomStatuses((venueSettings as any)?.customStatuses), [venueSettings]);
+
   const pipelineStages = React.useMemo(() => {
-    const defs = parseCustomStatuses((venueSettings as any)?.customStatuses);
-    return defs.map(d => {
-      const colorId = BRAND_STATUS_COLOR[d.key] ?? d.colorId;
-      const preset = COLOR_PRESETS.find(c => c.id === colorId) ?? COLOR_PRESETS[0];
+    return customStatusDefs.map(d => {
+      const preset = COLOR_PRESETS.find(c => c.id === d.colorId) ?? COLOR_PRESETS[0];
       return {
         key: d.key,
         label: d.label,
@@ -1210,17 +1174,17 @@ export default function Dashboard() {
         dayClasses: preset.dayClasses,
       };
     });
-  }, [venueSettings]);
+  }, [customStatusDefs]);
 
   const getStatusInfo = React.useCallback((key: string) => {
     // 'confirmed' (booking status enum) should display identically to 'booked' (lead status)
     const lookupKey = key === 'confirmed' ? 'booked' : key;
     const s = pipelineStages.find(p => p.key === lookupKey);
     if (s) return s;
-    // Canonical lifecycle key not in the venue's saved statuses → still brand it.
-    const brandId = BRAND_STATUS_COLOR[lookupKey];
-    if (brandId) {
-      const preset = COLOR_PRESETS.find(c => c.id === brandId) ?? COLOR_PRESETS[0];
+    // Canonical lifecycle key not in the venue's saved statuses → derive from the venue's own custom status for that key.
+    const ownDef = customStatusDefs.find(d => d.key === lookupKey);
+    if (ownDef) {
+      const preset = COLOR_PRESETS.find(c => c.id === ownDef.colorId) ?? COLOR_PRESETS[0];
       return {
         key,
         label: (key ?? '').replace(/_/g, ' ').toUpperCase(),
@@ -1240,7 +1204,7 @@ export default function Dashboard() {
       barClasses: "bg-gray-300",
       dayClasses: "border-l-4 border-gray-400 bg-gray-50",
     };
-  }, [pipelineStages]);
+  }, [pipelineStages, customStatusDefs]);
 
   const saveKanbanPrefs = React.useCallback((prefs: { visible: string[]; order: string[] }) => {
     const key = `kanban_stage_prefs_${user?.id ?? "default"}`;
@@ -3252,7 +3216,7 @@ export default function Dashboard() {
                     <div className="flex gap-5 min-w-max h-full">
                       {kanbanStages.map(stage => {
                         const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
-                        const tone = STAGE_TONE[stage.key] ?? (stage as any).swatch ?? '#2f5488';
+                        const tone = (stage as any).swatch ?? '#2f5488';
                         const stageTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
                         const stageTotalLabel = stageTotal > 0 ? `$${(stageTotal / 1000).toFixed(1)}k` : null;
                         return (
