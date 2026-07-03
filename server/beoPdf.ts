@@ -831,7 +831,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{background:var(--paper-edge);font-family:var(--sans);color:var(--ink2);-webkit-font-smoothing:antialiased;}
   .sheet{
-    width:210mm;min-height:297mm;background:var(--cream);margin:10mm auto;
+    width:210mm;min-height:auto;background:var(--cream);margin:10mm auto;
     padding:16mm 15mm 14mm;position:relative;display:flex;flex-direction:column;
   }
   .muted{color:var(--gray);}
@@ -904,7 +904,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .prep-line{font-size:11.5px;color:var(--gray2);margin-top:2px;font-style:italic;}
 
   /* ── Footer ── */
-  .foot{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:10px;color:var(--faint);letter-spacing:.04em;}
+  .foot{margin-top:24px;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:10px;color:var(--faint);letter-spacing:.04em;}
   .foot .biz{font-weight:700;color:var(--green);}
 
   /* ── Page 2 head + columns ── */
@@ -971,8 +971,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   @page{size:A4;margin:0;}
   @media print{
     html,body{background:none;}
-    .sheet{margin:0;page-break-after:always;}
-    .sheet:last-child{page-break-after:auto;}
+    .sheet{margin:0;}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
   @media screen{ .sheet{box-shadow:0 8px 40px rgba(0,0,0,.16);} }
