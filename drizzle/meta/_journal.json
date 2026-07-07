@@ -308,6 +308,13 @@
       "when": 1779800200000,
       "tag": "0043_beo_redesign_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1779800300000,
+      "tag": "0044_wedding_checklist",
+      "breakpoints": true
     }
   ]
 }

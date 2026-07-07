@@ -5615,6 +5615,150 @@ Return ONLY valid JSON.`;
       }),
   }),
 
+  // ─── Wedding Checklist (couple-facing, filled in via a public share link) ──
+  weddingChecklist: router({
+    // Protected: fetch (or lazily create) the link + current answers for a
+    // runsheet, so the operator can copy the link and see progress inline.
+    getForRunsheet: protectedProcedure
+      .input(z.object({ runsheetId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { weddingChecklists, runsheets } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [rs] = await db.select({ id: runsheets.id }).from(runsheets)
+          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+        if (!rs) throw new Error('Runsheet not found');
+        const [existing] = await db.select().from(weddingChecklists)
+          .where(eq(weddingChecklists.runsheetId, input.runsheetId)).limit(1);
+        return existing ?? null;
+      }),
+
+    // Protected: create the share link for a runsheet (idempotent — returns
+    // the existing one if already created).
+    createLink: protectedProcedure
+      .input(z.object({ runsheetId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { weddingChecklists, runsheets } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [rs] = await db.select({ id: runsheets.id }).from(runsheets)
+          .where(and(eq(runsheets.id, input.runsheetId), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+        if (!rs) throw new Error('Runsheet not found');
+        const [existing] = await db.select().from(weddingChecklists)
+          .where(eq(weddingChecklists.runsheetId, input.runsheetId)).limit(1);
+        if (existing) return existing;
+        const crypto = await import('crypto');
+        const shareToken = crypto.randomBytes(24).toString('hex');
+        const [created] = await db.insert(weddingChecklists).values({
+          runsheetId: input.runsheetId,
+          ownerId: ctx.user.id,
+          shareToken,
+          answers: {},
+        }).returning();
+        return created;
+      }),
+
+    // Protected: delete the link (couple will see "link not found" after).
+    deleteLink: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { weddingChecklists } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        await db.delete(weddingChecklists)
+          .where(and(eq(weddingChecklists.id, input.id), eq(weddingChecklists.ownerId, ctx.user.id)));
+        return { success: true };
+      }),
+
+    // Public: fetch venue/event context + question set + current answers.
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('weddingChecklist:getByToken', getRequestIp(ctx.req), 120, 60_000);
+        const { getDb } = await import('./db');
+        const { weddingChecklists, runsheets, venueSettings, leads } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return null;
+        const [wc] = await db.select().from(weddingChecklists).where(eq(weddingChecklists.shareToken, input.token)).limit(1);
+        if (!wc) return null;
+        const [runsheet] = await db.select().from(runsheets).where(eq(runsheets.id, wc.runsheetId)).limit(1);
+        if (!runsheet) return null;
+        const [venue] = await db.select({ name: venueSettings.name, logoUrl: venueSettings.logoUrl, primaryColor: venueSettings.primaryColor })
+          .from(venueSettings).where(eq(venueSettings.ownerId, wc.ownerId)).limit(1);
+        let coupleNames: string | null = null;
+        if (runsheet.leadId) {
+          const [lead] = await db.select({ firstName: leads.firstName, lastName: leads.lastName }).from(leads).where(eq(leads.id, runsheet.leadId)).limit(1);
+          if (lead) coupleNames = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
+        }
+        return {
+          answers: wc.answers ?? {},
+          submittedAt: wc.submittedAt,
+          venueName: venue?.name ?? 'Your Venue',
+          eventTitle: runsheet.title,
+          eventDate: runsheet.eventDate,
+          coupleNames,
+        };
+      }),
+
+    // Public: autosave answers as the couple fills the form in. Merges into
+    // the existing answers object rather than requiring the whole thing each
+    // time, so partial saves from a slow connection never wipe other fields.
+    saveByToken: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        answers: z.object({
+          ceremonyNotes: z.string().optional(),
+          mustHaveMoments: z.string().optional(),
+          firstDanceSong: z.string().optional(),
+          processionalSong: z.string().optional(),
+          doNotPlay: z.string().optional(),
+          seatingNotes: z.string().optional(),
+          familyNotes: z.string().optional(),
+          dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
+          dayOfContactName: z.string().optional(),
+          dayOfContactPhone: z.string().optional(),
+          specialRequests: z.string().optional(),
+        }),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('weddingChecklist:saveByToken', getRequestIp(ctx.req), 60, 60_000);
+        const { getDb } = await import('./db');
+        const { weddingChecklists } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [wc] = await db.select().from(weddingChecklists).where(eq(weddingChecklists.shareToken, input.token)).limit(1);
+        if (!wc) throw new Error('Link not found');
+        const merged = { ...(wc.answers ?? {}), ...input.answers };
+        await db.update(weddingChecklists).set({ answers: merged, updatedAt: new Date() }).where(eq(weddingChecklists.id, wc.id));
+        return { success: true };
+      }),
+
+    // Public: mark the form as submitted (shown to the operator + a gentle
+    // "thanks, you're done" state for the couple; doesn't lock editing).
+    submitByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('weddingChecklist:submitByToken', getRequestIp(ctx.req), 20, 60_000);
+        const { getDb } = await import('./db');
+        const { weddingChecklists } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [wc] = await db.select().from(weddingChecklists).where(eq(weddingChecklists.shareToken, input.token)).limit(1);
+        if (!wc) throw new Error('Link not found');
+        await db.update(weddingChecklists).set({ submittedAt: new Date(), updatedAt: new Date() }).where(eq(weddingChecklists.id, wc.id));
+        return { success: true };
+      }),
+  }),
+
   // ─── Daily / Standalone Checklists ────────────────────────────────────────
   dailyChecklists: router({
     list: protectedProcedure.query(async ({ ctx }) => {

@@ -524,6 +524,36 @@ export const checklistInstances = pgTable("checklist_instances", {
 });
 export type ChecklistInstance = typeof checklistInstances.$inferSelect;
 
+// ─── Wedding Checklist (couple-facing, filled in via a public share link) ─────
+// One per runsheet. `answers` is a free-form questionnaire response — the
+// question set itself is defined in the client, not the DB, so it can evolve
+// without a migration. The `dietaries` shape intentionally matches
+// runsheets.dietaries so an operator can review + import it with one click
+// rather than trusting unverified guest input straight into a safety field.
+export const weddingChecklists = pgTable("wedding_checklists", {
+  id: serial("id").primaryKey(),
+  runsheetId: integer("runsheetId").notNull(),
+  ownerId: integer("ownerId").notNull(),
+  shareToken: varchar("shareToken", { length: 64 }).notNull().unique(),
+  answers: json("answers").$type<{
+    ceremonyNotes?: string;
+    mustHaveMoments?: string;
+    firstDanceSong?: string;
+    processionalSong?: string;
+    doNotPlay?: string;
+    seatingNotes?: string;
+    familyNotes?: string;
+    dietaries?: { name: string; count: number; notes?: string }[];
+    dayOfContactName?: string;
+    dayOfContactPhone?: string;
+    specialRequests?: string;
+  }>().default({}),
+  submittedAt: timestamp("submittedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+export type WeddingChecklist = typeof weddingChecklists.$inferSelect;
+
 // ─── Payments ─────────────────────────────────────────────────────────────────
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
