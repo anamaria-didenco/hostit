@@ -13,7 +13,7 @@ import {
   UtensilsCrossed, ChefHat, User, Phone, Mail, CheckSquare, Square,
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
   Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine, Package,
-  Eye, EyeOff, DollarSign, Download, ClipboardList, Calendar, Pencil, Camera,
+  Eye, EyeOff, DollarSign, Download, ClipboardList, Calendar, Pencil, Camera, Heart,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -1203,6 +1203,19 @@ export default function RunsheetBuilder() {
   });
   const deleteStaffLinkMutation = trpc.staffPortal.deleteLink.useMutation({
     onSuccess: () => { toast.success('Link deleted'); refetchStaffLinks(); },
+    onError: () => toast.error('Failed to delete link'),
+  });
+  // ── Wedding Checklist — couple-facing share link ──────────────────────
+  const { data: weddingChecklist, refetch: refetchWeddingChecklist } = trpc.weddingChecklist.getForRunsheet.useQuery(
+    { runsheetId: sheetId! },
+    { enabled: !!sheetId }
+  );
+  const createWeddingChecklistMutation = trpc.weddingChecklist.createLink.useMutation({
+    onSuccess: () => { toast.success('Wedding checklist link created'); refetchWeddingChecklist(); },
+    onError: () => toast.error('Failed to create link'),
+  });
+  const deleteWeddingChecklistMutation = trpc.weddingChecklist.deleteLink.useMutation({
+    onSuccess: () => { toast.success('Link deleted'); refetchWeddingChecklist(); },
     onError: () => toast.error('Failed to delete link'),
   });
   // Used by the per-link "Email staff briefing" button — sends the runsheet
@@ -4687,6 +4700,88 @@ export default function RunsheetBuilder() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Wedding Checklist — send a fill-in-yourself link to the couple ── */}
+        {sheetId && (
+          <div className="dante-card mt-4 no-print">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
+              <div className="flex items-center gap-2">
+                <Heart className="w-4 h-4 text-forest" />
+                <span className="font-bebas tracking-widest text-sm text-forest">WEDDING CHECKLIST</span>
+                {weddingChecklist?.submittedAt && (
+                  <span className="text-xs font-bebas px-1.5 py-0.5 bg-forest/10 text-forest">SUBMITTED</span>
+                )}
+              </div>
+            </div>
+            <div className="px-5 pb-5 pt-2 space-y-3">
+              <p className="text-xs font-dm text-ink/50">
+                Send a link the couple can fill in themselves — ceremony details, music, seating, dietary requirements and a day-of contact. Saves automatically as they go.
+              </p>
+              {weddingChecklist ? (
+                <>
+                  <div className="flex items-center gap-2 bg-linen border border-gold/20 px-3 py-2">
+                    <Heart className="w-3.5 h-3.5 text-gold shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-dm text-xs font-semibold text-ink truncate">Wedding checklist link</div>
+                      <div className="font-dm text-[10px] text-ink/40 truncate">{`${window.location.origin}/wedding-checklist/${weddingChecklist.shareToken}`}</div>
+                    </div>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/wedding-checklist/${weddingChecklist.shareToken}`); toast.success('Link copied!'); }}
+                      className="p-1 hover:text-forest transition-colors text-ink/40"
+                      title="Copy link"
+                    >
+                      <Clipboard className="w-3.5 h-3.5" />
+                    </button>
+                    <a
+                      href={`/wedding-checklist/${weddingChecklist.shareToken}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 hover:text-forest transition-colors text-ink/40"
+                      title="Open link"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                    <button
+                      onClick={() => { if (confirm('Delete this link? The couple will no longer be able to access or update it.')) deleteWeddingChecklistMutation.mutate({ id: weddingChecklist.id }); }}
+                      className="p-1 hover:text-red-500 transition-colors text-ink/30"
+                      title="Delete link"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {(weddingChecklist.answers?.dietaries?.length ?? 0) > 0 && (
+                    <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 px-3 py-2">
+                      <span className="font-dm text-xs text-amber-800">
+                        The couple listed {weddingChecklist.answers!.dietaries!.length} dietary requirement{weddingChecklist.answers!.dietaries!.length !== 1 ? 's' : ''} — review before adding to the event.
+                      </span>
+                      <button
+                        onClick={() => {
+                          const incoming = weddingChecklist.answers!.dietaries!;
+                          const existingNames = new Set(dietaries.map(d => d.name.toLowerCase().trim()));
+                          const toAdd = incoming.filter(d => d.name.trim() && !existingNames.has(d.name.toLowerCase().trim()));
+                          if (toAdd.length === 0) { toast.info('Already added — nothing new to import.'); return; }
+                          setDietaries(prev => [...prev, ...toAdd]);
+                          toast.success(`Added ${toAdd.length} to Dietary & Allergies`);
+                        }}
+                        className="font-bebas tracking-widest text-[10px] text-amber-800 border border-amber-300 px-2.5 py-1.5 hover:bg-amber-100 transition-colors shrink-0"
+                      >
+                        IMPORT TO EVENT
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <button
+                  onClick={() => createWeddingChecklistMutation.mutate({ runsheetId: sheetId })}
+                  disabled={createWeddingChecklistMutation.isPending}
+                  className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-3 py-1.5 hover:bg-forest/5 transition-colors disabled:opacity-50"
+                >
+                  <Plus className="w-3 h-3" /> {createWeddingChecklistMutation.isPending ? 'CREATING...' : 'CREATE WEDDING CHECKLIST LINK'}
+                </button>
+              )}
+            </div>
           </div>
         )}
 
