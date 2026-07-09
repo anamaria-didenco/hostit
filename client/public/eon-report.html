@@ -13,7 +13,7 @@
     --oxblood: #690500;
     --paper: #FCFBF7;
     --peach: #FAD6C2;
-    --muted: rgba(105, 5, 0, .62);
+    --muted: rgba(105, 5, 0, .74);
     --line: rgba(105, 5, 0, .16);
     --redline: rgba(229, 31, 26, .32);
     --good: #2F6B4E;
@@ -27,9 +27,10 @@
     background: #ece2d6;
     font-family: var(--font-body);
     color: var(--oxblood);
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
-  input::placeholder, textarea::placeholder { color: rgba(105,5,0,.28); }
+  input::placeholder, textarea::placeholder { color: rgba(105,5,0,.32); }
 
   header.masthead {
     background: var(--oxblood);
@@ -71,6 +72,11 @@
   .util-btn:hover { background: var(--oxblood); color: var(--peach); }
   .util-btn.clear:hover { border-color: var(--franco-red); color: var(--franco-red); background: transparent; }
   .tabbar .spacer { margin-left: auto; display: flex; gap: 10px; }
+  @media (max-width: 640px) {
+    .tabbar .inner { padding: 10px 16px; }
+    .tabbar .spacer { margin-left: 0; width: 100%; }
+    .tabbar .spacer .util-btn { flex: 1; }
+  }
 
   .page { max-width: 980px; margin: 24px auto; background: var(--paper); border: 1px solid var(--line); border-radius: 5px; box-shadow: 0 14px 34px rgba(29,29,27,.08); padding: 26px 30px 34px; }
 
@@ -81,20 +87,20 @@
   .card-num { flex: none; font-family: var(--font-display); font-size: 14px; color: var(--peach); background: var(--franco-red); width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 2px; }
   .card-title { margin: 0; font-family: var(--font-display); text-transform: uppercase; color: var(--franco-red); font-size: 17px; letter-spacing: .03em; line-height: 1; }
   .card-hint { margin-left: auto; font-style: italic; font-size: 11.5px; color: var(--muted); }
-  .card-note { margin: 0 0 12px; font-style: italic; font-size: 12.5px; color: var(--muted); }
+  .card-note { margin: 0 0 12px; font-style: italic; font-size: 13px; color: var(--muted); line-height: 1.5; }
 
   .row-head { display: grid; gap: 14px; align-items: end; padding-bottom: 6px; border-bottom: 1.5px solid var(--redline); }
-  .row-head span { font-style: italic; text-transform: uppercase; letter-spacing: .08em; font-size: 9px; color: var(--franco-red); text-align: right; }
+  .row-head span { font-style: italic; text-transform: uppercase; letter-spacing: .08em; font-size: 10px; color: var(--franco-red); text-align: right; }
   .row-head span:first-child { text-align: left; }
 
-  .row { display: grid; gap: 14px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
-  .row .lbl { font-size: 14px; color: var(--oxblood); }
-  .row .lbl .fine { color: var(--muted); font-size: 12.5px; }
-  .row .val { text-align: right; font-size: 14px; color: var(--oxblood); padding: 4px 1px; }
+  .row { display: grid; gap: 14px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .row .lbl { font-size: 14.5px; color: var(--oxblood); }
+  .row .lbl .fine { color: var(--muted); font-size: 13px; }
+  .row .val { text-align: right; font-size: 14.5px; color: var(--oxblood); padding: 4px 1px; }
   .money-in { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--line); }
-  .money-in span { color: var(--muted); font-size: 12px; }
-  .money-in input, .plain-in { width: 100%; min-width: 0; border: none; background: transparent; text-align: right; font-family: var(--font-body); font-size: 14px; color: var(--oxblood); padding: 5px 1px; outline: none; }
-  .row.total { background: var(--peach); border-radius: 3px; margin-top: 4px; border-bottom: none; padding: 8px 0; }
+  .money-in span { color: var(--muted); font-size: 12.5px; }
+  .money-in input, .plain-in { width: 100%; min-width: 0; border: none; background: transparent; text-align: right; font-family: var(--font-body); font-size: 14.5px; color: var(--oxblood); padding: 6px 1px; outline: none; }
+  .row.total { background: var(--peach); border-radius: 3px; margin-top: 4px; border-bottom: none; padding: 9px 0; }
   .row.total .lbl { padding-left: 10px; }
   .row.total .val { color: var(--franco-red); padding-right: 10px; }
 
@@ -102,7 +108,17 @@
   .cols5 { grid-template-columns: 1fr 92px 92px 92px 92px; }
   .cols3 { grid-template-columns: 1fr 88px 88px; }
 
+  /* On narrow screens these grids no longer fit — scroll them horizontally as
+     one unit (via .grid-scroll) instead of letting columns clip off-screen. */
+  .grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 640px) {
+    .grid-scroll > .cols4 { min-width: 560px; }
+    .grid-scroll > .cols5 { min-width: 620px; }
+    .grid-scroll > .cols3 { min-width: 380px; }
+  }
+
   .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .two-up > * { min-width: 0; }
   @media (max-width: 720px) { .two-up { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } }
 
   .big-total { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 4px 0; }
@@ -117,14 +133,14 @@
 
   .status-pair { display: flex; gap: 8px; padding: 6px 0 0; }
   .status-pair > div { flex: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-  .status-pair .lb { font-style: italic; font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+  .status-pair .lb { font-style: italic; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
 
   textarea.field {
     width: 100%; box-sizing: border-box; min-height: 58px; resize: vertical; border: 1px solid var(--line);
-    border-radius: 3px; background: #fffdf9; font-family: var(--font-body); font-size: 13.5px; color: var(--oxblood);
-    padding: 8px 10px; outline: none; line-height: 1.5;
+    border-radius: 3px; background: #fffdf9; font-family: var(--font-body); font-size: 14px; color: var(--oxblood);
+    padding: 9px 11px; outline: none; line-height: 1.55;
   }
-  .field-lbl { font-style: italic; text-transform: uppercase; letter-spacing: .12em; font-size: 9.5px; color: var(--franco-red); margin-bottom: 5px; }
+  .field-lbl { font-style: italic; text-transform: uppercase; letter-spacing: .12em; font-size: 10px; color: var(--franco-red); margin-bottom: 5px; }
   .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 720px) { .review-grid { grid-template-columns: 1fr; } }
   .span2 { grid-column: 1 / -1; }
@@ -147,7 +163,7 @@
   .wk-table { min-width: 800px; }
   .wk-row-grid { display: grid; grid-template-columns: 92px 92px 52px 1fr 1fr 1fr 1fr 1fr 1.4fr; gap: 8px; align-items: center; }
   .wk-head { padding-bottom: 7px; border-bottom: 1.5px solid var(--redline); }
-  .wk-head span { font-style: italic; text-transform: uppercase; letter-spacing: .07em; font-size: 9px; color: var(--franco-red); }
+  .wk-head span { font-style: italic; text-transform: uppercase; letter-spacing: .07em; font-size: 10px; color: var(--franco-red); }
   .wk-head span.r { text-align: right; }
   .wk-day-row { padding: 3px 0; border-bottom: 1px solid var(--line); }
   .wk-day-row .day-lbl { font-size: 13px; color: var(--oxblood); }
@@ -219,6 +235,7 @@
     </div>
     <p class="card-note">Straight off each till's Lightspeed Z report — the Total column does itself.</p>
 
+    <div class="grid-scroll">
     <div class="row row-head cols4"><span></span><span>Bar till</span><span>Restaurant till</span><span>Total</span></div>
 
     <div class="row cols4">
@@ -240,7 +257,7 @@
       <div class="val" data-out="refundT">$0.00</div>
     </div>
 
-    <p class="card-note" style="text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;padding-top:8px">Payment types (from Z report)</p>
+    <p class="card-note" style="text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;padding-top:8px">Payment types (from Z report)</p>
 
     <div class="row cols4">
       <div class="lbl" style="padding-left:14px">Cash</div>
@@ -280,6 +297,7 @@
       <div class="money-in"><span>$</span><input type="text" inputmode="decimal" class="money" data-k="tipsC" placeholder="0.00"></div>
       <div class="val" data-out="tipsT">$0.00</div>
     </div>
+    </div>
   </section>
 
   <!-- 2. TERMINALS -->
@@ -290,6 +308,7 @@
     </div>
     <p class="card-note">From each terminal's settlement cut-over receipt — the settlement total.</p>
 
+    <div class="grid-scroll">
     <div class="row row-head cols5"><span></span><span>Bar terminal</span><span>Rest. terminal</span><span>Mobile EFTPOS</span><span>Total</span></div>
 
     <div class="row cols5">
@@ -313,8 +332,9 @@
       <div class="val" data-out="termNetM">$0.00</div>
       <div class="val" data-out="termNetT">$0.00</div>
     </div>
-    <div style="display:flex;align-items:center;gap:12px;padding:14px 0 0">
-      <div style="font-size:13.5px;color:var(--muted);white-space:nowrap">Settlement batch / ref #</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding:14px 0 0;flex-wrap:wrap">
+      <div style="font-size:14px;color:var(--muted);white-space:nowrap">Settlement batch / ref #</div>
       <input type="text" class="plain-in" style="text-align:left;border-bottom:1px solid var(--line)" data-k="batchRef" placeholder="—">
     </div>
   </section>
@@ -328,6 +348,7 @@
       </div>
       <p class="card-note">Count each till, one total. Float stays at $200 a till.</p>
 
+      <div class="grid-scroll">
       <div class="row row-head cols3"><span></span><span>Bar</span><span>Rest.</span></div>
       <div class="row cols3">
         <div class="lbl">Cash in till (counted)</div>
@@ -349,6 +370,7 @@
         <div class="val" style="color:var(--oxblood)" data-out="takB">$0.00</div>
         <div class="val" style="color:var(--oxblood)" data-out="takC">$0.00</div>
       </div>
+      </div>
       <div class="big-total"><span class="k">Total cash takings</span><span class="v" data-out="takT">$0.00</span></div>
     </section>
 
@@ -359,6 +381,7 @@
       </div>
       <p class="card-note" style="color:var(--oxblood)">+ over &nbsp;·&nbsp; − short. Anything past ±$5 a till — chase it.</p>
 
+      <div class="grid-scroll">
       <div class="row row-head cols3" style="border-bottom-color:var(--redline)"><span></span><span>Bar</span><span>Rest.</span></div>
       <div class="row cols3">
         <div class="lbl">Report says <span class="fine">(Lightspeed cash)</span></div>
@@ -374,6 +397,7 @@
         <div class="lbl">Variance</div>
         <div class="val" style="font-family:var(--font-display);font-size:15px" data-out="cvB">$0.00</div>
         <div class="val" style="font-family:var(--font-display);font-size:15px" data-out="cvC">$0.00</div>
+      </div>
       </div>
       <div class="status-pair">
         <div><span class="lb">Bar</span><span class="pill" id="st-cvB">BALANCED</span></div>
@@ -419,11 +443,11 @@
         <div class="money-in"><span>$</span><input type="text" inputmode="decimal" class="money" data-k="banked" placeholder="0.00"></div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 0">
-        <span style="font-style:italic;font-size:12px;color:var(--muted)">vs takings &nbsp;<span data-out="bankDiff">$0.00</span></span>
+        <span style="font-style:italic;font-size:13px;color:var(--muted)">vs takings &nbsp;<span data-out="bankDiff">$0.00</span></span>
         <span class="pill" id="st-bank">MATCH</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;padding:14px 0 0;margin-top:12px;border-top:1px solid var(--line)">
-        <span style="font-size:13.5px;color:var(--muted);white-space:nowrap">Bag / envelope #</span>
+        <span style="font-size:14px;color:var(--muted);white-space:nowrap">Bag / envelope #</span>
         <input type="text" class="plain-in" style="text-align:left;border-bottom:1px solid var(--line)" data-k="bankBag" placeholder="—">
       </div>
     </section>
