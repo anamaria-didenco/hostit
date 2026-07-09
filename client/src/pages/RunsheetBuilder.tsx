@@ -376,7 +376,7 @@ export default function RunsheetBuilder() {
   const [fnbSaving, setFnbSaving] = useState(false);
   const [expandedFnbIdx, setExpandedFnbIdx] = useState<number | null>(null);
   const [newFnbItem, setNewFnbItem] = useState<Partial<FnbItem>>({
-    section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '',
+    section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '', unitPrice: '',
   });
 
   // Venue setup
@@ -1082,10 +1082,11 @@ export default function RunsheetBuilder() {
       staffAssigned: newFnbItem.staffAssigned,
       sortOrder: fnbItems.length,
       _tempId: String(Date.now()),
+      unitPrice: newFnbItem.unitPrice != null && newFnbItem.unitPrice !== '' ? Number(newFnbItem.unitPrice) : null,
       ...(course === 'Drinks' && fnbCustomDrinkCat ? { drinkCategory: fnbCustomDrinkCat } : {}),
     };
     setFnbItems(prev => [...prev, item]);
-    setNewFnbItem({ section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '' });
+    setNewFnbItem({ section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '', unitPrice: '' });
     setFnbCustomName('');
     setFnbCustomDrinkCat('');
     if (fnbCustomMode) setFnbCustomMode(false);
@@ -3632,6 +3633,19 @@ export default function RunsheetBuilder() {
                         className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                       />
                     </div>
+                    <div>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">UNIT PRICE (NZD)</label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-ink/40 font-dm">$</span>
+                        <Input
+                          type="number" min={0} step="0.01"
+                          value={newFnbItem.unitPrice ?? ''}
+                          onChange={e => setNewFnbItem(p => ({ ...p, unitPrice: e.target.value }))}
+                          placeholder="0.00"
+                          className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9 pl-5"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
@@ -4885,6 +4899,42 @@ export default function RunsheetBuilder() {
                 </button>
               )}
             </div>
+
+            {/* F&B-derived summary — pulled live from the Food & Beverage section
+                above (qty × unit price) so the totals a manager set while adding
+                dishes are actually visible down here too, not just a separate
+                empty list waiting for costs to be re-entered by hand. */}
+            {(() => {
+              const fnbFoodTotal = fnbItems
+                .filter(it => (it.course ?? '') !== 'Drinks')
+                .reduce((sum, it) => sum + (Number(it.qty || 0) * Number(it.unitPrice ?? 0)), 0);
+              const fnbFoodCount = fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && Number(it.unitPrice ?? 0) > 0).length;
+              const barTab = rsTabAmount ? Number(rsTabAmount) : 0;
+              const manualTotal = costItems.reduce((sum, ci) => sum + ci.qty * ci.unitPrice, 0);
+              const combinedTotal = fnbFoodTotal + barTab + manualTotal;
+              if (fnbFoodTotal <= 0 && barTab <= 0) return null;
+              const fmt = (n: number) => `$${n.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}`;
+              return (
+                <div className="mx-5 mt-4 mb-1 border border-gold/30 bg-linen/40 px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+                  {fnbFoodTotal > 0 && (
+                    <div>
+                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">FOOD &amp; BEVERAGE ({fnbFoodCount} priced item{fnbFoodCount !== 1 ? 's' : ''})</div>
+                      <div className="font-serif text-base font-semibold text-ink">{fmt(fnbFoodTotal)}</div>
+                    </div>
+                  )}
+                  {barTab > 0 && (
+                    <div>
+                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">BAR TAB</div>
+                      <div className="font-serif text-base font-semibold text-ink">{fmt(barTab)}</div>
+                    </div>
+                  )}
+                  <div className="ml-auto bg-forest text-cream px-3 py-1.5">
+                    <div className="font-bebas tracking-widest text-[10px] text-cream/70">EVENT TOTAL {manualTotal > 0 ? '(incl. items below)' : ''}</div>
+                    <div className="font-serif text-base font-semibold">{fmt(combinedTotal)}</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Table */}
             <div className="overflow-x-auto">
