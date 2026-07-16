@@ -81,7 +81,7 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.7.284",
     "pg": "^8.20.0",
-    "puppeteer-core": "^24.37.5",
+    "puppeteer": "^24.37.5",
     "react": "^19.2.1",
     "react-day-picker": "^9.11.1",
     "react-dom": "^19.2.1",

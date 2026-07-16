@@ -30,6 +30,12 @@ services:
           property: connectionString
       - key: JWT_SECRET           # signs login sessions; Render generates a strong value
         generateValue: true
+      # PDF generation (BEO / proposal / floor plan) uses the full `puppeteer`
+      # package, which downloads its own Chromium during `npm install`. Pin
+      # its cache to a project-local path so the binary downloaded at build
+      # time is guaranteed to still be there at runtime.
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/project/.cache/puppeteer
       - key: PUBLIC_BASE_URL      # used in email links etc.
         value: https://venueflowhq.com
       - key: REPORT_EMAIL         # weekly pipeline report recipient
