@@ -4,7 +4,6 @@
  * Route: GET /api/floor-plan-pdf/:token  (public — token acts as auth)
  */
 import type { Request, Response } from "express";
-import { resolveChromiumPath } from "./chromiumPath";
 import { getDb } from "./db";
 import { floorPlans } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -208,9 +207,8 @@ export async function handleFloorPlanPdf(req: Request, res: Response) {
 
     const html = buildHtml(plan);
 
-    const puppeteer = await import("puppeteer-core");
-    const browser = await puppeteer.launch({
-      executablePath: await resolveChromiumPath(),
+    const puppeteer = await import("puppeteer");
+    const browser = await puppeteer.default.launch({
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
       headless: true,
     });

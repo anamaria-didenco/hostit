@@ -1,10 +1,9 @@
 /**
  * Proposal PDF Generator
- * Generates a styled PDF for a proposal using Puppeteer + system Chromium.
+ * Generates a styled PDF for a proposal using Puppeteer's bundled Chromium.
  * Called from a dedicated Express route: GET /api/proposal-pdf/:token
  */
 import type { Request, Response } from "express";
-import { resolveChromiumPath } from "./chromiumPath";
 import { getDb } from "./db";
 import {
   proposals,
@@ -400,11 +399,9 @@ export async function handleProposalPdf(req: Request, res: Response) {
       quoteData: qSettingsRows[0] ? { settings: qSettingsRows[0], items: qItemRows } : null,
     });
 
-    // Generate PDF with Puppeteer + system Chromium
-    const puppeteer = await import("puppeteer-core");
-    const chromiumPath = await resolveChromiumPath();
-    const browser = await puppeteer.launch({
-      executablePath: chromiumPath,
+    // Generate PDF with Puppeteer's bundled Chromium (no system browser needed)
+    const puppeteer = await import("puppeteer");
+    const browser = await puppeteer.default.launch({
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
       headless: true,
     });

@@ -22,7 +22,6 @@
 import type { Request, Response } from "express";
 import path from "path";
 import fs from "fs";
-import { resolveChromiumPath } from "./chromiumPath";
 import { getDb } from "./db";
 import {
   bookings,
@@ -1044,19 +1043,21 @@ ${bandHtml}
       return res.send(html);
     }
 
-    let puppeteer: any;
+    let browser: any;
     try {
-      puppeteer = await import("puppeteer-core");
-    } catch {
+      const puppeteer = await import("puppeteer");
+      browser = await puppeteer.default.launch({
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        headless: true,
+      });
+    } catch (err) {
+      // No usable Chromium (module missing, or its bundled browser failed to
+      // launch) — degrade to HTML rather than a hard 500 so the operator can
+      // still view/print the document via the browser's own print dialog.
+      console.error("BEO PDF: failed to launch Chromium", err);
       res.setHeader("Content-Type", "text/html");
       return res.send(html);
     }
-
-    const browser = await puppeteer.launch({
-      executablePath: await resolveChromiumPath(),
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-      headless: true,
-    });
 
     try {
       const page = await browser.newPage();
