@@ -569,16 +569,22 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const foodCourses = orderFoodCourses(foodGrouped);
     // Shared dish renderer (reference look): red em-dash + bold name + grey
     // detail; changed dishes show the new name with an inline "CHANGED · was X" tag.
-    const dishHtml = (f: any, opts?: { prep?: boolean }) => {
+    const dishHtml = (f: any, opts?: { prep?: boolean; hideQty?: boolean }) => {
       const det = f.description ? `<span class="det"> ${escHtml(f.description)}</span>` : "";
       const tag = f.previousDishName
         ? `<span class="changed">Changed &middot; was ${escHtml(f.previousDishName)}</span>`
+        : "";
+      // Real entered quantity (e.g. "× 40" canapés) — shown per dish unless
+      // the menu header already states a uniform count for every item.
+      const qtyNum = Number(f.qty ?? 1);
+      const qty = (!opts?.hideQty && qtyNum > 1)
+        ? `<span class="dqty">&times; ${escHtml(String(qtyNum))}</span>`
         : "";
       const prep = (opts?.prep && (f.prepNotes || f.platingNotes))
         ? `<div class="prep-line">${[f.prepNotes, f.platingNotes].filter(Boolean).map((n: string) => escHtml(n)).join(" · ")}</div>`
         : "";
       return `
-        <div class="dish"><span class="em">&mdash;</span><span class="body"><span class="dname">${escHtml(f.dishName)}</span>${det}${tag}${prep}</span></div>`;
+        <div class="dish"><span class="em">&mdash;</span><span class="body"><span class="dname">${escHtml(f.dishName)}</span>${qty}${det}${tag}${prep}</span></div>`;
     };
     // When the food is one pasted multi-course menu, split it into columns.
     const embeddedMenu = detectEmbeddedMenu(foodItems);
@@ -591,9 +597,22 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const sharedDetected = (embeddedMenu ?? []).some(c => c.note === "To share")
       || foodItems.some((i: any) => /\bto share\b|\bshared\b/i.test(`${i.dishName ?? ""} ${i.description ?? ""}`));
     const menuTitleSuffix = onlyCanapes ? "Canap&eacute; Menu" : sharedDetected ? "Shared Menu" : "Menu";
-    const menuMeta = guestCount
-      ? `&times; ${escHtml(String(guestCount))}${sharedDetected ? " &middot; served shared to table" : onlyCanapes ? " &middot; canap&eacute; service" : ""}`
-      : "";
+    // "× N" is driven by the QUANTITIES the operator entered on the F&B
+    // sheet, not the guest count — "40 of each canapé" for 35 guests must
+    // read × 40, not × 35. Uniform qty > 1 → stated once in the header;
+    // mixed qtys → each dish carries its own × N; all-1 qtys → fall back
+    // to the guest count (per-guest plated/shared service).
+    const foodQtys = foodItems.map((i: any) => Number(i.qty ?? 1));
+    const uniformQty = foodQtys.length > 0 && foodQtys.every(q => q === foodQtys[0]) ? foodQtys[0] : null;
+    const qtysVary = uniformQty === null;
+    const serviceStyleMeta = sharedDetected ? " &middot; served shared to table" : onlyCanapes ? " &middot; canap&eacute; service" : "";
+    const menuMeta = (uniformQty !== null && uniformQty > 1)
+      ? `&times; ${escHtml(String(uniformQty))} of each${serviceStyleMeta}`
+      : qtysVary
+        ? serviceStyleMeta.replace(/^ &middot; /, "")
+        : guestCount
+          ? `&times; ${escHtml(String(guestCount))}${serviceStyleMeta}`
+          : "";
     const menuHead = `
     <div class="sec-head">
       <span class="sec-title">${escHtml(venueName)} ${menuTitleSuffix}</span>
@@ -616,7 +635,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       ${foodCourses.map(course => `
       <div class="course">
         <div class="course-title">${escHtml(course)}</div>
-        ${(foodGrouped[course] ?? []).map((f: any) => dishHtml(f, { prep: !isPublic })).join("")}
+        ${(foodGrouped[course] ?? []).map((f: any) => dishHtml(f, { prep: !isPublic, hideQty: !qtysVary })).join("")}
       </div>`).join("")}
     </div>
   </div>` : "");
@@ -924,6 +943,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .dish .dname{font-size:12.5px;font-weight:700;color:var(--ink);}
   .dish .det{font-size:12px;color:#736a5d;}
   .changed{background:var(--red);color:#fff;font-size:8.5px;font-weight:800;letter-spacing:.08em;padding:1.5px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;white-space:nowrap;text-transform:uppercase;}
+  .dish .dqty{font-size:11px;font-weight:700;color:var(--gray2);margin-left:6px;white-space:nowrap;}
   .prep-line{font-size:11px;color:var(--gray2);margin-top:1px;font-style:italic;}
 
   /* ── Footer ── */
