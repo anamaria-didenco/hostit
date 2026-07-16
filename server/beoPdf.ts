@@ -582,11 +582,23 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     };
     // When the food is one pasted multi-course menu, split it into columns.
     const embeddedMenu = detectEmbeddedMenu(foodItems);
+    // Menu title + service-style meta adapt to what's actually on the menu —
+    // the old header hardcoded "Shared Menu · served shared to table" (from
+    // the shared-dinner reference design), which mislabels canapé/standing
+    // events. "Shared" only appears when the menu itself says so.
+    const menuCourseLabels = embeddedMenu ? embeddedMenu.map(c => c.label) : foodCourses;
+    const onlyCanapes = menuCourseLabels.length > 0 && menuCourseLabels.every(c => /canap/i.test(c));
+    const sharedDetected = (embeddedMenu ?? []).some(c => c.note === "To share")
+      || foodItems.some((i: any) => /\bto share\b|\bshared\b/i.test(`${i.dishName ?? ""} ${i.description ?? ""}`));
+    const menuTitleSuffix = onlyCanapes ? "Canap&eacute; Menu" : sharedDetected ? "Shared Menu" : "Menu";
+    const menuMeta = guestCount
+      ? `&times; ${escHtml(String(guestCount))}${sharedDetected ? " &middot; served shared to table" : onlyCanapes ? " &middot; canap&eacute; service" : ""}`
+      : "";
     const menuHead = `
     <div class="sec-head">
-      <span class="sec-title">${escHtml(venueName)} Shared Menu</span>
+      <span class="sec-title">${escHtml(venueName)} ${menuTitleSuffix}</span>
       <span class="sec-line"></span>
-      <span class="sec-meta">${guestCount ? `&times; ${escHtml(String(guestCount))} &middot; served shared to table` : ""}</span>
+      <span class="sec-meta">${menuMeta}</span>
     </div>`;
     const menuSection = embeddedMenu ? `
   <div class="section">${menuHead}
