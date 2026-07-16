@@ -4755,13 +4755,17 @@ Return ONLY valid JSON. Example structure:
         const raw = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
         try {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) return { timelineItems: parsed, fnbItems: [], dietaries: [], eventDetails: null, success: true };
-          if (parsed.items || parsed.timeline) return { timelineItems: (parsed.items ?? parsed.timeline ?? []).slice(0, 60), fnbItems: [], dietaries: [], eventDetails: null, success: true };
+          // A time written into the title ("5.15pm - Final checks") wins over
+          // whatever the model guessed — NZ dot-format times are routinely
+          // missed, leaving items on default sequential times.
+          const { healTimelineTitles } = await import('./timeText');
+          if (Array.isArray(parsed)) return { timelineItems: healTimelineTitles(parsed), fnbItems: [], dietaries: [], eventDetails: null, success: true };
+          if (parsed.items || parsed.timeline) return { timelineItems: healTimelineTitles((parsed.items ?? parsed.timeline ?? []).slice(0, 60)), fnbItems: [], dietaries: [], eventDetails: null, success: true };
           return {
             eventDetails: parsed.eventDetails ?? null,
             dietaries: Array.isArray(parsed.dietaries) ? parsed.dietaries : [],
             fnbItems: Array.isArray(parsed.fnbItems) ? parsed.fnbItems.slice(0, 60) : [],
-            timelineItems: Array.isArray(parsed.timelineItems) ? parsed.timelineItems.slice(0, 60) : [],
+            timelineItems: Array.isArray(parsed.timelineItems) ? healTimelineTitles(parsed.timelineItems.slice(0, 60)) : [],
             success: true,
           };
         } catch {

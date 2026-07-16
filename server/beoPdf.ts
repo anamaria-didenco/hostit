@@ -642,11 +642,20 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 
     // ── Run of night (page 2) — time gutter + dot-and-rail timeline ───────
     // Flag (red dot) the arrival & dinner moments, matching the reference.
+    // A time written into the title ("5.15pm - Final checks") overrides the
+    // stored time — imports used to miss NZ dot-format times, leaving rows on
+    // default sequential times with the real time trapped in the title. This
+    // heals those already-saved rows at render.
+    const { extractLeadingTime } = await import('./timeText');
+    const healedTimeline = timelineItems.map((item: any) => {
+      const ex = extractLeadingTime(String(item.title ?? ""));
+      return ex ? { ...item, time: ex.time24, title: ex.rest } : item;
+    });
     const TL_FLAG_RE = /arriv|welcome|dinner|service|seat|main/i;
-    const timelineSection = timelineItems.length > 0 ? `
+    const timelineSection = healedTimeline.length > 0 ? `
       <div class="col-title">Run of Night</div>
       <div class="tl">
-        ${timelineItems.map((item: any, i: number) => `
+        ${healedTimeline.map((item: any, i: number) => `
         <div class="tl-item${TL_FLAG_RE.test(String(item.title || "")) ? " flag" : ""}">
           <div class="tl-anchor">
             <div class="tl-time">${fmt12(item.time) || "—"}</div>
@@ -654,7 +663,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
           </div>
           <div class="tl-rail">
             <div class="tl-dot"></div>
-            ${i < timelineItems.length - 1 ? `<div class="tl-line"></div>` : ""}
+            ${i < healedTimeline.length - 1 ? `<div class="tl-line"></div>` : ""}
           </div>
           <div class="tl-body">
             <div class="tl-title">${escHtml(item.title || "—")}</div>
