@@ -18,7 +18,11 @@ services:
     autoDeploy: true            # redeploy automatically on every push to main → real "push = live"
     # --include=dev is required: the build uses vite + esbuild (devDependencies),
     # and NODE_ENV=production would otherwise make npm skip them → build fails.
-    buildCommand: npm install --include=dev && npm run build
+    # `npx puppeteer browsers install chrome` is belt-and-braces for PDF
+    # generation: it's idempotent (skips if already downloaded by puppeteer's
+    # postinstall) and guarantees Chromium lands in PUPPETEER_CACHE_DIR even
+    # if the postinstall step was skipped for any reason.
+    buildCommand: npm install --include=dev && npx puppeteer browsers install chrome && npm run build
     startCommand: npm start
     healthCheckPath: /
     envVars:
