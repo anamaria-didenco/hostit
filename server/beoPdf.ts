@@ -765,16 +765,28 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       fnbFoodTotal + costFbTotal + barTabAmt,
     );
     const depAmt = Number(booking.depositNzd ?? 0);
-    const balanceToCollect = eventTotal > 0 ? Math.max(0, eventTotal - (booking.depositPaid ? depAmt : 0)) : 0;
+    // GST breakdown — mirrors the runsheet Costs tab exactly. The runsheet's
+    // gstInclusive toggle declares whether the entered amounts already carry
+    // 15% GST; either way the BEO shows the full picture (subtotal, GST,
+    // total incl. GST) and the balance to collect is the INCLUSIVE amount —
+    // an ex-GST balance on the PDF reads as the final figure and confuses
+    // clients (reported by Bar Franco).
+    const gstInclusiveFlag = Boolean((runsheet as any)?.gstInclusive);
+    const subtotalExGst = gstInclusiveFlag ? eventTotal / 1.15 : eventTotal;
+    const gstAmt = gstInclusiveFlag ? eventTotal - subtotalExGst : eventTotal * 0.15;
+    const totalInclGst = subtotalExGst + gstAmt;
+    const balanceToCollect = eventTotal > 0 ? Math.max(0, totalInclGst - (booking.depositPaid ? depAmt : 0)) : 0;
     const showFinancials = !isPublic && (minSpendAmt > 0 || eventTotal > 0 || depAmt > 0);
     const balanceOutstanding = !booking.depositPaid && balanceToCollect > 0;
     const financialsSection = showFinancials ? `
       <div class="cost">
         <div class="cost-title">Cost Summary</div>
         ${minSpendAmt > 0 ? `<div class="cost-row"><span class="k">Minimum Spend</span><span class="v">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
-        ${eventTotal > 0 ? `<div class="cost-row"><span class="k">Total</span><span class="v">${fmtCurrency(eventTotal)}</span></div>` : ""}
+        ${eventTotal > 0 ? `<div class="cost-row"><span class="k">Subtotal (excl. GST)</span><span class="v small">${fmtCurrency(subtotalExGst)}</span></div>` : ""}
+        ${eventTotal > 0 ? `<div class="cost-row"><span class="k">GST (15%)</span><span class="v small">${fmtCurrency(gstAmt)}</span></div>` : ""}
+        ${eventTotal > 0 ? `<div class="cost-row"><span class="k">Total (incl. GST)</span><span class="v">${fmtCurrency(totalInclGst)}</span></div>` : ""}
         ${depAmt > 0 ? `<div class="cost-row"><span class="k">Deposit received</span><span class="v small">${fmtCurrency(depAmt)} ${booking.depositPaid ? "&middot; Paid" : "&middot; Outstanding"}</span></div>` : ""}
-        <div class="cost-row balance"><span class="k">Balance to collect</span><span class="v">${fmtCurrency(balanceToCollect)}${balanceOutstanding ? ` <span class="out-tag">Outstanding</span>` : ""}</span></div>
+        <div class="cost-row balance"><span class="k">Balance to collect <span class="k-sub">incl. GST</span></span><span class="v">${fmtCurrency(balanceToCollect)}${balanceOutstanding ? ` <span class="out-tag">Outstanding</span>` : ""}</span></div>
       </div>` : "";
 
     // Footer note (closing message) — shown to everyone, on page 2.
@@ -950,6 +962,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .cost-row .v.small{font-size:13px;}
   .cost-row.balance{background:var(--green);color:#fff;border-top:0;padding:7px 12px;}
   .cost-row.balance .k{color:#fff;font-size:12px;font-weight:700;}
+  .cost-row.balance .k-sub{display:block;font-size:9px;font-weight:600;color:rgba(255,255,255,.65);letter-spacing:.04em;margin-top:1px;}
   .cost-row.balance .v{color:#fff;font-size:15.5px;}
   .out-tag{background:var(--red);color:#fff;font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:7px;}
 
