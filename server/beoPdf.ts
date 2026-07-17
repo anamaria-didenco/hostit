@@ -22,6 +22,7 @@
 import type { Request, Response } from "express";
 import path from "path";
 import fs from "fs";
+import { cleanRichHtml } from "./sanitizeHtml";
 import { getDb } from "./db";
 import {
   bookings,
@@ -419,7 +420,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const guestCount = booking.guestCount ?? runsheet?.guestCount ?? "";
     const eventType = booking.eventType ?? (runsheet as any)?.eventType ?? "";
     const dietaries: { name: string; count: number; notes?: string }[] = (runsheet as any)?.dietaries ?? [];
-    const venueSetup = (runsheet as any)?.venueSetup ?? "";
+    // venueSetup / footerNote are rich HTML injected verbatim into the PDF
+    // (which renders in --no-sandbox Puppeteer) and, for the event-pack, into
+    // the browser. Sanitise so operator/guest input can't run script / SSRF.
+    const venueSetup = cleanRichHtml((runsheet as any)?.venueSetup ?? "");
     // Concise one-line setup summary for the booking band (e.g. "Seated · 2 × tables of 8").
     const setupSummary = ((runsheet as any)?.setupSummary ?? "").toString().trim();
     // Drink type tags (SPARK/WHITE/RED/BEER) keyed by drink name, if the operator set them.
@@ -429,7 +433,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const bookingNotes = isPublic ? "" : ((booking as any).notes ?? "");
     // Footer note — a closing message (payment terms, thank-you, etc.) shown to
     // everyone, including the public event-pack link.
-    const footerNote = ((runsheet as any)?.footerText ?? "").toString();
+    const footerNote = cleanRichHtml((runsheet as any)?.footerText ?? "");
     const fnbCols = (runsheet as any)?.fnbColumns ?? {};
     const showQty = fnbCols.qty !== false;
 

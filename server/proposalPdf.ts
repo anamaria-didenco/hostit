@@ -5,6 +5,7 @@
  */
 import type { Request, Response } from "express";
 import { getDb } from "./db";
+import { escapeHtml as esc, cleanRichHtml } from "./sanitizeHtml";
 import {
   proposals,
   leads,
@@ -107,7 +108,7 @@ function buildHtml(data: {
         const picked = sec.items.filter(i => selectedSet.has(i.key));
         if (picked.length === 0) return "";
         const rows = picked
-          .map(i => `<tr><td class="item-name">${i.name}</td><td class="item-desc">${sec.note ? `<em>${sec.note}</em>` : ""}</td></tr>`)
+          .map(i => `<tr><td class="item-name">${esc(i.name)}</td><td class="item-desc">${sec.note ? `<em>${esc(sec.note)}</em>` : ""}</td></tr>`)
           .join("");
         return `
           <div style="margin-top:12px;">
@@ -137,10 +138,10 @@ function buildHtml(data: {
     const drinkRows = selectedKeys
       .map((k) => FRANCO_DRINKS[k])
       .filter(Boolean)
-      .map((d) => `<tr><td class="item-name">${d.label}</td><td class="item-desc">${d.description}</td></tr>`)
+      .map((d) => `<tr><td class="item-name">${esc(d.label)}</td><td class="item-desc">${esc(d.description)}</td></tr>`)
       .join("");
     const customRows = customDrinks
-      .map((d) => `<tr><td class="item-name">${d.name}${d.price ? ` — ${nzd(d.price)}` : ""}</td><td class="item-desc">${d.description ?? ""}</td></tr>`)
+      .map((d) => `<tr><td class="item-name">${esc(d.name)}${d.price ? ` — ${nzd(d.price)}` : ""}</td><td class="item-desc">${esc(d.description ?? "")}</td></tr>`)
       .join("");
 
     drinksHtml = `
@@ -167,9 +168,9 @@ function buildHtml(data: {
 
     const qItemRows = qItems.map((item: any) => `
       <tr>
-        <td class="item-name">${item.name}</td>
-        <td class="item-desc">${item.description ?? ""}</td>
-        <td class="item-qty">${item.qty}</td>
+        <td class="item-name">${esc(item.name)}</td>
+        <td class="item-desc">${esc(item.description ?? "")}</td>
+        <td class="item-qty">${esc(item.qty)}</td>
         <td class="item-price">${nzd(Number(item.qty) * Number(item.unitPrice))}</td>
       </tr>`).join("");
 
@@ -191,7 +192,7 @@ function buildHtml(data: {
           <thead><tr><th>Item</th><th>Description</th><th>Qty</th><th>Total</th></tr></thead>
           <tbody>${qItemRows}</tbody>
         </table>` : ""}
-        ${qs.notes ? `<p class="quote-notes">${qs.notes}</p>` : ""}
+        ${qs.notes ? `<p class="quote-notes">${cleanRichHtml(qs.notes)}</p>` : ""}
       </div>`;
   }
 
@@ -200,7 +201,7 @@ function buildHtml(data: {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>${proposal.title}</title>
+<title>${esc(proposal.title)}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500&family=Bebas+Neue&display=swap');
 
@@ -289,15 +290,15 @@ function buildHtml(data: {
 <!-- Header -->
 <div class="header">
   <div class="header-left">
-    ${venueLogoUrl ? `<img src="${venueLogoUrl}" alt="${venueName}" class="logo" />` : ""}
-    <h1>${proposal.title}</h1>
+    ${venueLogoUrl ? `<img src="${esc(venueLogoUrl)}" alt="${esc(venueName)}" class="logo" />` : ""}
+    <h1>${esc(proposal.title)}</h1>
     <div class="subtitle">Event Proposal</div>
   </div>
   <div class="header-right">
-    <div class="venue-name">${venueName}</div>
-    ${venueAddress ? `<div>${venueAddress}</div>` : ""}
-    ${venuePhone ? `<div>${venuePhone}</div>` : ""}
-    ${venueEmail ? `<div>${venueEmail}</div>` : ""}
+    <div class="venue-name">${esc(venueName)}</div>
+    ${venueAddress ? `<div>${esc(venueAddress)}</div>` : ""}
+    ${venuePhone ? `<div>${esc(venuePhone)}</div>` : ""}
+    ${venueEmail ? `<div>${esc(venueEmail)}</div>` : ""}
   </div>
 </div>
 
@@ -305,19 +306,19 @@ function buildHtml(data: {
 <div class="meta-strip">
   <div class="meta-item">
     <span class="meta-label">Prepared for</span>
-    <span class="meta-value">${lead?.firstName ?? ""} ${lead?.lastName ?? ""}</span>
+    <span class="meta-value">${esc(lead?.firstName ?? "")} ${esc(lead?.lastName ?? "")}</span>
   </div>
-  ${lead?.email ? `<div class="meta-item"><span class="meta-label">Email</span><span class="meta-value">${lead.email}</span></div>` : ""}
-  ${eventDate ? `<div class="meta-item"><span class="meta-label">Event Date</span><span class="meta-value">${eventDate}</span></div>` : ""}
-  ${proposal.guestCount ? `<div class="meta-item"><span class="meta-label">Guests</span><span class="meta-value">${proposal.guestCount}</span></div>` : ""}
-  ${proposal.spaceName ? `<div class="meta-item"><span class="meta-label">Space</span><span class="meta-value">${proposal.spaceName}</span></div>` : ""}
+  ${lead?.email ? `<div class="meta-item"><span class="meta-label">Email</span><span class="meta-value">${esc(lead.email)}</span></div>` : ""}
+  ${eventDate ? `<div class="meta-item"><span class="meta-label">Event Date</span><span class="meta-value">${esc(eventDate)}</span></div>` : ""}
+  ${proposal.guestCount ? `<div class="meta-item"><span class="meta-label">Guests</span><span class="meta-value">${esc(proposal.guestCount)}</span></div>` : ""}
+  ${proposal.spaceName ? `<div class="meta-item"><span class="meta-label">Space</span><span class="meta-value">${esc(proposal.spaceName)}</span></div>` : ""}
   ${expiresAt ? `<div class="meta-item"><span class="meta-label">Valid Until</span><span class="meta-value">${expiresAt}</span></div>` : ""}
 </div>
 
 <div class="body">
 
   <!-- Intro message -->
-  ${proposal.introMessage ? `<div class="intro">${proposal.introMessage}</div>` : ""}
+  ${proposal.introMessage ? `<div class="intro">${cleanRichHtml(proposal.introMessage)}</div>` : ""}
 
   <!-- Line items / Pricing -->
   <div class="section">
@@ -329,8 +330,8 @@ function buildHtml(data: {
       <tbody>
         ${lineItems.map((item) => `
         <tr>
-          <td class="item-name">${item.description}</td>
-          <td class="item-qty">${item.qty}</td>
+          <td class="item-name">${esc(item.description)}</td>
+          <td class="item-qty">${esc(item.qty)}</td>
           <td class="item-price">${nzd(item.unitPrice)}</td>
           <td class="item-price">${nzd(item.total)}</td>
         </tr>`).join("")}
@@ -355,7 +356,7 @@ function buildHtml(data: {
   ${proposal.termsAndConditions ? `
   <div class="section">
     <h2 class="section-title">Terms &amp; Conditions</h2>
-    <div class="terms">${proposal.termsAndConditions}</div>
+    <div class="terms">${cleanRichHtml(proposal.termsAndConditions)}</div>
   </div>` : ""}
 
 </div>

@@ -5436,7 +5436,19 @@ Return ONLY valid JSON.`;
             notes: payments.notes,
           }).from(payments).where(eq(payments.bookingId, runsheet.bookingId)).orderBy(payments.paidAt);
         }
-        return { link, runsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null };
+        // Sanitise rich-text fields before they reach the PUBLIC staff portal,
+        // which renders them via dangerouslySetInnerHTML. An operator (or a
+        // compromised/mischievous team member) could otherwise store
+        // <img onerror=…> etc. and run script on the app origin for anyone
+        // opening the shared link.
+        const { cleanRichHtml } = await import('./sanitizeHtml');
+        const safeRunsheet = {
+          ...runsheet,
+          notes: cleanRichHtml((runsheet as any).notes),
+          venueSetup: cleanRichHtml((runsheet as any).venueSetup),
+          footerText: cleanRichHtml((runsheet as any).footerText),
+        };
+        return { link, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null };
       }),
 
     // Protected: create a new staff portal link
