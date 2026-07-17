@@ -1,5 +1,6 @@
-import { and, desc, eq, gte, isNull, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import {
   InsertUser, users,
   venueSettings, VenueSettings,
@@ -13,17 +14,41 @@ import {
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _pool: Pool | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      // Own the Pool explicitly so we can attach an 'error' handler. Without
+      // one, when the managed Postgres restarts/does maintenance an idle
+      // client emits 'error', pg re-emits it as an uncaught exception, and the
+      // single web instance crash-loops. With the handler it's just logged and
+      // the pool transparently reconnects on the next query.
+      _pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      _pool.on("error", (err) => {
+        console.error("[Database] idle client error (recovered):", err?.message ?? err);
+      });
+      _db = drizzle(_pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
+      _pool = null;
     }
   }
   return _db;
+}
+
+/** Lightweight liveness check for /healthz — returns false instead of throwing
+ *  so a DB outage surfaces as an unhealthy instance rather than a crash. */
+export async function pingDb(): Promise<boolean> {
+  try {
+    const db = await getDb();
+    if (!db) return false;
+    await db.execute(sql`select 1`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────────

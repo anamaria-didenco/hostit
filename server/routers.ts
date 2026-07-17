@@ -6,6 +6,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { enforceRateLimit, getRequestIp } from "./_core/rateLimit";
+import { smtpTls } from "./smtpTls";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -104,15 +105,19 @@ export const appRouter = router({
         if (!vs) return null;
         // For unauthenticated callers, strip every sensitive field. Even authenticated
         // callers don't need these on this endpoint — there is a protected `getOwn`.
+        // Since this endpoint takes an arbitrary ownerId, a stranger can fetch
+        // any venue's row. For non-self callers, null out every sensitive /
+        // internal field before returning (keeps the response shape so the
+        // owner's own settings page — which reads the full object as "self" —
+        // still type-checks). staffEmails is PII and was previously exposed.
         const isOwnerSelf = ctx.user?.id === id;
         if (!isOwnerSelf) {
           const safe: any = { ...vs };
-          delete safe.smtpHost; delete safe.smtpPort; delete safe.smtpUser; delete safe.smtpPass;
-          delete safe.smtpFromEmail; delete safe.smtpFromName; delete safe.smtpSecure;
-          delete safe.notificationEmail;
-          delete safe.nbiApiKey; delete safe.nbiAccountId; delete safe.nbiVenueId;
-          delete safe.nbiServiceId; delete safe.nbiSectionId; delete safe.nbiSyncEnabled; delete safe.nbiWebhookSecret;
-          delete safe.automatedTaskRules;
+          for (const k of [
+            "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFromEmail", "smtpFromName", "smtpSecure",
+            "notificationEmail", "emailSignature", "staffEmails", "automatedTaskRules",
+            "nbiApiKey", "nbiAccountId", "nbiVenueId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret",
+          ]) safe[k] = null;
           return safe;
         }
         return vs;
@@ -277,7 +282,7 @@ export const appRouter = router({
         const transporter = nodemailer.default.createTransport({
           host: vs.smtpHost, port, secure,
           auth: { user: vs.smtpUser, pass: vs.smtpPass },
-          tls: { rejectUnauthorized: false },
+          tls: smtpTls(),
         } as any);
         await transporter.verify();
         await transporter.sendMail({
@@ -562,7 +567,7 @@ export const appRouter = router({
                 port,
                 secure,
                 auth: { user: vs.smtpUser, pass: vs.smtpPass },
-                tls: { rejectUnauthorized: false },
+                tls: smtpTls(),
               } as any);
               const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
               const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
@@ -2605,7 +2610,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             host: vs.smtpHost, port: vs.smtpPort ?? 587,
             secure: (vs.smtpSecure ?? 0) === 1 || (vs.smtpPort ?? 587) === 465,
             auth: { user: vs.smtpUser, pass: vs.smtpPass },
-            tls: { rejectUnauthorized: false },
+            tls: smtpTls(),
           } as any);
           const fromName2 = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
           const fromEmail2 = vs.smtpFromEmail ?? vs.smtpUser!;
@@ -2750,7 +2755,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           host: vs.smtpHost, port: vs.smtpPort ?? 587,
           secure: (vs.smtpSecure ?? 0) === 1 || (vs.smtpPort ?? 587) === 465,
           auth: { user: vs.smtpUser, pass: vs.smtpPass },
-          tls: { rejectUnauthorized: false },
+          tls: smtpTls(),
         } as any);
         const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
         const fromEmail = vs.smtpFromEmail ?? vs.smtpUser!;
@@ -3094,7 +3099,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         venueName: z.string().optional(),
         message: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('waitlist:join', getRequestIp(ctx.req), 10, 60_000);
         const { getDb } = await import('./db');
         const { waitlist } = await import('../drizzle/schema');
         const db = await getDb();
@@ -3381,7 +3387,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        // Cryptographically-random public token (was Math.random()+Date.now(),
+        // which is guessable) — matches every other share token in this file.
+        const crypto = await import('crypto');
+        const token = crypto.randomBytes(24).toString('hex');
         const [result] = await db.insert(runsheets).values({
           ownerId: ctx.user.id,
           leadId: input.leadId ?? null,
@@ -4945,7 +4954,8 @@ Return ONLY valid JSON.`;
       }),
     sign: publicProcedure
       .input(z.object({ token: z.string(), signerName: z.string(), signatureData: z.string(), signerIp: z.string().optional() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('contract:sign', getRequestIp(ctx.req), 20, 5 * 60_000);
         const { getDb } = await import('./db');
         const { contracts } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -4957,7 +4967,10 @@ Return ONLY valid JSON.`;
           signedAt: now,
           signatureData: input.signatureData,
           signerName: input.signerName,
-          signerIp: input.signerIp ?? '',
+          // Record the SERVER-observed IP as signing evidence, not a
+          // client-supplied value (which is trivially spoofable and would
+          // weaken non-repudiation of the e-signature).
+          signerIp: getRequestIp(ctx.req) || input.signerIp || '',
           updatedAt: now,
         }).where(and(eq(contracts.token, input.token), eq(contracts.status, 'sent')));
         return { success: true };
@@ -6188,7 +6201,8 @@ Return ONLY valid JSON.`;
 
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('shiftRunsheet:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { shiftRunsheets, dailyChecklists, dailyChecklistItems, venueSettings, runsheets, fnbItems, bookings } = await import('../drizzle/schema');
         const { eq, and, inArray, gte, lt } = await import('drizzle-orm');
@@ -6404,7 +6418,8 @@ Return ONLY valid JSON.`;
 
     getByToken: publicProcedure
       .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('teamMember:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { teamMembers, users } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');

@@ -12,6 +12,7 @@
  *
  * Never throws — any failure is logged so it can't break the confirm flow.
  */
+import { smtpTls } from "./smtpTls";
 import { getDb } from "./db";
 import { bookings, venueSettings, leads, contacts } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
@@ -132,7 +133,7 @@ export async function sendDepositPromptEmail(
       port,
       secure,
       auth: { user: vs.smtpUser, pass: vs.smtpPass },
-      tls: { rejectUnauthorized: false },
+      tls: smtpTls(),
     } as any);
     const fromName = vs.smtpFromName ?? vs.name ?? "VenueFlowHQ";
     const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
