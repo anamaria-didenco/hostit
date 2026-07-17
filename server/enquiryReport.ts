@@ -11,6 +11,7 @@
  * Schedule overridable with REPORT_WEEKDAY (default "Mon") + REPORT_HOUR (8).
  * Never throws — failures are logged so they can't crash the server loop.
  */
+import { smtpTls } from "./smtpTls";
 import { getDb } from "./db";
 import { leads, bookings, venueSettings } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -168,7 +169,7 @@ export async function sendEnquiryReport(
     const transporter = nodemailer.default.createTransport({
       host: vs.smtpHost, port, secure,
       auth: { user: vs.smtpUser, pass: vs.smtpPass },
-      tls: { rejectUnauthorized: false },
+      tls: smtpTls(),
     } as any);
     const fromName = vs.smtpFromName ?? vs.name ?? "VenueFlowHQ";
     const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;

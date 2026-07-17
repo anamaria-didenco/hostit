@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import crypto from "crypto";
 import multer from "multer";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
@@ -14,7 +15,7 @@ import { serveStatic, setupVite } from "./vite";
 import path from "path";
 import fs from "fs";
 import { sdk } from "./sdk";
-import { upsertUser } from "../db";
+import { upsertUser, pingDb } from "../db";
 import { ENV } from "./env";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -169,9 +170,22 @@ async function startServer() {
     handleGithubWebhook(req, res);
   });
 
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Deep health check — actually pings the DB, so Render marks the instance
+  // unhealthy (and restarts / stops routing to it) when Postgres is down,
+  // instead of the old `/` check that served the static SPA and stayed
+  // "healthy" over a broken database. Registered before the body parser so a
+  // huge/garbage body can't affect it.
+  app.get("/healthz", async (_req, res) => {
+    const ok = await pingDb();
+    res.status(ok ? 200 : 503).json({ status: ok ? "ok" : "degraded", db: ok });
+  });
+
+  // Body parser. 10MB comfortably covers the app's JSON payloads (runsheets,
+  // floor-plan canvases); binary uploads go through multer on their own
+  // routes, so the old 50MB JSON limit was just a memory-exhaustion DoS
+  // vector on a 512MB instance.
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
   // NowBookIt inbound webhook — auth via per-venue secret in the URL path.
   // Mounted after json middleware so req.body is parsed.
@@ -267,7 +281,13 @@ async function startServer() {
         res.status(503).json({ error: "Local login is not configured. Set the ADMIN_PASSWORD environment variable." });
         return;
       }
-      if (password !== adminPassword) {
+      // Constant-time compare so response timing can't be used to recover the
+      // shared admin password character-by-character. Length-pad to equal
+      // buffers first (timingSafeEqual throws on length mismatch).
+      const a = Buffer.from(String(password));
+      const b = Buffer.from(adminPassword);
+      const passwordOk = a.length === b.length && crypto.timingSafeEqual(a, b);
+      if (!passwordOk) {
         res.status(401).json({ error: "Incorrect password." });
         return;
       }
@@ -450,6 +470,16 @@ async function startServer() {
     serveStatic(app);
   }
 
+  // Global error handler — catches anything a route forwarded via next(err)
+  // (or a body-parser rejection, e.g. payload-too-large / malformed JSON) and
+  // returns a clean JSON error instead of leaking a stack trace or hanging.
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const status = Number(err?.status || err?.statusCode) || 500;
+    if (status >= 500) console.error("[express] unhandled route error:", err);
+    if (res.headersSent) return;
+    res.status(status).json({ error: status >= 500 ? "Internal server error" : (err?.message ?? "Request error") });
+  });
+
   const preferredPort = parseInt(process.env.PORT || "5000");
   const port = await findAvailablePort(preferredPort);
 
@@ -464,4 +494,19 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+// Last-resort guards so a stray async error can't take down the single web
+// instance. A rejected promise or a throw from a background task (puppeteer,
+// nodemailer, an idle DB client) is logged and swallowed rather than crashing
+// the process — the request that triggered it still fails, but the server
+// stays up for everyone else.
+process.on("unhandledRejection", (reason) => {
+  console.error("[process] unhandledRejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[process] uncaughtException:", err);
+});
+
+startServer().catch((err) => {
+  console.error("[server] fatal startup error:", err);
+  process.exit(1);
+});
