@@ -793,10 +793,14 @@ export default function RunsheetBuilder() {
       return;
     }
     setIsDirty(true);
-  // We intentionally watch these specific user-editable fields.
+  // Only the fields that require an explicit Save flip the button to
+  // "Save changes". Everything else (notes, dietaries, venue setup, footer,
+  // GST, payment notes, header fields, costs, drinks, linked docs) is
+  // debounce-autosaved above, so tracking them here just kept the button lit
+  // and nagged the beforeunload guard after the data was already persisted.
+  // A FAILED autosave re-flips isDirty via silentUpdateMutation.onError.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, title, eventDate, venueName, spaceName, venueArea, eventStartTime, eventEndTime,
-      guestCount, eventType, notes, dietaries, venueSetup, footerText, gstInclusive, paymentNotes]);
+  }, [items, title, eventDate, venueName]);
 
   // Warn before leaving page with unsaved changes
   useEffect(() => {
@@ -1528,7 +1532,11 @@ export default function RunsheetBuilder() {
     onSuccess: () => { utils.runsheets.get.invalidate({ id: sheetId! }); toast.success("Saved!"); },
     onError: () => toast.error("Failed to save"),
   });
-  const silentUpdateMutation = trpc.runsheets.update.useMutation();
+  // Autosave. If it fails (offline etc.) re-flag dirty + warn, so the change
+  // isn't silently lost with the button still reading "Saved".
+  const silentUpdateMutation = trpc.runsheets.update.useMutation({
+    onError: () => { setIsDirty(true); toast.error("Auto-save failed — click Save changes"); },
+  });
   const addItemMutation = trpc.runsheets.addItem.useMutation({
     onSuccess: () => utils.runsheets.get.invalidate({ id: sheetId! }),
     onError: () => toast.error("Failed to add item"),
@@ -1589,11 +1597,17 @@ export default function RunsheetBuilder() {
         venueSetup: venueSetup || undefined,
         setupSummary: setupSummary || undefined,
         gstInclusive,
+        // Costs + linked proposal/floor plan were only persisted on an
+        // explicit Save (and costs not at all on a new sheet) — edit-and-leave
+        // silently dropped them. Autosave them like every other field.
+        costItems: costItems.length ? costItems : null,
+        proposalId: linkedProposalId,
+        floorPlanId: linkedFloorPlanId ?? null,
         drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes },
       } as any);
     }, 1000);
     return () => clearTimeout(t);
-  }, [sheetId, notes, footerText, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes]);
+  }, [sheetId, notes, footerText, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes]);
 
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
@@ -1617,6 +1631,8 @@ export default function RunsheetBuilder() {
           leadId,
           bookingId,
           proposalId: linkedProposalId,
+          floorPlanId: linkedFloorPlanId ?? null,
+          costItems: costItems.length ? costItems : undefined,
           eventDate: eventDate || undefined,
           venueName: venueName || undefined,
           spaceName: spaceName || undefined,
@@ -4602,7 +4618,7 @@ export default function RunsheetBuilder() {
                 )}
               </div>
             </div>
-            {true && (
+            {(
               <div className="px-5 pb-5 pt-2 space-y-4">
                 <p className="text-xs font-dm text-ink/50">Generate a read-only link for staff to view the runsheet without logging in.</p>
                 {/* Existing links */}

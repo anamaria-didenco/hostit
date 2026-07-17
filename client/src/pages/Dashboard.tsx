@@ -1521,6 +1521,9 @@ export default function Dashboard() {
   function openEventDrawer(item: any) {
     if (!item) return;
     setDrawerPaymentsOpen(false);
+    // Clear any half-finished inline edit from a previously-open event so the
+    // next drawer doesn't show a stale field value.
+    setDrawerEdit(null);
     const isBookingType = item._type === 'booking' || (!('_type' in item) && 'leadId' in item && !item._isLead);
     if (isBookingType) { setSelectedBooking(item); return; }
     if (['booked', 'confirmed', 'finished'].includes(item.status)) {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import { Loader2, CheckCircle2, Heart, Plus, X } from "lucide-react";
 
 type Dietary = { name: string; count: number; notes?: string };
@@ -43,9 +44,16 @@ export default function WeddingChecklist() {
     { enabled: !!token }
   );
 
-  const saveMutation = trpc.weddingChecklist.saveByToken.useMutation();
+  // Only report "saved" once the mutation actually succeeds — and surface a
+  // clear error if it doesn't, so a guest on a flaky connection never sees
+  // "saved" while their answer was dropped.
+  const saveMutation = trpc.weddingChecklist.saveByToken.useMutation({
+    onSuccess: () => setSaved(true),
+    onError: () => { setSaved(false); toast.error("Couldn't save — check your connection and try again"); },
+  });
   const submitMutation = trpc.weddingChecklist.submitByToken.useMutation({
     onSuccess: () => refetch(),
+    onError: () => toast.error("Couldn't submit — please try again"),
   });
 
   const [answers, setAnswers] = useState<Answers>(EMPTY);
@@ -65,12 +73,13 @@ export default function WeddingChecklist() {
   }
 
   function saveField<K extends keyof Answers>(key: K) {
-    setSaved(true);
+    setSaved(false);
     saveMutation.mutate({ token, answers: { [key]: answers[key] } as any });
   }
 
   function saveDietaries(next: Dietary[]) {
     setAnswers(prev => ({ ...prev, dietaries: next }));
+    setSaved(false);
     saveMutation.mutate({ token, answers: { dietaries: next } });
   }
 
