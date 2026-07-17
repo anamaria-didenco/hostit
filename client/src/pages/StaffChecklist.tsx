@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import { CheckSquare, Square, Loader2, CheckCircle2 } from "lucide-react";
 
 const CATEGORY_STYLES: Record<string, string> = {
@@ -22,11 +23,17 @@ export default function StaffChecklist() {
     { enabled: !!token, refetchInterval: 10000 }
   );
 
+  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+
   const toggleMutation = trpc.checklists.toggleItemByToken.useMutation({
     onSuccess: () => refetch(),
+    // Roll the optimistic tick back immediately on failure instead of waiting
+    // up to 10s for the refetch to correct it.
+    onError: (_e, vars) => {
+      setOptimistic(prev => { const n = { ...prev }; delete n[vars.itemId]; return n; });
+      toast.error("Couldn't update — please try again");
+    },
   });
-
-  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setOptimistic({});
