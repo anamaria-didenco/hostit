@@ -527,6 +527,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
     { id: "menu", label: "Menu & Catalogue" },
     { id: "templates", label: "Templates" },
     { id: "email", label: "Email" },
+    { id: "staff-emails", label: "BEO Email Recipients" },
     { id: "automated-tasks", label: "Automated Tasks" },
     { id: "taxes", label: "Taxes & Fees" },
     { id: "team", label: "Team" },
@@ -798,9 +799,9 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading, isTeamMember } = useAuth();
   const [, setLocation] = useLocation();
   type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook";
-  type SettingsSubTab = "venue"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
+  type SettingsSubTab = "venue"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
   const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","expressbook"];
-  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","lead-form","integrations","menu","templates","email","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist"];
+  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist"];
   const isDashTab = (v: string | null): v is DashTab => v !== null && (DASH_TABS as readonly string[]).includes(v);
   const isSettingsSubTab = (v: string | null): v is SettingsSubTab => v !== null && (SETTINGS_SUB_TABS as readonly string[]).includes(v);
   const _qp = new URLSearchParams(window.location.search);
@@ -1793,6 +1794,31 @@ export default function Dashboard() {
   const [weeklyExtraEmails, setWeeklyExtraEmails] = React.useState('');
   const [weeklyNewStaffName, setWeeklyNewStaffName] = React.useState('');
   const [weeklyNewStaffEmail, setWeeklyNewStaffEmail] = React.useState('');
+
+  // ── Saved BEO / briefing email recipients (Settings → BEO Email Recipients) ──
+  const staffEmailList = trpc.staffEmails.list.useQuery(undefined, { enabled: settingsSubTab === "staff-emails" });
+  const [newStaffName, setNewStaffName] = React.useState("");
+  const [newStaffEmail, setNewStaffEmail] = React.useState("");
+  const [staffBulkText, setStaffBulkText] = React.useState("");
+  const [staffBulkOpen, setStaffBulkOpen] = React.useState(false);
+  const addStaffEmailMut = trpc.staffEmails.add.useMutation({
+    onSuccess: () => { staffEmailList.refetch(); setNewStaffName(""); setNewStaffEmail(""); toast.success("Recipient added"); },
+    onError: (e: any) => toast.error(e.message || "Could not add recipient"),
+  });
+  const addStaffBulkMut = trpc.staffEmails.addBulk.useMutation({
+    onSuccess: (r: any) => {
+      staffEmailList.refetch();
+      setStaffBulkText(""); setStaffBulkOpen(false);
+      const bits = [`Added ${r.added.length}`];
+      if (r.skippedDuplicates) bits.push(`${r.skippedDuplicates} duplicate${r.skippedDuplicates !== 1 ? 's' : ''} skipped`);
+      toast.success(bits.join(" · "));
+    },
+    onError: (e: any) => toast.error(e.message || "Could not import"),
+  });
+  const removeStaffEmailMut = trpc.staffEmails.remove.useMutation({
+    onSuccess: () => { staffEmailList.refetch(); toast.success("Recipient removed"); },
+    onError: (e: any) => toast.error(e.message || "Could not remove"),
+  });
 
   const staffEmailsForWeekly = trpc.staffEmails.list.useQuery(undefined, { enabled: showWeeklyModal });
   React.useEffect(() => {
@@ -6628,6 +6654,100 @@ export default function Dashboard() {
               </div>
               </div>
               )}
+
+              {/* ── BEO EMAIL RECIPIENTS SUB-TAB ───────────────────────────── */}
+              {settingsSubTab === "staff-emails" && (() => {
+                const list = (staffEmailList.data as Array<{ id: string; name: string; email: string }> | undefined) ?? [];
+                const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newStaffEmail.trim());
+                return (
+                <div className="max-w-3xl mx-auto">
+                  <div className="flex items-center justify-between mb-2">
+                    <h1 className="font-cormorant text-3xl font-semibold text-ink">BEO Email Recipients</h1>
+                    <span className="font-bebas tracking-widest text-xs text-ink/50">{list.length} saved</span>
+                  </div>
+                  <div className="dante-card p-5 mb-4">
+                    <p className="font-dm text-sm text-ink/60">
+                      The saved staff you can tick when emailing a BEO / runsheet briefing (and the weekly report). Add people once here, then just check them off each time. Remove anyone who's left the team so they stop receiving event details.
+                    </p>
+                  </div>
+
+                  {/* Add a single recipient */}
+                  <div className="dante-card p-5 mb-4">
+                    <h2 className="font-bebas tracking-widest text-base text-ink mb-4">ADD RECIPIENT</h2>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+                      <div className="flex-1">
+                        <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">NAME</label>
+                        <input value={newStaffName} onChange={e => setNewStaffName(e.target.value)} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">EMAIL</label>
+                        <input value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} type="email" className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz"
+                          onKeyDown={e => { if (e.key === 'Enter' && newStaffName.trim() && emailValid) addStaffEmailMut.mutate({ name: newStaffName.trim(), email: newStaffEmail.trim() }); }} />
+                      </div>
+                      <button
+                        onClick={() => addStaffEmailMut.mutate({ name: newStaffName.trim(), email: newStaffEmail.trim() })}
+                        disabled={!newStaffName.trim() || !emailValid || addStaffEmailMut.isPending}
+                        className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center justify-center gap-1 disabled:opacity-40 shrink-0"
+                      >
+                        <Plus className="w-3 h-3" /> {addStaffEmailMut.isPending ? 'ADDING…' : 'ADD'}
+                      </button>
+                    </div>
+                    <button onClick={() => setStaffBulkOpen(v => !v)} className="font-bebas tracking-widest text-[10px] text-forest hover:underline mt-3">
+                      {staffBulkOpen ? '− PASTE MULTIPLE' : '+ PASTE MULTIPLE'}
+                    </button>
+                    {staffBulkOpen && (
+                      <div className="mt-2 space-y-2">
+                        <textarea value={staffBulkText} onChange={e => setStaffBulkText(e.target.value)} rows={4} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest resize-y" placeholder={"Paste names + emails — one per line, or comma-separated.\nSarah Jones <sarah@venue.co.nz>\nJoe Bloggs, joe@venue.co.nz"} />
+                        <button
+                          onClick={() => { if (staffBulkText.trim()) addStaffBulkMut.mutate({ text: staffBulkText }); }}
+                          disabled={!staffBulkText.trim() || addStaffBulkMut.isPending}
+                          className="font-bebas tracking-widest text-xs px-4 py-2 border border-forest/30 text-forest hover:bg-forest/5 disabled:opacity-40"
+                        >
+                          {addStaffBulkMut.isPending ? 'IMPORTING…' : 'IMPORT LIST'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Saved recipients */}
+                  <div className="dante-card overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gold/20 flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-forest" />
+                      <span className="font-bebas tracking-widest text-sm text-ink">SAVED RECIPIENTS</span>
+                    </div>
+                    {staffEmailList.isLoading ? (
+                      <div className="px-5 py-8 text-center font-dm text-sm text-ink/40">Loading…</div>
+                    ) : list.length === 0 ? (
+                      <div className="px-5 py-10 text-center font-dm text-sm text-ink/40">
+                        No recipients saved yet. Add your team above, or save people as you email BEOs from a runsheet.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gold/15">
+                        {list.map(s => (
+                          <div key={s.id} className="px-5 py-3 flex items-center gap-3 group">
+                            <div className="w-8 h-8 rounded-full bg-forest/10 text-forest grid place-items-center font-bebas text-xs shrink-0">
+                              {(s.name || s.email).slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-dm text-sm font-medium text-ink truncate">{s.name}</div>
+                              <div className="font-dm text-xs text-ink/50 truncate">{s.email}</div>
+                            </div>
+                            <button
+                              onClick={() => { if (confirm(`Remove ${s.name} (${s.email}) from your BEO recipients?`)) removeStaffEmailMut.mutate({ id: s.id }); }}
+                              disabled={removeStaffEmailMut.isPending}
+                              className="p-1.5 text-ink/30 hover:text-red-600 transition-colors shrink-0 disabled:opacity-40"
+                              title="Remove recipient"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                );
+              })()}
 
               {/* ── TEAM SUB-TAB ───────────────────────────────── */}
               {settingsSubTab === "team" && (() => {
