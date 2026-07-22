@@ -521,6 +521,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
 }) {
   const items = [
     { id: "venue", label: "Venue" },
+    { id: "brand-pack", label: "Brand Pack" },
     { id: "lead-form", label: "Contact Form" },
     { id: "floor-plans", label: "Floor Plans" },
     { id: "integrations", label: "Integrations" },
@@ -799,9 +800,9 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading, isTeamMember } = useAuth();
   const [, setLocation] = useLocation();
   type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook";
-  type SettingsSubTab = "venue"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
+  type SettingsSubTab = "venue"|"brand-pack"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
   const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","expressbook"];
-  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist"];
+  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","brand-pack","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist"];
   const isDashTab = (v: string | null): v is DashTab => v !== null && (DASH_TABS as readonly string[]).includes(v);
   const isSettingsSubTab = (v: string | null): v is SettingsSubTab => v !== null && (SETTINGS_SUB_TABS as readonly string[]).includes(v);
   const _qp = new URLSearchParams(window.location.search);
@@ -2184,6 +2185,8 @@ export default function Dashboard() {
         bufferTime: vs?.bufferTime ?? "30 minutes",
         primaryColor: vs?.primaryColor ?? "#2D4A3E",
         themeKey: vs?.themeKey ?? "sage",
+        brandAccentColor: vs?.brandAccentColor ?? "",
+        brandFontKey: vs?.brandFontKey ?? "editorial",
         logoUrl: vs?.logoUrl ?? "",
         coverImageUrl: vs?.coverImageUrl ?? "",
         formFont: vs?.formFont ?? "inter",
@@ -6656,6 +6659,159 @@ export default function Dashboard() {
               )}
 
               {/* ── BEO EMAIL RECIPIENTS SUB-TAB ───────────────────────────── */}
+              {settingsSubTab === "brand-pack" && settingsForm && (() => {
+                // Curated serif+sans pairings — keys MUST match BRAND_FONT_PAIRS
+                // in server/beoPdf.ts so the on-screen picker matches the PDF.
+                const FONT_PAIRS = [
+                  { key: "editorial", label: "Editorial", serif: "'Spectral',Georgia,serif", sans: "'Hanken Grotesk',Arial,sans-serif", link: "https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" },
+                  { key: "classic", label: "Classic", serif: "'Playfair Display',Georgia,serif", sans: "'Source Sans 3',Arial,sans-serif", link: "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600;700&display=swap" },
+                  { key: "modern", label: "Modern", serif: "'Fraunces',Georgia,serif", sans: "'Inter',Arial,sans-serif", link: "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" },
+                  { key: "elegant", label: "Elegant", serif: "'Cormorant Garamond',Georgia,serif", sans: "'Montserrat',Arial,sans-serif", link: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Montserrat:wght@400;500;600;700&display=swap" },
+                  { key: "clean", label: "Clean", serif: "'DM Serif Display',Georgia,serif", sans: "'DM Sans',Arial,sans-serif", link: "https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" },
+                ];
+                const hex = String(settingsForm.brandAccentColor || "");
+                const accent = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex) ? hex : "#2f5488";
+                const pair = FONT_PAIRS.find(p => p.key === (settingsForm.brandFontKey || "editorial")) ?? FONT_PAIRS[0];
+                const onAccent = (() => {
+                  const h = accent.replace(/^#/, "");
+                  const f = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+                  const r = parseInt(f.slice(0, 2), 16), g = parseInt(f.slice(2, 4), 16), b = parseInt(f.slice(4, 6), 16);
+                  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#16140f" : "#fff";
+                })();
+                const isDefault = !settingsForm.brandAccentColor && (settingsForm.brandFontKey || "editorial") === "editorial";
+                return (
+                <div className="max-w-3xl mx-auto">
+                  {/* Load the selected pairing so the preview shows real fonts */}
+                  <link rel="stylesheet" href={pair.link} />
+                  <div className="flex items-center justify-between mb-2">
+                    <h1 className="font-cormorant text-3xl font-semibold text-ink">Brand Pack</h1>
+                    <button
+                      onClick={() => updateSettings.mutate({
+                        logoUrl: settingsForm.logoUrl,
+                        logoScale: settingsForm.logoScale,
+                        brandAccentColor: settingsForm.brandAccentColor || "",
+                        brandFontKey: settingsForm.brandFontKey || "editorial",
+                      })}
+                      disabled={updateSettings.isPending}
+                      className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream disabled:opacity-40"
+                    >
+                      {updateSettings.isPending ? "SAVING…" : "SAVE BRAND PACK"}
+                    </button>
+                  </div>
+                  <div className="dante-card p-5 mb-4">
+                    <p className="font-dm text-sm text-ink/60">
+                      Your logo, colour and fonts, applied to every BEO and customer Event Pack. The VenueFlow layout stays exactly the same — it just wears your branding. Leave everything untouched to keep the classic editorial navy.
+                    </p>
+                  </div>
+
+                  {/* Logo */}
+                  <div className="dante-card p-5 mb-4 space-y-4">
+                    <h2 className="font-bebas tracking-widest text-base text-ink">LOGO</h2>
+                    <div className="flex items-start gap-4">
+                      <div className="w-24 h-24 rounded border-2 border-dashed border-gold/40 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0" style={{ padding: "4px" }}>
+                        {settingsForm.logoUrl ? (
+                          <img src={settingsForm.logoUrl} alt="logo" style={{ width: `${settingsForm.logoScale ?? 100}%`, height: `${settingsForm.logoScale ?? 100}%`, objectFit: "contain" }} />
+                        ) : (
+                          <span className="text-[10px] text-gray-400 text-center px-1">No logo</span>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <input type="file" accept="image/*"
+                          onChange={async e => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            try {
+                              const dataUrl = await compressToDataUrl(file, 400, 400, 0.90);
+                              setSettingsForm((f: any) => ({ ...f, logoUrl: dataUrl }));
+                              toast.success("Logo uploaded — save to apply.");
+                            } catch { toast.error("Logo upload failed."); }
+                          }}
+                          className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
+                        <p className="font-dm text-xs text-ink/40 mt-1">PNG or JPG. It sits at the top of page 1. This is the same logo used on your contact form.</p>
+                        {settingsForm.logoUrl && (
+                          <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, logoUrl: "" }))}
+                            className="mt-1 font-dm text-xs text-red-400 hover:text-red-600">Remove logo</button>
+                        )}
+                      </div>
+                    </div>
+                    {settingsForm.logoUrl && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-bebas text-xs tracking-widest text-sage">LOGO SIZE</label>
+                          <span className="font-dm text-xs text-ink/50">{settingsForm.logoScale ?? 100}%</span>
+                        </div>
+                        <input type="range" min={30} max={200} step={5}
+                          value={settingsForm.logoScale ?? 100}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, logoScale: Number(e.target.value) }))}
+                          className="w-full accent-sage-green" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Accent colour */}
+                  <div className="dante-card p-5 mb-4 space-y-3">
+                    <h2 className="font-bebas tracking-widest text-base text-ink">ACCENT COLOUR</h2>
+                    <p className="font-dm text-xs text-ink/40">Recolours the header rule, status pill, guest count, timeline dots and the balance bar. Text on the colour stays readable automatically.</p>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={accent}
+                        onChange={e => setSettingsForm((f: any) => ({ ...f, brandAccentColor: e.target.value }))}
+                        className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
+                      <Input value={settingsForm.brandAccentColor ?? ""}
+                        onChange={e => setSettingsForm((f: any) => ({ ...f, brandAccentColor: e.target.value }))}
+                        placeholder="#2f5488" className="w-32 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
+                      {settingsForm.brandAccentColor && (
+                        <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, brandAccentColor: "" }))}
+                          className="font-dm text-xs text-ink/40 hover:text-ink/70">Reset to navy</button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Font pairing */}
+                  <div className="dante-card p-5 mb-4 space-y-3">
+                    <h2 className="font-bebas tracking-widest text-base text-ink flex items-center gap-1"><Type className="w-4 h-4" /> FONTS</h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {FONT_PAIRS.map(p => (
+                        <button key={p.key} type="button"
+                          onClick={() => setSettingsForm((f: any) => ({ ...f, brandFontKey: p.key }))}
+                          className={`text-left border rounded-lg p-3 transition-colors ${ (settingsForm.brandFontKey || "editorial") === p.key ? "border-forest bg-forest/5" : "border-gold/25 hover:border-gold/50" }`}>
+                          <link rel="stylesheet" href={p.link} />
+                          <div style={{ fontFamily: p.serif }} className="text-lg text-ink leading-tight">Aa</div>
+                          <div className="font-bebas tracking-widest text-[11px] text-ink/70 mt-1">{p.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Live preview */}
+                  <div className="dante-card p-5 mb-4">
+                    <h2 className="font-bebas tracking-widest text-base text-ink mb-3">PREVIEW</h2>
+                    <div style={{ fontFamily: pair.sans, background: "#fffdf9", border: "1px solid #e3ddd0", borderRadius: 8, padding: "18px 20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `2.5px solid ${accent}`, paddingBottom: 8 }}>
+                        <div>
+                          {settingsForm.logoUrl && (
+                            <img src={settingsForm.logoUrl} alt="" style={{ maxHeight: 40, maxWidth: 160, objectFit: "contain", marginBottom: 6, display: "block" }} />
+                          )}
+                          <div style={{ fontSize: 10, letterSpacing: ".3em", fontWeight: 700, color: accent, textTransform: "uppercase" }}>Event Pack</div>
+                          <div style={{ fontFamily: pair.serif, fontSize: 24, fontWeight: 600, color: "#16140f", lineHeight: 1.05, marginTop: 4 }}>{settingsForm.name || "Your Venue"}</div>
+                          <div style={{ fontSize: 12, color: "#6a6256", marginTop: 2 }}>Wedding · Jenna & Partner</div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontFamily: pair.serif, fontSize: 20, fontWeight: 600, color: "#16140f" }}>BEO #35</div>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 6, background: accent, color: onAccent, fontSize: 9, fontWeight: 700, letterSpacing: ".14em", padding: "4px 9px", borderRadius: 3, textTransform: "uppercase" }}>
+                            <span style={{ width: 5, height: 5, borderRadius: "50%", background: onAccent, opacity: 0.55 }} />Confirmed
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: accent, color: onAccent, marginTop: 10, borderRadius: 5, padding: "8px 12px" }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em" }}>Balance to collect</span>
+                        <span style={{ fontFamily: pair.serif, fontSize: 15, fontWeight: 600 }}>$8,872.25</span>
+                      </div>
+                    </div>
+                    {isDefault && <p className="font-dm text-xs text-ink/40 mt-2">Currently showing the VenueFlow default (editorial navy + Spectral). Pick a colour or font above to make it yours.</p>}
+                  </div>
+                </div>
+                );
+              })()}
+
               {settingsSubTab === "staff-emails" && (() => {
                 const list = (staffEmailList.data as Array<{ id: string; name: string; email: string }> | undefined) ?? [];
                 const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newStaffEmail.trim());

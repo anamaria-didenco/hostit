@@ -172,6 +172,8 @@ export const appRouter = router({
         operatingHours: z.string().optional(),
         primaryColor: z.string().optional(),
         themeKey: z.string().optional(),
+        brandAccentColor: z.string().optional(),
+        brandFontKey: z.string().optional(),
         logoUrl: z.string().optional(),
         coverImageUrl: z.string().optional(),
         customStatuses: z.string().optional(),

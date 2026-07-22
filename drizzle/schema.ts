@@ -62,6 +62,14 @@ export const venueSettings = pgTable("venue_settings", {
   coverImageUrl: text("coverImageUrl"),
   primaryColor: varchar("primaryColor", { length: 20 }).default("#C8102E"),
   themeKey: varchar("themeKey", { length: 50 }).default("sage"),
+  // ─── Brand Pack (BEO / Event Pack document branding) ───────────────────────
+  // The venue's document accent colour. NULL = fall back to the editorial navy
+  // so existing documents are unchanged until a venue opts in via the Brand
+  // Pack settings panel.
+  brandAccentColor: varchar("brandAccentColor", { length: 20 }),
+  // Selected font pairing key (see BRAND_FONT_PAIRS in server/beoPdf.ts).
+  // NULL = "editorial" (Spectral + Hanken Grotesk), the current default.
+  brandFontKey: varchar("brandFontKey", { length: 50 }),
   leadFormTitle: varchar("leadFormTitle", { length: 255 }).default("Book Your Event"),
   leadFormSubtitle: text("leadFormSubtitle"),
   depositPercent: decimal("depositPercent", { precision: 5, scale: 2 }).default("25.00"),
