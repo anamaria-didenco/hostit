@@ -1017,6 +1017,9 @@ export default function RunsheetBuilder() {
   const [showStaffCol, setShowStaffCol] = useState(true);
   const [showPrepPlatingCol, setShowPrepPlatingCol] = useState(true);
   const [showQtyCol, setShowQtyCol] = useState(true);
+  // Per-item price on the printed BEO / Event Pack. Opt-in (default off) so
+  // prices only appear when the operator chooses to show them.
+  const [showPriceCol, setShowPriceCol] = useState(false);
 
   // Derived: dynamic grid template for F&B table (header + rows)
   const fnbGridCols = ['90px', '1fr', showQtyCol ? '50px' : null, showDietaryCol ? '80px' : null, showTimeCol ? '80px' : null, showStaffCol ? '90px' : null, showPrepPlatingCol ? '1fr' : null, '64px'].filter(Boolean).join(' ');
@@ -1362,6 +1365,7 @@ export default function RunsheetBuilder() {
         if (cols.staff !== undefined) setShowStaffCol(cols.staff);
         if (cols.notes !== undefined) setShowPrepPlatingCol(cols.notes);
         if (cols.qty !== undefined) setShowQtyCol(cols.qty);
+        if (cols.price !== undefined) setShowPriceCol(cols.price);
       }
       setVenueArea((existing as any).venueArea ?? "");
       setEventStartTime((existing as any).eventStartTime ?? "");
@@ -1556,9 +1560,9 @@ export default function RunsheetBuilder() {
     if (!sheetId) return;
     silentUpdateMutation.mutate({
       id: sheetId,
-      fnbColumns: { dietary: showDietaryCol, serviceTime: showTimeCol, staff: showStaffCol, notes: showPrepPlatingCol, qty: showQtyCol },
+      fnbColumns: { dietary: showDietaryCol, serviceTime: showTimeCol, staff: showStaffCol, notes: showPrepPlatingCol, qty: showQtyCol, price: showPriceCol },
     } as any);
-  }, [showDietaryCol, showTimeCol, showStaffCol, showPrepPlatingCol, showQtyCol]);
+  }, [showDietaryCol, showTimeCol, showStaffCol, showPrepPlatingCol, showQtyCol, showPriceCol]);
 
   // Auto-save dietaries (debounced) so they persist without requiring an explicit Save click.
   // Without this, dietaries added in the builder never make it to the live/staff link.
@@ -3202,6 +3206,11 @@ export default function RunsheetBuilder() {
                   className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showQtyCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
                   title="Toggle Quantity column"
                 >QTY</button>
+                <button
+                  onClick={() => setShowPriceCol(v => !v)}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPriceCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  title="Show each item's price on the BEO / Event Pack (per-item price = till amount)"
+                >PRICE</button>
                 <button
                   onClick={() => setShowDietaryCol(v => !v)}
                   className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDietaryCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
