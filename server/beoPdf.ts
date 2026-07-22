@@ -793,42 +793,48 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 
     // ── Cost summary (page 2) — internal only, never public ──────────────
     const costList: any[] = Array.isArray((runsheet as any)?.costItems) ? (runsheet as any).costItems : [];
-    const fnbFoodTotal = fnbList
-      .filter(i => (i.course ?? "") !== "Drinks")
-      .reduce((s, i) => s + Number(i.qty ?? 0) * Number((i as any).unitPrice ?? 0), 0);
-    const costFbTotal = costList
-      .filter(ci => /food|beverage/i.test(String(ci.category ?? "")))
-      .reduce((s, ci) => s + Number(ci.qty ?? 0) * Number(ci.unitPrice ?? 0), 0);
-    const barTabAmt = Number((drinks as any)?.tabAmount ?? 0);
+    const lineAmt = (ci: any) => Number(ci.qty ?? 0) * Number(ci.unitPrice ?? 0);
+    // Accumulate EVERY itemised cost line (AV, hire, styling, F&B — all of it),
+    // not just food/beverage. This is the same figure the runsheet Costs tab
+    // sums, so the BEO total matches what the operator sees on screen.
+    const costItemsTotal = costList.reduce((s, ci) => s + lineAmt(ci), 0);
     const minSpendAmt = Number((booking as any).minimumSpend ?? quoteSettingsRow?.minimumSpend ?? 0);
-    // Balance is based on the ACTUAL total (minimum spend vs itemised F&B +
-    // costs, whichever is higher), with the deposit subtracted only once paid.
-    const eventTotal = Math.max(
-      Number(booking.totalNzd ?? 0),
-      minSpendAmt,
-      fnbFoodTotal + costFbTotal + barTabAmt,
-    );
+    // Prefer the itemised costs when the operator has entered them; otherwise
+    // fall back to the booking total / minimum spend. (We no longer re-add the
+    // F&B menu sheet + bar tab on top — that double-counted anything already
+    // itemised as a cost line, which is how most operators enter food/drinks.)
+    const enteredTotal = costItemsTotal > 0
+      ? costItemsTotal
+      : Math.max(Number(booking.totalNzd ?? 0), minSpendAmt);
     const depAmt = Number(booking.depositNzd ?? 0);
-    // GST breakdown — mirrors the runsheet Costs tab exactly. The runsheet's
-    // gstInclusive toggle declares whether the entered amounts already carry
-    // 15% GST; either way the BEO shows the full picture (subtotal, GST,
-    // total incl. GST) and the balance to collect is the INCLUSIVE amount —
-    // an ex-GST balance on the PDF reads as the final figure and confuses
-    // clients (reported by Bar Franco).
+    // GST breakdown — mirrors the runsheet Costs tab. The gstInclusive toggle
+    // declares whether the entered amounts already carry 15% GST; either way
+    // the BEO shows the full picture (subtotal, GST, total incl. GST) and the
+    // balance to collect is the INCLUSIVE amount.
     const gstInclusiveFlag = Boolean((runsheet as any)?.gstInclusive);
-    const subtotalExGst = gstInclusiveFlag ? eventTotal / 1.15 : eventTotal;
-    const gstAmt = gstInclusiveFlag ? eventTotal - subtotalExGst : eventTotal * 0.15;
+    const subtotalExGst = gstInclusiveFlag ? enteredTotal / 1.15 : enteredTotal;
+    const gstAmt = gstInclusiveFlag ? enteredTotal - subtotalExGst : enteredTotal * 0.15;
     const totalInclGst = subtotalExGst + gstAmt;
-    const balanceToCollect = eventTotal > 0 ? Math.max(0, totalInclGst - (booking.depositPaid ? depAmt : 0)) : 0;
-    const showFinancials = !isPublic && (minSpendAmt > 0 || eventTotal > 0 || depAmt > 0);
+    const balanceToCollect = totalInclGst > 0 ? Math.max(0, totalInclGst - (booking.depositPaid ? depAmt : 0)) : 0;
+    const showFinancials = !isPublic && (enteredTotal > 0 || minSpendAmt > 0 || depAmt > 0);
     const balanceOutstanding = !booking.depositPaid && balanceToCollect > 0;
+    // Itemised breakdown — one row per cost line, so the totals below are
+    // justified rather than dropping out of nowhere.
+    const costLinesHtml = costList
+      .filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0)
+      .map(ci => {
+        const q = Number(ci.qty ?? 0);
+        const qtyBit = q > 1 ? `<span class="qy"> × ${escHtml(String(q))}</span>` : "";
+        return `<div class="cost-row line"><span class="k">${escHtml(ci.label ?? "Item")}${qtyBit}</span><span class="v small">${fmtCurrency(lineAmt(ci))}</span></div>`;
+      }).join("");
     const financialsSection = showFinancials ? `
       <div class="cost">
-        <div class="cost-title">Cost Summary</div>
-        ${minSpendAmt > 0 ? `<div class="cost-row"><span class="k">Minimum Spend</span><span class="v">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
-        ${eventTotal > 0 ? `<div class="cost-row"><span class="k">Subtotal (excl. GST)</span><span class="v small">${fmtCurrency(subtotalExGst)}</span></div>` : ""}
-        ${eventTotal > 0 ? `<div class="cost-row"><span class="k">GST (15%)</span><span class="v small">${fmtCurrency(gstAmt)}</span></div>` : ""}
-        ${eventTotal > 0 ? `<div class="cost-row"><span class="k">Total (incl. GST)</span><span class="v">${fmtCurrency(totalInclGst)}</span></div>` : ""}
+        <div class="cost-title">Cost Summary${gstInclusiveFlag ? " &middot; incl. GST" : " &middot; excl. GST"}</div>
+        ${costLinesHtml}
+        ${minSpendAmt > 0 ? `<div class="cost-row"><span class="k">Minimum Spend</span><span class="v small">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
+        ${enteredTotal > 0 ? `<div class="cost-row sub"><span class="k">Subtotal (excl. GST)</span><span class="v small">${fmtCurrency(subtotalExGst)}</span></div>` : ""}
+        ${enteredTotal > 0 ? `<div class="cost-row"><span class="k">GST (15%)</span><span class="v small">${fmtCurrency(gstAmt)}</span></div>` : ""}
+        ${enteredTotal > 0 ? `<div class="cost-row"><span class="k">Total (incl. GST)</span><span class="v">${fmtCurrency(totalInclGst)}</span></div>` : ""}
         ${depAmt > 0 ? `<div class="cost-row"><span class="k">Deposit received</span><span class="v small">${fmtCurrency(depAmt)} ${booking.depositPaid ? "&middot; Paid" : "&middot; Outstanding"}</span></div>` : ""}
         <div class="cost-row balance"><span class="k">Balance to collect <span class="k-sub">incl. GST</span></span><span class="v">${fmtCurrency(balanceToCollect)}${balanceOutstanding ? ` <span class="out-tag">Outstanding</span>` : ""}</span></div>
       </div>` : "";
@@ -1005,6 +1011,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .cost-row .k{color:var(--gray);font-weight:500;}
   .cost-row .v{font-family:var(--serif);font-size:14.5px;font-weight:600;color:var(--ink);}
   .cost-row .v.small{font-size:13px;}
+  /* Itemised breakdown lines — lighter than the summary rows. */
+  .cost-row.line{padding:4px 12px;font-size:12px;}
+  .cost-row.line .k{color:var(--ink2);font-weight:500;}
+  .cost-row.line .k .qy{color:var(--gray2);font-weight:600;}
+  .cost-row.line .v.small{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--ink2);}
+  /* First summary row after the itemised lines gets a heavier divider. */
+  .cost-row.sub{border-top:1.5px solid var(--line2);}
   .cost-row.balance{background:var(--green);color:#fff;border-top:0;padding:7px 12px;}
   .cost-row.balance .k{color:#fff;font-size:12px;font-weight:700;}
   .cost-row.balance .k-sub{display:block;font-size:9px;font-weight:600;color:rgba(255,255,255,.65);letter-spacing:.04em;margin-top:1px;}
