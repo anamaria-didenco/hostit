@@ -57,6 +57,68 @@ const COURSE_ORDER = [
   "Breakfast","Morning Tea","Lunch","Afternoon Tea","Drinks","Other",
 ];
 
+// ─── Brand Pack font pairings ────────────────────────────────────────────────
+// A curated set of serif + sans Google Font pairings a venue can pick in the
+// Brand Pack settings panel. `key` is stored on venueSettings.brandFontKey; the
+// same keys/labels are mirrored in the client picker (Dashboard.tsx). Each pair
+// ships its own <link> so we request exactly the weights/italics the BEO uses
+// (italic serif for course titles + venue name). "editorial" is the historic
+// default and its link/vars reproduce the previous hard-coded fonts 1:1.
+export const BRAND_FONT_PAIRS: Record<string, { label: string; serif: string; sans: string; link: string }> = {
+  editorial: {
+    label: "Editorial (Spectral · Hanken Grotesk)",
+    serif: "'Spectral',Georgia,serif",
+    sans: "'Hanken Grotesk',Arial,sans-serif",
+    link: "https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap",
+  },
+  classic: {
+    label: "Classic (Playfair Display · Source Sans)",
+    serif: "'Playfair Display',Georgia,serif",
+    sans: "'Source Sans 3',Arial,sans-serif",
+    link: "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600;700&display=swap",
+  },
+  modern: {
+    label: "Modern (Fraunces · Inter)",
+    serif: "'Fraunces',Georgia,serif",
+    sans: "'Inter',Arial,sans-serif",
+    link: "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap",
+  },
+  elegant: {
+    label: "Elegant (Cormorant Garamond · Montserrat)",
+    serif: "'Cormorant Garamond',Georgia,serif",
+    sans: "'Montserrat',Arial,sans-serif",
+    link: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Montserrat:wght@400;500;600;700&display=swap",
+  },
+  clean: {
+    label: "Clean (DM Serif Display · DM Sans)",
+    serif: "'DM Serif Display',Georgia,serif",
+    sans: "'DM Sans',Arial,sans-serif",
+    link: "https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap",
+  },
+};
+
+// Pick a readable ink/white for text sitting on a solid brand-accent surface
+// (status pill, guests cell, balance bar, bar tag). A pale accent needs dark
+// text; a dark accent needs white. Uses perceived luminance; falls back to
+// white for anything we can't parse so we never regress the dark-navy default.
+function readableOnAccent(hex: string): string {
+  const h = String(hex || "").trim().replace(/^#/, "");
+  const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return "#fff";
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? "#16140f" : "#fff";
+}
+
+// Accept only a valid CSS hex colour for the accent; ignore anything else so a
+// bad/garbage value can't break the document CSS.
+function safeHex(hex: any, fallback: string): string {
+  const h = String(hex ?? "").trim();
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(h) ? h : fallback;
+}
+
 function fmt12(t: string | null | undefined): string {
   if (!t) return "";
   const [hStr, mStr] = t.split(":");
@@ -399,6 +461,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     // White-label the BEO header / accents to the operator's brand colour.
     // Falls back to VenueFlow's default brand blue when none is configured.
     const venuePrimaryColor = (venue as any)?.primaryColor ?? "#2f5488";
+    // ── Brand Pack: document accent + font pairing ───────────────────────────
+    // brandAccentColor is opt-in — NULL keeps the editorial navy so existing
+    // documents are unchanged. The accent recolours every navy surface; text
+    // sitting on the accent gets a readable ink/white via luminance.
+    const brandAccent = safeHex((venue as any)?.brandAccentColor, "#2f5488");
+    const onAccent = readableOnAccent(brandAccent);
+    const brandFontKey = String((venue as any)?.brandFontKey ?? "editorial");
+    const fontPair = BRAND_FONT_PAIRS[brandFontKey] ?? BRAND_FONT_PAIRS.editorial;
     // Resolve the venue logo to an inline data URI so it renders identically in
     // the on-screen preview AND the Puppeteer PDF. Puppeteer prints via
     // setContent() with no base URL, so a relative "/uploads/…" src would 404
@@ -909,17 +979,18 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 <title>BEO #${booking.id} &middot; ${escHtml(venueName)} &middot; ${escHtml(clientName)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="${fontPair.link}" rel="stylesheet">
 <style>
   :root{
-    /* Editorial rebrand: the document accent is VenueFlow deep blue.
-       (--green is kept as the variable name the layout already references.) */
-    --cream:#fffdf9; --ink:#16140f; --ink2:#211d18; --green:#2f5488; --red:#c0392b;
+    /* The document accent (--green, kept as the name the layout references) is
+       the venue's Brand Pack colour, defaulting to VenueFlow deep blue.
+       --on-green is the readable text colour for surfaces filled with it. */
+    --cream:#fffdf9; --ink:#16140f; --ink2:#211d18; --green:${brandAccent}; --on-green:${onAccent}; --red:#c0392b;
     --gray:#6a6256; --gray2:#8a8073; --faint:#a39684;
     --line:#e3ddd0; --line2:#e6dccb; --hair:#eee6d8; --amber:#b07c25;
     --fill:#f4efe6; --change-fill:#fbf3e8; --change-line:#e6d9bf;
     --paper-edge:#ddd8cf;
-    --serif:'Spectral',Georgia,serif; --sans:'Hanken Grotesk',Arial,sans-serif;
+    --serif:${fontPair.serif}; --sans:${fontPair.sans};
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{background:var(--paper-edge);font-family:var(--sans);color:var(--ink2);-webkit-font-smoothing:antialiased;}
@@ -937,9 +1008,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .mast-sub{font-size:13px;color:var(--gray);margin-top:2px;}
   .mast-right{text-align:right;flex:none;padding-left:18px;}
   .beo-num{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--ink);line-height:1;}
-  .pill{display:inline-flex;align-items:center;gap:6px;margin-top:6px;background:var(--green);color:#fff;font-size:10px;font-weight:700;letter-spacing:.14em;padding:4px 10px;border-radius:3px;text-transform:uppercase;}
-  .pill .dot{width:6px;height:6px;border-radius:50%;background:#a9c8f2;}
-  .pill.is-muted{background:var(--gray2);}
+  .pill{display:inline-flex;align-items:center;gap:6px;margin-top:6px;background:var(--green);color:var(--on-green);font-size:10px;font-weight:700;letter-spacing:.14em;padding:4px 10px;border-radius:3px;text-transform:uppercase;}
+  .pill .dot{width:6px;height:6px;border-radius:50%;background:var(--on-green);opacity:.55;}
+  .pill.is-muted{background:var(--gray2);color:#fff;}
 
   /* ── Booking band ── */
   .band{display:grid;margin-top:8px;border:1px solid var(--line);border-radius:6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;}
@@ -947,8 +1018,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .band-cell:last-child{border-right:0;}
   .blabel{font-size:9px;letter-spacing:.16em;font-weight:700;color:var(--gray2);text-transform:uppercase;}
   .band-val{font-size:14px;font-weight:600;margin-top:3px;line-height:1.2;}
-  .band-guests{background:var(--green);color:#fff;}
-  .band-guests .blabel{color:rgba(255,255,255,.75);}
+  .band-guests{background:var(--green);color:var(--on-green);}
+  .band-guests .blabel{color:var(--on-green);opacity:.75;}
   .band-num{font-family:var(--serif);font-size:22px;font-weight:600;line-height:1;margin-top:3px;}
 
   /* ── Section heads ── */
@@ -1033,7 +1104,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .notes-list li .b{color:var(--red);font-weight:700;flex:none;}
   .contact-name{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink);}
   .contact-lines{font-size:12px;color:#736a5d;margin-top:4px;line-height:1.55;}
-  .bar-tag{display:inline-block;background:var(--green);color:#fff;font-size:9px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:3px;text-transform:uppercase;}
+  .bar-tag{display:inline-block;background:var(--green);color:var(--on-green);font-size:9px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:3px;text-transform:uppercase;}
   .bar-tab-amt{display:inline-block;margin-left:7px;font-size:11px;font-weight:600;color:var(--gray);}
   .bar-note{font-size:12px;color:#332e26;margin-top:6px;line-height:1.35;}
 
@@ -1051,10 +1122,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .cost-row.line .v.small{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--ink2);}
   /* First summary row after the itemised lines gets a heavier divider. */
   .cost-row.sub{border-top:1.5px solid var(--line2);}
-  .cost-row.balance{background:var(--green);color:#fff;border-top:0;padding:7px 12px;}
-  .cost-row.balance .k{color:#fff;font-size:12px;font-weight:700;}
-  .cost-row.balance .k-sub{display:block;font-size:9px;font-weight:600;color:rgba(255,255,255,.65);letter-spacing:.04em;margin-top:1px;}
-  .cost-row.balance .v{color:#fff;font-size:15.5px;}
+  .cost-row.balance{background:var(--green);color:var(--on-green);border-top:0;padding:7px 12px;}
+  .cost-row.balance .k{color:var(--on-green);font-size:12px;font-weight:700;}
+  .cost-row.balance .k-sub{display:block;font-size:9px;font-weight:600;color:var(--on-green);opacity:.65;letter-spacing:.04em;margin-top:1px;}
+  .cost-row.balance .v{color:var(--on-green);font-size:15.5px;}
   .out-tag{background:var(--red);color:#fff;font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:7px;}
 
   /* ── Beverages ── */
@@ -1064,7 +1135,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .bev-tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:#fff;padding:3px 6px;border-radius:3px;flex:none;text-transform:uppercase;}
   .bev-name{font-size:12.5px;font-weight:600;color:var(--ink);}
   .bev-desc{font-size:11.5px;color:#736a5d;font-weight:400;}
-  .t-spark{background:#b07c25;} .t-white{background:#a98f2a;} .t-red{background:#7a2420;} .t-beer{background:var(--green);}
+  .t-spark{background:#b07c25;} .t-white{background:#a98f2a;} .t-red{background:#7a2420;} .t-beer{background:var(--green);color:var(--on-green);}
 
   /* ── Full-width blocks below the grid (setup / payment / note) ── */
   .blk{margin-top:9px;break-inside:avoid;page-break-inside:avoid;}

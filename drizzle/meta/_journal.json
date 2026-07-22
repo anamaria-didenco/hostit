@@ -315,6 +315,13 @@
       "when": 1779800300000,
       "tag": "0044_wedding_checklist",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1779800400000,
+      "tag": "0045_brand_pack",
+      "breakpoints": true
     }
   ]
 }
