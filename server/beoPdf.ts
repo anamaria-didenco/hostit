@@ -399,6 +399,33 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     // White-label the BEO header / accents to the operator's brand colour.
     // Falls back to VenueFlow's default brand blue when none is configured.
     const venuePrimaryColor = (venue as any)?.primaryColor ?? "#2f5488";
+    // Resolve the venue logo to an inline data URI so it renders identically in
+    // the on-screen preview AND the Puppeteer PDF. Puppeteer prints via
+    // setContent() with no base URL, so a relative "/uploads/…" src would 404
+    // in the PDF — embedding the bytes sidesteps that (and the network round
+    // trip). Read straight from disk with the same path-traversal guard used
+    // for linked menu PDFs; fall back to remote/data URLs verbatim.
+    let venueLogoSrc = "";
+    if (venueLogoUrl) {
+      if (/^(https?:|data:)/i.test(venueLogoUrl)) {
+        venueLogoSrc = venueLogoUrl;
+      } else if (venueLogoUrl.startsWith("/uploads/")) {
+        try {
+          const uploadsDir = path.join(process.cwd(), "public", "uploads");
+          const filePath = path.resolve(uploadsDir, venueLogoUrl.replace(/^\/uploads\//, ""));
+          if (filePath.startsWith(uploadsDir + path.sep) && fs.existsSync(filePath)) {
+            const ext = path.extname(filePath).slice(1).toLowerCase();
+            const mime = ext === "svg" ? "image/svg+xml" : ext === "jpg" ? "image/jpeg" : `image/${ext || "png"}`;
+            venueLogoSrc = `data:${mime};base64,${fs.readFileSync(filePath).toString("base64")}`;
+          }
+        } catch (e) {
+          console.warn("[BEO PDF] could not inline venue logo:", venueLogoUrl, e);
+        }
+      }
+    }
+    // Honour the operator's saved logo scale (%), clamped to a sane print range.
+    const logoScalePct = Math.max(40, Math.min(160, Number((venue as any)?.logoScale ?? 100) || 100));
+    const logoMaxH = Math.round(46 * logoScalePct / 100);
     const clientName = `${booking.firstName}${booking.lastName ? " " + booking.lastName : ""}`;
     const eventDate = fmtDate(booking.eventDate);
     const eventTime = booking.eventDate ? fmt12(new Date(booking.eventDate).toTimeString().slice(0,5)) : "";
@@ -868,6 +895,11 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const p2Meta = [`BEO #${booking.id}`, escHtml(venueName), [eventType, clientName].filter(Boolean).map(escHtml).join(" · ")]
       .filter(Boolean).join(" · ");
     const mastSub = [eventType, clientName].filter(Boolean).map(escHtml).join(" · ");
+    // Branded masthead logo (page 1). Empty string when no logo is configured,
+    // so the header gracefully falls back to the text venue name as before.
+    const logoImg = venueLogoSrc
+      ? `<img class="mast-logo" src="${venueLogoSrc}" alt="${escHtml(venueName)} logo" style="max-height:${logoMaxH}px;" />`
+      : "";
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -899,6 +931,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 
   /* ── Masthead (page 1) ── */
   .mast{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid var(--green);padding-bottom:7px;}
+  .mast-logo{display:block;max-width:190px;object-fit:contain;margin-bottom:8px;}
   .eyebrow{font-size:10px;letter-spacing:.32em;font-weight:700;color:var(--green);text-transform:uppercase;}
   .venue{font-family:var(--serif);font-size:24px;font-weight:600;line-height:1.05;margin-top:4px;color:var(--ink);}
   .mast-sub{font-size:13px;color:var(--gray);margin-top:2px;}
@@ -1039,9 +1072,16 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .blk .kv{font-size:12.5px;line-height:1.45;color:#332e26;}
 
   @page{size:A4;margin:0;}
+  /* Two-page A4 contract: page 2 ("Floor & Service") always begins on a fresh
+     physical page, so the document prints as a clean two-pager no matter how
+     tall page 1's content runs. */
+  .sheet + .sheet{break-before:page;page-break-before:always;}
   @media print{
     html,body{background:none;}
-    .sheet{margin:0;}
+    /* Fill the page height (kept just under 297mm to avoid rounding a blank
+       3rd page) and drop the footer to the bottom of each sheet. */
+    .sheet{margin:0;min-height:295mm;}
+    .foot{margin-top:auto;}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
   @media screen{ .sheet{box-shadow:0 8px 40px rgba(0,0,0,.16);} }
@@ -1053,7 +1093,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 <section class="sheet">
   <header class="mast">
     <div>
-      <div class="eyebrow">Banquet Event Order</div>
+      ${logoImg}
+      <div class="eyebrow">${isPublic ? "Event Pack" : "Banquet Event Order"}</div>
       <div class="venue">${escHtml(venueName)}</div>
       ${mastSub ? `<div class="mast-sub">${mastSub}</div>` : ""}
     </div>
@@ -1068,7 +1109,7 @@ ${bandHtml}
   ${show('food', menuSection)}
   ${show('kitchen', kitchenSection)}
 
-  ${pageFooter("Kitchen copy &middot; Page 1 of 2")}
+  ${pageFooter(isPublic ? "Event Pack &middot; Page 1 of 2" : "Kitchen copy &middot; Page 1 of 2")}
 </section>
 
 <!-- ═══════════════ PAGE 2 — SERVICE & BILLING ═══════════════ -->
@@ -1098,7 +1139,7 @@ ${bandHtml}
   ${paymentSection}
   ${show('footer', footerNoteSection)}
 
-  ${pageFooter("Service copy &middot; Page 2 of 2")}
+  ${pageFooter(isPublic ? "Event Pack &middot; Page 2 of 2" : "Service copy &middot; Page 2 of 2")}
 </section>
 
 </body>
