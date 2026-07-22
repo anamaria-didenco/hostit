@@ -533,6 +533,11 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const footerNote = cleanRichHtml((runsheet as any)?.footerText ?? "");
     const fnbCols = (runsheet as any)?.fnbColumns ?? {};
     const showQty = fnbCols.qty !== false;
+    // Per-item pricing on the menu — opt-in (default off) so prices only appear
+    // when the operator ticks "PRICE" on the F&B sheet. Shown to everyone,
+    // including the customer Event Pack, and doubles as a till reference (the
+    // per-item unit price is what staff ring up).
+    const showItemPrice = fnbCols.price === true;
 
     const escHtml = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -684,8 +689,15 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       const prep = (opts?.prep && (f.prepNotes || f.platingNotes))
         ? `<div class="prep-line">${[f.prepNotes, f.platingNotes].filter(Boolean).map((n: string) => escHtml(n)).join(" · ")}</div>`
         : "";
+      // Per-item price (opt-in). Show the line total (qty × unit) as the main
+      // figure, with the "N × $unit" breakdown so staff can see the till price
+      // of a single item. Only for items that actually carry a price.
+      const unit = (f.unitPrice === null || f.unitPrice === undefined || f.unitPrice === "") ? null : Number(f.unitPrice);
+      const price = (showItemPrice && unit !== null && !isNaN(unit) && unit > 0)
+        ? `<span class="dprice">${fmtCurrency(unit * qtyNum)}${qtyNum > 1 ? `<span class="dprice-ea"> &middot; ${escHtml(String(qtyNum))} &times; ${fmtCurrency(unit)}</span>` : ""}</span>`
+        : "";
       return `
-        <div class="dish"><span class="em">&mdash;</span><span class="body"><span class="dname">${escHtml(f.dishName)}</span>${qty}${det}${tag}${prep}</span></div>`;
+        <div class="dish"><span class="em">&mdash;</span><span class="body"><span class="dname">${escHtml(f.dishName)}</span>${qty}${det}${tag}${prep}</span>${price}</div>`;
     };
     // When the food is one pasted multi-course menu, split it into columns.
     const embeddedMenu = detectEmbeddedMenu(foodItems);
@@ -1067,6 +1079,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .dish .det{font-size:12px;color:#736a5d;}
   .changed{background:var(--red);color:#fff;font-size:8.5px;font-weight:800;letter-spacing:.08em;padding:1.5px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;white-space:nowrap;text-transform:uppercase;}
   .dish .dqty{font-size:11px;font-weight:700;color:var(--gray2);margin-left:6px;white-space:nowrap;}
+  .dish .dprice{flex:none;margin-left:10px;font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;text-align:right;}
+  .dish .dprice-ea{font-size:10.5px;font-weight:600;color:var(--gray2);}
   .prep-line{font-size:11px;color:var(--gray2);margin-top:1px;font-style:italic;}
 
   /* ── Footer ── */
