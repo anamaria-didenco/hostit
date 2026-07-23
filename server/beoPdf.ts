@@ -525,6 +525,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const setupSummary = ((runsheet as any)?.setupSummary ?? "").toString().trim();
     // Drink type tags (SPARK/WHITE/RED/BEER) keyed by drink name, if the operator set them.
     const drinkTypesMap: Record<string, string> = (rsDrinks as any)?.drinkTypes ?? {};
+    // Per-drink price (single-serve / till amount), keyed by drink name.
+    const drinkPricesMap: Record<string, any> = (rsDrinks as any)?.drinkPrices ?? {};
     // Internal-only fields — never surfaced via the public event-pack link.
     const rsNotes = isPublic ? "" : ((runsheet as any)?.notes ?? "");
     const bookingNotes = isPublic ? "" : ((booking as any).notes ?? "");
@@ -832,22 +834,28 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const BEV_TAG_LABEL: Record<string, string> = {
       SPARK: "Spark", WHITE: "White", RED: "Red", BEER: "Beer",
     };
-    const drinkChip = (name: string, desc?: string) => {
+    const drinkChip = (name: string, desc?: string, priceVal?: any) => {
       const t = drinkType(name);
+      // Per-drink price — opt-in via the same F&B "PRICE" toggle as food. Bar
+      // drinks are shown at their single-serve (till) price; no qty maths.
+      const unit = (priceVal === null || priceVal === undefined || priceVal === "") ? null : Number(priceVal);
+      const priceHtml = (showItemPrice && unit !== null && !isNaN(unit) && unit > 0)
+        ? `<span class="bev-price">${fmtCurrency(unit)}</span>` : "";
       return `
         <div class="bev-row">
           ${t ? `<span class="bev-tag ${BEV_TAG_CLASS[t] ?? ""}">${BEV_TAG_LABEL[t] ?? t}</span>` : ""}
           <span class="bev-name">${escHtml(name)}${desc ? ` <span class="bev-desc">&mdash; ${escHtml(desc)}</span>` : ""}</span>
+          ${priceHtml}
         </div>`;
     };
     // Drinks source: DRINKS-tab selection if present, else legacy fnb Drinks course.
     const legacyDrinkRows = fohItems.filter((i: any) => (i.course ?? "") === "Drinks");
     const bevRows = hasDrinkSelection
       ? [
-          ...selectedDrinkNames.map(n => drinkChip(n)),
-          ...customDrinkList.map((d: any) => drinkChip(d.name, d.description)),
+          ...selectedDrinkNames.map(n => drinkChip(n, undefined, drinkPricesMap[n])),
+          ...customDrinkList.map((d: any) => drinkChip(d.name, d.description, drinkPricesMap[d.name] ?? d.price)),
         ]
-      : legacyDrinkRows.map((f: any) => drinkChip(f.dishName, f.description));
+      : legacyDrinkRows.map((f: any) => drinkChip(f.dishName, f.description, drinkPricesMap[f.dishName] ?? f.unitPrice));
     const beveragesSection = bevRows.length > 0 ? `
       <div class="bev">
         <div class="sec-head">
@@ -1149,6 +1157,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .bev-tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:#fff;padding:3px 6px;border-radius:3px;flex:none;text-transform:uppercase;}
   .bev-name{font-size:12.5px;font-weight:600;color:var(--ink);}
   .bev-desc{font-size:11.5px;color:#736a5d;font-weight:400;}
+  .bev-price{margin-left:auto;padding-left:8px;font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;}
   .t-spark{background:#b07c25;} .t-white{background:#a98f2a;} .t-red{background:#7a2420;} .t-beer{background:var(--green);color:var(--on-green);}
 
   /* ── Full-width blocks below the grid (setup / payment / note) ── */
