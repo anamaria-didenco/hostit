@@ -1053,13 +1053,25 @@ export default function RunsheetBuilder() {
     onSuccess: () => toast.success('F&B sheet saved'),
     onError: () => toast.error('Failed to save F&B sheet'),
   });
+  // Silent variant for debounced autosave — no toast, no refetch, so the food
+  // sheet persists as you type without interrupting editing or flashing toasts.
+  const silentFnbSaveMutation = trpc.fnb.save.useMutation();
   const { data: existingFnb, refetch: refetchFnb } = trpc.fnb.list.useQuery(
     { runsheetId: sheetId! },
     { enabled: !!sheetId }
   );
+  // Guards for the debounced food autosave (declared here so the load effect
+  // can arm them): fnbReadyRef gates autosave until the server list has loaded
+  // (so we never save an empty list over real data before load); skipNext
+  // suppresses the one autosave that would otherwise echo freshly-loaded data
+  // straight back to the server.
+  const fnbReadyRef = React.useRef(false);
+  const skipNextFnbAutosaveRef = React.useRef(false);
   useEffect(() => {
     if (existingFnb) {
       setFnbItems(existingFnb.map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
+      fnbReadyRef.current = true;
+      skipNextFnbAutosaveRef.current = true;
     }
   }, [existingFnb]);
 
@@ -1631,6 +1643,36 @@ export default function RunsheetBuilder() {
     }, 1000);
     return () => clearTimeout(t);
   }, [sheetId, notes, footerText, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices]);
+
+  // Auto-save FOOD items (debounced) — same convenience as drinks/notes, so the
+  // operator never has to click SAVE FOOD. Silent (no toast, no refetch) so it
+  // doesn't interrupt typing. Gated on fnbReadyRef so we never persist an empty
+  // list before the server data has loaded.
+  useEffect(() => {
+    if (!sheetId || !fnbReadyRef.current) return;
+    if (skipNextFnbAutosaveRef.current) { skipNextFnbAutosaveRef.current = false; return; }
+    const t = setTimeout(() => {
+      silentFnbSaveMutation.mutate({
+        runsheetId: sheetId,
+        items: fnbItems.map((item, i) => ({
+          section: item.section,
+          course: item.course,
+          dishName: item.dishName,
+          previousDishName: item.previousDishName ?? null,
+          description: item.description,
+          qty: item.qty ?? 1,
+          dietary: item.dietary,
+          serviceTime: item.serviceTime,
+          prepNotes: item.prepNotes,
+          platingNotes: item.platingNotes,
+          staffAssigned: item.staffAssigned,
+          sortOrder: i,
+          unitPrice: item.unitPrice != null && (item.unitPrice as any) !== '' ? Number(item.unitPrice) : null,
+        })),
+      });
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [fnbItems, sheetId]);
 
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
