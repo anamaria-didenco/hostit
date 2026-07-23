@@ -1030,7 +1030,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   html,body{background:var(--paper-edge);font-family:var(--sans);color:var(--ink2);-webkit-font-smoothing:antialiased;}
   .sheet{
     width:210mm;min-height:auto;background:var(--cream);margin:10mm auto;
-    padding:7mm 10mm 7mm;position:relative;display:flex;flex-direction:column;
+    padding:5mm 8mm 5mm;position:relative;display:flex;flex-direction:column;
   }
   .muted{color:var(--gray);}
 
@@ -1047,8 +1047,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .pill.is-muted{background:var(--gray2);color:#fff;}
 
   /* ── Booking band ── */
-  .band{display:grid;margin-top:8px;border:1px solid var(--line);border-radius:6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;}
-  .band-cell{padding:7px 12px;border-right:1px solid var(--line);}
+  .band{display:grid;margin-top:5px;border:1px solid var(--line);border-radius:6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;}
+  .band-cell{padding:5px 10px;border-right:1px solid var(--line);}
   .band-cell:last-child{border-right:0;}
   .blabel{font-size:9px;letter-spacing:.16em;font-weight:700;color:var(--gray2);text-transform:uppercase;}
   .band-val{font-size:14px;font-weight:600;margin-top:3px;line-height:1.2;}
@@ -1057,8 +1057,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .band-num{font-family:var(--serif);font-size:22px;font-weight:600;line-height:1;margin-top:3px;}
 
   /* ── Section heads ── */
-  .section{margin-top:8px;break-inside:avoid;page-break-inside:avoid;}
-  .sec-head{display:flex;align-items:center;gap:9px;margin-bottom:6px;}
+  .section{margin-top:5px;break-inside:avoid;page-break-inside:avoid;}
+  .sec-head{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
   .sec-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none;}
   .sec-title.red{color:var(--red);}
   .sec-line{flex:1;height:1.5px;background:var(--green);}
@@ -1090,11 +1090,11 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .change-new{font-weight:700;color:var(--ink);}
 
   /* ── Menu ── */
-  .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 20px;margin-top:2px;}
-  .course{break-inside:avoid;page-break-inside:avoid;margin-bottom:6px;}
+  .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px 18px;margin-top:1px;}
+  .course{break-inside:avoid;page-break-inside:avoid;margin-bottom:4px;}
   .course-title{font-family:var(--serif);font-style:italic;font-size:14.5px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:2px;margin-bottom:4px;}
   .course-note{font-family:var(--sans);font-style:normal;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--gray2);text-transform:uppercase;}
-  .dish{display:flex;gap:8px;padding:1.5px 0;align-items:baseline;}
+  .dish{display:flex;gap:8px;padding:0.5px 0;align-items:baseline;}
   .dish .em{color:var(--red);font-size:12.5px;line-height:1.35;flex:none;}
   .dish .body{flex:1;}
   .dish .dname{font-size:12.5px;font-weight:700;color:var(--ink);}
@@ -1113,11 +1113,11 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .p2-head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:7px;}
   .p2-title{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);}
   .p2-meta{font-size:11.5px;color:var(--gray);font-weight:600;}
-  .p2-cols{display:grid;grid-template-columns:1.25fr 1fr;gap:18px;margin-top:9px;}
+  .p2-cols{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:6px;}
   .col-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:6px;}
 
   /* ── Timeline ── */
-  .tl-item{display:flex;gap:10px;padding-bottom:7px;break-inside:avoid;page-break-inside:avoid;}
+  .tl-item{display:flex;gap:10px;padding-bottom:4px;break-inside:avoid;page-break-inside:avoid;}
   .tl-item:last-child{padding-bottom:0;}
   .tl-anchor{width:66px;flex:none;text-align:right;}
   .tl-time{font-family:var(--serif);font-size:14.5px;font-weight:600;color:var(--ink);line-height:1;white-space:nowrap;}
@@ -1131,8 +1131,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .tl-desc{font-size:11.5px;color:#736a5d;margin-top:1px;line-height:1.3;}
 
   /* ── Right-column boxes ── */
-  .rcol{display:flex;flex-direction:column;gap:8px;}
-  .box{border:1.5px solid var(--line2);border-radius:6px;padding:8px 12px;break-inside:avoid;page-break-inside:avoid;}
+  .rcol{display:flex;flex-direction:column;gap:6px;}
+  .box{border:1.5px solid var(--line2);border-radius:6px;padding:6px 10px;break-inside:avoid;page-break-inside:avoid;}
   .box.fill{background:var(--fill);border:0;}
   .box-title{font-size:11px;letter-spacing:.16em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:5px;}
   .notes-list{list-style:none;display:flex;flex-direction:column;gap:5px;}
@@ -1146,8 +1146,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 
   /* ── Cost summary ── */
   .cost{border:1.5px solid var(--line2);border-radius:6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;}
-  .cost-title{font-size:11px;letter-spacing:.16em;font-weight:800;color:var(--green);text-transform:uppercase;padding:9px 12px 6px;}
-  .cost-row{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;font-size:12.5px;border-top:1px solid var(--hair);}
+  .cost-title{font-size:11px;letter-spacing:.16em;font-weight:800;color:var(--green);text-transform:uppercase;padding:6px 12px 3px;}
+  .cost-row{display:flex;justify-content:space-between;align-items:center;padding:3.5px 12px;font-size:12.5px;border-top:1px solid var(--hair);}
   .cost-row .k{color:var(--gray);font-weight:500;}
   .cost-row .v{font-family:var(--serif);font-size:14.5px;font-weight:600;color:var(--ink);}
   .cost-row .v.small{font-size:13px;}
@@ -1165,9 +1165,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .out-tag{background:var(--red);color:#fff;font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:7px;}
 
   /* ── Beverages ── */
-  .bev{margin-top:9px;break-inside:avoid;page-break-inside:avoid;}
-  .bev-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 16px;}
-  .bev-row{display:flex;gap:10px;align-items:baseline;border-bottom:1px solid var(--hair);padding-bottom:4px;}
+  .bev{margin-top:6px;break-inside:avoid;page-break-inside:avoid;}
+  .bev-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px 14px;}
+  .bev-row{display:flex;gap:10px;align-items:baseline;border-bottom:1px solid var(--hair);padding-bottom:3px;}
   .bev-tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:#fff;padding:3px 6px;border-radius:3px;flex:none;text-transform:uppercase;}
   .bev-name{font-size:12.5px;font-weight:600;color:var(--ink);}
   .bev-desc{font-size:11.5px;color:#736a5d;font-weight:400;}
@@ -1175,7 +1175,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .t-spark{background:#b07c25;} .t-white{background:#a98f2a;} .t-red{background:#7a2420;} .t-beer{background:var(--green);color:var(--on-green);}
 
   /* ── Full-width blocks below the grid (setup / payment / note) ── */
-  .blk{margin-top:9px;break-inside:avoid;page-break-inside:avoid;}
+  .blk{margin-top:6px;break-inside:avoid;page-break-inside:avoid;}
   .blk-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:6px;}
   .blk .kv{font-size:12.5px;line-height:1.45;color:#332e26;}
 
