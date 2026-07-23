@@ -368,6 +368,10 @@ export default function RunsheetBuilder() {
   const [rsCustomDrinks, setRsCustomDrinks] = useState<{ name: string; description?: string; price?: number }[]>([]);
   // Beverage type per selected drink, keyed by drink name → 'spark' | 'white' | 'red' | 'beer' | 'other'
   const [rsDrinkTypes, setRsDrinkTypes] = useState<Record<string, string>>({});
+  // Per-drink price (the single-serve / till amount), keyed by drink name.
+  // Auto-filled from the catalogue where available; editable. Shown on the BEO
+  // when the F&B "PRICE" toggle is on, same as food.
+  const [rsDrinkPrices, setRsDrinkPrices] = useState<Record<string, number>>({});
   const [newRsCustomDrink, setNewRsCustomDrink] = useState({ name: "", description: "" });
   const [drinksSaving, setDrinksSaving] = useState(false);
 
@@ -687,6 +691,20 @@ export default function RunsheetBuilder() {
     if (catalogSelectorType === 'drink') {
       const drinkNames = entries.map(e => e.item.name);
       setRsSelectedDrinks(prev => Array.from(new Set([...prev, ...drinkNames])));
+      // Carry a per-drink price through so it's ready if the operator shows
+      // prices on the BEO. Prefer glass (single-serve/till), then cents/price,
+      // then bottle. Existing hand-entered prices win over the auto-fill.
+      const priceMap: Record<string, number> = {};
+      entries.forEach(e => {
+        const it: any = e.item;
+        const p = it?.priceGlass != null ? Number(it.priceGlass)
+          : it?.priceCents != null ? Number(it.priceCents) / 100
+          : it?.price != null ? Number(it.price)
+          : it?.priceBottle != null ? Number(it.priceBottle)
+          : null;
+        if (p != null && !isNaN(p) && p > 0) priceMap[it.name] = p;
+      });
+      if (Object.keys(priceMap).length) setRsDrinkPrices(prev => ({ ...priceMap, ...prev }));
     }
     setCatalogSelectedItems(new Map());
     setShowCatalogSelector(false);
@@ -1378,6 +1396,7 @@ export default function RunsheetBuilder() {
         if (dd.customDrinks) setRsCustomDrinks(dd.customDrinks);
         if (dd.barNotes) setRsBarNotes(dd.barNotes);
         if (dd.drinkTypes) setRsDrinkTypes(dd.drinkTypes);
+        if (dd.drinkPrices) setRsDrinkPrices(dd.drinkPrices);
       }
     }
   }, [existing]);
@@ -1607,11 +1626,11 @@ export default function RunsheetBuilder() {
         costItems: costItems.length ? costItems : null,
         proposalId: linkedProposalId,
         floorPlanId: linkedFloorPlanId ?? null,
-        drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes },
+        drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices },
       } as any);
     }, 1000);
     return () => clearTimeout(t);
-  }, [sheetId, notes, footerText, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes]);
+  }, [sheetId, notes, footerText, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices]);
 
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
@@ -1653,7 +1672,7 @@ export default function RunsheetBuilder() {
           gstInclusive,
           paymentNotes: paymentNotes || undefined,
           drinksData: (rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length)
-            ? { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes }
+            ? { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices }
             : undefined,
           items: items.map((item, i) => ({
             time: item.time,
@@ -1689,7 +1708,7 @@ export default function RunsheetBuilder() {
           proposalId: linkedProposalId,
           floorPlanId: linkedFloorPlanId ?? null,
           costItems: costItems.length ? costItems : null,
-          drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes },
+          drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices },
           gstInclusive,
           paymentNotes: paymentNotes || undefined,
         } as any);
@@ -4042,7 +4061,7 @@ export default function RunsheetBuilder() {
                   try {
                     await silentUpdateMutation.mutateAsync({
                       id: sheetId,
-                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes },
+                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices },
                     } as any);
                     toast.success("Drinks selection saved!");
                   } catch { toast.error("Failed to save drinks"); }
@@ -4122,6 +4141,12 @@ export default function RunsheetBuilder() {
                           <option value="beer">Beer</option>
                           <option value="other">Other</option>
                         </select>
+                        <span className="inline-flex items-center text-[10px] text-ink/50">$
+                          <input type="number" min={0} step={0.5} value={rsDrinkPrices[k] ?? ''}
+                            onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[k]; else n[k] = Number(e.target.value); return n; })}
+                            placeholder="—" title="Price per drink (till amount)"
+                            className="w-12 border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5" />
+                        </span>
                         <button type="button" onClick={() => setRsSelectedDrinks(prev => prev.filter(x => x !== k))} className="text-ink/40 hover:text-red-600">×</button>
                       </span>
                     ))}
@@ -4141,6 +4166,12 @@ export default function RunsheetBuilder() {
                           <option value="beer">Beer</option>
                           <option value="other">Other</option>
                         </select>
+                        <span className="inline-flex items-center text-[10px] text-ink/50">$
+                          <input type="number" min={0} step={0.5} value={rsDrinkPrices[d.name] ?? (d.price ?? '')}
+                            onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[d.name]; else n[d.name] = Number(e.target.value); return n; })}
+                            placeholder="—" title="Price per drink (till amount)"
+                            className="w-12 border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5" />
+                        </span>
                         <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/40 hover:text-red-600">×</button>
                       </span>
                     ))}
