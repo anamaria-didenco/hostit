@@ -911,17 +911,25 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     // ── Cost summary (page 2) — internal only, never public ──────────────
     const costList: any[] = Array.isArray((runsheet as any)?.costItems) ? (runsheet as any).costItems : [];
     const lineAmt = (ci: any) => Number(ci.qty ?? 0) * Number(ci.unitPrice ?? 0);
+    // Priced FOOD lines entered on the F&B sheet (qty × unitPrice). The operator
+    // often prices food here (e.g. a $1,500 grazing table) rather than adding a
+    // separate Costs-tab line, so the BEO total must pick these up too — this is
+    // exactly what the runsheet's Running Total does. Drinks are excluded (billed
+    // on consumption / bar tab). Matched to the on-screen "FOOD" subtotal.
+    const fnbFoodLines: any[] = (Array.isArray(fnbList) ? fnbList : [])
+      .filter((i: any) => i.section === "foh" && (i.course ?? "") !== "Drinks" && Number(i.unitPrice ?? 0) > 0);
+    const fnbFoodTotal = fnbFoodLines.reduce((s, i: any) => s + Number(i.qty ?? 0) * Number(i.unitPrice ?? 0), 0);
     // Accumulate EVERY itemised cost line (AV, hire, styling, F&B — all of it),
     // not just food/beverage. This is the same figure the runsheet Costs tab
     // sums, so the BEO total matches what the operator sees on screen.
     const costItemsTotal = costList.reduce((s, ci) => s + lineAmt(ci), 0);
     const minSpendAmt = Number((booking as any).minimumSpend ?? quoteSettingsRow?.minimumSpend ?? 0);
-    // Prefer the itemised costs when the operator has entered them; otherwise
-    // fall back to the booking total / minimum spend. (We no longer re-add the
-    // F&B menu sheet + bar tab on top — that double-counted anything already
-    // itemised as a cost line, which is how most operators enter food/drinks.)
-    const enteredTotal = costItemsTotal > 0
-      ? costItemsTotal
+    // The entered total is priced food (from the F&B sheet) PLUS every itemised
+    // cost line. When nothing has been priced anywhere, fall back to the booking
+    // total / minimum spend so the summary still shows the deal value.
+    const itemisedTotal = fnbFoodTotal + costItemsTotal;
+    const enteredTotal = itemisedTotal > 0
+      ? itemisedTotal
       : Math.max(Number(booking.totalNzd ?? 0), minSpendAmt);
     const depAmt = Number(booking.depositNzd ?? 0);
     // GST breakdown — mirrors the runsheet Costs tab. The gstInclusive toggle
@@ -935,18 +943,24 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const balanceToCollect = totalInclGst > 0 ? Math.max(0, totalInclGst - (booking.depositPaid ? depAmt : 0)) : 0;
     const showFinancials = !isPublic && (enteredTotal > 0 || minSpendAmt > 0 || depAmt > 0);
     const balanceOutstanding = !booking.depositPaid && balanceToCollect > 0;
-    // Itemised breakdown — one row per cost line, so the totals below are
-    // justified rather than dropping out of nowhere.
+    // Itemised breakdown — one row per priced line (food from the F&B sheet
+    // first, then the Costs-tab lines), so the totals below are justified
+    // rather than dropping out of nowhere.
+    const fnbLineHtml = (label: string, qty: number, amt: number) => {
+      const qtyBit = qty > 1 ? `<span class="qy"> × ${escHtml(String(qty))}</span>` : "";
+      return `<div class="cost-row line"><span class="k">${escHtml(label)}${qtyBit}</span><span class="v small">${fmtCurrency(amt)}</span></div>`;
+    };
+    const fnbLinesHtml = fnbFoodLines
+      .map((i: any) => fnbLineHtml(i.dishName ?? "Item", Number(i.qty ?? 0), Number(i.qty ?? 0) * Number(i.unitPrice ?? 0)))
+      .join("");
     const costLinesHtml = costList
       .filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0)
-      .map(ci => {
-        const q = Number(ci.qty ?? 0);
-        const qtyBit = q > 1 ? `<span class="qy"> × ${escHtml(String(q))}</span>` : "";
-        return `<div class="cost-row line"><span class="k">${escHtml(ci.label ?? "Item")}${qtyBit}</span><span class="v small">${fmtCurrency(lineAmt(ci))}</span></div>`;
-      }).join("");
+      .map(ci => fnbLineHtml(ci.label ?? "Item", Number(ci.qty ?? 0), lineAmt(ci)))
+      .join("");
     const financialsSection = showFinancials ? `
       <div class="cost">
         <div class="cost-title">Cost Summary${gstInclusiveFlag ? " &middot; incl. GST" : " &middot; excl. GST"}</div>
+        ${fnbLinesHtml}
         ${costLinesHtml}
         ${minSpendAmt > 0 ? `<div class="cost-row"><span class="k">Minimum Spend</span><span class="v small">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
         ${enteredTotal > 0 ? `<div class="cost-row sub"><span class="k">Subtotal (excl. GST)</span><span class="v small">${fmtCurrency(subtotalExGst)}</span></div>` : ""}
