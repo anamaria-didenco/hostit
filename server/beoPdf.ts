@@ -610,19 +610,15 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const SEVERE_RE = /allerg|anaphyla|\bnuts?\b|pregnan|coeliac|celiac|epipen|severe/i;
     const isSevere = (d: { name: string; notes?: string }) =>
       SEVERE_RE.test(d.name || "") || SEVERE_RE.test(d.notes || "");
-    const dietaryCount = dietaries.reduce((s, d) => s + (Number(d.count) || 0), 0);
     const severeDiet = dietaries.filter(isSevere);
     const mildDiet = dietaries.filter(d => !isSevere(d));
     const orderedDiet = [...severeDiet, ...mildDiet];
-    const dietCountLabel = (d: { count: number }) =>
-      `${d.count || 0} of ${escHtml(String(guestCount || "—"))} guests`;
     const dietCard = (d: { name: string; count: number; notes?: string }) => {
       const severe = isSevere(d);
       return `
       <div class="diet-card${severe ? " severe" : ""}">
         <div class="dlabel">${severe ? "Allergy · Severe" : "Dietary"}</div>
         <div class="dname">${escHtml(d.name)}</div>
-        <div class="dcount">${dietCountLabel(d)}</div>
         ${d.notes ? `<div class="dnote">${escHtml(d.notes)}</div>` : ""}
       </div>`;
     };
@@ -631,7 +627,6 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     <div class="sec-head">
       <span class="sec-title red">&#9888; Dietary &amp; Allergies</span>
       <span class="sec-line red thick"></span>
-      <span class="sec-meta">${dietaryCount} of ${escHtml(String(guestCount || "—"))} guests</span>
     </div>
     <div class="diet-grid">
       ${orderedDiet.map(dietCard).join("")}
