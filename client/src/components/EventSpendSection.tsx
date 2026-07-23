@@ -16,9 +16,13 @@ const CAT_COLOURS: Record<string, string> = {
 
 interface Props {
   bookingId: number;
+  // When provided (from the runsheet), the client charges (food + drinks +
+  // cost lines — i.e. what the customer pays) are folded in as revenue so this
+  // section shows true profitability without re-entering the charge total.
+  revenueFromCharges?: number;
 }
 
-export default function EventSpendSection({ bookingId }: Props) {
+export default function EventSpendSection({ bookingId, revenueFromCharges }: Props) {
   const utils = trpc.useUtils();
 
   const { data: items = [] } = trpc.budgets.list.useQuery(
@@ -72,6 +76,19 @@ export default function EventSpendSection({ bookingId }: Props) {
 
   const variance = totalActual - totalEst;
 
+  // Merged money view: when the runsheet passes the client-charge total, treat
+  // it as revenue, add any manual income items, subtract expense items, and
+  // show the resulting profit. Uses actual where entered, else estimated.
+  const hasCharges = revenueFromCharges != null;
+  const amt = (i: { estimatedAmount?: number | null; actualAmount?: number | null }) =>
+    (i.actualAmount ?? 0) || (i.estimatedAmount ?? 0);
+  const expensesTotal = items.filter((i) => i.type === "expense").reduce((s, i) => s + amt(i), 0);
+  const incomeItemsTotal = items.filter((i) => i.type === "income").reduce((s, i) => s + amt(i), 0);
+  const revenueTotal = (revenueFromCharges ?? 0) + incomeItemsTotal;
+  const profit = revenueTotal - expensesTotal;
+  const margin = revenueTotal > 0 ? (profit / revenueTotal) * 100 : 0;
+  const money = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(Math.round(n)).toLocaleString("en-NZ")}`;
+
   function handleAdd() {
     if (!newName.trim()) return;
     createItem.mutate({
@@ -98,14 +115,35 @@ export default function EventSpendSection({ bookingId }: Props) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <div className="font-bebas text-xs tracking-widest text-ink/40">EVENT SPEND</div>
+        <div className="font-bebas text-xs tracking-widest text-ink/40">{hasCharges ? "COSTS & PROFIT" : "EVENT SPEND"}</div>
         <button
           onClick={() => setShowAdd((v) => !v)}
           className="flex items-center gap-1 font-bebas text-xs tracking-widest text-forest hover:text-forest-dark transition-colors"
         >
-          <Plus className="w-3 h-3" /> ADD ITEM
+          <Plus className="w-3 h-3" /> ADD EXPENSE
         </button>
       </div>
+
+      {/* Profitability band — revenue (client charges) − your expenses = profit */}
+      {hasCharges && (
+        <div className="grid grid-cols-3 mb-3 border border-forest/20 bg-forest-dark/5 rounded-sm overflow-hidden">
+          <div className="px-3 py-2 text-center">
+            <div className="font-bebas text-[10px] tracking-widest text-ink/40">REVENUE</div>
+            <div className="font-cormorant text-base font-semibold text-forest">{money(revenueTotal)}</div>
+            <div className="font-dm text-[9px] text-ink/35">client charges</div>
+          </div>
+          <div className="px-3 py-2 text-center border-l border-gold/20">
+            <div className="font-bebas text-[10px] tracking-widest text-ink/40">EXPENSES</div>
+            <div className="font-cormorant text-base font-semibold text-rose-500">{money(expensesTotal)}</div>
+            <div className="font-dm text-[9px] text-ink/35">your costs</div>
+          </div>
+          <div className="px-3 py-2 text-center border-l border-gold/20">
+            <div className="font-bebas text-[10px] tracking-widest text-ink/40">PROFIT</div>
+            <div className={`font-cormorant text-base font-semibold ${profit >= 0 ? "text-forest" : "text-rose-500"}`}>{money(profit)}</div>
+            <div className="font-dm text-[9px] text-ink/35">{revenueTotal > 0 ? `${margin.toFixed(0)}% margin` : ""}</div>
+          </div>
+        </div>
+      )}
 
       {/* Add form */}
       {showAdd && (
@@ -181,7 +219,7 @@ export default function EventSpendSection({ bookingId }: Props) {
       {/* Items list */}
       {items.length === 0 && !showAdd && (
         <div className="border border-dashed border-gold/20 p-4 text-center">
-          <div className="font-dm text-xs text-ink/40">No spend items yet. Add income and expenses to track event profitability.</div>
+          <div className="font-dm text-xs text-ink/40">{hasCharges ? "No expenses yet. Add your costs (staff, ingredients, hire…) below to see your profit on this event." : "No spend items yet. Add income and expenses to track event profitability."}</div>
         </div>
       )}
 
@@ -245,8 +283,9 @@ export default function EventSpendSection({ bookingId }: Props) {
         </div>
       )}
 
-      {/* Totals summary */}
-      {items.length > 0 && (
+      {/* Totals summary — estimate vs actual (standalone use). When the runsheet
+          drives revenue, the profitability band above already tells the story. */}
+      {items.length > 0 && !hasCharges && (
         <div className="bg-forest-dark/5 border border-gold/20 border-t-0 px-3 py-2 grid grid-cols-3 gap-2">
           <div className="text-center">
             <div className="font-bebas text-[10px] tracking-widest text-ink/40">EST NET</div>

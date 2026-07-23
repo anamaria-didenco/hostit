@@ -3066,6 +3066,13 @@ export default function RunsheetBuilder() {
                               value={item.time}
                               onChange={e => updateItemField(idx, "time", e.target.value)}
                               aria-label="Start time"
+                              title="Click to set the time"
+                              // The input is transparent (the styled 12-hour time
+                              // shows behind it), so the native clock icon is
+                              // hidden — open the picker explicitly on click/focus
+                              // so the field is actually selectable on desktop.
+                              onClick={e => { try { (e.currentTarget as any).showPicker?.(); } catch {} }}
+                              onFocus={e => { try { (e.currentTarget as any).showPicker?.(); } catch {} }}
                               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             />
                           </div>
@@ -4070,12 +4077,8 @@ export default function RunsheetBuilder() {
                 </div>
               );
             })()}
-            {/* ── EVENT SPEND / BUDGET ───────────────────────────────────────── */}
-            {effectiveBookingId && (
-              <div className="px-5 py-5 border-t border-gold/20 no-print">
-                <EventSpendSection bookingId={effectiveBookingId} />
-              </div>
-            )}
+            {/* Event Spend / profitability now lives in the merged money section
+                under Costs (see #rb-costs) so all event money is in one place. */}
 
             </div>{/* /Items sub-tab wrapper */}
           </div>
@@ -5145,6 +5148,23 @@ export default function RunsheetBuilder() {
                       </div>
                     )}
                   </div>
+                </div>
+              );
+            })()}
+
+            {/* ── PROFITABILITY (merged) — your costs vs what the client pays ──
+                Revenue = priced food + cost lines + bar tab (what prints on the
+                BEO). Enter your expenses here to see profit, all in one place. */}
+            {effectiveBookingId && (() => {
+              const foodRevenue = fnbItems
+                .filter(it => (it.course ?? '') !== 'Drinks')
+                .reduce((s, it) => s + Number(it.qty || 0) * Number(it.unitPrice ?? 0), 0);
+              const costRevenue = costItems.reduce((s, ci) => s + Number(ci.qty) * Number(ci.unitPrice), 0);
+              const barRevenue = rsTabAmount ? Number(rsTabAmount) : 0;
+              const clientChargesTotal = foodRevenue + costRevenue + barRevenue;
+              return (
+                <div className="px-5 py-5 border-t border-gold/20 no-print">
+                  <EventSpendSection bookingId={effectiveBookingId} revenueFromCharges={clientChargesTotal} />
                 </div>
               );
             })()}
