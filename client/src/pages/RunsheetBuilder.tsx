@@ -249,6 +249,21 @@ type FnbItem = {
 };
 const DEFAULT_COURSES = ['Canapes', 'Entree', 'Main', 'Dessert', 'Cheese', 'Late Night Snack', 'Breakfast', 'Morning Tea', 'Lunch', 'Afternoon Tea', 'Other'];
 
+// Per-course colour coding for the F&B sheet. Full literal class strings so
+// Tailwind keeps them (no dynamic `bg-${x}` construction). A course keeps its
+// colour regardless of drag order (mapped by the course's stable index).
+type CourseColour = { band: string; text: string; pencil: string; leftBorder: string; rowHover: string; expandBg: string };
+const COURSE_COLOURS: CourseColour[] = [
+  { band: 'bg-amber-50 border-amber-200/60',   text: 'text-amber-700',   pencil: 'text-amber-400',   leftBorder: 'border-l-amber-300',   rowHover: 'hover:bg-amber-50/40',   expandBg: 'bg-amber-50/40' },
+  { band: 'bg-rose-50 border-rose-200/60',     text: 'text-rose-700',    pencil: 'text-rose-400',    leftBorder: 'border-l-rose-300',    rowHover: 'hover:bg-rose-50/40',    expandBg: 'bg-rose-50/40' },
+  { band: 'bg-emerald-50 border-emerald-200/60', text: 'text-emerald-700', pencil: 'text-emerald-400', leftBorder: 'border-l-emerald-300', rowHover: 'hover:bg-emerald-50/40', expandBg: 'bg-emerald-50/40' },
+  { band: 'bg-sky-50 border-sky-200/60',       text: 'text-sky-700',     pencil: 'text-sky-400',     leftBorder: 'border-l-sky-300',     rowHover: 'hover:bg-sky-50/40',     expandBg: 'bg-sky-50/40' },
+  { band: 'bg-violet-50 border-violet-200/60', text: 'text-violet-700',  pencil: 'text-violet-400',  leftBorder: 'border-l-violet-300',  rowHover: 'hover:bg-violet-50/40',  expandBg: 'bg-violet-50/40' },
+  { band: 'bg-teal-50 border-teal-200/60',     text: 'text-teal-700',    pencil: 'text-teal-400',    leftBorder: 'border-l-teal-300',    rowHover: 'hover:bg-teal-50/40',    expandBg: 'bg-teal-50/40' },
+  { band: 'bg-orange-50 border-orange-200/60', text: 'text-orange-700',  pencil: 'text-orange-400',  leftBorder: 'border-l-orange-300',  rowHover: 'hover:bg-orange-50/40',  expandBg: 'bg-orange-50/40' },
+  { band: 'bg-fuchsia-50 border-fuchsia-200/60', text: 'text-fuchsia-700', pencil: 'text-fuchsia-400', leftBorder: 'border-l-fuchsia-300', rowHover: 'hover:bg-fuchsia-50/40', expandBg: 'bg-fuchsia-50/40' },
+];
+
 type ParsedRunsheetData = {
   eventDetails?: {
     eventDate?: string;
@@ -963,6 +978,51 @@ export default function RunsheetBuilder() {
       }
     } catch {}
   }, [bookingId, extraCourses]);
+
+  // Manual per-runsheet course order (drag-to-reorder). Empty = fall back to the
+  // canonical venue course order. Persisted to localStorage like extraCourses.
+  const [courseOrder, setCourseOrder] = useState<string[]>([]);
+  useEffect(() => {
+    if (!bookingId) return;
+    try {
+      const raw = localStorage.getItem(`runsheet:${bookingId}:courseOrder`);
+      if (raw) { const p = JSON.parse(raw); if (Array.isArray(p)) setCourseOrder(p.filter((c) => typeof c === 'string')); }
+    } catch {}
+  }, [bookingId]);
+  useEffect(() => {
+    if (!bookingId) return;
+    try {
+      if (courseOrder.length > 0) localStorage.setItem(`runsheet:${bookingId}:courseOrder`, JSON.stringify(courseOrder));
+      else localStorage.removeItem(`runsheet:${bookingId}:courseOrder`);
+    } catch {}
+  }, [bookingId, courseOrder]);
+
+  // Colour for a course — stable to the course (by canonical index, else a
+  // name hash) so a course keeps its colour when the list is reordered.
+  const courseColour = (course: string): CourseColour => {
+    const i = courses.indexOf(course);
+    const key = i >= 0 ? i : course.split('').reduce((s, ch) => s + ch.charCodeAt(0), 0);
+    return COURSE_COLOURS[key % COURSE_COLOURS.length];
+  };
+
+  // Food courses to display, in order: manual drag order first, then canonical.
+  const displayedFoodCourses: string[] = [...new Set([...fnbItems.map(i => i.course ?? 'Other'), ...extraCourses])]
+    .filter(course => course !== 'Drinks')
+    .sort((a, b) => {
+      const ao = courseOrder.indexOf(a), bo = courseOrder.indexOf(b);
+      if (ao !== -1 || bo !== -1) return (ao === -1 ? 999 : ao) - (bo === -1 ? 999 : bo);
+      const ai = courses.indexOf(a), bi = courses.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+
+  function handleCourseDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const from = displayedFoodCourses.indexOf(String(active.id));
+    const to = displayedFoodCourses.indexOf(String(over.id));
+    if (from === -1 || to === -1) return;
+    setCourseOrder(arrayMove(displayedFoodCourses, from, to));
+  }
 
   function addNewCourse() {
     const name = prompt('New course name (e.g. "Pre-dinner Bites", "Late Night")\n\nTip: add at least one item to keep this course saved with the runsheet.');
@@ -3806,14 +3866,12 @@ export default function RunsheetBuilder() {
                     legacy "Drinks" course from the F&B sheet so the two
                     surfaces don't double up. Existing data is preserved on
                     disk but no longer rendered/edited here. */}
-                {[...new Set([...fnbItems.map(i => i.course ?? 'Other'), ...extraCourses])]
-                  .filter(course => course !== 'Drinks')
-                  .sort((a, b) => {
-                    const ai = courses.indexOf(a); const bi = courses.indexOf(b);
-                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-                  })
+                <DndContext sensors={sectionSensors} collisionDetection={closestCenter} onDragEnd={handleCourseDragEnd}>
+                <SortableContext items={displayedFoodCourses} strategy={verticalListSortingStrategy}>
+                {displayedFoodCourses
                   .map(course => {
                     const isDrinks = course === 'Drinks';
+                    const cc = courseColour(course);
                     const courseItems = fnbItems
                       .map((item, originalIdx) => ({ item, originalIdx }))
                       .filter(({ item }) => (item.course ?? 'Other') === course);
@@ -3825,10 +3883,10 @@ export default function RunsheetBuilder() {
                       return (
                         <div key={item._tempId ?? originalIdx}>
                           <div
-                            className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm group transition-colors ${isDrinks ? 'border-l-4 border-l-blue-300 hover:bg-blue-50/50' : 'border-l-4 border-l-amber-300 hover:bg-amber-50/40'} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : 'bg-amber-50/40') : ''}`}
+                            className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm group transition-colors border-l-4 ${isDrinks ? 'border-l-blue-300 hover:bg-blue-50/50' : `${cc.leftBorder} ${cc.rowHover}`} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : cc.expandBg) : ''}`}
                             style={{ gridTemplateColumns: fnbGridCols }}
                           >
-                            <div className={`text-xs font-bebas tracking-widest ${isDrinks ? 'text-blue-500' : 'text-amber-600'}`}>{isDrinks ? (item.drinkCategory || 'Drink') : item.course}</div>
+                            <div className={`text-xs font-bebas tracking-widest ${isDrinks ? 'text-blue-500' : cc.text}`}>{isDrinks ? (item.drinkCategory || 'Drink') : item.course}</div>
                             <div>
                               <input value={item.dishName} onChange={e => updateFnbItem(originalIdx, 'dishName', e.target.value)} className="w-full font-dm text-sm text-ink bg-transparent border-0 focus:outline-none font-semibold" />
                               {item.description && <div className="text-xs text-ink/40">{item.description}</div>}
@@ -3942,14 +4000,16 @@ export default function RunsheetBuilder() {
                       );
                     });
                     return (
-                      <div key={course}>
-                        {/* Editable course header with rename + delete */}
-                        <div className={`px-5 py-1.5 flex items-center gap-2 border-b ${isDrinks ? 'bg-blue-50 border-blue-200/60' : 'bg-amber-50 border-amber-200/60'}`}>
-                          <Pencil className={`w-3 h-3 flex-shrink-0 no-print ${isDrinks ? 'text-blue-400' : 'text-amber-400'}`} />
+                      <SortableSection id={course} key={course}>
+                      <div>
+                        {/* Editable course header with rename + delete. The drag
+                            grip (from SortableSection) appears on hover at the left. */}
+                        <div className={`pl-6 pr-5 py-1.5 flex items-center gap-2 border-b ${isDrinks ? 'bg-blue-50 border-blue-200/60' : cc.band}`}>
+                          <Pencil className={`w-3 h-3 flex-shrink-0 no-print ${isDrinks ? 'text-blue-400' : cc.pencil}`} />
                           <input
                             value={course}
                             onChange={e => renameCourse(course, e.target.value)}
-                            className={`bg-transparent border-0 border-b border-dashed focus:outline-none focus:border-solid font-bebas tracking-widest text-xs w-full min-w-0 ${isDrinks ? 'text-blue-700 border-blue-200 focus:border-blue-500' : 'text-amber-700 border-amber-200 focus:border-amber-500'} print:border-none`}
+                            className={`bg-transparent border-0 border-b border-dashed focus:outline-none focus:border-solid font-bebas tracking-widest text-xs w-full min-w-0 ${isDrinks ? 'text-blue-700 border-blue-200 focus:border-blue-500' : `${cc.text} border-current`} print:border-none`}
                             title="Click to rename this course"
                             placeholder="Course name..."
                           />
@@ -3975,8 +4035,11 @@ export default function RunsheetBuilder() {
                           renderRows(courseItems)
                         )}
                       </div>
+                      </SortableSection>
                     );
                   })}
+                </SortableContext>
+                </DndContext>
               </div>
             )}
 
