@@ -1321,7 +1321,11 @@ ${pageContents.join("\n")}
   .blk-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:6px;}
   .blk .kv{font-size:12.5px;line-height:1.45;color:#332e26;}
 
-  @page{size:A4;margin:0;}
+  /* Page size only — margins come from the PDF print margins (page.pdf), which
+     reserve the footer strip on every page. Do NOT set an @page margin here: a
+     0 margin would override those and let content paint over the running
+     footer. The cream still bleeds to the edge via the page background. */
+  @page{size:A4;}
   /* Keep a section's header attached to its first block so a heading never sits
      alone at the foot of a page; cards already carry break-inside:avoid. */
   .pagehead,.mast,.blk-title,.sec-label{break-after:avoid;page-break-after:avoid;}
