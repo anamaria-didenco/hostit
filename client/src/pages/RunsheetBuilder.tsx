@@ -3849,16 +3849,23 @@ export default function RunsheetBuilder() {
               </div>
             ) : (
               <div>
-                {/* Table header */}
-                <div className="grid gap-2 px-5 py-2.5 text-xs font-bebas tracking-widest text-white bg-gold" style={{ gridTemplateColumns: fnbGridCols }}>
+                {/* On screen the food sheet is a clean, collapsible list (each
+                    dish drops down to its detail fields) — a slim identity bar.
+                    In print we keep the full column header so the runsheet still
+                    prints as a structured table. */}
+                <div className="px-5 py-2 text-xs font-bebas tracking-widest text-white bg-gold flex items-center justify-between no-print">
+                  <span>MENU</span>
+                  <span className="opacity-70 font-dm text-[10px] tracking-normal">Tap a dish to expand its details</span>
+                </div>
+                <div className="hidden print:grid gap-2 px-5 py-1.5 text-xs font-bebas tracking-widest text-white bg-gold" style={{ gridTemplateColumns: fnbGridCols }}>
                   <div>COURSE</div>
                   <div>DISH</div>
                   {showQtyCol && <div>QTY</div>}
                   {showDietaryCol && <div>DIETARY</div>}
-                  {showTimeCol && <div>SERVICE TIME</div>}
+                  {showTimeCol && <div>TIME</div>}
                   {showStaffCol && <div>STAFF</div>}
                   {showPrepPlatingCol && <div>NOTES</div>}
-                  <div className="no-print"></div>
+                  <div></div>
                 </div>
                 {/* Group by course — derived from actual items + any extra empty courses
                     the user added via "+ NEW COURSE" so empty headers still render */}
@@ -3882,49 +3889,53 @@ export default function RunsheetBuilder() {
                       const isExpanded = expandedFnbIdx === originalIdx;
                       return (
                         <div key={item._tempId ?? originalIdx}>
+                          {/* SCREEN — clean, menu-style collapsible row */}
                           <div
-                            className={`grid gap-2 px-5 py-2.5 items-center border-b border-gold/20 text-sm font-dm group transition-colors border-l-4 ${isDrinks ? 'border-l-blue-300 hover:bg-blue-50/50' : `${cc.leftBorder} ${cc.rowHover}`} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : cc.expandBg) : ''}`}
-                            style={{ gridTemplateColumns: fnbGridCols }}
+                            className={`no-print flex items-center gap-3 px-5 py-2.5 border-b border-gold/20 text-sm font-dm group transition-colors border-l-4 ${isDrinks ? 'border-l-blue-300 hover:bg-blue-50/40' : `${cc.leftBorder} ${cc.rowHover}`} ${isExpanded ? (isDrinks ? 'bg-blue-50/50' : cc.expandBg) : ''}`}
                           >
+                            {/* course-colour dash */}
+                            <span className={`flex-none w-4 h-0.5 rounded-full bg-current ${isDrinks ? 'text-blue-400' : cc.text}`} aria-hidden />
+                            {/* dish name — editable inline */}
+                            <input
+                              value={item.dishName}
+                              onChange={e => updateFnbItem(originalIdx, 'dishName', e.target.value)}
+                              placeholder="Dish name…"
+                              className="font-semibold text-ink bg-transparent border-0 focus:outline-none focus:bg-white/70 rounded px-1 -ml-1 min-w-0 w-[38%]"
+                            />
+                            {/* covers */}
+                            {item.course !== 'Drinks' && Number(item.qty) > 1 && (
+                              <span className="flex-none text-xs text-ink/45 font-dm">&times; {item.qty}</span>
+                            )}
+                            {/* description preview */}
+                            {item.description
+                              ? <span className="flex-1 min-w-0 truncate text-ink/45">{item.description}</span>
+                              : <span className="flex-1" />}
+                            {/* dietary chip */}
+                            {item.dietary && <span className="flex-none bg-amber-100 text-amber-800 border border-amber-400 text-xs px-1.5 py-0.5 font-bebas tracking-widest font-bold rounded-sm">{item.dietary}</span>}
+                            {/* price hint */}
+                            {item.unitPrice != null && String(item.unitPrice) !== '' && (
+                              <span className="flex-none text-xs text-forest font-semibold font-dm">${Number(item.unitPrice).toLocaleString('en-NZ', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{item.course !== 'Drinks' ? '/head' : ''}</span>
+                            )}
+                            {/* actions — chevron always visible */}
+                            <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="flex-none text-ink/40 hover:text-forest transition-colors" title={isExpanded ? 'Collapse' : 'Expand details'}>
+                              <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                            <button onClick={() => removeFnbItem(originalIdx)} className="flex-none text-ink/25 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Remove item"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                          {/* PRINT — full static column row so the printed runsheet
+                              keeps its structured table (honours the column toggles) */}
+                          <div className="hidden print:grid gap-2 px-5 py-1.5 items-baseline border-b border-gold/20 text-sm font-dm border-l-4 border-l-gold/30" style={{ gridTemplateColumns: fnbGridCols }}>
                             <div className={`text-xs font-bebas tracking-widest ${isDrinks ? 'text-blue-500' : cc.text}`}>{isDrinks ? (item.drinkCategory || 'Drink') : item.course}</div>
                             <div>
-                              <input value={item.dishName} onChange={e => updateFnbItem(originalIdx, 'dishName', e.target.value)} className="w-full font-dm text-sm text-ink bg-transparent border-0 focus:outline-none font-semibold" />
-                              {item.description && <div className="text-xs text-ink/40">{item.description}</div>}
+                              <span className="font-semibold text-ink">{item.dishName}</span>
+                              {item.description && <div className="text-xs text-ink/50">{item.description}</div>}
                             </div>
-                            {showQtyCol && (
-                              <div className={item.course === 'Drinks' ? 'print:hidden' : ''}>
-                                {item.course !== 'Drinks' && item.qty > 1 && (
-                                  <input type="number" min={1} value={item.qty || ''} placeholder="1" onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))} className="w-12 font-dm text-sm text-ink bg-transparent border-0 focus:outline-none text-center" />
-                                )}
-                                {item.course !== 'Drinks' && item.qty <= 1 && (
-                                  <input type="number" min={1} value={item.qty || ''} placeholder="1" onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))} className="w-12 font-dm text-sm text-ink/20 bg-transparent border-0 focus:outline-none text-center opacity-0 group-hover:opacity-100 transition-opacity" title="Qty (default 1)" />
-                                )}
-                              </div>
-                            )}
-                            {showDietaryCol && (
-                              <div>{item.dietary && <span className="bg-amber-100 text-amber-800 border border-amber-400 text-xs px-1.5 py-0.5 font-bebas tracking-widest font-bold rounded-sm">{item.dietary}</span>}</div>
-                            )}
-                            {showTimeCol && (
-                              <div>
-                                <input type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none w-full no-print" />
-                                {item.serviceTime && <div className="hidden print:block text-xs text-ink/50 font-dm">{formatTime12(item.serviceTime)}</div>}
-                              </div>
-                            )}
-                            {showStaffCol && (
-                              <div><input value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff..." className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none" /></div>
-                            )}
-                            {showPrepPlatingCol && (
-                              <div className="space-y-0.5">
-                                <input value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Prep..." className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none" />
-                                <input value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating..." className="w-full font-dm text-xs text-ink/50 bg-transparent border-0 focus:outline-none" />
-                              </div>
-                            )}
-                            <div className="no-print opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                              <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="text-ink/30 hover:text-forest transition-colors" title="Expand details">
-                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                              </button>
-                              <button onClick={() => removeFnbItem(originalIdx)} className="text-ink/30 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                            </div>
+                            {showQtyCol && <div className="text-center">{item.course !== 'Drinks' && Number(item.qty) > 1 ? item.qty : ''}</div>}
+                            {showDietaryCol && <div>{item.dietary && <span className="bg-amber-100 text-amber-800 border border-amber-400 text-xs px-1.5 py-0.5 font-bebas tracking-widest font-bold rounded-sm">{item.dietary}</span>}</div>}
+                            {showTimeCol && <div className="text-xs text-ink/60">{item.serviceTime ? formatTime12(item.serviceTime) : ''}</div>}
+                            {showStaffCol && <div className="text-xs text-ink/60">{item.staffAssigned ?? ''}</div>}
+                            {showPrepPlatingCol && <div className="text-xs text-ink/60">{item.prepNotes}{item.prepNotes && item.platingNotes ? ' · ' : ''}{item.platingNotes}</div>}
+                            <div></div>
                           </div>
                           {isExpanded && (
                             <div className={`px-5 py-4 border-b border-gold/20 grid grid-cols-2 md:grid-cols-4 gap-3 no-print ${isDrinks ? 'bg-blue-50/40' : 'bg-amber-50/30'}`}>
