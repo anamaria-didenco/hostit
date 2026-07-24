@@ -3242,31 +3242,45 @@ export default function Dashboard() {
                   ))}
                 </div>}
 
-                {/* ── KANBAN VIEW ──────────────────────────────────────── */}
-                {leadViewMode === "kanban" && (
+                {/* ── KANBAN VIEW — editorial pipeline (4 fixed columns) ──────
+                    Matches the Claude Design "Enquiry Pipeline" UI kit: New,
+                    Quoted, Confirmed and Follow-up due, on a full-width 4-up
+                    grid. Real leads are mapped by status; leads with an overdue
+                    follow-up move into the Follow-up due column (and out of their
+                    status column); lost/cancelled are excluded from the board. */}
+                {leadViewMode === "kanban" && (() => {
+                  const active = filteredLeads.filter((l: any) => !['lost', 'cancelled'].includes(l.status));
+                  const isOverdue = (l: any) => l.followUpDate && new Date(l.followUpDate) <= new Date() && !['booked', 'lost', 'cancelled'].includes(l.status);
+                  const followUp = active.filter(isOverdue);
+                  const overdueIds = new Set(followUp.map((l: any) => l.id));
+                  const byStatus = (keys: string[]) => active.filter((l: any) => keys.includes(l.status) && !overdueIds.has(l.id));
+                  const COLUMNS = [
+                    { id: 'new',       title: 'New',           tone: '#2f5488', leads: byStatus(['new']) },
+                    { id: 'quoted',    title: 'Quoted',        tone: '#b07c25', leads: byStatus(['contacted', 'proposal_sent', 'negotiating']) },
+                    { id: 'confirmed', title: 'Confirmed',     tone: '#2f5488', leads: byStatus(['booked']) },
+                    { id: 'overdue',   title: 'Follow-up due', tone: '#c0392b', leads: followUp },
+                  ];
+                  return (
                   <div className="flex-1 overflow-x-auto px-6 py-5 bg-background">
-                    <div className="flex gap-5 min-w-max h-full">
-                      {kanbanStages.map(stage => {
-                        const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
-                        const tone = (stage as any).swatch ?? '#2f5488';
-                        const stageTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
-                        const stageTotalLabel = stageTotal > 0 ? `$${(stageTotal / 1000).toFixed(1)}k` : null;
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start min-w-0">
+                      {COLUMNS.map(col => {
+                        const total = col.leads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
+                        const totalLabel = total > 0 ? `$${(total / 1000).toFixed(1)}k` : null;
                         return (
-                          <div key={stage.key} className="w-72 flex-shrink-0 flex flex-col min-w-0">
+                          <div key={col.id} className="flex flex-col min-w-0">
                             {/* Column header — tracked title, colored rule, serif total */}
-                            <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0" style={{ borderBottom: `2px solid ${tone}` }}>
-                              <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: tone }}>{stage.label}</span>
-                              <span className="font-sans text-[11px] font-bold" style={{ color: '#8a8073' }}>{stageLeads.length}</span>
+                            <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0" style={{ borderBottom: `2px solid ${col.tone}` }}>
+                              <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: col.tone }}>{col.title}</span>
+                              <span className="font-sans text-[11px] font-bold" style={{ color: '#8a8073' }}>{col.leads.length}</span>
                               <span className="flex-1" />
-                              {stageTotalLabel && (
-                                <span className="font-serif text-[13px] font-semibold text-stormy [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
+                              {totalLabel && (
+                                <span className="font-serif text-[13px] font-semibold [font-variant-numeric:tabular-nums_lining-nums]" style={{ color: '#6a6256' }}>{totalLabel}</span>
                               )}
                             </div>
                             {/* Cards */}
-                            <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 pb-2">
-                              {stageLeads.map((lead: any) => {
+                            <div className="flex flex-col gap-2.5">
+                              {col.leads.map((lead: any) => {
                                 const value = fmtBudget(lead.budget);
-                                const overdue = lead.followUpDate && new Date(lead.followUpDate) <= new Date() && !['booked', 'lost', 'cancelled'].includes(lead.status);
                                 return (
                                   <button key={lead.id}
                                     onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
@@ -3302,19 +3316,15 @@ export default function Dashboard() {
                                         ) : null}
                                       </div>
                                     )}
-                                    {/* Footer — serif value + age / overdue flag */}
+                                    {/* Footer — serif value + age */}
                                     <div className="flex items-baseline justify-between pt-[9px]" style={{ borderTop: '1px solid #eee6d8' }}>
                                       <span className="font-serif text-[18px] font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]">{value ?? '—'}</span>
-                                      {overdue ? (
-                                        <span className="text-[11px] font-semibold" style={{ color: '#c0392b' }}>Follow-up overdue</span>
-                                      ) : (
-                                        <span className="text-[11px]" style={{ color: '#a39684' }}>{fmtAgo(lead.createdAt)}</span>
-                                      )}
+                                      <span className="text-[11px]" style={{ color: '#a39684' }}>{fmtAgo(lead.createdAt)}</span>
                                     </div>
                                   </button>
                                 );
                               })}
-                              {stageLeads.length === 0 && (
+                              {col.leads.length === 0 && (
                                 <div className="rounded-lg border border-dashed border-[#e6dccb] p-5 text-center">
                                   <p className="font-sans text-[12px]" style={{ color: '#a39684' }}>No leads</p>
                                 </div>
@@ -3330,7 +3340,8 @@ export default function Dashboard() {
                       })}
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* Lead Detail — only used in list mode (table mode opens event drawer instead) */}
                 {leadViewMode === "list" && (selectedLead ? (
