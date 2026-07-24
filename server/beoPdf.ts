@@ -1416,6 +1416,10 @@ ${sheetsHtml}
       }
 
       res.setHeader("Content-Type", "application/pdf");
+      // The BEO is regenerated from live data on every request, so it must
+      // never be cached — otherwise a re-download (or a proxy/CDN) can serve a
+      // stale copy and layout/data fixes look like they "didn't apply".
+      res.setHeader("Cache-Control", "no-store, max-age=0");
       // Public event-pack opens inline in the browser (no forced download)
       // so customers click the link and see it; internal BEO PDF still
       // downloads as a file.
