@@ -3086,9 +3086,10 @@ export default function RunsheetBuilder() {
                   // original index `i` so updateItemField / moveItem /
                   // removeItem keep targeting the right row in state.
                   .sort((a, b) => (a.it.time ?? '').localeCompare(b.it.time ?? ''))
-                  .map(({ it: item, i: idx }) => {
+                  .map(({ it: item, i: idx }, pos, arr) => {
                   const key = getItemKey(item);
                   const isExpanded = expandedItem === key;
+                  const isLastRow = pos === arr.length - 1;
                   const endTime = addMinutes(item.time, item.duration);
                   const catInfo = CATEGORIES.find(c => c.value === item.category);
                   const hlBg = item.highlight ? item.highlight : undefined;
@@ -3109,9 +3110,12 @@ export default function RunsheetBuilder() {
                     >
                       {/* Main row */}
                       <div className="flex items-center gap-0 print:gap-3">
-                        {/* Run-of-day timeline dot — deep blue normally, red for flagged / key moments */}
-                        <div className="flex-none w-5 self-stretch flex items-center justify-center" aria-hidden>
-                          <span className={`size-2.5 rounded-full ${item.highlight ? 'bg-destructive' : 'bg-primary'}`} />
+                        {/* Run-of-day timeline node — a coloured dot on a vertical
+                            connector line (deep blue normally, red for flagged /
+                            key moments), so the run of day reads as one thread. */}
+                        <div className="flex-none w-5 self-stretch flex flex-col items-center pt-[15px] no-print" aria-hidden>
+                          <span className={`size-2.5 rounded-full ring-2 ring-cream flex-none ${item.highlight ? 'bg-destructive shadow-[0_0_0_1.5px_var(--destructive)]' : 'bg-primary shadow-[0_0_0_1.5px_var(--primary)]'}`} />
+                          {!isLastRow && <span className="w-0.5 flex-1 min-h-3 bg-gold/25 mt-1.5" />}
                         </div>
                         {/* Time column — wider + bolder for service-time scannability */}
                         <div className={`w-[116px] flex-shrink-0 px-3 py-3 border-r border-gold/15 print:border-0 relative ${isNow ? 'bg-emerald-100' : ''}`}>
@@ -3160,12 +3164,13 @@ export default function RunsheetBuilder() {
                           {item.description && <div className="hidden print:block font-dm text-xs text-ink/50 mt-0.5 whitespace-normal">{item.description}</div>}
                         </div>
 
-                        {/* Assigned to — editorial owner tag, coloured by category */}
+                        {/* Assigned to — editorial owner tag on a colour-tinted
+                            chip, coloured by the moment's category owner */}
                         {item.assignedTo && (
                           <div className="px-3 py-3 hidden md:block print:block">
                             <span
-                              className="inline-flex items-center gap-1 font-sans text-[9px] font-extrabold uppercase tracking-[0.1em]"
-                              style={{ color: categoryTone(item.category) }}
+                              className="inline-flex items-center gap-1 font-sans text-[9px] font-extrabold uppercase tracking-[0.1em] rounded-sm px-1.5 py-0.5 print:px-0 print:bg-transparent"
+                              style={{ color: categoryTone(item.category), backgroundColor: `color-mix(in srgb, ${categoryTone(item.category)} 12%, transparent)` }}
                             >
                               <Users className="w-3 h-3" />{item.assignedTo}
                             </span>
