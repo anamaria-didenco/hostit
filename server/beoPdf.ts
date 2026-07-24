@@ -997,8 +997,147 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     // Branded masthead logo (page 1). Empty string when no logo is configured,
     // so the header gracefully falls back to the text venue name as before.
     const logoImg = venueLogoSrc
-      ? `<img class="mast-logo" src="${venueLogoSrc}" alt="${escHtml(venueName)} logo" style="max-height:${logoMaxH}px;" />`
+      ? `<img class="mast-logo" src="${venueLogoSrc}" alt="${escHtml(venueName)} logo" style="max-height:${logoMaxH}px;margin-bottom:8px;" />`
       : "";
+
+    // ══════════════════════════════════════════════════════════════════════
+    // FOUR-PAGE EDITORIAL BEO — matches templates/beo-full/BeoFull.dc.html 1:1.
+    // Presentation only: every section reuses the data + helpers computed above.
+    // Brand tokens (--green / --on-green / --serif / --sans) drive all accents
+    // so white-labeling still works; each section collapses when its data is
+    // empty and the whole page collapses when all its sections are empty.
+    // ══════════════════════════════════════════════════════════════════════
+    const todayPrinted = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" });
+    const footerBiz = [escHtml(venueName), escHtml(eventType || clientName), escHtml(eventDate)].filter(Boolean).join(" &middot; ");
+    const clientOrg = escHtml((booking as any).company ?? (booking as any).organisation ?? (booking as any).organisationName ?? "");
+    const paymentInstr = ((venue as any)?.paymentInstructions ?? "").toString();
+
+    // Reusable brand/red section-label rule with an optional right-aligned meta.
+    const secLabel = (title: string, opts?: { red?: boolean; metaRight?: string }) => {
+      const c = opts?.red ? "var(--red)" : "var(--green)";
+      const h = opts?.red ? "2px" : "1.5px";
+      return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px"><span style="font-size:11px;letter-spacing:.2em;font-weight:800;color:${c};text-transform:uppercase;flex:none">${title}</span><span style="flex:1;height:${h};background:${c}"></span>${opts?.metaRight ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">${opts.metaRight}</span>` : ""}</div>`;
+    };
+    const pageHeadR = (title: string, meta: string) =>
+      `<header style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:12px"><div style="font-family:var(--serif);font-size:22px;font-weight:600;color:var(--ink)">${title}</div><div style="font-size:12px;color:var(--gray);font-weight:600">${meta}</div></header>`;
+
+    // ── PAGE 1 — masthead, booking band, client details, run of day, sig ──
+    const statusPillHtml = isConfirmed
+      ? `<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--green);color:var(--on-green);font-size:10px;font-weight:800;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase"><span style="width:6px;height:6px;border-radius:50%;background:var(--on-green);opacity:.6"></span>Confirmed</div>`
+      : `<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--amber-tint);color:var(--amber);border:1px solid var(--change-line);font-size:10px;font-weight:800;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase"><span style="width:6px;height:6px;border-radius:50%;background:var(--amber)"></span>Not Final</div>`;
+    const p1Head = `<header style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid var(--green);padding-bottom:14px">
+      <div>${logoImg}<div style="font-size:10px;letter-spacing:.32em;font-weight:700;color:var(--green);text-transform:uppercase">${isPublic ? "Event Pack &middot; Function Sheet" : "Event Order &middot; Function Sheet"}</div>
+        <div style="font-family:var(--serif);font-size:34px;font-weight:600;line-height:1.05;margin-top:6px;color:var(--ink);letter-spacing:-.01em">${escHtml(venueName)}</div>
+        ${mastSub ? `<div style="font-size:14px;color:var(--gray);margin-top:3px">${mastSub}</div>` : ""}</div>
+      <div style="text-align:right;flex:none;padding-left:18px"><div style="font-family:var(--serif);font-size:26px;font-weight:600;color:var(--ink);line-height:1">${isPublic ? "Event&nbsp;Pack" : `EO&nbsp;#${booking.id}`}</div>${statusPillHtml}</div>
+    </header>`;
+
+    const bandCell4 = (label: string, val: string, last: boolean) =>
+      `<div style="padding:13px 15px;${last ? "" : "border-right:1px solid var(--line);"}"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-size:15px;font-weight:600;margin-top:4px;line-height:1.2;color:var(--ink)">${val}</div></div>`;
+    const bandData: Array<[string, string]> = [];
+    if (eventDate) bandData.push(["Date", escHtml(eventDate)]);
+    if (timeRange && timeRange !== "—") bandData.push(["Service", escHtml(timeRange)]);
+    if (roomLabel || spaceName) bandData.push(["Space", escHtml(roomLabel || spaceName)]);
+    if (!isPublic && clientName) bandData.push(["Onsite Contact", escHtml(clientName)]);
+    const p1Band = `<div style="display:grid;grid-template-columns:auto repeat(${bandData.length},1fr);margin-top:18px;border:1px solid var(--line);border-radius:6px;overflow:hidden">
+      <div style="padding:13px 18px 13px 15px;border-right:1px solid var(--line);background:var(--green);color:var(--on-green)"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--on-green);opacity:.75;text-transform:uppercase">Guests</div><div style="font-family:var(--serif);font-size:52px;font-weight:600;line-height:1;margin-top:4px">${guestCount ? escHtml(String(guestCount)) : "&mdash;"}</div></div>
+      ${bandData.map(([k, v], i) => bandCell4(k, v, i === bandData.length - 1)).join("")}
+    </div>`;
+
+    const clientDetailsSection = (!isPublic && (clientName || leadEmail || leadPhone || booking.phone)) ? `<div style="margin-top:20px">${secLabel("Client Details")}
+      <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px">
+        <div style="border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">Client</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink);margin-top:4px">${escHtml(clientName) || "&mdash;"}</div>${clientOrg ? `<div style="font-size:12.5px;color:var(--gray);margin-top:3px">${clientOrg}</div>` : ""}</div>
+        <div style="border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">Email</div><div style="font-size:13px;font-weight:600;color:var(--ink);margin-top:5px;line-height:1.5;word-break:break-word">${escHtml(leadEmail) || "&mdash;"}</div></div>
+        <div style="border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">Contact</div><div style="font-size:15px;font-weight:600;color:var(--ink);margin-top:5px">${escHtml(leadPhone || booking.phone) || "&mdash;"}</div></div>
+      </div></div>` : "";
+
+    const rodItem = (item: any, last: boolean) => {
+      const flag = TL_FLAG_RE.test(String(item.title || ""));
+      const dot = flag ? "var(--red)" : "var(--green)";
+      return `<div style="display:flex;gap:14px;padding-bottom:${last ? 0 : 16}px"><div style="width:80px;flex:none;text-align:right"><div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1">${fmt12(item.time) || "&mdash;"}</div>${item.duration ? `<div style="font-size:10px;color:var(--faint);font-weight:600;margin-top:3px">${escHtml(String(item.duration))} min</div>` : ""}</div><div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:11px;height:11px;border-radius:50%;background:${dot};border:2px solid var(--cream);box-shadow:0 0 0 1.5px ${dot};margin-top:4px;flex:none"></span>${!last ? `<span style="width:2px;flex:1;background:var(--line);margin-top:3px;min-height:12px"></span>` : ""}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:14.5px;font-weight:700;color:var(--ink)">${escHtml(item.title || "&mdash;")}</span>${flag ? `<span style="display:inline-flex;color:var(--red)">&#9888;</span>` : ""}</div>${item.description ? `<div style="font-size:12.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.description)}</div>` : ""}${item.assignedTo ? `<div style="font-size:12.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.assignedTo)}</div>` : ""}</div></div>`;
+    };
+    const runOfDaySection = healedTimeline.length > 0 ? `<div style="margin-top:22px">${secLabel("Run of Day", { metaRight: (timeRange && timeRange !== "—") ? escHtml(timeRange) : undefined })}
+      <div>${healedTimeline.map((it: any, i: number) => rodItem(it, i === healedTimeline.length - 1)).join("")}</div></div>` : "";
+
+    const sigStrip = (top: boolean) => `<div style="margin-top:22px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;padding-top:16px;border-top:1px solid var(--line)">${["Name", "Signature", "Date"].map(l => top
+      ? `<div><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:20px">${l}</div><div style="border-bottom:1.5px solid var(--gray2)"></div></div>`
+      : `<div><div style="border-bottom:1.5px solid var(--gray2)"></div><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-top:6px">${l}</div></div>`).join("")}</div>`;
+
+    // ── PAGE 2 — food (cover-count cards), dietary, beverage ──
+    const foodCoverOf = (its: any[]) => {
+      const qs = its.map((i: any) => Number(i.qty ?? 1));
+      const uniform = qs.length > 0 && qs.every(q => q === qs[0]) ? qs[0] : null;
+      return (uniform && uniform > 1) ? uniform : (Number(guestCount) || qs[0] || 1);
+    };
+    const foodCardHtml = (title: string, its: any[]) => {
+      const cov = foodCoverOf(its);
+      const covLabel = Number(cov) === 1 ? "Cover" : "Covers";
+      const body = its.map((f: any) => `${escHtml(f.dishName)}${f.description ? ` &mdash; ${escHtml(f.description)}` : ""}`).join(" &middot; ");
+      return `<div style="border:1.5px solid var(--line2);border-radius:6px;padding:14px 16px;background:var(--cream);display:flex;gap:15px;align-items:center"><span style="flex:none;text-align:center;min-width:52px;border-right:1.5px solid var(--line);padding-right:15px"><span style="font-family:var(--serif);display:block;font-size:36px;font-weight:600;color:var(--ink);line-height:1">&times;${escHtml(String(cov))}</span><span style="font-size:8.5px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${covLabel}</span></span><span><span style="font-family:var(--serif);font-style:italic;font-size:16px;font-weight:500;color:var(--green)">${escHtml(title)}</span>${body ? `<div style="font-size:13px;color:var(--ink2);margin-top:4px;line-height:1.45">${body}</div>` : ""}</span></div>`;
+    };
+    const foodCards = (embeddedMenu
+      ? embeddedMenu.map(c => foodCardHtml(c.label, c.dishes.map(d => ({ dishName: d.name, description: d.det }))))
+      : foodCourses.map(course => foodCardHtml(course, foodGrouped[course] ?? []))).join("");
+    const totalCovers = Number(guestCount) || (foodItems[0] ? Number(foodItems[0].qty) || 0 : 0);
+    const foodSection = foodItems.length > 0 ? `<div style="margin-top:20px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><span style="font-size:11px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span>${totalCovers ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">Total covers</span><span style="font-family:var(--serif);font-size:34px;font-weight:600;color:var(--green);line-height:1;flex:none">${escHtml(String(totalCovers))}</span>` : ""}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${foodCards}</div></div>` : "";
+
+    const dietCardNew = (d: any) => isSevere(d)
+      ? `<div style="background:var(--red);border-radius:6px;padding:13px 16px;color:#fff"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:rgba(255,255,255,.85);text-transform:uppercase">Allergy &middot; Severe</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;margin-top:4px;color:#fff;line-height:1.1">${escHtml(d.name)}</div>${d.notes ? `<div style="font-size:12.5px;color:#fff;opacity:.93;margin-top:4px;line-height:1.4">${escHtml(d.notes)}</div>` : ""}</div>`
+      : `<div style="border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--amber);text-transform:uppercase">Dietary</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;margin-top:4px;color:var(--ink);line-height:1.1">${escHtml(d.name)}</div>${d.notes ? `<div style="font-size:12.5px;color:var(--gray);margin-top:4px;line-height:1.4">${escHtml(d.notes)}</div>` : ""}</div>`;
+    const dietarySectionNew = dietaries.length > 0 ? `<div style="margin-top:20px">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${orderedDiet.map(dietCardNew).join("")}</div></div>` : "";
+
+    const bevItems2: Array<{ name: string; desc?: string }> = hasDrinkSelection
+      ? [...selectedDrinkNames.map(n => ({ name: n })), ...customDrinkList.map((d: any) => ({ name: d.name, desc: d.description }))]
+      : legacyDrinkRows.map((f: any) => ({ name: f.dishName, desc: f.description }));
+    const bevChipRow2 = (it: { name: string }) => { const t = drinkType(it.name); const cls = t ? BEV_TAG_CLASS[t] : ""; const lbl = t ? BEV_TAG_LABEL[t] : ""; return `<div style="display:flex;gap:9px;align-items:baseline;font-size:13.5px">${t ? `<span class="bev-tag ${cls}" style="font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:3px;text-transform:uppercase;flex:none">${lbl}</span>` : ""}<span style="font-weight:600;color:var(--ink)">${escHtml(it.name)}</span></div>`; };
+    const isBeerCider = (n: string) => drinkType(n) === "BEER" || /cider/i.test(n);
+    const beerCol = bevItems2.filter(it => isBeerCider(it.name));
+    const wineCol = bevItems2.filter(it => !isBeerCider(it.name));
+    const bevColHtml = (title: string, list: any[]) => list.length ? `<div><div style="font-family:var(--serif);font-style:italic;font-size:15px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:8px">${title}</div><div style="display:flex;flex-direction:column;gap:6px">${list.map(bevChipRow2).join("")}</div></div>` : "";
+    const bevBillingCallout = (!isPublic && barNotesText.trim()) ? `<div style="margin-top:16px;background:var(--change-fill);border:1.5px solid var(--change-line);border-radius:6px;padding:12px 16px;font-size:12.5px;color:#5b4a2b;line-height:1.5"><b style="font-weight:700;color:var(--amber)">Beverage billing &mdash;</b> ${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : "";
+    const beverageSectionNew = bevItems2.length > 0 ? `<div style="margin-top:20px">${secLabel("Beverage")}<div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">${bevColHtml("Beer &amp; Cider", beerCol)}${bevColHtml("Wine &amp; Bubbles", wineCol)}</div></div>${bevBillingCallout}` : "";
+
+    // ── PAGE 3 — billing instructions, onsite contact, set-up ──
+    const noFinancials = hideSet.has('financials');
+    const billingInstrBlk = (!isPublic && !noFinancials && (minSpendAmt > 0 || depAmt > 0 || paymentInstr.trim())) ? `${secLabel("Billing Instructions")}
+      <div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">
+        ${minSpendAmt > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 15px;background:var(--green);color:var(--on-green)"><span style="font-size:12px;font-weight:700">Minimum spend</span><span style="font-family:var(--serif);font-size:17px;font-weight:600">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
+        ${depAmt > 0 ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:13px;color:var(--ink2)"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:3px">Deposit</div><b style="font-weight:700">${fmtCurrency(depAmt)}</b> <span style="background:${booking.depositPaid ? "var(--brand-tint)" : "color-mix(in srgb,var(--red) 12%,#fff)"};color:${booking.depositPaid ? "var(--green)" : "var(--red)"};font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:4px">${booking.depositPaid ? "Paid" : "Due"}</span></div>` : ""}
+        ${paymentInstr.trim() ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:13px;color:var(--ink2);line-height:1.45">${escHtml(paymentInstr).replace(/\n/g, "<br>")}</div>` : ""}
+      </div>` : "";
+    const onsiteContactBlk = (!isPublic && clientName) ? `<div style="margin-top:22px">${secLabel("Onsite Contact")}<div style="border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink)">${escHtml(clientName)}</div>${clientOrg ? `<div style="font-size:12.5px;color:var(--gray);margin-top:3px">${clientOrg}</div>` : ""}</div></div>` : "";
+    const setupBlk = (!hideSet.has('setup') && venueSetup && String(venueSetup).trim()) ? `<div>${secLabel("Set-up")}<div style="font-size:13px;color:var(--ink2);line-height:1.55">${venueSetup}</div></div>` : "";
+    const page3Left = `${billingInstrBlk}${onsiteContactBlk}`;
+    const page3Right = setupBlk;
+    const page3Content = (page3Left.trim() || page3Right.trim()) ? `${pageHeadR("External Hire &amp; Suppliers", footerBiz)}<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px"><div>${page3Left}</div><div>${page3Right}</div></div>` : "";
+
+    // ── PAGE 4 — summary stat cards, itemised billing, acceptance ──
+    const statCard = (label: string, big: string, sub: string) => `<div style="border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);margin-top:4px;line-height:1.1">${big}</div>${sub ? `<div style="font-size:12px;color:var(--gray);margin-top:3px">${sub}</div>` : ""}</div>`;
+    const statCards = [
+      (timeRange && timeRange !== "—") ? statCard(escHtml(eventType || "Event"), escHtml(timeRange), guestCount ? `Attendees: ${escHtml(String(guestCount))}` : "") : "",
+      (roomLabel || spaceName) ? statCard("Space", escHtml(roomLabel || spaceName), guestCount ? `Attendees: ${escHtml(String(guestCount))}` : "") : "",
+      (!isPublic && minSpendAmt > 0) ? statCard("F&amp;B Minimum", fmtCurrency(minSpendAmt), "Food &amp; Beverage") : "",
+    ].filter(Boolean);
+    const billRow = (item: string, sub: string, price: string, qty: string, total: string) => `<div style="display:grid;grid-template-columns:1fr 90px 60px 110px;padding:11px 16px;border-top:1px solid var(--hair);font-size:13px;align-items:baseline"><span style="color:var(--ink2)">${item}${sub ? `<div style="font-size:11px;color:var(--faint);margin-top:1px">${sub}</div>` : ""}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${price}</span><span style="text-align:right;color:var(--gray)">${qty}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${total}</span></div>`;
+    const foodBillRows = fnbFoodLines.map((i: any) => billRow(`Food &amp; Beverage &mdash; ${escHtml(i.dishName ?? "Item")}`, "", fmtCurrency(Number(i.unitPrice) || 0), String(Number(i.qty) || 0), fmtCurrency((Number(i.qty) || 0) * (Number(i.unitPrice) || 0)))).join("");
+    const costBillRows = costList.filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0).map(ci => billRow(escHtml(ci.label ?? "Item"), "", fmtCurrency(Number(ci.unitPrice) || 0), String(Number(ci.qty) || 0), fmtCurrency(lineAmt(ci)))).join("");
+    const billingTable = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || costList.length > 0 || minSpendAmt > 0)) ? `<div style="margin-top:24px">${secLabel("Daily Billing Summary", { metaRight: escHtml(eventDate) })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden"><div style="display:grid;grid-template-columns:1fr 90px 60px 110px;background:var(--fill);padding:9px 16px;font-size:9px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>${foodBillRows}${costBillRows}<div style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:13px;font-weight:700">Day Estimated Total</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(itemisedTotal > 0 ? itemisedTotal : enteredTotal)}</span></div></div></div>` : "";
+    const closingNote = (!hideSet.has('footer') && footerNote.trim()) ? `<div style="margin-top:20px">${secLabel("Note")}<div style="font-size:12.5px;line-height:1.5;color:#332e26">${footerNote.replace(/\n/g, "<br>")}</div></div>` : "";
+    const acceptanceBlk = `<div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--line)"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:6px">Client Acceptance</div><div style="font-size:12px;color:var(--gray);margin-bottom:20px;line-height:1.5;max-width:80%">By signing below the client confirms the details, catering, beverages and estimated charges set out in this event order are correct.</div>${sigStrip(false)}</div>`;
+    const page4Inner = `${statCards.length ? `<div style="display:grid;grid-template-columns:repeat(${Math.min(3, statCards.length)},1fr);gap:10px;margin-top:20px">${statCards.join("")}</div>` : ""}${billingTable}${closingNote}${acceptanceBlk}`;
+    const page4Content = (statCards.length > 0 || billingTable.trim()) ? `${pageHeadR("Event Summary", escHtml(eventDate))}${page4Inner}` : "";
+
+    // ── Assemble pages; collapse empties; number "Page N of N" dynamically ──
+    const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
+    const page1Content = `${p1Head}${p1Band}${clientDetailsSection}${show('timeline', runOfDaySection)}${sigStrip(true)}`;
+    const page2Content = (p2Food.trim() || p2Diet.trim() || p2Bev.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${p2Diet}${p2Bev}` : "";
+    const pageContents = [page1Content, page2Content, page3Content, page4Content].filter(c => c && c.trim());
+    const totalPages = pageContents.length;
+    const sheetsHtml = pageContents.map((c, i) => `
+<section class="sheet">
+  ${c}
+  <div class="foot"><span class="biz">${footerBiz}</span><span class="copy">Printed ${todayPrinted} &middot; Page ${i + 1} of ${totalPages}</span></div>
+</section>`).join("\n");
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1019,13 +1158,17 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     --line:#e3ddd0; --line2:#e6dccb; --hair:#eee6d8; --amber:#b07c25;
     --fill:#f4efe6; --change-fill:#fbf3e8; --change-line:#e6d9bf;
     --paper-edge:#ddd8cf;
+    /* Light tints derived from the brand accent / amber so pills + fills follow
+       white-labeling. color-mix is supported by the print Chromium. */
+    --brand-tint:color-mix(in srgb, var(--green) 12%, #fff);
+    --amber-tint:color-mix(in srgb, var(--amber) 14%, #fff);
     --serif:${fontPair.serif}; --sans:${fontPair.sans};
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{background:var(--paper-edge);font-family:var(--sans);color:var(--ink2);-webkit-font-smoothing:antialiased;}
   .sheet{
     width:210mm;min-height:auto;background:var(--cream);margin:10mm auto;
-    padding:5mm 8mm 5mm;position:relative;display:flex;flex-direction:column;
+    padding:14mm 15mm 12mm;position:relative;display:flex;flex-direction:column;
   }
   .muted{color:var(--gray);}
 
@@ -1191,60 +1334,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
 </style>
 </head>
 <body>
-
-<!-- ═══════════════ PAGE 1 — KITCHEN ═══════════════ -->
-<section class="sheet">
-  <header class="mast">
-    <div>
-      ${logoImg}
-      <div class="eyebrow">${isPublic ? "Event Pack" : "Banquet Event Order"}</div>
-      <div class="venue">${escHtml(venueName)}</div>
-      ${mastSub ? `<div class="mast-sub">${mastSub}</div>` : ""}
-    </div>
-    <div class="mast-right">
-      <div class="beo-num">BEO #${booking.id}</div>
-      ${isConfirmed ? `<div class="pill"><span class="dot"></span>Confirmed</div>` : (booking.status ? `<div class="pill is-muted">${escHtml(String(booking.status).replace(/_/g, " "))}</div>` : "")}
-    </div>
-  </header>
-${bandHtml}
-  ${show('dietary', dietarySection)}
-  ${menuChangesSection}
-  ${show('food', menuSection)}
-  ${show('kitchen', kitchenSection)}
-
-  ${pageFooter(isPublic ? "Event Pack &middot; Page 1 of 2" : "Kitchen copy &middot; Page 1 of 2")}
-</section>
-
-<!-- ═══════════════ PAGE 2 — SERVICE & BILLING ═══════════════ -->
-<section class="sheet">
-  <header class="p2-head">
-    <div class="p2-title">Floor &amp; Service</div>
-    <div class="p2-meta">${p2Meta}</div>
-  </header>
-
-  <div class="p2-cols">
-    <!-- Left: run of night -->
-    <div>
-      ${show('timeline', timelineSection)}
-    </div>
-
-    <!-- Right: key notes, contact, cost, bar arrangement -->
-    <div class="rcol">
-      ${show('notes', notesSection)}
-      ${contactSection}
-      ${show('financials', financialsSection)}
-      ${show('drinks', barArrangementSection)}
-    </div>
-  </div>
-
-  ${show('drinks', beveragesSection)}
-  ${show('setup', setupSection)}
-  ${paymentSection}
-  ${show('footer', footerNoteSection)}
-
-  ${pageFooter(isPublic ? "Event Pack &middot; Page 2 of 2" : "Service copy &middot; Page 2 of 2")}
-</section>
-
+${sheetsHtml}
 </body>
 </html>`;
 
