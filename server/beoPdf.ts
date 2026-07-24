@@ -1016,10 +1016,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const secLabel = (title: string, opts?: { red?: boolean; metaRight?: string }) => {
       const c = opts?.red ? "var(--red)" : "var(--green)";
       const h = opts?.red ? "2px" : "1.5px";
-      return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px"><span style="font-size:11px;letter-spacing:.2em;font-weight:800;color:${c};text-transform:uppercase;flex:none">${title}</span><span style="flex:1;height:${h};background:${c}"></span>${opts?.metaRight ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">${opts.metaRight}</span>` : ""}</div>`;
+      return `<div class="sec-label" style="display:flex;align-items:center;gap:9px;margin-bottom:12px"><span style="font-size:11px;letter-spacing:.2em;font-weight:800;color:${c};text-transform:uppercase;flex:none">${title}</span><span style="flex:1;height:${h};background:${c}"></span>${opts?.metaRight ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">${opts.metaRight}</span>` : ""}</div>`;
     };
     const pageHeadR = (title: string, meta: string) =>
-      `<header style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:12px"><div style="font-family:var(--serif);font-size:22px;font-weight:600;color:var(--ink)">${title}</div><div style="font-size:12px;color:var(--gray);font-weight:600">${meta}</div></header>`;
+      `<header class="pagehead" style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:12px;margin-top:26px"><div style="font-family:var(--serif);font-size:22px;font-weight:600;color:var(--ink)">${title}</div><div style="font-size:12px;color:var(--gray);font-weight:600">${meta}</div></header>`;
 
     // ── PAGE 1 — masthead, booking band, client details, run of day, sig ──
     const statusPillHtml = isConfirmed
@@ -1131,13 +1131,15 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
     const page1Content = `${p1Head}${p1Band}${clientDetailsSection}${show('timeline', runOfDaySection)}${sigStrip(true)}`;
     const page2Content = (p2Food.trim() || p2Diet.trim() || p2Bev.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${p2Diet}${p2Bev}` : "";
+    // One continuous flow: sections condense onto as few physical A4 pages as
+    // the content needs (no reserved page per section). Empty sections still
+    // collapse. Page numbering is applied by the running PDF footer below; the
+    // in-doc .foot is a screen-only sign-off (hidden in print).
     const pageContents = [page1Content, page2Content, page3Content, page4Content].filter(c => c && c.trim());
-    const totalPages = pageContents.length;
-    const sheetsHtml = pageContents.map((c, i) => `
-<section class="sheet">
-  ${c}
-  <div class="foot"><span class="biz">${footerBiz}</span><span class="copy">Printed ${todayPrinted} &middot; Page ${i + 1} of ${totalPages}</span></div>
-</section>`).join("\n");
+    const sheetsHtml = `<div class="doc">
+${pageContents.join("\n")}
+  <div class="foot"><span class="biz">${footerBiz}</span><span class="copy">Printed ${todayPrinted}</span></div>
+</div>`;
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1166,10 +1168,12 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{background:var(--paper-edge);font-family:var(--sans);color:var(--ink2);-webkit-font-smoothing:antialiased;}
-  .sheet{
-    width:210mm;min-height:auto;background:var(--cream);margin:10mm auto;
-    padding:14mm 15mm 12mm;position:relative;display:flex;flex-direction:column;
-  }
+  /* The document is one continuous flow: it condenses onto as few A4 pages as
+     the content needs instead of reserving a full page per section. Page insets
+     come from the print margins (repeated per page); the cream bleed comes from
+     the page background. On screen the .doc carries its own padding so the
+     preview still looks like a page. */
+  .doc{max-width:210mm;margin:0 auto;background:var(--cream);}
   .muted{color:var(--gray);}
 
   /* ── Masthead (page 1) ── */
@@ -1244,7 +1248,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .prep-line{font-size:11px;color:var(--gray2);margin-top:1px;font-style:italic;}
 
   /* ── Footer ── */
-  .foot{margin-top:8px;padding-top:6px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:9.5px;color:var(--faint);letter-spacing:.04em;}
+  .foot{margin-top:16px;padding-top:6px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:9.5px;color:var(--faint);letter-spacing:.04em;}
   .foot .biz{font-weight:700;color:var(--green);}
 
   /* ── Page 2 head + columns ── */
@@ -1318,19 +1322,22 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   .blk .kv{font-size:12.5px;line-height:1.45;color:#332e26;}
 
   @page{size:A4;margin:0;}
-  /* Two-page A4 contract: page 2 ("Floor & Service") always begins on a fresh
-     physical page, so the document prints as a clean two-pager no matter how
-     tall page 1's content runs. */
-  .sheet + .sheet{break-before:page;page-break-before:always;}
+  /* Keep a section's header attached to its first block so a heading never sits
+     alone at the foot of a page; cards already carry break-inside:avoid. */
+  .pagehead,.mast,.blk-title,.sec-label{break-after:avoid;page-break-after:avoid;}
   @media print{
-    html,body{background:none;}
-    /* Fill the page height (kept just under 297mm to avoid rounding a blank
-       3rd page) and drop the footer to the bottom of each sheet. */
-    .sheet{margin:0;min-height:295mm;}
-    .foot{margin-top:auto;}
+    /* Cream bleeds to the paper edge on every page via the propagated page
+       background; the page inset comes from the PDF print margins (repeated on
+       every page); the in-doc footer is replaced by the running PDF footer. */
+    html,body{background:var(--cream);}
+    .doc{max-width:none;background:transparent;}
+    .foot{display:none;}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
-  @media screen{ .sheet{box-shadow:0 8px 40px rgba(0,0,0,.16);} }
+  @media screen{
+    html,body{background:var(--paper-edge);}
+    .doc{margin:10mm auto;padding:14mm 15mm 12mm;box-shadow:0 8px 40px rgba(0,0,0,.16);}
+  }
 </style>
 </head>
 <body>
@@ -1367,15 +1374,23 @@ ${sheetsHtml}
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: "networkidle0" });
-      // The design owns its own layout: `@page{size:A4;margin:0}` + each
-      // `.sheet` is sized to A4 (210×297mm) with its own internal padding and
-      // an in-sheet footer. So we zero Puppeteer's margins, honour the page
-      // CSS size, and drop the header/footer template — this makes the
-      // downloaded PDF match the on-screen `?format=html` preview 1:1.
+      // Continuous-flow layout: content condenses onto as few A4 pages as it
+      // needs. Repeating page margins inset every physical page; the cream
+      // bleeds to the edge via the propagated page background (printBackground).
+      // A running footer carries the biz name + "Page N of N", so the page
+      // count is computed by Chromium from the actual flow rather than baked in.
+      const footerTemplate =
+        `<div style="width:100%;font-family:'Helvetica Neue',Arial,sans-serif;font-size:8px;color:#8a8073;letter-spacing:.04em;padding:0 15mm;display:flex;justify-content:space-between;-webkit-print-color-adjust:exact;print-color-adjust:exact">` +
+        `<span style="font-weight:700;color:${brandAccent}">${footerBiz}</span>` +
+        `<span>Printed ${todayPrinted} &middot; Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>` +
+        `</div>`;
       const pdf = await page.pdf({
         printBackground: true,
-        preferCSSPageSize: true,
-        margin: { top: "0", right: "0", bottom: "0", left: "0" },
+        format: "A4",
+        displayHeaderFooter: true,
+        headerTemplate: "<div></div>",
+        footerTemplate,
+        margin: { top: "14mm", right: "15mm", bottom: "16mm", left: "15mm" },
       });
 
       // Append linked menu PDFs (chef-facing) to the end of the internal
