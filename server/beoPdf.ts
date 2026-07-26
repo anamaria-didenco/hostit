@@ -1076,34 +1076,40 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       : `<div><div style="border-bottom:1.5px solid var(--gray2)"></div><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-top:6px">${l}</div></div>`).join("")}</div>`;
 
     // ── PAGE 2 — food (cover-count cards), dietary, beverage ──
-    const foodCoverOf = (its: any[]) => {
-      const qs = its.map((i: any) => Number(i.qty ?? 1));
-      const uniform = qs.length > 0 && qs.every(q => q === qs[0]) ? qs[0] : null;
-      return (uniform && uniform > 1) ? uniform : (Number(guestCount) || qs[0] || 1);
-    };
     const foodCardHtml = (title: string, its: any[]) => {
-      const cov = foodCoverOf(its);
-      const covLabel = Number(cov) === 1 ? "Cover" : "Covers";
-      // Each dish on its own spaced bullet line so the card reads as a menu
-      // rather than one run-on paragraph.
-      const body = its.map((f: any) => `<div style="display:flex;gap:7px;margin-top:2px;line-height:1.3"><span style="color:var(--green);flex:none;font-weight:700">&bull;</span><span><span style="font-size:13.5px;font-weight:600;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` <span style="font-size:13px;color:var(--gray)">&mdash; ${escHtml(f.description)}</span>` : ""}</span></div>`).join("");
-      return `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:10px 13px;background:var(--cream);display:flex;gap:12px;align-items:flex-start"><span style="flex:none;text-align:center;min-width:52px;border-right:1.5px solid var(--line);padding-right:15px;padding-top:2px"><span style="font-family:var(--serif);display:block;font-size:27px;font-weight:600;color:var(--ink);line-height:1">&times;${escHtml(String(cov))}</span><span style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${covLabel}</span></span><span><span style="font-family:var(--serif);font-style:italic;font-size:16px;font-weight:500;color:var(--green)">${escHtml(title)}</span>${body ? `<div style="margin-top:2px">${body}</div>` : ""}</span></div>`;
+      // Plain course title, then each dish on its own line prefixed with its
+      // own ×N quantity (e.g. "×54 Crudo"). The ×N sits in a small serif column
+      // so the quantities line up down the list.
+      const dishRow = (f: any) => {
+        const q = Number(f.qty) > 0 ? Number(f.qty) : (Number(guestCount) || 0);
+        const qHtml = q > 0
+          ? `<span style="font-family:var(--serif);font-size:15px;font-weight:600;color:var(--green);min-width:38px;text-align:right;flex:none;line-height:1.35">&times;${escHtml(String(q))}</span>`
+          : `<span style="min-width:38px;flex:none"></span>`;
+        return `<div style="display:flex;gap:10px;margin-top:3px;line-height:1.35;align-items:baseline">${qHtml}<span><span style="font-size:13.5px;font-weight:600;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` <span style="font-size:13px;color:var(--gray)">&mdash; ${escHtml(f.description)}</span>` : ""}</span></div>`;
+      };
+      return `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:10px 13px;background:var(--cream)"><div style="font-family:var(--serif);font-style:italic;font-size:16px;font-weight:500;color:var(--green)">${escHtml(title)}</div><div style="margin-top:3px">${its.map(dishRow).join("")}</div></div>`;
     };
     const foodCards = (embeddedMenu
       ? embeddedMenu.map(c => foodCardHtml(c.label, c.dishes.map(d => ({ dishName: d.name, description: d.det }))))
       : foodCourses.map(course => foodCardHtml(course, foodGrouped[course] ?? []))).join("");
-    const totalCovers = Number(guestCount) || (foodItems[0] ? Number(foodItems[0].qty) || 0 : 0);
-    const foodSection = foodItems.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:7px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:6px"><span style="font-size:11px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span>${totalCovers ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">Total covers</span><span style="font-family:var(--serif);font-size:34px;font-weight:600;color:var(--green);line-height:1;flex:none">${escHtml(String(totalCovers))}</span>` : ""}</div><div style="display:grid;grid-template-columns:1fr;gap:8px">${foodCards}</div></div>` : "";
+    const foodSection = foodItems.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:7px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:6px"><span style="font-size:11px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span></div><div style="display:grid;grid-template-columns:1fr;gap:8px">${foodCards}</div></div>` : "";
 
-    const dietCardNew = (d: any) => isSevere(d)
-      ? `<div style="break-inside:avoid;page-break-inside:avoid;background:var(--red);border-radius:6px;padding:7px 11px;color:#fff"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:rgba(255,255,255,.85);text-transform:uppercase">Allergy &middot; Severe</div><div style="font-family:var(--serif);font-size:15px;font-weight:600;margin-top:2px;color:#fff;line-height:1.1">${escHtml(d.name)}</div>${d.notes ? `<div style="font-size:13px;color:#fff;opacity:.93;margin-top:4px;line-height:1.4">${escHtml(d.notes)}</div>` : ""}</div>`
-      : `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:7px 11px"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--amber);text-transform:uppercase">Dietary</div><div style="font-family:var(--serif);font-size:15px;font-weight:600;margin-top:2px;color:var(--ink);line-height:1.1">${escHtml(d.name)}</div>${d.notes ? `<div style="font-size:13px;color:var(--gray);margin-top:4px;line-height:1.4">${escHtml(d.notes)}</div>` : ""}</div>`;
-    // DF-1: never orphan a severe allergy card from its heading. The whole
-    // section is kept together when it fits; if it can't, the heading + the
-    // severe (red) cards stay as one unbreakable unit (severe are front-loaded
-    // by orderedDiet), and only the mild cards flow onto the next page.
-    const dietGrid = (arr: any[]) => arr.length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${arr.map(dietCardNew).join("")}</div>` : "";
-    const dietarySectionNew = dietaries.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:7px"><div style="break-inside:avoid;page-break-inside:avoid">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}${dietGrid(severeDiet)}</div>${mildDiet.length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${mildDiet.map(dietCardNew).join("")}</div>` : ""}</div>` : "";
+    // Tally-ledger: one sorted list (severe/allergy first via orderedDiet), a
+    // big serif ×N count column and a severity dot (red = severe allergy,
+    // amber = dietary). DF-1 safety: the whole section is kept together and the
+    // severe rows sit at the top, so no severe row is ever orphaned from the
+    // "Dietary & Allergies" heading.
+    const dietRow = (d: any, first: boolean) => {
+      const severe = isSevere(d);
+      const dot = severe ? "var(--red)" : "var(--amber)";
+      const n = Number(d.count) > 0 ? Number(d.count) : 1;
+      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;align-items:center;gap:13px;padding:7px 14px;${first ? "" : "border-top:1px solid var(--hair);"}">`
+        + `<span style="font-family:var(--serif);font-size:22px;font-weight:600;color:var(--ink);min-width:42px;text-align:right;line-height:1;flex:none">&times;${escHtml(String(n))}</span>`
+        + `<span style="width:9px;height:9px;border-radius:50%;background:${dot};flex:none" aria-hidden></span>`
+        + `<span style="flex:1;min-width:0"><span style="font-size:14px;font-weight:600;color:var(--ink)">${escHtml(d.name)}</span>${severe ? ` <span style="font-size:9px;letter-spacing:.14em;font-weight:800;color:var(--red);text-transform:uppercase">Severe</span>` : ""}${d.notes ? `<span style="font-size:12.5px;color:var(--gray)"> &mdash; ${escHtml(d.notes)}</span>` : ""}</span>`
+        + `</div>`;
+    };
+    const dietarySectionNew = dietaries.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:7px">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">${orderedDiet.map((d, i) => dietRow(d, i === 0)).join("")}</div></div>` : "";
 
     const bevItems2: Array<{ name: string; desc?: string }> = hasDrinkSelection
       ? [...selectedDrinkNames.map(n => ({ name: n })), ...customDrinkList.map((d: any) => ({ name: d.name, desc: d.description }))]
