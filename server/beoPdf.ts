@@ -816,18 +816,21 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       // it as no-tag (like an untyped drink) instead of an unstyled chip.
       if (explicit) { const e = String(explicit).toLowerCase(); return e === "other" ? "" : e.toUpperCase(); }
       const n = name.toLowerCase();
-      if (/prosecco|champagne|cava|cliquot|spumante|sparkling/.test(n)) return "SPARK";
-      if (/sauvignon|pinot grigio|chardonnay|riesling|blanc|pinot gris|gewurz/.test(n)) return "WHITE";
-      if (/nero|shiraz|cabernet|merlot|pinot noir|malbec|rosso|rosato|tempranillo|sangiovese/.test(n)) return "RED";
-      if (/beer|pilsner|lager|ale|ipa|peroni|stout/.test(n)) return "BEER";
+      // Rosé before Red so a Rosato isn't mislabelled Red.
+      if (/rosato|ros[eé]\b|rosado|blush/.test(n)) return "ROSE";
+      if (/margarita|martini|spritz|negroni|mojito|daiquiri|paloma|cosmopolitan|old fashioned|aperol|limoncello|hugo|cocktail|highball|americano/.test(n)) return "COCKTAIL";
+      if (/prosecco|champagne|cava|cliquot|spumante|sparkling|extra dry|\bbrut\b|franciacorta|cremant/.test(n)) return "SPARK";
+      if (/sauvignon|pinot grigio|pinot gris|chardonnay|riesling|blanc|gewurz|malvasia|verdicchio|vermentino|\bgavi\b|falanghina|greco/.test(n)) return "WHITE";
+      if (/nero|shiraz|syrah|cabernet|merlot|pinot noir|malbec|rosso|tempranillo|sangiovese|montepulciano|nebbiolo|barolo|chianti|primitivo|zinfandel|grenache|\bgsm\b/.test(n)) return "RED";
+      if (/beer|pilsner|lager|\bale\b|ipa|peroni|stout|cider/.test(n)) return "BEER";
       return "";
     };
     // Reference colour tags: SPARK→t-spark, WHITE→t-white, RED→t-red, BEER→t-beer.
     const BEV_TAG_CLASS: Record<string, string> = {
-      SPARK: "t-spark", WHITE: "t-white", RED: "t-red", BEER: "t-beer",
+      SPARK: "t-spark", WHITE: "t-white", RED: "t-red", BEER: "t-beer", ROSE: "t-rose", COCKTAIL: "t-cocktail",
     };
     const BEV_TAG_LABEL: Record<string, string> = {
-      SPARK: "Spark", WHITE: "White", RED: "Red", BEER: "Beer",
+      SPARK: "Sparkling", WHITE: "White", RED: "Red", BEER: "Beer", ROSE: "Rosé", COCKTAIL: "Cocktail",
     };
     const drinkChip = (name: string, desc?: string, priceVal?: any) => {
       const t = drinkType(name);
@@ -1019,49 +1022,58 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       return `<div class="sec-label" style="display:flex;align-items:center;gap:9px;margin-bottom:12px"><span style="font-size:11px;letter-spacing:.2em;font-weight:800;color:${c};text-transform:uppercase;flex:none">${title}</span><span style="flex:1;height:${h};background:${c}"></span>${opts?.metaRight ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">${opts.metaRight}</span>` : ""}</div>`;
     };
     const pageHeadR = (title: string, meta: string) =>
-      `<header class="pagehead" style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:12px;margin-top:26px"><div style="font-family:var(--serif);font-size:22px;font-weight:600;color:var(--ink)">${title}</div><div style="font-size:12px;color:var(--gray);font-weight:600">${meta}</div></header>`;
+      `<header class="pagehead" style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:12px;margin-top:26px"><div style="font-family:var(--serif);font-size:22px;font-weight:600;color:var(--ink)">${title}</div><div style="font-size:13px;color:var(--gray);font-weight:600">${meta}</div></header>`;
 
     // ── PAGE 1 — masthead, booking band, client details, run of day, sig ──
     const statusPillHtml = isConfirmed
       ? `<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--green);color:var(--on-green);font-size:10px;font-weight:800;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase"><span style="width:6px;height:6px;border-radius:50%;background:var(--on-green);opacity:.6"></span>Confirmed</div>`
       : `<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--amber-tint);color:var(--amber);border:1px solid var(--change-line);font-size:10px;font-weight:800;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase"><span style="width:6px;height:6px;border-radius:50%;background:var(--amber)"></span>Not Final</div>`;
+    // DF-2: the EVENT is the headline; "Bar Franco" (+ logo) sits at eyebrow
+    // scale. Staff scan for which event this is, not which venue they work at.
+    const mastHeadline = mastSub || escHtml(venueName);
+    const mastEyebrow = [(mastSub ? escHtml(venueName) : ""), isPublic ? "Event Pack &middot; Function Sheet" : "Event Order &middot; Function Sheet"].filter(Boolean).join(" &middot; ");
     const p1Head = `<header style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid var(--green);padding-bottom:14px">
-      <div>${logoImg}<div style="font-size:10px;letter-spacing:.32em;font-weight:700;color:var(--green);text-transform:uppercase">${isPublic ? "Event Pack &middot; Function Sheet" : "Event Order &middot; Function Sheet"}</div>
-        <div style="font-family:var(--serif);font-size:34px;font-weight:600;line-height:1.05;margin-top:6px;color:var(--ink);letter-spacing:-.01em">${escHtml(venueName)}</div>
-        ${mastSub ? `<div style="font-size:14px;color:var(--gray);margin-top:3px">${mastSub}</div>` : ""}</div>
+      <div>${logoImg}<div style="font-size:10px;letter-spacing:.28em;font-weight:700;color:var(--green);text-transform:uppercase">${mastEyebrow}</div>
+        <div style="font-family:var(--serif);font-size:32px;font-weight:600;line-height:1.08;margin-top:6px;color:var(--ink);letter-spacing:-.01em">${mastHeadline}</div></div>
       <div style="text-align:right;flex:none;padding-left:18px"><div style="font-family:var(--serif);font-size:26px;font-weight:600;color:var(--ink);line-height:1">${isPublic ? "Event&nbsp;Pack" : `EO&nbsp;#${booking.id}`}</div>${statusPillHtml}</div>
     </header>`;
 
     const bandCell4 = (label: string, val: string, last: boolean) =>
-      `<div style="padding:13px 15px;${last ? "" : "border-right:1px solid var(--line);"}"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-size:15px;font-weight:600;margin-top:4px;line-height:1.2;color:var(--ink)">${val}</div></div>`;
+      `<div style="padding:13px 15px;${last ? "" : "border-right:1px solid var(--line);"}"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-size:15px;font-weight:600;margin-top:4px;line-height:1.2;color:var(--ink)">${val}</div></div>`;
     const bandData: Array<[string, string]> = [];
     if (eventDate) bandData.push(["Date", escHtml(eventDate)]);
     if (timeRange && timeRange !== "—") bandData.push(["Service", escHtml(timeRange)]);
     if (roomLabel || spaceName) bandData.push(["Space", escHtml(roomLabel || spaceName)]);
     if (!isPublic && clientName) bandData.push(["Onsite Contact", escHtml(clientName)]);
     const p1Band = `<div style="display:grid;grid-template-columns:auto repeat(${bandData.length},1fr);margin-top:18px;border:1px solid var(--line);border-radius:6px;overflow:hidden">
-      <div style="padding:13px 18px 13px 15px;border-right:1px solid var(--line);background:var(--green);color:var(--on-green)"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--on-green);opacity:.75;text-transform:uppercase">Guests</div><div style="font-family:var(--serif);font-size:52px;font-weight:600;line-height:1;margin-top:4px">${guestCount ? escHtml(String(guestCount)) : "&mdash;"}</div></div>
+      <div style="padding:13px 18px 13px 15px;border-right:1px solid var(--line);background:var(--green);color:var(--on-green)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--on-green);opacity:.75;text-transform:uppercase">Guests</div><div style="font-family:var(--serif);font-size:52px;font-weight:600;line-height:1;margin-top:4px">${guestCount ? escHtml(String(guestCount)) : "&mdash;"}</div></div>
       ${bandData.map(([k, v], i) => bandCell4(k, v, i === bandData.length - 1)).join("")}
     </div>`;
 
-    const clientDetailsSection = (!isPublic && (clientName || leadEmail || leadPhone || booking.phone)) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:20px">${secLabel("Client Details")}
-      <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px">
-        <div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">Client</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink);margin-top:4px">${escHtml(clientName) || "&mdash;"}</div>${clientOrg ? `<div style="font-size:12.5px;color:var(--gray);margin-top:3px">${clientOrg}</div>` : ""}</div>
-        <div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">Email</div><div style="font-size:13px;font-weight:600;color:var(--ink);margin-top:5px;line-height:1.5;word-break:break-word">${escHtml(leadEmail) || "&mdash;"}</div></div>
-        <div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">Contact</div><div style="font-size:15px;font-weight:600;color:var(--ink);margin-top:5px">${escHtml(leadPhone || booking.phone) || "&mdash;"}</div></div>
-      </div></div>` : "";
+    // DF-5: only render cells that actually have data — no bare "—" placeholders.
+    const cdCard = (label: string, valHtml: string, sub?: string) => `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-size:15px;font-weight:600;color:var(--ink);margin-top:5px;line-height:1.4;word-break:break-word">${valHtml}</div>${sub ? `<div style="font-size:13px;color:var(--gray);margin-top:3px">${sub}</div>` : ""}</div>`;
+    const cdContactVal = escHtml(leadPhone || booking.phone);
+    const cdCells: string[] = [];
+    if (clientName) cdCells.push(`<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">Client</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink);margin-top:4px">${escHtml(clientName)}</div>${clientOrg ? `<div style="font-size:13px;color:var(--gray);margin-top:3px">${clientOrg}</div>` : ""}</div>`);
+    if (leadEmail) cdCells.push(cdCard("Email", escHtml(leadEmail)));
+    if (cdContactVal) cdCells.push(cdCard("Contact", cdContactVal));
+    const cdCols = cdCells.length >= 3 ? "1.4fr 1fr 1fr" : cdCells.length === 2 ? "1.4fr 1fr" : "1fr";
+    const clientDetailsSection = (!isPublic && cdCells.length > 0) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:20px">${secLabel("Client Details")}<div style="display:grid;grid-template-columns:${cdCols};gap:10px">${cdCells.join("")}</div></div>` : "";
+    // DF-5: the Set-up note lives on page 1 (under the band) instead of reserving
+    // a standalone "External Hire & Suppliers" page for a lone note.
+    const setupNoteSection = (!hideSet.has('setup') && venueSetup && String(venueSetup).trim()) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:20px">${secLabel("Set-up")}<div style="font-size:13px;color:var(--ink2);line-height:1.55">${venueSetup}</div></div>` : "";
 
     const rodItem = (item: any, last: boolean) => {
       const flag = TL_FLAG_RE.test(String(item.title || ""));
       const dot = flag ? "var(--red)" : "var(--green)";
-      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:14px;padding-bottom:${last ? 0 : 16}px"><div style="width:80px;flex:none;text-align:right"><div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1">${fmt12(item.time) || "&mdash;"}</div>${item.duration ? `<div style="font-size:10px;color:var(--faint);font-weight:600;margin-top:3px">${escHtml(String(item.duration))} min</div>` : ""}</div><div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:11px;height:11px;border-radius:50%;background:${dot};border:2px solid var(--cream);box-shadow:0 0 0 1.5px ${dot};margin-top:4px;flex:none"></span>${!last ? `<span style="width:2px;flex:1;background:var(--line);margin-top:3px;min-height:12px"></span>` : ""}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:14.5px;font-weight:700;color:var(--ink)">${escHtml(item.title || "&mdash;")}</span>${flag ? `<span style="display:inline-flex;color:var(--red)">&#9888;</span>` : ""}</div>${item.description ? `<div style="font-size:12.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.description)}</div>` : ""}${item.assignedTo ? `<div style="font-size:12.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.assignedTo)}</div>` : ""}</div></div>`;
+      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:14px;padding-bottom:${last ? 0 : 16}px"><div style="width:80px;flex:none;text-align:right"><div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1">${fmt12(item.time) || "&mdash;"}</div>${item.duration ? `<div style="font-size:10px;color:var(--faint);font-weight:600;margin-top:3px">${escHtml(String(item.duration))} min</div>` : ""}</div><div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:11px;height:11px;border-radius:50%;background:${dot};border:2px solid var(--cream);box-shadow:0 0 0 1.5px ${dot};margin-top:4px;flex:none"></span>${!last ? `<span style="width:2px;flex:1;background:var(--line);margin-top:3px;min-height:12px"></span>` : ""}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:14.5px;font-weight:700;color:var(--ink)">${escHtml(item.title || "&mdash;")}</span>${flag ? `<span style="display:inline-flex;color:var(--red)">&#9888;</span>` : ""}</div>${item.description ? `<div style="font-size:13px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.description)}</div>` : ""}${item.assignedTo ? `<div style="font-size:13px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.assignedTo)}</div>` : ""}</div></div>`;
     };
     const runOfDaySection = healedTimeline.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:22px">${secLabel("Run of Day", { metaRight: (timeRange && timeRange !== "—") ? escHtml(timeRange) : undefined })}
       <div>${healedTimeline.map((it: any, i: number) => rodItem(it, i === healedTimeline.length - 1)).join("")}</div></div>` : "";
 
     const sigStrip = (top: boolean) => `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:22px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;padding-top:16px;border-top:1px solid var(--line)">${["Name", "Signature", "Date"].map(l => top
-      ? `<div><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:20px">${l}</div><div style="border-bottom:1.5px solid var(--gray2)"></div></div>`
-      : `<div><div style="border-bottom:1.5px solid var(--gray2)"></div><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-top:6px">${l}</div></div>`).join("")}</div>`;
+      ? `<div><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:20px">${l}</div><div style="border-bottom:1.5px solid var(--gray2)"></div></div>`
+      : `<div><div style="border-bottom:1.5px solid var(--gray2)"></div><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-top:6px">${l}</div></div>`).join("")}</div>`;
 
     // ── PAGE 2 — food (cover-count cards), dietary, beverage ──
     const foodCoverOf = (its: any[]) => {
@@ -1074,8 +1086,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       const covLabel = Number(cov) === 1 ? "Cover" : "Covers";
       // Each dish on its own spaced bullet line so the card reads as a menu
       // rather than one run-on paragraph.
-      const body = its.map((f: any) => `<div style="display:flex;gap:8px;margin-top:6px;line-height:1.4"><span style="color:var(--green);flex:none;font-weight:700">&bull;</span><span style="font-size:13px;color:var(--ink2)"><span style="font-weight:600;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` &mdash; <span style="color:var(--gray)">${escHtml(f.description)}</span>` : ""}</span></div>`).join("");
-      return `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:14px 16px;background:var(--cream);display:flex;gap:15px;align-items:flex-start"><span style="flex:none;text-align:center;min-width:52px;border-right:1.5px solid var(--line);padding-right:15px;padding-top:2px"><span style="font-family:var(--serif);display:block;font-size:36px;font-weight:600;color:var(--ink);line-height:1">&times;${escHtml(String(cov))}</span><span style="font-size:8.5px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${covLabel}</span></span><span><span style="font-family:var(--serif);font-style:italic;font-size:16px;font-weight:500;color:var(--green)">${escHtml(title)}</span>${body ? `<div style="margin-top:2px">${body}</div>` : ""}</span></div>`;
+      const body = its.map((f: any) => `<div style="display:flex;gap:8px;margin-top:6px;line-height:1.4"><span style="color:var(--green);flex:none;font-weight:700">&bull;</span><span><span style="font-size:13.5px;font-weight:600;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` <span style="font-size:13px;color:var(--gray)">&mdash; ${escHtml(f.description)}</span>` : ""}</span></div>`).join("");
+      return `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:14px 16px;background:var(--cream);display:flex;gap:15px;align-items:flex-start"><span style="flex:none;text-align:center;min-width:52px;border-right:1.5px solid var(--line);padding-right:15px;padding-top:2px"><span style="font-family:var(--serif);display:block;font-size:36px;font-weight:600;color:var(--ink);line-height:1">&times;${escHtml(String(cov))}</span><span style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${covLabel}</span></span><span><span style="font-family:var(--serif);font-style:italic;font-size:16px;font-weight:500;color:var(--green)">${escHtml(title)}</span>${body ? `<div style="margin-top:2px">${body}</div>` : ""}</span></div>`;
     };
     const foodCards = (embeddedMenu
       ? embeddedMenu.map(c => foodCardHtml(c.label, c.dishes.map(d => ({ dishName: d.name, description: d.det }))))
@@ -1084,60 +1096,74 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const foodSection = foodItems.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:20px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><span style="font-size:11px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span>${totalCovers ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">Total covers</span><span style="font-family:var(--serif);font-size:34px;font-weight:600;color:var(--green);line-height:1;flex:none">${escHtml(String(totalCovers))}</span>` : ""}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${foodCards}</div></div>` : "";
 
     const dietCardNew = (d: any) => isSevere(d)
-      ? `<div style="break-inside:avoid;page-break-inside:avoid;background:var(--red);border-radius:6px;padding:13px 16px;color:#fff"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:rgba(255,255,255,.85);text-transform:uppercase">Allergy &middot; Severe</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;margin-top:4px;color:#fff;line-height:1.1">${escHtml(d.name)}</div>${d.notes ? `<div style="font-size:12.5px;color:#fff;opacity:.93;margin-top:4px;line-height:1.4">${escHtml(d.notes)}</div>` : ""}</div>`
-      : `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--amber);text-transform:uppercase">Dietary</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;margin-top:4px;color:var(--ink);line-height:1.1">${escHtml(d.name)}</div>${d.notes ? `<div style="font-size:12.5px;color:var(--gray);margin-top:4px;line-height:1.4">${escHtml(d.notes)}</div>` : ""}</div>`;
-    const dietarySectionNew = dietaries.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:20px">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${orderedDiet.map(dietCardNew).join("")}</div></div>` : "";
+      ? `<div style="break-inside:avoid;page-break-inside:avoid;background:var(--red);border-radius:6px;padding:13px 16px;color:#fff"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:rgba(255,255,255,.85);text-transform:uppercase">Allergy &middot; Severe</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;margin-top:4px;color:#fff;line-height:1.1">${escHtml(d.name)}</div>${d.notes ? `<div style="font-size:13px;color:#fff;opacity:.93;margin-top:4px;line-height:1.4">${escHtml(d.notes)}</div>` : ""}</div>`
+      : `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--amber);text-transform:uppercase">Dietary</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;margin-top:4px;color:var(--ink);line-height:1.1">${escHtml(d.name)}</div>${d.notes ? `<div style="font-size:13px;color:var(--gray);margin-top:4px;line-height:1.4">${escHtml(d.notes)}</div>` : ""}</div>`;
+    // DF-1: never orphan a severe allergy card from its heading. The whole
+    // section is kept together when it fits; if it can't, the heading + the
+    // severe (red) cards stay as one unbreakable unit (severe are front-loaded
+    // by orderedDiet), and only the mild cards flow onto the next page.
+    const dietGrid = (arr: any[]) => arr.length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${arr.map(dietCardNew).join("")}</div>` : "";
+    const dietarySectionNew = dietaries.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:20px"><div style="break-inside:avoid;page-break-inside:avoid">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}${dietGrid(severeDiet)}</div>${mildDiet.length ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">${mildDiet.map(dietCardNew).join("")}</div>` : ""}</div>` : "";
 
     const bevItems2: Array<{ name: string; desc?: string }> = hasDrinkSelection
       ? [...selectedDrinkNames.map(n => ({ name: n })), ...customDrinkList.map((d: any) => ({ name: d.name, desc: d.description }))]
       : legacyDrinkRows.map((f: any) => ({ name: f.dishName, desc: f.description }));
-    const bevChipRow2 = (it: { name: string }) => { const t = drinkType(it.name); const cls = t ? BEV_TAG_CLASS[t] : ""; const lbl = t ? BEV_TAG_LABEL[t] : ""; return `<div style="display:flex;gap:9px;align-items:baseline;font-size:13.5px">${t ? `<span class="bev-tag ${cls}" style="font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:3px;text-transform:uppercase;flex:none">${lbl}</span>` : ""}<span style="font-weight:600;color:var(--ink)">${escHtml(it.name)}</span></div>`; };
-    const isBeerCider = (n: string) => drinkType(n) === "BEER" || /cider/i.test(n);
-    const beerCol = bevItems2.filter(it => isBeerCider(it.name));
-    const wineCol = bevItems2.filter(it => !isBeerCider(it.name));
-    const bevColHtml = (title: string, list: any[]) => list.length ? `<div><div style="font-family:var(--serif);font-style:italic;font-size:15px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:8px">${title}</div><div style="display:flex;flex-direction:column;gap:6px">${list.map(bevChipRow2).join("")}</div></div>` : "";
-    const bevBillingCallout = (!isPublic && barNotesText.trim()) ? `<div style="margin-top:16px;background:var(--change-fill);border:1.5px solid var(--change-line);border-radius:6px;padding:12px 16px;font-size:12.5px;color:#5b4a2b;line-height:1.5"><b style="font-weight:700;color:var(--amber)">Beverage billing &mdash;</b> ${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : "";
-    const beverageSectionNew = bevItems2.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:20px">${secLabel("Beverage")}<div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">${bevColHtml("Beer &amp; Cider", beerCol)}${bevColHtml("Wine &amp; Bubbles", wineCol)}</div></div>${bevBillingCallout}` : "";
+    // DF-6: group beverages by category under italic-serif subheadings, in
+    // order (Cocktails, Sparkling, White, Red, Rosé, Beer & Cider, then any
+    // untyped as "Other"). The per-row colour chip is dropped — the category
+    // heading is the label now. Groups flow across two balanced columns and
+    // each group is kept intact across page breaks.
+    const BEV_GROUPS: Array<[string, string]> = [
+      ["COCKTAIL", "Cocktails"], ["SPARK", "Sparkling"], ["WHITE", "White"],
+      ["RED", "Red"], ["ROSE", "Ros&eacute;"], ["BEER", "Beer &amp; Cider"], ["", "Other"],
+    ];
+    const bevGroupRow = (it: { name: string; desc?: string }) => `<div style="font-size:13.5px;font-weight:600;color:var(--ink);margin-top:5px;line-height:1.35">${escHtml(it.name)}${it.desc ? ` <span style="font-weight:400;font-size:13px;color:var(--gray)">&mdash; ${escHtml(it.desc)}</span>` : ""}</div>`;
+    const bevGroupBlock = (label: string, items: Array<{ name: string; desc?: string }>) => items.length
+      ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:14px"><div style="font-family:var(--serif);font-style:italic;font-size:15px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:4px">${label}</div>${items.map(bevGroupRow).join("")}</div>` : "";
+    const bevBillingCallout = (!isPublic && barNotesText.trim()) ? `<div style="margin-top:16px;background:var(--change-fill);border:1.5px solid var(--change-line);border-radius:6px;padding:12px 16px;font-size:13px;color:#5b4a2b;line-height:1.5"><b style="font-weight:700;color:var(--amber)">Beverage billing &mdash;</b> ${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : "";
+    const beverageSectionNew = bevItems2.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:20px">${secLabel("Beverage")}<div style="column-count:2;column-gap:26px">${BEV_GROUPS.map(([k, lbl]) => bevGroupBlock(lbl, bevItems2.filter(it => drinkType(it.name) === k))).join("")}</div></div>${bevBillingCallout}` : "";
 
     // ── PAGE 3 — billing instructions, onsite contact, set-up ──
     const noFinancials = hideSet.has('financials');
     const billingInstrBlk = (!isPublic && !noFinancials && (minSpendAmt > 0 || depAmt > 0 || paymentInstr.trim())) ? `${secLabel("Billing Instructions")}
       <div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">
-        ${minSpendAmt > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 15px;background:var(--green);color:var(--on-green)"><span style="font-size:12px;font-weight:700">Minimum spend</span><span style="font-family:var(--serif);font-size:17px;font-weight:600">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
-        ${depAmt > 0 ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:13px;color:var(--ink2)"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:3px">Deposit</div><b style="font-weight:700">${fmtCurrency(depAmt)}</b> <span style="background:${booking.depositPaid ? "var(--brand-tint)" : "color-mix(in srgb,var(--red) 12%,#fff)"};color:${booking.depositPaid ? "var(--green)" : "var(--red)"};font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:4px">${booking.depositPaid ? "Paid" : "Due"}</span></div>` : ""}
+        ${minSpendAmt > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 15px;background:var(--green);color:var(--on-green)"><span style="font-size:13px;font-weight:700">Minimum spend</span><span style="font-family:var(--serif);font-size:17px;font-weight:600">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
+        ${depAmt > 0 ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:13px;color:var(--ink2)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:3px">Deposit</div><b style="font-weight:700">${fmtCurrency(depAmt)}</b> <span style="background:${booking.depositPaid ? "var(--brand-tint)" : "color-mix(in srgb,var(--red) 12%,#fff)"};color:${booking.depositPaid ? "var(--green)" : "var(--red)"};font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:4px">${booking.depositPaid ? "Paid" : "Due"}</span></div>` : ""}
         ${paymentInstr.trim() ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:13px;color:var(--ink2);line-height:1.45">${escHtml(paymentInstr).replace(/\n/g, "<br>")}</div>` : ""}
       </div>` : "";
-    const onsiteContactBlk = (!isPublic && clientName) ? `<div style="margin-top:22px">${secLabel("Onsite Contact")}<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink)">${escHtml(clientName)}</div>${clientOrg ? `<div style="font-size:12.5px;color:var(--gray);margin-top:3px">${clientOrg}</div>` : ""}</div></div>` : "";
-    const setupBlk = (!hideSet.has('setup') && venueSetup && String(venueSetup).trim()) ? `<div>${secLabel("Set-up")}<div style="font-size:13px;color:var(--ink2);line-height:1.55">${venueSetup}</div></div>` : "";
-    const page3Left = `${billingInstrBlk}${onsiteContactBlk}`;
-    const page3Right = setupBlk;
-    const page3Content = (page3Left.trim() || page3Right.trim()) ? `${pageHeadR("External Hire &amp; Suppliers", footerBiz)}<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px"><div>${page3Left}</div><div>${page3Right}</div></div>` : "";
+    // DF-5: no standalone "External Hire & Suppliers" page. Onsite contact is
+    // already in the info band; the Set-up note moves to page 1 (setupSection);
+    // billing instructions move onto the Event Summary page (billingInstrSection
+    // below). So there is no page-3 section.
+    const billingInstrSection = billingInstrBlk.trim() ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:24px">${billingInstrBlk}</div>` : "";
 
     // ── PAGE 4 — summary stat cards, itemised billing, acceptance ──
-    const statCard = (label: string, big: string, sub: string) => `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);margin-top:4px;line-height:1.1">${big}</div>${sub ? `<div style="font-size:12px;color:var(--gray);margin-top:3px">${sub}</div>` : ""}</div>`;
+    const statCard = (label: string, big: string, sub: string) => `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:13px 16px"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);margin-top:4px;line-height:1.1">${big}</div>${sub ? `<div style="font-size:13px;color:var(--gray);margin-top:3px">${sub}</div>` : ""}</div>`;
     const statCards = [
       (timeRange && timeRange !== "—") ? statCard(escHtml(eventType || "Event"), escHtml(timeRange), guestCount ? `Attendees: ${escHtml(String(guestCount))}` : "") : "",
-      (roomLabel || spaceName) ? statCard("Space", escHtml(roomLabel || spaceName), guestCount ? `Attendees: ${escHtml(String(guestCount))}` : "") : "",
+      (roomLabel || spaceName) ? statCard("Space", escHtml(roomLabel || spaceName), "") : "",
       (!isPublic && minSpendAmt > 0) ? statCard("F&amp;B Minimum", fmtCurrency(minSpendAmt), "Food &amp; Beverage") : "",
     ].filter(Boolean);
     const billRow = (item: string, sub: string, price: string, qty: string, total: string) => `<div style="break-inside:avoid;page-break-inside:avoid;display:grid;grid-template-columns:1fr 90px 60px 110px;padding:11px 16px;border-top:1px solid var(--hair);font-size:13px;align-items:baseline"><span style="color:var(--ink2)">${item}${sub ? `<div style="font-size:11px;color:var(--faint);margin-top:1px">${sub}</div>` : ""}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${price}</span><span style="text-align:right;color:var(--gray)">${qty}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${total}</span></div>`;
     const foodBillRows = fnbFoodLines.map((i: any) => billRow(`Food &amp; Beverage &mdash; ${escHtml(i.dishName ?? "Item")}`, "", fmtCurrency(Number(i.unitPrice) || 0), String(Number(i.qty) || 0), fmtCurrency((Number(i.qty) || 0) * (Number(i.unitPrice) || 0)))).join("");
     const costBillRows = costList.filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0).map(ci => billRow(escHtml(ci.label ?? "Item"), "", fmtCurrency(Number(ci.unitPrice) || 0), String(Number(ci.qty) || 0), fmtCurrency(lineAmt(ci)))).join("");
-    const billingTable = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || costList.length > 0 || minSpendAmt > 0)) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:24px">${secLabel("Daily Billing Summary", { metaRight: escHtml(eventDate) })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden"><div style="display:grid;grid-template-columns:1fr 90px 60px 110px;background:var(--fill);padding:9px 16px;font-size:9px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>${foodBillRows}${costBillRows}<div style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:13px;font-weight:700">Day Estimated Total</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(itemisedTotal > 0 ? itemisedTotal : enteredTotal)}</span></div></div></div>` : "";
-    const closingNote = (!hideSet.has('footer') && footerNote.trim()) ? `<div style="margin-top:20px">${secLabel("Note")}<div style="font-size:12.5px;line-height:1.5;color:#332e26">${footerNote.replace(/\n/g, "<br>")}</div></div>` : "";
-    const acceptanceBlk = `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)"><div style="font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:6px">Client Acceptance</div><div style="font-size:12px;color:var(--gray);margin-bottom:20px;line-height:1.5;max-width:80%">By signing below the client confirms the details, catering, beverages and estimated charges set out in this event order are correct.</div>${sigStrip(false)}</div>`;
-    const page4Inner = `${statCards.length ? `<div style="display:grid;grid-template-columns:repeat(${Math.min(3, statCards.length)},1fr);gap:10px;margin-top:20px">${statCards.join("")}</div>` : ""}${billingTable}${closingNote}${acceptanceBlk}`;
+    const billingTable = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || costList.length > 0 || minSpendAmt > 0)) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:24px">${secLabel("Daily Billing Summary", { metaRight: escHtml(eventDate) })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden"><div style="display:grid;grid-template-columns:1fr 90px 60px 110px;background:var(--fill);padding:9px 16px;font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>${foodBillRows}${costBillRows}<div style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:13px;font-weight:700">Day Estimated Total</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(itemisedTotal > 0 ? itemisedTotal : enteredTotal)}</span></div></div></div>` : "";
+    const closingNote = (!hideSet.has('footer') && footerNote.trim()) ? `<div style="margin-top:20px">${secLabel("Note")}<div style="font-size:13px;line-height:1.5;color:#332e26">${footerNote.replace(/\n/g, "<br>")}</div></div>` : "";
+    const acceptanceBlk = `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:6px">Client Acceptance</div><div style="font-size:13px;color:var(--gray);margin-bottom:20px;line-height:1.5;max-width:80%">By signing below the client confirms the details, catering, beverages and estimated charges set out in this event order are correct.</div>${sigStrip(false)}</div>`;
+    const page4Inner = `${statCards.length ? `<div style="display:grid;grid-template-columns:repeat(${Math.min(3, statCards.length)},1fr);gap:10px;margin-top:20px">${statCards.join("")}</div>` : ""}${billingInstrSection}${billingTable}${closingNote}${acceptanceBlk}`;
     const page4Content = (statCards.length > 0 || billingTable.trim()) ? `${pageHeadR("Event Summary", escHtml(eventDate))}${page4Inner}` : "";
 
     // ── Assemble pages; collapse empties; number "Page N of N" dynamically ──
     const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
-    const page1Content = `${p1Head}${p1Band}${clientDetailsSection}${show('timeline', runOfDaySection)}${sigStrip(true)}`;
+    // DF-5: exactly one signature strip in the document — the formal Client
+    // Acceptance block on the Event Summary page. No page-1 sign-off strip.
+    const page1Content = `${p1Head}${p1Band}${clientDetailsSection}${setupNoteSection}${show('timeline', runOfDaySection)}`;
     const page2Content = (p2Food.trim() || p2Diet.trim() || p2Bev.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${p2Diet}${p2Bev}` : "";
     // One continuous flow: sections condense onto as few physical A4 pages as
     // the content needs (no reserved page per section). Empty sections still
     // collapse. Page numbering is applied by the running PDF footer below; the
     // in-doc .foot is a screen-only sign-off (hidden in print).
-    const pageContents = [page1Content, page2Content, page3Content, page4Content].filter(c => c && c.trim());
+    const pageContents = [page1Content, page2Content, page4Content].filter(c => c && c.trim());
     const sheetsHtml = `<div class="doc">
 ${pageContents.join("\n")}
   <div class="foot"><span class="biz">${footerBiz}</span><span class="copy">Printed ${todayPrinted}</span></div>
@@ -1194,7 +1220,7 @@ ${pageContents.join("\n")}
   .band{display:grid;margin-top:5px;border:1px solid var(--line);border-radius:6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;}
   .band-cell{padding:5px 10px;border-right:1px solid var(--line);}
   .band-cell:last-child{border-right:0;}
-  .blabel{font-size:9px;letter-spacing:.16em;font-weight:700;color:var(--gray2);text-transform:uppercase;}
+  .blabel{font-size:10px;letter-spacing:.16em;font-weight:700;color:var(--gray2);text-transform:uppercase;}
   .band-val{font-size:14px;font-weight:600;margin-top:3px;line-height:1.2;}
   .band-guests{background:var(--green);color:var(--on-green);}
   .band-guests .blabel{color:var(--on-green);opacity:.75;}
@@ -1203,7 +1229,7 @@ ${pageContents.join("\n")}
   /* ── Section heads ── */
   .section{margin-top:5px;break-inside:avoid;page-break-inside:avoid;}
   .sec-head{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
-  .sec-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none;}
+  .sec-title{font-size:13px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none;}
   .sec-title.red{color:var(--red);}
   .sec-line{flex:1;height:1.5px;background:var(--green);}
   .sec-line.thick{height:2px;}
@@ -1213,7 +1239,7 @@ ${pageContents.join("\n")}
   /* ── Dietary ── */
   .diet-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
   .diet-card{background:#fff;border:1.5px solid var(--line2);border-radius:6px;padding:8px 12px;break-inside:avoid;page-break-inside:avoid;}
-  .diet-card .dlabel{font-size:9px;letter-spacing:.16em;font-weight:800;color:var(--amber);text-transform:uppercase;}
+  .diet-card .dlabel{font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--amber);text-transform:uppercase;}
   .diet-card .dname{font-family:var(--serif);font-size:16px;font-weight:600;margin-top:4px;color:var(--ink);line-height:1.05;}
   .diet-card .dcount{font-size:11.5px;color:var(--gray);margin-top:3px;font-weight:500;}
   .diet-card .dnote{font-size:11.5px;color:var(--gray);margin-top:3px;font-weight:500;line-height:1.35;}
@@ -1239,13 +1265,13 @@ ${pageContents.join("\n")}
   .course-title{font-family:var(--serif);font-style:italic;font-size:14.5px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:2px;margin-bottom:4px;}
   .course-note{font-family:var(--sans);font-style:normal;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--gray2);text-transform:uppercase;}
   .dish{display:flex;gap:8px;padding:0.5px 0;align-items:baseline;}
-  .dish .em{color:var(--red);font-size:12.5px;line-height:1.35;flex:none;}
+  .dish .em{color:var(--red);font-size:13px;line-height:1.35;flex:none;}
   .dish .body{flex:1;}
-  .dish .dname{font-size:12.5px;font-weight:700;color:var(--ink);}
-  .dish .det{font-size:12px;color:#736a5d;}
+  .dish .dname{font-size:13px;font-weight:700;color:var(--ink);}
+  .dish .det{font-size:13px;color:#736a5d;}
   .changed{background:var(--red);color:#fff;font-size:8.5px;font-weight:800;letter-spacing:.08em;padding:1.5px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;white-space:nowrap;text-transform:uppercase;}
   .dish .dqty{font-size:11px;font-weight:700;color:var(--gray2);margin-left:6px;white-space:nowrap;}
-  .dish .dprice{flex:none;margin-left:10px;font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;text-align:right;}
+  .dish .dprice{flex:none;margin-left:10px;font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;text-align:right;}
   .dish .dprice-ea{font-size:10.5px;font-weight:600;color:var(--gray2);}
   .prep-line{font-size:11px;color:var(--gray2);margin-top:1px;font-style:italic;}
 
@@ -1258,7 +1284,7 @@ ${pageContents.join("\n")}
   .p2-title{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);}
   .p2-meta{font-size:11.5px;color:var(--gray);font-weight:600;}
   .p2-cols{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:6px;}
-  .col-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:6px;}
+  .col-title{font-size:13px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:6px;}
 
   /* ── Timeline ── */
   .tl-item{display:flex;gap:10px;padding-bottom:4px;break-inside:avoid;page-break-inside:avoid;}
@@ -1280,30 +1306,30 @@ ${pageContents.join("\n")}
   .box.fill{background:var(--fill);border:0;}
   .box-title{font-size:11px;letter-spacing:.16em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:5px;}
   .notes-list{list-style:none;display:flex;flex-direction:column;gap:5px;}
-  .notes-list li{display:flex;gap:8px;font-size:12px;line-height:1.35;color:#332e26;}
+  .notes-list li{display:flex;gap:8px;font-size:13px;line-height:1.35;color:#332e26;}
   .notes-list li .b{color:var(--red);font-weight:700;flex:none;}
   .contact-name{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink);}
-  .contact-lines{font-size:12px;color:#736a5d;margin-top:4px;line-height:1.55;}
+  .contact-lines{font-size:13px;color:#736a5d;margin-top:4px;line-height:1.55;}
   .bar-tag{display:inline-block;background:var(--green);color:var(--on-green);font-size:9px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:3px;text-transform:uppercase;}
   .bar-tab-amt{display:inline-block;margin-left:7px;font-size:11px;font-weight:600;color:var(--gray);}
-  .bar-note{font-size:12px;color:#332e26;margin-top:6px;line-height:1.35;}
+  .bar-note{font-size:13px;color:#332e26;margin-top:6px;line-height:1.35;}
 
   /* ── Cost summary ── */
   .cost{border:1.5px solid var(--line2);border-radius:6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;}
   .cost-title{font-size:11px;letter-spacing:.16em;font-weight:800;color:var(--green);text-transform:uppercase;padding:6px 12px 3px;}
-  .cost-row{display:flex;justify-content:space-between;align-items:center;padding:3.5px 12px;font-size:12.5px;border-top:1px solid var(--hair);}
+  .cost-row{display:flex;justify-content:space-between;align-items:center;padding:3.5px 12px;font-size:13px;border-top:1px solid var(--hair);}
   .cost-row .k{color:var(--gray);font-weight:500;}
   .cost-row .v{font-family:var(--serif);font-size:14.5px;font-weight:600;color:var(--ink);}
   .cost-row .v.small{font-size:13px;}
   /* Itemised breakdown lines — lighter than the summary rows. */
-  .cost-row.line{padding:4px 12px;font-size:12px;}
+  .cost-row.line{padding:4px 12px;font-size:13px;}
   .cost-row.line .k{color:var(--ink2);font-weight:500;}
   .cost-row.line .k .qy{color:var(--gray2);font-weight:600;}
-  .cost-row.line .v.small{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--ink2);}
+  .cost-row.line .v.small{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink2);}
   /* First summary row after the itemised lines gets a heavier divider. */
   .cost-row.sub{border-top:1.5px solid var(--line2);}
   .cost-row.balance{background:var(--green);color:var(--on-green);border-top:0;padding:7px 12px;}
-  .cost-row.balance .k{color:var(--on-green);font-size:12px;font-weight:700;}
+  .cost-row.balance .k{color:var(--on-green);font-size:13px;font-weight:700;}
   .cost-row.balance .k-sub{display:block;font-size:9px;font-weight:600;color:var(--on-green);opacity:.65;letter-spacing:.04em;margin-top:1px;}
   .cost-row.balance .v{color:var(--on-green);font-size:15.5px;}
   .out-tag{background:var(--red);color:#fff;font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:7px;}
@@ -1313,15 +1339,15 @@ ${pageContents.join("\n")}
   .bev-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px 14px;}
   .bev-row{display:flex;gap:10px;align-items:baseline;border-bottom:1px solid var(--hair);padding-bottom:3px;}
   .bev-tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:#fff;padding:3px 6px;border-radius:3px;flex:none;text-transform:uppercase;}
-  .bev-name{font-size:12.5px;font-weight:600;color:var(--ink);}
+  .bev-name{font-size:13px;font-weight:600;color:var(--ink);}
   .bev-desc{font-size:11.5px;color:#736a5d;font-weight:400;}
   .bev-price{margin-left:auto;padding-left:8px;font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;}
   .t-spark{background:#b07c25;} .t-white{background:#a98f2a;} .t-red{background:#7a2420;} .t-beer{background:var(--green);color:var(--on-green);}
 
   /* ── Full-width blocks below the grid (setup / payment / note) ── */
   .blk{margin-top:6px;break-inside:avoid;page-break-inside:avoid;}
-  .blk-title{font-size:12px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:6px;}
-  .blk .kv{font-size:12.5px;line-height:1.45;color:#332e26;}
+  .blk-title{font-size:13px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;margin-bottom:6px;}
+  .blk .kv{font-size:13px;line-height:1.45;color:#332e26;}
 
   /* Page size only — margins come from the PDF print margins (page.pdf), which
      reserve the footer strip on every page. Do NOT set an @page margin here: a
