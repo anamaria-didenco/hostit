@@ -1062,6 +1062,16 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     // DF-5: the Set-up note lives on page 1 (under the band) instead of reserving
     // a standalone "External Hire & Suppliers" page for a lone note.
     const setupNoteSection = (!hideSet.has('setup') && venueSetup && String(venueSetup).trim()) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Set-up")}<div style="font-size:11.5px;color:var(--ink2);line-height:1.55">${venueSetup}</div></div>` : "";
+    // Event notes — the operator's free-text notes from the runsheet/booking.
+    // Internal-only (rsNotes/bookingNotes are already blanked when isPublic).
+    // Rendered verbatim (sanitised) to preserve rich formatting, styled like the
+    // Set-up block. Was dropped from the continuous-flow assembly during the
+    // condense passes; re-added here on page 1 with the other operational notes.
+    const eventNotesHtml = [rsNotes, bookingNotes]
+      .map(n => cleanRichHtml(String(n ?? "")))
+      .filter(n => n.trim())
+      .join('<div style="height:5px"></div>');
+    const eventNotesSection = (!hideSet.has('notes') && eventNotesHtml.trim()) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Notes")}<div style="font-size:11.5px;color:var(--ink2);line-height:1.55">${eventNotesHtml}</div></div>` : "";
 
     const rodItem = (item: any, last: boolean) => {
       const flag = TL_FLAG_RE.test(String(item.title || ""));
@@ -1175,7 +1185,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
     // DF-5: exactly one signature strip in the document — the formal Client
     // Acceptance block on the Event Summary page. No page-1 sign-off strip.
-    const page1Content = `${p1Head}${p1Band}${clientDetailsSection}${setupNoteSection}${show('timeline', runOfDaySection)}`;
+    const page1Content = `${p1Head}${p1Band}${clientDetailsSection}${setupNoteSection}${eventNotesSection}${show('timeline', runOfDaySection)}`;
     const page2Content = (p2Food.trim() || p2Diet.trim() || p2Bev.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${p2Diet}${p2Bev}` : "";
     // One continuous flow: sections condense onto as few physical A4 pages as
     // the content needs (no reserved page per section). Empty sections still
