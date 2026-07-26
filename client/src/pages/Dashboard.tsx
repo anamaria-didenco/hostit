@@ -31,6 +31,7 @@ import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
+import { beoUrl } from "@/lib/beoUrl";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 type FormFieldDef = {
@@ -1893,7 +1894,7 @@ export default function Dashboard() {
       if (weeklyAttachBeos) {
         for (const ev of events) {
           try {
-            const res = await fetch(`/api/beo/${ev.bookingId}`, { credentials: 'include' });
+            const res = await fetch(beoUrl(ev.bookingId), { credentials: 'include' });
             if (!res.ok) continue;
             const blob = await res.blob();
             if (!blob.type.includes('pdf') || blob.size < 1000) continue;
@@ -8899,7 +8900,7 @@ export default function Dashboard() {
                       <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">DOCUMENTS</div>
                       <button onClick={() => {
                           const a = document.createElement('a');
-                          a.href = `/api/beo/${selectedBooking.id}`;
+                          a.href = beoUrl(selectedBooking.id);
                           a.download = `BEO-${selectedBooking.firstName}-${selectedBooking.lastName ?? ''}.pdf`;
                           document.body.appendChild(a); a.click(); document.body.removeChild(a);
                           toast.success('Generating BEO PDF...');

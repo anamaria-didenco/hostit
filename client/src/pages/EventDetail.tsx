@@ -17,6 +17,7 @@ import {
 import { COLOR_PRESETS, parseCustomStatuses } from "@/components/StatusManager";
 import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput, combineLocalDateTime } from "@/lib/dateTime";
 import EventSpendSection from "@/components/EventSpendSection";
+import { beoUrl } from "@/lib/beoUrl";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
@@ -509,7 +510,7 @@ export default function EventDetail() {
               <button
                 onClick={() => {
                   const a = document.createElement('a');
-                  a.href = `/api/beo/${booking.id}`;
+                  a.href = beoUrl(booking.id);
                   a.download = `BEO-${booking.id}-${booking.firstName}-${booking.lastName ?? ''}.pdf`;
                   document.body.appendChild(a);
                   a.click();
