@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { RichTextarea } from "@/components/ui/RichTextarea";
+import { beoUrl } from "@/lib/beoUrl";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
@@ -537,7 +538,6 @@ export default function RunsheetBuilder() {
     setTimeout(cleanup, 30000);
     setTimeout(() => window.print(), 0);
   };
-  const beoHideQuery = printHide.size > 0 ? `?hide=${encodeURIComponent(Array.from(printHide).join(','))}` : '';
 
   // ── REDESIGN: view mode, export menu + single-scroll section rail ─────
   // Edit = the wired editor (single scrollable document). Preview = the
@@ -2219,21 +2219,16 @@ export default function RunsheetBuilder() {
                   {effectiveBookingId && (
                     <>
                       <div className="my-1.5 h-px bg-gold/20" />
+                      {/* One BEO entry: the preview modal is the canonical
+                          surface — it shows exactly what will download, and its
+                          footer has Download PDF + Print. The old direct
+                          "Download BEO PDF" duplicate was removed. */}
                       <button
                         onClick={() => { setExportMenuOpen(false); setBeoPreviewOpen(true); }}
                         className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
                       >
-                        <Eye className="w-4 h-4 text-forest" /> Preview &amp; print BEO
+                        <Eye className="w-4 h-4 text-forest" /> Preview, print &amp; download BEO
                       </button>
-                      <a
-                        href={`/api/beo/${effectiveBookingId}${beoHideQuery}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setExportMenuOpen(false)}
-                        className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
-                      >
-                        <Download className="w-4 h-4 text-forest" /> Download BEO PDF
-                      </a>
                       <button
                         onClick={() => { setExportMenuOpen(false); pushRunsheetToNbi.mutate({ id: effectiveBookingId }); }}
                         disabled={pushRunsheetToNbi.isPending}
@@ -2478,7 +2473,7 @@ export default function RunsheetBuilder() {
           </div>
           <iframe
             title="Runsheet preview"
-            src={`/api/beo/${effectiveBookingId}?format=html${printHide.size ? `&hide=${encodeURIComponent(Array.from(printHide).join(','))}` : ''}&_=${previewNonce}`}
+            src={beoUrl(effectiveBookingId, { format: 'html', nonce: previewNonce })}
             className="w-full bg-white border border-gold/20 rounded shadow-sm"
             style={{ height: 'calc(100vh - 220px)' }}
           />
@@ -5322,7 +5317,7 @@ export default function RunsheetBuilder() {
                 id="vf-beo-frame"
                 key={previewNonce}
                 title="BEO preview"
-                src={`/api/beo/${effectiveBookingId}?format=html${printHide.size ? `&hide=${encodeURIComponent(Array.from(printHide).join(','))}` : ''}&_=${previewNonce}`}
+                src={beoUrl(effectiveBookingId, { format: 'html', nonce: previewNonce })}
                 className="bg-white shadow-2xl w-full max-w-[820px] h-full border-0 rounded-sm"
               />
             </div>
@@ -5333,7 +5328,7 @@ export default function RunsheetBuilder() {
             <button onClick={() => setBeoPreviewOpen(false)} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink px-3 py-2 transition-colors">CLOSE</button>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => window.open(`/api/beo/${effectiveBookingId}${beoHideQuery}`, '_blank')}
+                onClick={() => window.open(beoUrl(effectiveBookingId), '_blank')}
                 className="font-bebas tracking-widest text-xs border border-forest/30 text-forest hover:bg-forest/5 px-4 py-2 flex items-center gap-1.5 transition-colors"
                 title="Download the BEO as a PDF file"
               >
@@ -6087,7 +6082,7 @@ export default function RunsheetBuilder() {
             // and file). Everything that used to point at it now points
             // here — do not reintroduce a second staff PDF.
             if (!effectiveBookingId) throw new Error('Save the runsheet against a booking first so we can generate the BEO');
-            const pdfRes = await fetch(`/api/beo/${effectiveBookingId}`, { credentials: 'include' });
+            const pdfRes = await fetch(beoUrl(effectiveBookingId), { credentials: 'include' });
             if (!pdfRes.ok) throw new Error('Could not generate the BEO PDF');
             const blob = await pdfRes.blob();
             if (!blob.type.includes('pdf') || blob.size < 1000) {

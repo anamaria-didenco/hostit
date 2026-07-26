@@ -1126,8 +1126,18 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const bevGroupRow = (it: { name: string; desc?: string }) => `<div style="font-size:13.5px;font-weight:600;color:var(--ink);margin-top:3px;line-height:1.3">${escHtml(it.name)}${it.desc ? ` <span style="font-weight:400;font-size:13px;color:var(--gray)">&mdash; ${escHtml(it.desc)}</span>` : ""}</div>`;
     const bevGroupBlock = (label: string, items: Array<{ name: string; desc?: string }>) => items.length
       ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:6px"><div style="font-family:var(--serif);font-style:italic;font-size:15px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:4px">${label}</div>${items.map(bevGroupRow).join("")}</div>` : "";
-    const bevBillingCallout = (!isPublic && barNotesText.trim()) ? `<div style="margin-top:16px;background:var(--change-fill);border:1.5px solid var(--change-line);border-radius:6px;padding:12px 16px;font-size:13px;color:#5b4a2b;line-height:1.5"><b style="font-weight:700;color:var(--amber)">Beverage billing &mdash;</b> ${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : "";
-    const beverageSectionNew = bevItems2.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:7px">${secLabel("Beverage")}<div style="column-count:2;column-gap:26px">${BEV_GROUPS.map(([k, lbl]) => bevGroupBlock(lbl, bevItems2.filter(it => drinkType(it.name) === k))).join("")}</div></div>${bevBillingCallout}` : "";
+    // Bar arrangement callout — bar option, tab limit and billing notes. The
+    // legacy barArrangementSection stopped rendering in the condensed layout,
+    // which silently dropped the Tab $X limit from the PDF; it lives here now.
+    const bevCalloutBits = [
+      barTagLabel ? `<b style="font-weight:700;color:var(--amber)">${escHtml(barTagLabel)}</b>` : "",
+      (!isPublic && barTabVal) ? `<b style="font-weight:700;color:var(--amber)">Tab limit ${fmtCurrency(barTabVal)}</b>` : "",
+      barNotesText.trim() ? escHtml(barNotesText).replace(/\n/g, "<br>") : "",
+    ].filter(Boolean);
+    const bevBillingCallout = bevCalloutBits.length ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px;background:var(--change-fill);border:1.5px solid var(--change-line);border-radius:6px;padding:9px 13px;font-size:13px;color:#5b4a2b;line-height:1.5"><b style="font-weight:700;color:var(--amber)">Bar &mdash;</b> ${bevCalloutBits.join(" &middot; ")}</div>` : "";
+    // Render whenever there are drinks OR a bar arrangement (option/tab/notes),
+    // so a tab limit still prints when no drink list was selected.
+    const beverageSectionNew = (bevItems2.length > 0 || bevBillingCallout) ? `${bevItems2.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:7px">${secLabel("Beverage")}<div style="column-count:2;column-gap:26px">${BEV_GROUPS.map(([k, lbl]) => bevGroupBlock(lbl, bevItems2.filter(it => drinkType(it.name) === k))).join("")}</div></div>` : `<div style="margin-top:7px">${secLabel("Beverage")}</div>`}${bevBillingCallout}` : "";
 
     // ── PAGE 3 — billing instructions, onsite contact, set-up ──
     const noFinancials = hideSet.has('financials');

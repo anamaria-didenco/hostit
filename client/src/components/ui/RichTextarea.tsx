@@ -28,7 +28,13 @@ const HIGHLIGHT_COLORS = [
 
 export function RichTextarea({ value, onChange, placeholder, className = '', minHeight = '80px' }: RichTextareaProps) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const lastHtml = useRef(value);
+  // null sentinel (not `value`) so the first effect run ALWAYS seeds the
+  // editor's innerHTML. Initialising to `value` meant a component that mounted
+  // with content already loaded (e.g. collapsing and reopening a section, or
+  // data arriving before mount) skipped the write and rendered an empty editor
+  // while the saved text still existed — it printed on the PDF but couldn't be
+  // seen or edited on screen.
+  const lastHtml = useRef<string | null>(null);
 
   useEffect(() => {
     if (editorRef.current && value !== lastHtml.current) {
