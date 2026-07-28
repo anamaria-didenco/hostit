@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { RichTextarea } from "@/components/ui/RichTextarea";
-import { beoUrl } from "@/lib/beoUrl";
+import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
@@ -3902,9 +3902,21 @@ export default function RunsheetBuilder() {
                               placeholder="Dish name…"
                               className="font-semibold text-ink bg-transparent border-0 focus:outline-none focus:bg-white/70 rounded px-1 -ml-1 min-w-0 w-[38%]"
                             />
-                            {/* covers */}
-                            {item.course !== 'Drinks' && Number(item.qty) > 1 && (
-                              <span className="flex-none text-xs text-ink/45 font-dm">&times; {item.qty}</span>
+                            {/* covers — inline editable qty (kept in the collapsed row
+                                so quantities can be changed without expanding the dish) */}
+                            {item.course !== 'Drinks' && (
+                              <span className="flex-none flex items-center gap-1 text-xs text-ink/45 font-dm" title="Quantity / covers">
+                                <span aria-hidden>&times;</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={item.qty || ''}
+                                  placeholder="1"
+                                  onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))}
+                                  aria-label="Quantity / covers"
+                                  className="w-12 text-center text-ink bg-transparent border border-transparent hover:border-gold/30 focus:border-forest focus:bg-white/70 rounded px-1 py-0.5 focus:outline-none"
+                                />
+                              </span>
                             )}
                             {/* description preview */}
                             {item.description
@@ -6082,20 +6094,6 @@ export default function RunsheetBuilder() {
             // and file). Everything that used to point at it now points
             // here — do not reintroduce a second staff PDF.
             if (!effectiveBookingId) throw new Error('Save the runsheet against a booking first so we can generate the BEO');
-            const pdfRes = await fetch(beoUrl(effectiveBookingId), { credentials: 'include' });
-            if (!pdfRes.ok) throw new Error('Could not generate the BEO PDF');
-            const blob = await pdfRes.blob();
-            if (!blob.type.includes('pdf') || blob.size < 1000) {
-              // Server returned an HTML error page or empty body. Fail loud
-              // so we never silently attach a broken file again.
-              throw new Error('BEO PDF came back empty — try again or check the booking');
-            }
-            const base64: string = await new Promise((resolve, reject) => {
-              const r = new FileReader();
-              r.onloadend = () => resolve(String(r.result || ''));
-              r.onerror = reject;
-              r.readAsDataURL(blob);
-            });
             const safeTitle = (title || 'Event').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event';
             const filename = `${safeTitle} — BEO.pdf`;
             // Pull the operator's saved template (Venue Setup → Staff
@@ -6127,11 +6125,16 @@ export default function RunsheetBuilder() {
             const bodyTpl = ((venueSettings as any)?.staffBriefingBody || '').trim();
             const subject = subjectTpl ? fill(subjectTpl) : defaultSubject;
             const body = bodyTpl ? fill(bodyTpl) : defaultBody;
+            // The BEO is rendered and attached server-side (see email.send),
+            // so the briefing can never go out with the function sheet silently
+            // missing. beoHide mirrors the operator's Print-layout toggles.
             await emailSendMutation.mutateAsync({
               to: allRecipients,
               subject,
               body,
-              attachments: [{ filename, content: base64, contentType: 'application/pdf' }],
+              bookingId: effectiveBookingId,
+              beoAttach: [{ bookingId: effectiveBookingId, filename }],
+              beoHide: getBeoHide() || undefined,
             });
             toast.success(`Staff briefing sent to ${allRecipients.length} recipient${allRecipients.length !== 1 ? 's' : ''}`, { id: tId });
             setEmailingLink(null);
