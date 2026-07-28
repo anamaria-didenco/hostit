@@ -2175,6 +2175,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           content: z.string(),
           contentType: z.string(),
         })).optional(),
+        // BEO PDFs to render and attach server-side. Preferred over sending
+        // the PDF as a base64 `attachments` entry from the browser — the
+        // server generates it directly so the briefing can never go out with
+        // the BEO silently dropped (e.g. a fetch that returned an HTML page).
+        beoAttach: z.array(z.object({
+          bookingId: z.number(),
+          filename: z.string(),
+        })).optional(),
+        // Operator's Print-layout section-hide list (comma-joined), so the
+        // emailed BEO matches what a direct download would produce.
+        beoHide: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Block ephemeral team-link sessions (which mark isTeamMember=true),
@@ -2216,11 +2227,29 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const fullHtml = `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1a1209">${bodyHtml}${signatureHtml}</div>`;
 
         // Process attachments (base64 encoded)
-        const attachments = (input.attachments ?? []).map(a => ({
-          filename: a.filename,
-          content: Buffer.from(a.content.split(',').pop() ?? a.content, 'base64'),
-          contentType: a.contentType,
-        }));
+        const attachments: { filename: string; content: Buffer; contentType: string }[] =
+          (input.attachments ?? []).map(a => ({
+            filename: a.filename,
+            content: Buffer.from(a.content.split(',').pop() ?? a.content, 'base64'),
+            contentType: a.contentType,
+          }));
+
+        // Render any requested BEO PDFs server-side and attach them. Fail loud:
+        // if a BEO can't be produced we abort the send rather than quietly
+        // email a staff briefing that's missing its function sheet.
+        if (input.beoAttach?.length) {
+          const { renderBeoPdfBuffer } = await import('./beoPdf');
+          for (const b of input.beoAttach) {
+            let buf: Buffer;
+            try {
+              buf = await renderBeoPdfBuffer({ bookingId: b.bookingId, userId: ctx.user.id, hide: input.beoHide });
+            } catch (err) {
+              console.error('[email.send] BEO attach failed for booking', b.bookingId, err);
+              throw new Error("Couldn't generate the BEO PDF for this briefing — please try again, or check the booking exists.");
+            }
+            attachments.push({ filename: b.filename, content: buf, contentType: 'application/pdf' });
+          }
+        }
 
         // Reply-To = notification email (or sender) so customer replies land
         // in the user's normal inbox. BCC the same address so the user keeps

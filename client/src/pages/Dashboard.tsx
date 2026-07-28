@@ -31,7 +31,7 @@ import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
-import { beoUrl } from "@/lib/beoUrl";
+import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 type FormFieldDef = {
@@ -1890,32 +1890,26 @@ export default function Dashboard() {
     setWeeklySending(true);
     const tId = toast.loading(`Preparing briefing for ${recipients.length} recipient${recipients.length !== 1 ? 's' : ''}…`);
     try {
-      const attachments: { filename: string; content: string; contentType: string }[] = [];
-      if (weeklyAttachBeos) {
-        for (const ev of events) {
-          try {
-            const res = await fetch(beoUrl(ev.bookingId), { credentials: 'include' });
-            if (!res.ok) continue;
-            const blob = await res.blob();
-            if (!blob.type.includes('pdf') || blob.size < 1000) continue;
-            const base64: string = await new Promise((resolve, reject) => {
-              const r = new FileReader();
-              r.onloadend = () => resolve(String(r.result || ''));
-              r.onerror = reject;
-              r.readAsDataURL(blob);
-            });
-            const safeTitle = ev.name.replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event';
-            attachments.push({ filename: `${safeTitle} — BEO.pdf`, content: base64, contentType: 'application/pdf' });
-          } catch { /* skip this event's BEO if it fails */ }
-        }
-      }
+      // BEOs are rendered and attached server-side (see email.send) so the
+      // weekly briefing can never go out with the function sheets silently
+      // dropped, which used to happen when a browser fetch of the BEO came
+      // back as an HTML fallback instead of a PDF.
+      const beoAttach = weeklyAttachBeos
+        ? events
+            .filter(ev => ev.bookingId != null)
+            .map(ev => ({
+              bookingId: ev.bookingId,
+              filename: `${ev.name.replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event'} — BEO.pdf`,
+            }))
+        : [];
       await emailSendForWeekly.mutateAsync({
         to: recipients,
         subject: weeklySubject,
         body: weeklyBody,
-        attachments,
+        beoAttach: beoAttach.length ? beoAttach : undefined,
+        beoHide: getBeoHide() || undefined,
       });
-      toast.success(`Briefing sent — ${events.length} event${events.length !== 1 ? 's' : ''}, ${attachments.length} BEO${attachments.length !== 1 ? 's' : ''} attached`, { id: tId });
+      toast.success(`Briefing sent — ${events.length} event${events.length !== 1 ? 's' : ''}, ${beoAttach.length} BEO${beoAttach.length !== 1 ? 's' : ''} attached`, { id: tId });
       setShowWeeklyModal(false);
       setWeeklyEventsData(null);
       setWeeklySubject('');
