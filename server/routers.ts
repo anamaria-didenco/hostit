@@ -2217,14 +2217,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const fromName = settings.smtpFromName ?? settings.name ?? 'VenueFlowHQ';
         const fromEmail = settings.smtpFromEmail ?? settings.smtpUser;
 
-        // Build HTML: body + optional signature (logo + text)
+        // Build HTML from the message body. The auto-appended signature
+        // (logo + text) was removed at the owner's request — the body is sent
+        // exactly as written, so any sign-off should be typed into the message.
         const bodyHtml = input.body.replace(/\n/g, '<br>');
-        const sigLogo = (settings as any).emailSignatureLogo ?? '';
-        const sigText = (settings as any).emailSignature ?? '';
-        const signatureHtml = (sigLogo || sigText)
-          ? `<br><br><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">${sigLogo ? `<img src="${sigLogo}" alt="" style="max-height:60px;width:auto;display:block;margin-bottom:8px">` : ''}${sigText ? `<span style="white-space:pre-wrap">${sigText}</span>` : ''}`
-          : '';
-        const fullHtml = `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1a1209">${bodyHtml}${signatureHtml}</div>`;
+        const fullHtml = `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1a1209">${bodyHtml}</div>`;
 
         // Process attachments (base64 encoded)
         const attachments: { filename: string; content: Buffer; contentType: string }[] =

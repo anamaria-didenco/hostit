@@ -2281,6 +2281,25 @@ export default function RunsheetBuilder() {
             )}
           </div>
 
+          {/* ── Send to staff — email the runsheet link + BEO PDF ───────── */}
+          {(() => {
+            const staffLink = effectiveBookingId ? (staffLinks ?? []).find(l => l.token) : undefined;
+            if (!staffLink) return null;
+            return (
+              <button
+                onClick={() => {
+                  setEmailingLink({ id: staffLink.id, token: staffLink.token!, label: staffLink.label ?? '' });
+                  setSelectedStaffIds(new Set((staffEmailsQuery.data ?? []).map(s => s.id)));
+                  setExtraEmails("");
+                }}
+                title="Email the runsheet link + BEO PDF to your staff"
+                className="no-print font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-gold/30 text-ink/65 hover:text-forest hover:bg-linen transition-colors"
+              >
+                <Mail className="w-3.5 h-3.5" /> <span className="hidden sm:inline">SEND TO STAFF</span>
+              </button>
+            );
+          })()}
+
           {/* ── Save state ──────────────────────────────────────────────── */}
           {isDirty && !saving && (
             <span className="no-print hidden sm:flex items-center gap-1.5 text-xs font-dm text-amber-700" title="You have unsaved changes">
