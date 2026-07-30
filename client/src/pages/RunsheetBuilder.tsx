@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { RichTextarea } from "@/components/ui/RichTextarea";
-import { beoUrl } from "@/lib/beoUrl";
+import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
@@ -1348,6 +1348,8 @@ export default function RunsheetBuilder() {
   // Which saved emails are ticked, plus a free-text field for ad-hoc adds.
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
   const [extraEmails, setExtraEmails] = useState("");
+  // Which saved email signature to send the briefing under ("" = none).
+  const [staffSigId, setStaffSigId] = useState<string>("");
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffEmail, setNewStaffEmail] = useState("");
   const [sendingStaffEmail, setSendingStaffEmail] = useState(false);
@@ -2280,6 +2282,25 @@ export default function RunsheetBuilder() {
               </>
             )}
           </div>
+
+          {/* ── Send to staff — email the runsheet link + BEO PDF ───────── */}
+          {(() => {
+            const staffLink = effectiveBookingId ? (staffLinks ?? []).find(l => l.token) : undefined;
+            if (!staffLink) return null;
+            return (
+              <button
+                onClick={() => {
+                  setEmailingLink({ id: staffLink.id, token: staffLink.token!, label: staffLink.label ?? '' });
+                  setSelectedStaffIds(new Set((staffEmailsQuery.data ?? []).map(s => s.id)));
+                  setExtraEmails("");
+                }}
+                title="Email the runsheet link + BEO PDF to your staff"
+                className="no-print font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-gold/30 text-ink/65 hover:text-forest hover:bg-linen transition-colors"
+              >
+                <Mail className="w-3.5 h-3.5" /> <span className="hidden sm:inline">SEND TO STAFF</span>
+              </button>
+            );
+          })()}
 
           {/* ── Save state ──────────────────────────────────────────────── */}
           {isDirty && !saving && (
@@ -3902,9 +3923,21 @@ export default function RunsheetBuilder() {
                               placeholder="Dish name…"
                               className="font-semibold text-ink bg-transparent border-0 focus:outline-none focus:bg-white/70 rounded px-1 -ml-1 min-w-0 w-[38%]"
                             />
-                            {/* covers */}
-                            {item.course !== 'Drinks' && Number(item.qty) > 1 && (
-                              <span className="flex-none text-xs text-ink/45 font-dm">&times; {item.qty}</span>
+                            {/* covers — inline editable qty (kept in the collapsed row
+                                so quantities can be changed without expanding the dish) */}
+                            {item.course !== 'Drinks' && (
+                              <span className="flex-none flex items-center gap-1 text-xs text-ink/45 font-dm" title="Quantity / covers">
+                                <span aria-hidden>&times;</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={item.qty || ''}
+                                  placeholder="1"
+                                  onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))}
+                                  aria-label="Quantity / covers"
+                                  className="w-12 text-center text-ink bg-transparent border border-transparent hover:border-gold/30 focus:border-forest focus:bg-white/70 rounded px-1 py-0.5 focus:outline-none"
+                                />
+                              </span>
                             )}
                             {/* description preview */}
                             {item.description
@@ -6082,20 +6115,6 @@ export default function RunsheetBuilder() {
             // and file). Everything that used to point at it now points
             // here — do not reintroduce a second staff PDF.
             if (!effectiveBookingId) throw new Error('Save the runsheet against a booking first so we can generate the BEO');
-            const pdfRes = await fetch(beoUrl(effectiveBookingId), { credentials: 'include' });
-            if (!pdfRes.ok) throw new Error('Could not generate the BEO PDF');
-            const blob = await pdfRes.blob();
-            if (!blob.type.includes('pdf') || blob.size < 1000) {
-              // Server returned an HTML error page or empty body. Fail loud
-              // so we never silently attach a broken file again.
-              throw new Error('BEO PDF came back empty — try again or check the booking');
-            }
-            const base64: string = await new Promise((resolve, reject) => {
-              const r = new FileReader();
-              r.onloadend = () => resolve(String(r.result || ''));
-              r.onerror = reject;
-              r.readAsDataURL(blob);
-            });
             const safeTitle = (title || 'Event').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event';
             const filename = `${safeTitle} — BEO.pdf`;
             // Pull the operator's saved template (Venue Setup → Staff
@@ -6127,11 +6146,17 @@ export default function RunsheetBuilder() {
             const bodyTpl = ((venueSettings as any)?.staffBriefingBody || '').trim();
             const subject = subjectTpl ? fill(subjectTpl) : defaultSubject;
             const body = bodyTpl ? fill(bodyTpl) : defaultBody;
+            // The BEO is rendered and attached server-side (see email.send),
+            // so the briefing can never go out with the function sheet silently
+            // missing. beoHide mirrors the operator's Print-layout toggles.
             await emailSendMutation.mutateAsync({
               to: allRecipients,
               subject,
               body,
-              attachments: [{ filename, content: base64, contentType: 'application/pdf' }],
+              bookingId: effectiveBookingId,
+              beoAttach: [{ bookingId: effectiveBookingId, filename }],
+              beoHide: getBeoHide() || undefined,
+              signatureId: staffSigId || undefined,
             });
             toast.success(`Staff briefing sent to ${allRecipients.length} recipient${allRecipients.length !== 1 ? 's' : ''}`, { id: tId });
             setEmailingLink(null);
@@ -6281,6 +6306,27 @@ export default function RunsheetBuilder() {
                   <p className="font-dm text-[11px] text-red-600 mt-1">Invalid: {invalidAdHoc.join(', ')}</p>
                 )}
               </div>
+
+              {/* Signature */}
+              {(() => {
+                const sigs: any[] = Array.isArray((venueSettings as any)?.emailSignatures) ? (venueSettings as any).emailSignatures : [];
+                if (sigs.length === 0) return null;
+                return (
+                  <div className="px-5 py-4 border-b border-gold/20">
+                    <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1.5">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
+                    <select
+                      value={staffSigId}
+                      onChange={e => setStaffSigId(e.target.value)}
+                      className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white"
+                    >
+                      <option value="">No signature</option>
+                      {sigs.map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.label || s.fromName || 'Untitled signature'}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
 
               {/* Footer / send */}
               <div className="px-5 py-3 flex items-center justify-between gap-3">

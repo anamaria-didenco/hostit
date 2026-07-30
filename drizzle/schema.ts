@@ -136,6 +136,11 @@ export const venueSettings = pgTable("venue_settings", {
   nbiWebhookSecret: varchar("nbiWebhookSecret", { length: 64 }),
   emailSignature: text("emailSignature"),
   emailSignatureLogo: text("emailSignatureLogo"),
+  // Saved email-signature profiles the sender picks from when composing. Each:
+  // { id, label, fromName, replyTo?, signature?, signatureLogo? }. Keeps the
+  // venue's single authenticated SMTP account, but lets the From display name,
+  // Reply-To address and appended signature vary per sender/team member.
+  emailSignatures: jsonb("emailSignatures"),
   customCourses: text("customCourses"),
   shiftSections: text("shiftSections"),
   // Saved staff email distribution list — used by the runsheet "email staff

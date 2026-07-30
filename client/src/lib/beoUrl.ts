@@ -8,18 +8,25 @@
 // is always the SAME document.
 const PRINT_PREFS_KEY = 'vf:printHide:v1';
 
+// The operator's saved section-visibility toggles as a comma-joined string
+// (empty = full document). Shared so emailed briefings, which render the BEO
+// server-side, honour the same Print-layout choices as a direct download.
+export function getBeoHide(): string {
+  try {
+    const raw = localStorage.getItem(PRINT_PREFS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(arr) && arr.length > 0) return arr.join(',');
+  } catch {
+    /* no prefs — full document */
+  }
+  return '';
+}
+
 export function beoUrl(
   bookingId: number | string,
   opts?: { format?: 'html'; nonce?: string | number },
 ): string {
-  let hide = '';
-  try {
-    const raw = localStorage.getItem(PRINT_PREFS_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(arr) && arr.length > 0) hide = arr.join(',');
-  } catch {
-    /* no prefs — full document */
-  }
+  const hide = getBeoHide();
   const params = new URLSearchParams();
   if (opts?.format) params.set('format', opts.format);
   if (hide) params.set('hide', hide);

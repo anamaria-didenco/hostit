@@ -15,7 +15,7 @@ const VENUE_SECRET_FIELDS = [
   "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFromName", "smtpFromEmail", "smtpSecure",
   "notificationEmail", "internalName",
   "nbiApiKey", "nbiVenueId", "nbiAccountId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret", "nbiServiceMappings",
-  "automatedTaskRules", "emailSignature", "emailSignatureLogo", "autoCancelTentative",
+  "automatedTaskRules", "emailSignature", "emailSignatureLogo", "emailSignatures", "autoCancelTentative",
 ] as const;
 function stripVenueSecrets<T extends Record<string, any>>(row: T): T {
   const safe: any = { ...row };
@@ -199,6 +199,14 @@ export const appRouter = router({
         nbiServiceMappings: z.string().optional(),
         emailSignature: z.string().optional(),
         emailSignatureLogo: z.string().optional(),
+        emailSignatures: z.array(z.object({
+          id: z.string(),
+          label: z.string(),
+          fromName: z.string(),
+          replyTo: z.string().optional(),
+          signature: z.string().optional(),
+          signatureLogo: z.string().optional(),
+        })).optional(),
         customCourses: z.string().optional(),
         shiftSections: z.string().optional(),
         paymentInstructions: z.string().optional(),
@@ -571,7 +579,11 @@ export const appRouter = router({
                 auth: { user: vs.smtpUser, pass: vs.smtpPass },
                 tls: smtpTls(),
               } as any);
-              const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
+              // Internal "new enquiry" alert — brand the sender name as
+              // VenueFlowHQ so it reads as a system notification rather than a
+              // bare mailbox address (which is what shows when smtpFromName is
+              // blank). The From address stays the authenticated SMTP mailbox.
+              const fromName = 'VenueFlowHQ';
               const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
               const clientName = [input.firstName, input.lastName].filter(Boolean).join(' ');
               // Format event date as "Saturday 12 April 2026"
@@ -2175,6 +2187,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           content: z.string(),
           contentType: z.string(),
         })).optional(),
+        // BEO PDFs to render and attach server-side. Preferred over sending
+        // the PDF as a base64 `attachments` entry from the browser — the
+        // server generates it directly so the briefing can never go out with
+        // the BEO silently dropped (e.g. a fetch that returned an HTML page).
+        beoAttach: z.array(z.object({
+          bookingId: z.number(),
+          filename: z.string(),
+        })).optional(),
+        // Operator's Print-layout section-hide list (comma-joined), so the
+        // emailed BEO matches what a direct download would produce.
+        beoHide: z.string().optional(),
+        // Id of a saved email-signature profile (venueSettings.emailSignatures)
+        // to send under. Sets the From display name + Reply-To and appends the
+        // profile's signature. The authenticated SMTP account is unchanged, so
+        // deliverability isn't affected — only the visible sender/reply differ.
+        signatureId: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Block ephemeral team-link sessions (which mark isTeamMember=true),
@@ -2203,29 +2231,62 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           auth: { user: settings.smtpUser, pass: settings.smtpPass },
         });
 
-        const fromName = settings.smtpFromName ?? settings.name ?? 'VenueFlowHQ';
+        // Resolve the chosen signature profile (if any). The workspace has one
+        // authenticated SMTP account, but the sender picks a profile whose
+        // From display name, Reply-To and signature are used — so a team
+        // member's email shows their name/reply address, not the owner's.
+        const sigProfiles: any[] = Array.isArray((settings as any).emailSignatures)
+          ? (settings as any).emailSignatures : [];
+        const sigProfile = input.signatureId
+          ? sigProfiles.find((p: any) => p && p.id === input.signatureId)
+          : undefined;
+
+        const fromName = (sigProfile?.fromName?.trim())
+          || settings.smtpFromName || settings.name || 'VenueFlowHQ';
         const fromEmail = settings.smtpFromEmail ?? settings.smtpUser;
 
-        // Build HTML: body + optional signature (logo + text)
+        // Build HTML from the message body, appending the chosen profile's
+        // signature (logo + text) when one is selected. With no profile the
+        // body is sent exactly as written.
         const bodyHtml = input.body.replace(/\n/g, '<br>');
-        const sigLogo = (settings as any).emailSignatureLogo ?? '';
-        const sigText = (settings as any).emailSignature ?? '';
-        const signatureHtml = (sigLogo || sigText)
-          ? `<br><br><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">${sigLogo ? `<img src="${sigLogo}" alt="" style="max-height:60px;width:auto;display:block;margin-bottom:8px">` : ''}${sigText ? `<span style="white-space:pre-wrap">${sigText}</span>` : ''}`
+        const sigLogo = (sigProfile?.signatureLogo ?? '').toString();
+        const sigText = (sigProfile?.signature ?? '').toString();
+        const signatureHtml = (sigLogo || sigText.trim())
+          ? `<br><br><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">${sigLogo ? `<img src="${sigLogo}" alt="" style="max-height:60px;width:auto;display:block;margin-bottom:8px">` : ''}${sigText.trim() ? `<span style="white-space:pre-wrap">${sigText}</span>` : ''}`
           : '';
         const fullHtml = `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1a1209">${bodyHtml}${signatureHtml}</div>`;
 
         // Process attachments (base64 encoded)
-        const attachments = (input.attachments ?? []).map(a => ({
-          filename: a.filename,
-          content: Buffer.from(a.content.split(',').pop() ?? a.content, 'base64'),
-          contentType: a.contentType,
-        }));
+        const attachments: { filename: string; content: Buffer; contentType: string }[] =
+          (input.attachments ?? []).map(a => ({
+            filename: a.filename,
+            content: Buffer.from(a.content.split(',').pop() ?? a.content, 'base64'),
+            contentType: a.contentType,
+          }));
 
-        // Reply-To = notification email (or sender) so customer replies land
-        // in the user's normal inbox. BCC the same address so the user keeps
-        // a copy of every outgoing message in their email log.
-        const replyAndBcc = settings.notificationEmail || fromEmail;
+        // Render any requested BEO PDFs server-side and attach them. Fail loud:
+        // if a BEO can't be produced we abort the send rather than quietly
+        // email a staff briefing that's missing its function sheet.
+        if (input.beoAttach?.length) {
+          const { renderBeoPdfBuffer } = await import('./beoPdf');
+          for (const b of input.beoAttach) {
+            let buf: Buffer;
+            try {
+              buf = await renderBeoPdfBuffer({ bookingId: b.bookingId, userId: ctx.user.id, hide: input.beoHide });
+            } catch (err) {
+              console.error('[email.send] BEO attach failed for booking', b.bookingId, err);
+              throw new Error("Couldn't generate the BEO PDF for this briefing — please try again, or check the booking exists.");
+            }
+            attachments.push({ filename: b.filename, content: buf, contentType: 'application/pdf' });
+          }
+        }
+
+        // BCC = the venue's notification inbox so the owner keeps a copy of
+        // every outgoing message. Reply-To defaults to the same, but a chosen
+        // signature profile's reply address wins so replies reach the actual
+        // sender rather than the owner's inbox.
+        const bccAddress = settings.notificationEmail || fromEmail;
+        const replyTo = (sigProfile?.replyTo?.trim()) || bccAddress;
 
         // Normalise `to` for both nodemailer (which accepts arrays directly)
         // and our activity-log string. For a single named recipient we keep
@@ -2239,8 +2300,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         await transporter.sendMail({
           from: `"${fromName}" <${fromEmail}>`,
           to: toForNodemailer,
-          replyTo: replyAndBcc,
-          bcc: replyAndBcc,
+          replyTo,
+          bcc: bccAddress,
           subject: input.subject,
           html: fullHtml,
           text: input.body,

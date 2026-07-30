@@ -322,6 +322,13 @@
       "when": 1779800400000,
       "tag": "0045_brand_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1779800500000,
+      "tag": "0046_email_signatures",
+      "breakpoints": true
     }
   ]
 }

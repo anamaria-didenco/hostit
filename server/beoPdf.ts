@@ -330,6 +330,48 @@ export async function handleBeoPdfPublic(req: Request, res: Response) {
   return _renderBeo(req, res, "token");
 }
 
+/**
+ * Render the internal BEO to a PDF Buffer, server-side, for the given booking
+ * and owner. Used by the staff-briefing email path so the attachment never
+ * depends on a fragile browser → server fetch (which could silently come back
+ * as an HTML fallback and get dropped). Ownership is enforced exactly as the
+ * HTTP auth route: the booking must belong to `userId`. Throws if a real PDF
+ * can't be produced (missing booking, Chromium launch failure, etc.) so the
+ * caller can fail loudly instead of sending a briefing with no BEO.
+ */
+export async function renderBeoPdfBuffer(opts: {
+  bookingId: number;
+  userId: number;
+  hide?: string;
+}): Promise<Buffer> {
+  const req: any = {
+    params: { bookingId: String(opts.bookingId) },
+    query: opts.hide ? { hide: opts.hide } : {},
+    user: { id: opts.userId },
+  };
+  // Minimal Express-Response stand-in that captures what _renderBeo writes
+  // instead of streaming it to a socket.
+  let statusCode = 200;
+  const headers: Record<string, string> = {};
+  let body: any = null;
+  const res: any = {
+    headersSent: false,
+    setHeader(k: string, v: string) { headers[k.toLowerCase()] = v; },
+    getHeader(k: string) { return headers[k.toLowerCase()]; },
+    status(code: number) { statusCode = code; return res; },
+    send(payload: any) { body = payload; res.headersSent = true; return res; },
+  };
+  await _renderBeo(req, res, "auth");
+  const contentType = String(headers["content-type"] || "");
+  if (statusCode >= 400 || !contentType.includes("application/pdf") || !Buffer.isBuffer(body)) {
+    throw new Error(
+      `BEO render did not produce a PDF for booking ${opts.bookingId} ` +
+      `(status ${statusCode}, type ${contentType || "none"})`
+    );
+  }
+  return body as Buffer;
+}
+
 async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
   const isPublic = mode === "token";
   try {
