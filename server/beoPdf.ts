@@ -956,8 +956,16 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     // separate Costs-tab line, so the BEO total must pick these up too — this is
     // exactly what the runsheet's Running Total does. Drinks are excluded (billed
     // on consumption / bar tab). Matched to the on-screen "FOOD" subtotal.
+    // Guard against double-billing: when the operator prices a menu on the F&B
+    // sheet AND also enters it as a Costs-tab line (same item, entered twice),
+    // the Costs line is the authoritative charge — drop the matching F&B food
+    // line so it isn't counted/listed twice on the client's bill. Match on the
+    // item name, normalised (trim + lowercase + collapse whitespace).
+    const normBillName = (s: any) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    const costLabelSet = new Set(costList.map(ci => normBillName(ci.label)).filter(Boolean));
     const fnbFoodLines: any[] = (Array.isArray(fnbList) ? fnbList : [])
-      .filter((i: any) => i.section === "foh" && (i.course ?? "") !== "Drinks" && Number(i.unitPrice ?? 0) > 0);
+      .filter((i: any) => i.section === "foh" && (i.course ?? "") !== "Drinks" && Number(i.unitPrice ?? 0) > 0
+        && !costLabelSet.has(normBillName(i.dishName)));
     const fnbFoodTotal = fnbFoodLines.reduce((s, i: any) => s + Number(i.qty ?? 0) * Number(i.unitPrice ?? 0), 0);
     // Accumulate EVERY itemised cost line (AV, hire, styling, F&B — all of it),
     // not just food/beverage. This is the same figure the runsheet Costs tab
