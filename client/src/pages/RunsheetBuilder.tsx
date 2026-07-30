@@ -1696,17 +1696,20 @@ export default function RunsheetBuilder() {
     const t = setTimeout(() => {
       silentUpdateMutation.mutate({
         id: sheetId,
-        notes: notes || undefined,
-        footerText: footerText || undefined,
-        paymentNotes: paymentNotes || undefined,
-        spaceName: spaceName || undefined,
-        venueArea: venueArea || undefined,
+        // Use `|| null` (not undefined) so CLEARING a field persists — undefined
+        // is dropped from the payload and the server keeps the old value, which
+        // made deleted notes/setup/footer reappear on reload.
+        notes: notes || null,
+        footerText: footerText || null,
+        paymentNotes: paymentNotes || null,
+        spaceName: spaceName || null,
+        venueArea: venueArea || null,
         eventStartTime: eventStartTime || null,
         eventEndTime: eventEndTime || null,
         guestCount: guestCount ? Number(guestCount) : undefined,
-        eventType: eventType || undefined,
-        venueSetup: venueSetup || undefined,
-        setupSummary: setupSummary || undefined,
+        eventType: eventType || null,
+        venueSetup: venueSetup || null,
+        setupSummary: setupSummary || null,
         gstInclusive,
         // Costs + linked proposal/floor plan were only persisted on an
         // explicit Save (and costs not at all on a new sheet) — edit-and-leave
@@ -1776,19 +1779,19 @@ export default function RunsheetBuilder() {
           costItems: costItems.length ? costItems : undefined,
           eventDate: eventDate || undefined,
           venueName: venueName || undefined,
-          spaceName: spaceName || undefined,
-          venueArea: venueArea || undefined,
+          spaceName: spaceName || null,
+          venueArea: venueArea || null,
           eventStartTime: eventStartTime || undefined,
           eventEndTime: eventEndTime || undefined,
           guestCount: guestCount ? Number(guestCount) : undefined,
-          eventType: eventType || undefined,
-          notes: notes || undefined,
+          eventType: eventType || null,
+          notes: notes || null,
           dietaries: dietaries.length ? dietaries : undefined,
-          venueSetup: venueSetup || undefined,
-          setupSummary: setupSummary || undefined,
-          footerText: footerText || undefined,
+          venueSetup: venueSetup || null,
+          setupSummary: setupSummary || null,
+          footerText: footerText || null,
           gstInclusive,
-          paymentNotes: paymentNotes || undefined,
+          paymentNotes: paymentNotes || null,
           drinksData: (rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length)
             ? { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices }
             : undefined,
@@ -1812,23 +1815,23 @@ export default function RunsheetBuilder() {
           title,
           eventDate: eventDate || null,
           venueName: venueName || undefined,
-          spaceName: spaceName || undefined,
-          venueArea: venueArea || undefined,
+          spaceName: spaceName || null,
+          venueArea: venueArea || null,
           eventStartTime: eventStartTime || null,
           eventEndTime: eventEndTime || null,
           guestCount: guestCount ? Number(guestCount) : undefined,
-          eventType: eventType || undefined,
-          notes: notes || undefined,
+          eventType: eventType || null,
+          notes: notes || null,
           dietaries: dietaries.length ? dietaries : undefined,
-          venueSetup: venueSetup || undefined,
-          setupSummary: setupSummary || undefined,
-          footerText: footerText || undefined,
+          venueSetup: venueSetup || null,
+          setupSummary: setupSummary || null,
+          footerText: footerText || null,
           proposalId: linkedProposalId,
           floorPlanId: linkedFloorPlanId ?? null,
           costItems: costItems.length ? costItems : null,
           drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices },
           gstInclusive,
-          paymentNotes: paymentNotes || undefined,
+          paymentNotes: paymentNotes || null,
         } as any);
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
@@ -5307,9 +5310,10 @@ export default function RunsheetBuilder() {
                 Revenue = priced food + cost lines + bar tab (what prints on the
                 BEO). Enter your expenses here to see profit, all in one place. */}
             {effectiveBookingId && (() => {
-              const foodRevenue = fnbItems
-                .filter(it => (it.course ?? '') !== 'Drinks')
-                .reduce((s, it) => s + Number(it.qty || 0) * Number(it.unitPrice ?? 0), 0);
+              // Use the deduped F&B mirror (not raw fnbItems) so a dish priced
+              // on BOTH the F&B sheet and as a manual cost line isn't counted
+              // twice — keeps REVENUE consistent with the Costs-tab total.
+              const foodRevenue = fnbCostMirrorTotal;
               const costRevenue = costItems.reduce((s, ci) => s + Number(ci.qty) * Number(ci.unitPrice), 0);
               const barRevenue = rsTabAmount ? Number(rsTabAmount) : 0;
               const clientChargesTotal = foodRevenue + costRevenue + barRevenue;

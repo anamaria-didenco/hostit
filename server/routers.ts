@@ -605,8 +605,12 @@ export const appRouter = router({
                   const { bookings: bTable, leads: lTable } = await import('../drizzle/schema');
                   const { and, gte, lt } = await import('drizzle-orm');
                   // Compute the calendar day window regardless of whether input.eventDate
-                  // is "YYYY-MM-DD" or a full ISO timestamp.
-                  const eventD = new Date(input.eventDate);
+                  // is "YYYY-MM-DD" or a full ISO timestamp. A bare date must be
+                  // anchored to local midnight (not UTC), otherwise in NZ (UTC+12/13)
+                  // the window lands on the previous day and the clash check is wrong.
+                  const eventD = /^\d{4}-\d{2}-\d{2}$/.test(String(input.eventDate))
+                    ? new Date(String(input.eventDate) + 'T00:00:00')
+                    : new Date(input.eventDate);
                   const dayStart = new Date(eventD.getFullYear(), eventD.getMonth(), eventD.getDate(), 0, 0, 0);
                   const dayEnd = new Date(eventD.getFullYear(), eventD.getMonth(), eventD.getDate(), 23, 59, 59);
                   const [existingBookings, existingLeads] = await Promise.all([
@@ -1288,8 +1292,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                   const nodemailer = await import('nodemailer');
                   const transporter = nodemailer.default.createTransport({
                     host: vs.smtpHost, port: vs.smtpPort ?? 587,
-                    secure: (vs.smtpSecure ?? 0) === 1,
+                    secure: (vs.smtpSecure ?? 0) === 1 || (vs.smtpPort ?? 587) === 465,
                     auth: { user: vs.smtpUser, pass: vs.smtpPass },
+                    tls: smtpTls(),
                   });
                   const proposalUrl = `${process.env.REPLIT_DEV_DOMAIN ? 'https://' + process.env.REPLIT_DEV_DOMAIN : 'https://' + (process.env.REPLIT_DOMAINS ?? '').split(',')[0]}/proposal/${proposal.publicToken}`;
                   const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
@@ -2227,8 +2232,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const transporter = nodemailer.default.createTransport({
           host: settings.smtpHost,
           port: settings.smtpPort ?? 587,
-          secure: (settings.smtpSecure ?? 0) === 1,
+          secure: (settings.smtpSecure ?? 0) === 1 || (settings.smtpPort ?? 587) === 465,
           auth: { user: settings.smtpUser, pass: settings.smtpPass },
+          tls: smtpTls(),
         });
 
         // Resolve the chosen signature profile (if any). The workspace has one
@@ -2240,6 +2246,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const sigProfile = input.signatureId
           ? sigProfiles.find((p: any) => p && p.id === input.signatureId)
           : undefined;
+        // A chosen signature that no longer exists (deleted/renamed) must not
+        // silently fall back to the owner's identity — surface it so the sender
+        // can re-pick rather than unknowingly emailing under the wrong name.
+        if (input.signatureId && !sigProfile) {
+          throw new Error('That email signature no longer exists — please pick another and resend.');
+        }
 
         const fromName = (sigProfile?.fromName?.trim())
           || settings.smtpFromName || settings.name || 'VenueFlowHQ';
@@ -3414,21 +3426,23 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         leadId: z.number().optional(),
         bookingId: z.number().optional(),
         proposalId: z.number().optional(),
-        eventDate: z.string().optional(),
+        eventDate: z.string().optional().nullable(),
         venueName: z.string().optional(),
-        spaceName: z.string().optional(),
-        venueArea: z.string().optional(),
-        eventStartTime: z.string().optional(),
-        eventEndTime: z.string().optional(),
+        // Nullable so the client can send `field || null` uniformly (cleared
+        // fields persist as null instead of being silently kept).
+        spaceName: z.string().optional().nullable(),
+        venueArea: z.string().optional().nullable(),
+        eventStartTime: z.string().optional().nullable(),
+        eventEndTime: z.string().optional().nullable(),
         guestCount: z.number().optional(),
-        eventType: z.string().optional(),
-        notes: z.string().optional(),
+        eventType: z.string().optional().nullable(),
+        notes: z.string().optional().nullable(),
         dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
-        venueSetup: z.string().optional(),
-        setupSummary: z.string().optional(),
-        footerText: z.string().optional(),
+        venueSetup: z.string().optional().nullable(),
+        setupSummary: z.string().optional().nullable(),
+        footerText: z.string().optional().nullable(),
         gstInclusive: z.boolean().optional(),
-        paymentNotes: z.string().optional(),
+        paymentNotes: z.string().optional().nullable(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).optional(),
         drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string(), z.string()).optional() }).nullable().optional(),
         items: z.array(z.object({
@@ -3507,17 +3521,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         title: z.string().optional(),
         eventDate: z.string().optional().nullable(),
         venueName: z.string().optional(),
-        spaceName: z.string().optional(),
-        venueArea: z.string().optional(),
+        // Nullable so clearing a field persists as null (undefined is dropped
+        // from the payload and would leave the old value in place).
+        spaceName: z.string().optional().nullable(),
+        venueArea: z.string().optional().nullable(),
         eventStartTime: z.string().optional().nullable(),
         eventEndTime: z.string().optional().nullable(),
         guestCount: z.number().optional(),
-        eventType: z.string().optional(),
-        notes: z.string().optional(),
+        eventType: z.string().optional().nullable(),
+        notes: z.string().optional().nullable(),
         dietaries: z.array(z.object({ name: z.string(), count: z.number(), notes: z.string().optional() })).optional(),
-        venueSetup: z.string().optional(),
-        setupSummary: z.string().optional(),
-        footerText: z.string().optional(),
+        venueSetup: z.string().optional().nullable(),
+        setupSummary: z.string().optional().nullable(),
+        footerText: z.string().optional().nullable(),
         proposalId: z.number().nullable().optional(),
         floorPlanId: z.number().nullable().optional(),
         fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional(), qty: z.boolean().optional() }).optional(),
