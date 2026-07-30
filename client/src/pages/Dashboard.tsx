@@ -1794,6 +1794,7 @@ export default function Dashboard() {
   const [weeklyEventsData, setWeeklyEventsData] = React.useState<any>(null);
   const [weeklySending, setWeeklySending] = React.useState(false);
   const [weeklyExtraEmails, setWeeklyExtraEmails] = React.useState('');
+  const [weeklySigId, setWeeklySigId] = React.useState('');
   const [weeklyNewStaffName, setWeeklyNewStaffName] = React.useState('');
   const [weeklyNewStaffEmail, setWeeklyNewStaffEmail] = React.useState('');
 
@@ -1908,6 +1909,7 @@ export default function Dashboard() {
         body: weeklyBody,
         beoAttach: beoAttach.length ? beoAttach : undefined,
         beoHide: getBeoHide() || undefined,
+        signatureId: weeklySigId || undefined,
       });
       toast.success(`Briefing sent — ${events.length} event${events.length !== 1 ? 's' : ''}, ${beoAttach.length} BEO${beoAttach.length !== 1 ? 's' : ''} attached`, { id: tId });
       setShowWeeklyModal(false);
@@ -2204,6 +2206,7 @@ export default function Dashboard() {
         ]),
         emailSignature: vs?.emailSignature ?? "",
         emailSignatureLogo: (vs as any)?.emailSignatureLogo ?? "",
+        emailSignatures: Array.isArray((vs as any)?.emailSignatures) ? (vs as any).emailSignatures : [],
         paymentInstructions: (vs as any)?.paymentInstructions ?? "",
         staffBriefingSubject: (vs as any)?.staffBriefingSubject ?? "",
         staffBriefingBody: (vs as any)?.staffBriefingBody ?? "",
@@ -3183,7 +3186,11 @@ export default function Dashboard() {
                       <p className="font-dm text-sage text-sm">No leads found</p>
                     </div>
                   ) : filteredLeads.map((lead: any) => (
-                    <div key={lead.id} className={`flex items-stretch ${
+                    // shrink-0: the global `.flex { min-height:0 }` reset (index.css)
+                    // otherwise lets flexbox squash these rows — a tall stack of flex
+                    // children in a fixed-height flex column — down to ~0px, so the
+                    // content overlaps instead of the list scrolling. Keep natural height.
+                    <div key={lead.id} className={`flex items-stretch shrink-0 ${
                       selectedLeadIds.has(lead.id) ? 'bg-forest/5' : ''
                     }`}>
                       {bulkSelectMode && (
@@ -5574,71 +5581,125 @@ export default function Dashboard() {
                 </form>
               </div>
 
-              {/* ── Email Signature ─────────────────────────────────────── */}
+              {/* ── Email Signatures ────────────────────────────────────── */}
               <div className="mt-8">
-                <h2 className="font-cormorant text-xl font-semibold text-ink mb-1">Email Signature</h2>
-                <p className="font-dm text-xs text-sage mb-4">Automatically appended to every outbound email sent from VenueFlow.</p>
-                <div className="space-y-3">
-                  {/* Logo upload */}
-                  <div>
-                    <p className="font-bebas tracking-widest text-[10px] text-sage mb-2">LOGO / PHOTO</p>
-                    <div className="flex items-start gap-3">
-                      {settingsForm?.emailSignatureLogo && (
-                        <div className="relative flex-shrink-0">
-                          <img src={settingsForm.emailSignatureLogo} alt="Signature logo" className="h-14 w-auto object-contain border border-gold/20 bg-white p-1" />
+                <h2 className="font-cormorant text-xl font-semibold text-ink mb-1">Email Signatures</h2>
+                <p className="font-dm text-xs text-sage mb-4">
+                  Create one signature per person or team. When you send an email you pick which one to use — it sets the
+                  sender name, the reply-to address and the sign-off. Emails still send through your connected email account.
+                </p>
+                <div className="space-y-5">
+                  {(settingsForm?.emailSignatures ?? []).map((sig: any, idx: number) => {
+                    const patch = (changes: any) => setSettingsForm((f: any) => ({
+                      ...f,
+                      emailSignatures: (f.emailSignatures ?? []).map((s: any, i: number) => i === idx ? { ...s, ...changes } : s),
+                    }));
+                    return (
+                      <div key={sig.id ?? idx} className="border border-gold/25 bg-white p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <input
+                            value={sig.label ?? ""}
+                            onChange={e => patch({ label: e.target.value })}
+                            placeholder="Name this signature (e.g. Ana-Maria, Events Team)"
+                            className="flex-1 min-w-0 rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm font-semibold px-3 py-2 bg-white"
+                          />
                           <button
                             type="button"
-                            onClick={() => setSettingsForm((f: any) => ({ ...f, emailSignatureLogo: "" }))}
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center leading-none hover:bg-red-600"
-                          >✕</button>
+                            onClick={() => setSettingsForm((f: any) => ({ ...f, emailSignatures: (f.emailSignatures ?? []).filter((_: any, i: number) => i !== idx) }))}
+                            className="flex-none text-ink/30 hover:text-red-500 transition-colors"
+                            title="Remove this signature"
+                          ><Trash2 className="w-4 h-4" /></button>
                         </div>
-                      )}
-                      <label className="border border-dashed border-gold/40 px-4 py-2.5 cursor-pointer hover:bg-gold/5 transition-colors flex items-center gap-2">
-                        <span className="font-bebas tracking-widest text-xs text-sage">{settingsForm?.emailSignatureLogo ? "CHANGE IMAGE" : "UPLOAD LOGO / PHOTO"}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={e => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = () => setSettingsForm((f: any) => ({ ...f, emailSignatureLogo: reader.result as string }));
-                            reader.readAsDataURL(file);
-                            e.target.value = '';
-                          }}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                  <Textarea
-                    value={settingsForm?.emailSignature ?? ""}
-                    onChange={e => setSettingsForm((f: any) => ({ ...f, emailSignature: e.target.value }))}
-                    rows={5}
-                    placeholder={`e.g.\n\nKind regards,\nAna Maria\nBar Franco Events\nph: 03 123 4567 | www.barfranco.nz`}
-                    className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none"
-                  />
-                  {(settingsForm?.emailSignature || settingsForm?.emailSignatureLogo) && (
-                    <div className="bg-stone-50 border border-stone-200 p-3">
-                      <p className="font-bebas tracking-widest text-[10px] text-sage mb-2">PREVIEW</p>
-                      <div className="border-t border-stone-200 pt-2">
-                        {settingsForm?.emailSignatureLogo && (
-                          <img src={settingsForm.emailSignatureLogo} alt="Logo" className="h-10 w-auto object-contain mb-2" />
-                        )}
-                        {settingsForm?.emailSignature && (
-                          <pre className="font-dm text-xs text-ink/70 whitespace-pre-wrap leading-relaxed">{settingsForm.emailSignature}</pre>
-                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">SENDER NAME (shown on the email)</p>
+                            <input
+                              value={sig.fromName ?? ""}
+                              onChange={e => patch({ fromName: e.target.value })}
+                              placeholder="e.g. Ana-Maria at Bar Franco"
+                              className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm px-3 py-2 bg-white"
+                            />
+                          </div>
+                          <div>
+                            <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">REPLY-TO EMAIL (where replies go)</p>
+                            <input
+                              type="email"
+                              value={sig.replyTo ?? ""}
+                              onChange={e => patch({ replyTo: e.target.value })}
+                              placeholder="e.g. ana@barfranco.nz"
+                              className="w-full rounded-none border border-gold/30 focus:outline-none focus:border-gold font-dm text-sm px-3 py-2 bg-white"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">LOGO / PHOTO</p>
+                          <div className="flex items-start gap-3">
+                            {sig.signatureLogo && (
+                              <div className="relative flex-shrink-0">
+                                <img src={sig.signatureLogo} alt="Signature logo" className="h-14 w-auto object-contain border border-gold/20 bg-white p-1" />
+                                <button
+                                  type="button"
+                                  onClick={() => patch({ signatureLogo: "" })}
+                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center leading-none hover:bg-red-600"
+                                >✕</button>
+                              </div>
+                            )}
+                            <label className="border border-dashed border-gold/40 px-4 py-2.5 cursor-pointer hover:bg-gold/5 transition-colors flex items-center gap-2">
+                              <span className="font-bebas tracking-widest text-xs text-sage">{sig.signatureLogo ? "CHANGE IMAGE" : "UPLOAD LOGO / PHOTO"}</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={e => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const reader = new FileReader();
+                                  reader.onload = () => patch({ signatureLogo: reader.result as string });
+                                  reader.readAsDataURL(file);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="font-bebas tracking-widest text-[10px] text-sage mb-1">SIGN-OFF TEXT</p>
+                          <Textarea
+                            value={sig.signature ?? ""}
+                            onChange={e => patch({ signature: e.target.value })}
+                            rows={4}
+                            placeholder={`e.g.\n\nKind regards,\nAna Maria\nBar Franco Events\nph: 03 123 4567 | www.barfranco.nz`}
+                            className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
+
                   <button
                     type="button"
-                    onClick={() => updateSettings.mutate({ emailSignature: settingsForm?.emailSignature ?? "", emailSignatureLogo: settingsForm?.emailSignatureLogo ?? "" })}
-                    disabled={updateSettings.isPending}
-                    className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50"
+                    onClick={() => setSettingsForm((f: any) => ({
+                      ...f,
+                      emailSignatures: [
+                        ...(f.emailSignatures ?? []),
+                        { id: `sig-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, label: "", fromName: "", replyTo: "", signature: "", signatureLogo: "" },
+                      ],
+                    }))}
+                    className="border border-dashed border-gold/40 px-4 py-2.5 cursor-pointer hover:bg-gold/5 transition-colors flex items-center gap-2 font-bebas tracking-widest text-xs text-sage"
                   >
-                    {updateSettings.isPending ? "SAVING..." : "SAVE SIGNATURE"}
+                    <Plus className="w-3.5 h-3.5" /> ADD SIGNATURE
                   </button>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => updateSettings.mutate({ emailSignatures: (settingsForm?.emailSignatures ?? []).filter((s: any) => (s.label ?? "").trim() || (s.fromName ?? "").trim()) })}
+                      disabled={updateSettings.isPending}
+                      className="btn-forest font-bebas tracking-widest text-sm px-8 py-3 text-cream disabled:opacity-50"
+                    >
+                      {updateSettings.isPending ? "SAVING..." : "SAVE SIGNATURES"}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -9518,8 +9579,28 @@ export default function Dashboard() {
                 <textarea rows={12} value={weeklyBody} onChange={e => setWeeklyBody(e.target.value)}
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest resize-y"
                   placeholder="Email body will auto-fill once events are loaded…" />
-                <p className="font-dm text-[10px] text-ink/35 mt-1">Your saved email signature will be appended automatically.</p>
               </div>
+
+              {/* Signature */}
+              {(() => {
+                const sigs: any[] = Array.isArray((venueSettings as any)?.emailSignatures) ? (venueSettings as any).emailSignatures : [];
+                if (sigs.length === 0) return null;
+                return (
+                  <div>
+                    <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
+                    <select
+                      value={weeklySigId}
+                      onChange={e => setWeeklySigId(e.target.value)}
+                      className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest bg-white"
+                    >
+                      <option value="">No signature</option>
+                      {sigs.map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.label || s.fromName || 'Untitled signature'}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
 
               {/* Attach BEOs */}
               <div>

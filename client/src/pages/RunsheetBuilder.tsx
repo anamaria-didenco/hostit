@@ -1348,6 +1348,8 @@ export default function RunsheetBuilder() {
   // Which saved emails are ticked, plus a free-text field for ad-hoc adds.
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
   const [extraEmails, setExtraEmails] = useState("");
+  // Which saved email signature to send the briefing under ("" = none).
+  const [staffSigId, setStaffSigId] = useState<string>("");
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffEmail, setNewStaffEmail] = useState("");
   const [sendingStaffEmail, setSendingStaffEmail] = useState(false);
@@ -6154,6 +6156,7 @@ export default function RunsheetBuilder() {
               bookingId: effectiveBookingId,
               beoAttach: [{ bookingId: effectiveBookingId, filename }],
               beoHide: getBeoHide() || undefined,
+              signatureId: staffSigId || undefined,
             });
             toast.success(`Staff briefing sent to ${allRecipients.length} recipient${allRecipients.length !== 1 ? 's' : ''}`, { id: tId });
             setEmailingLink(null);
@@ -6303,6 +6306,27 @@ export default function RunsheetBuilder() {
                   <p className="font-dm text-[11px] text-red-600 mt-1">Invalid: {invalidAdHoc.join(', ')}</p>
                 )}
               </div>
+
+              {/* Signature */}
+              {(() => {
+                const sigs: any[] = Array.isArray((venueSettings as any)?.emailSignatures) ? (venueSettings as any).emailSignatures : [];
+                if (sigs.length === 0) return null;
+                return (
+                  <div className="px-5 py-4 border-b border-gold/20">
+                    <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1.5">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
+                    <select
+                      value={staffSigId}
+                      onChange={e => setStaffSigId(e.target.value)}
+                      className="w-full border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white"
+                    >
+                      <option value="">No signature</option>
+                      {sigs.map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.label || s.fromName || 'Untitled signature'}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
 
               {/* Footer / send */}
               <div className="px-5 py-3 flex items-center justify-between gap-3">
