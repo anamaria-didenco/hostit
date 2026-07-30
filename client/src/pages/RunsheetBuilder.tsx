@@ -394,6 +394,20 @@ export default function RunsheetBuilder() {
   // F&B
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
   const [fnbSaving, setFnbSaving] = useState(false);
+  // Priced food from the F&B sheet, mirrored (read-only) into the Costs tab so
+  // the operator doesn't have to re-enter it. Drinks are billed on consumption,
+  // so they're excluded. Any item already entered by hand as a Costs-tab line
+  // (same name) is skipped, so it isn't shown/counted twice — this matches the
+  // BEO's billing dedup.
+  const fnbCostMirror = React.useMemo(() => {
+    const norm = (s: any) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const manualLabels = new Set(costItems.map(ci => norm(ci.label)).filter(Boolean));
+    return fnbItems.filter(it =>
+      (it.course ?? '') !== 'Drinks' &&
+      Number(it.unitPrice ?? 0) > 0 &&
+      !manualLabels.has(norm(it.dishName)));
+  }, [fnbItems, costItems]);
+  const fnbCostMirrorTotal = fnbCostMirror.reduce((s, it) => s + Number(it.qty || 0) * Number(it.unitPrice ?? 0), 0);
   const [expandedFnbIdx, setExpandedFnbIdx] = useState<number | null>(null);
   const [newFnbItem, setNewFnbItem] = useState<Partial<FnbItem>>({
     section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '',
@@ -5052,9 +5066,10 @@ export default function RunsheetBuilder() {
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-gold" />
                 <span className="font-bebas tracking-widest text-sm text-ink">EVENT COSTS</span>
-                {costItems.length > 0 && (
-                  <span className="text-xs font-bebas px-1.5 py-0.5 bg-forest/10 text-ink/60">{costItems.length} item{costItems.length !== 1 ? 's' : ''}</span>
-                )}
+                {(costItems.length + fnbCostMirror.length) > 0 && (() => {
+                  const n = costItems.length + fnbCostMirror.length;
+                  return <span className="text-xs font-bebas px-1.5 py-0.5 bg-forest/10 text-ink/60">{n} item{n !== 1 ? 's' : ''}</span>;
+                })()}
               </div>
               {linkedProposalId && (
                 <button
@@ -5108,13 +5123,37 @@ export default function RunsheetBuilder() {
                   </tr>
                 </thead>
                 <tbody>
-                  {costItems.length === 0 && (
+                  {costItems.length === 0 && fnbCostMirror.length === 0 && (
                     <tr>
                       <td colSpan={6} className="px-4 py-10 text-center text-ink/30 font-dm text-sm">
                         No cost items yet — add one below{linkedProposalId ? ' or import from the linked proposal' : ''}
                       </td>
                     </tr>
                   )}
+                  {/* Priced food mirrored from the F&B sheet — read-only here;
+                      edit the price/qty on the F&B sheet. */}
+                  {fnbCostMirror.map((it, i) => (
+                    <tr key={`fnbmirror-${(it as any)._tempId ?? i}`} className="border-b border-gold/15 bg-linen/25">
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-ink/80 font-dm text-sm truncate">{it.dishName || 'Menu item'}</span>
+                          <span
+                            className="flex-none font-bebas tracking-widest text-[9px] px-1.5 py-0.5 bg-forest/10 text-forest/70"
+                            title="Priced on the Food & Beverage sheet — edit it there"
+                          >F&amp;B SHEET</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-ink/50 font-dm text-xs">Food &amp; Beverage</td>
+                      <td className="px-3 py-2 text-center text-ink/70 font-dm text-sm">{it.qty}</td>
+                      <td className="px-4 py-2 text-right text-ink/70 font-dm text-sm">
+                        ${Number(it.unitPrice ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-2 text-right font-semibold text-ink">
+                        ${(Number(it.qty || 0) * Number(it.unitPrice ?? 0)).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-2 py-2" />
+                    </tr>
+                  ))}
                   {costItems.map((ci, idx) => (
                     <tr key={ci._id} className="group border-b border-gold/20 hover:bg-linen/40 transition-colors">
                       <td className="px-4 py-2">
@@ -5213,8 +5252,10 @@ export default function RunsheetBuilder() {
             </div>
 
             {/* Totals */}
-            {costItems.length > 0 && (() => {
-              const entered = costItems.reduce((sum, ci) => sum + ci.qty * ci.unitPrice, 0);
+            {(costItems.length > 0 || fnbCostMirror.length > 0) && (() => {
+              // Include the mirrored F&B priced food so the Costs-tab total is
+              // the full client bill (food + manual cost lines), matching the BEO.
+              const entered = costItems.reduce((sum, ci) => sum + ci.qty * ci.unitPrice, 0) + fnbCostMirrorTotal;
               const subtotal = gstInclusive ? entered / 1.15 : entered;
               const gstAmt = gstInclusive ? entered - subtotal : entered * 0.15;
               const total = gstInclusive ? entered : entered + gstAmt;
@@ -5222,6 +5263,9 @@ export default function RunsheetBuilder() {
                 acc[ci.category] = (acc[ci.category] ?? 0) + ci.qty * ci.unitPrice;
                 return acc;
               }, {} as Record<string, number>);
+              if (fnbCostMirrorTotal > 0) {
+                byCategory['Food & Beverage'] = (byCategory['Food & Beverage'] ?? 0) + fnbCostMirrorTotal;
+              }
               return (
                 <div className="border-t border-gold/20 px-5 py-4 flex flex-col md:flex-row gap-6 items-start justify-between bg-linen/30">
                   {/* Category breakdown */}
