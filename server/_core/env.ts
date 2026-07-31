@@ -17,5 +17,8 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? "",
+  // AI model for the paste-to-parse helpers. Env-configurable so a deployment
+  // whose key doesn't serve the default can switch models without a code change.
+  forgeModel: process.env.AI_INTEGRATIONS_OPENAI_MODEL ?? process.env.BUILT_IN_FORGE_MODEL ?? "gpt-5",
   adminPassword: process.env.ADMIN_PASSWORD ?? "",
 };

@@ -1600,7 +1600,7 @@ export default function Dashboard() {
       }
       setEnquiryParsing(false);
     },
-    onError: () => { toast.error('Failed to parse text'); setEnquiryParsing(false); },
+    onError: (err: any) => { toast.error(err?.message || 'Failed to parse text'); setEnquiryParsing(false); },
   });
 
   const createEnquiry = trpc.leads.create.useMutation({
