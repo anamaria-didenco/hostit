@@ -3950,7 +3950,7 @@ export default function RunsheetBuilder() {
                                   min={1}
                                   value={item.qty || ''}
                                   placeholder="1"
-                                  onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))}
+                                  onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 1 : Number(e.target.value))}
                                   aria-label="Quantity / covers"
                                   className="w-12 text-center text-ink bg-transparent border border-transparent hover:border-gold/30 focus:border-forest focus:bg-white/70 rounded px-1 py-0.5 focus:outline-none"
                                 />
@@ -4011,7 +4011,7 @@ export default function RunsheetBuilder() {
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
-                                <input type="number" min={1} value={item.qty || ''} placeholder="1" onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
+                                <input type="number" min={1} value={item.qty || ''} placeholder="1" onChange={e => updateFnbItem(originalIdx, 'qty', e.target.value === '' ? 1 : Number(e.target.value))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
                                 <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY / ALLERGEN</label>
