@@ -689,7 +689,7 @@ export default function RunsheetBuilder() {
       });
       setEditedParsedTimeline((data.timelineItems ?? []).map((it: any, i: number) => ({ ...it, _editId: String(i) })));
     },
-    onError: () => toast.error('Failed to parse text — try again'),
+    onError: (err: any) => toast.error(err?.message || 'Failed to parse text — try again'),
   });
 
   function addCatalogItemsToFnb() {
@@ -882,7 +882,7 @@ export default function RunsheetBuilder() {
       const cat = map[data.category] || 'other';
       setChecklistParsed({ items: data.items.map((it: any) => ({ text: it.note ? `${it.text} — ${it.note}` : it.text, category: cat, _selected: true })) });
     },
-    onError: () => toast.error("AI parse failed"),
+    onError: (err: any) => toast.error(err?.message || "AI parse failed"),
   });
   function applyChecklistParsed() {
     if (!checklistParsed) return;
@@ -1408,7 +1408,7 @@ export default function RunsheetBuilder() {
       setFnbParsedLoading(false);
       if (!data.success) toast.error('AI could not parse all items — review carefully');
     },
-    onError: () => { toast.error('Failed to parse F&B text'); setFnbParsedLoading(false); },
+    onError: (err: any) => { toast.error(err?.message || 'Failed to parse F&B text'); setFnbParsedLoading(false); },
   });
   function runFnbParse() {
     if (!fnbPasteText.trim()) { toast.error('Paste some text first'); return; }

@@ -212,7 +212,9 @@ const normalizeToolChoice = (
 
 const getOpenAIClient = () => {
   if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    // User-facing: this bubbles to the "paste-to-parse" toasts. Make it
+    // actionable rather than a cryptic env-var name.
+    throw new Error("AI is not set up on this server — add an OpenAI API key to enable the paste-to-parse helpers.");
   }
   return new OpenAI({
     apiKey: ENV.forgeApiKey,
@@ -294,7 +296,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   });
 
   const requestParams: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
-    model: "gpt-5",
+    model: ENV.forgeModel || "gpt-5",
     messages: messages.map(normalizeMessage) as OpenAI.Chat.ChatCompletionMessageParam[],
     max_completion_tokens: 4096,
   };
@@ -311,6 +313,21 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     requestParams.response_format = normalizedResponseFormat as OpenAI.ResponseFormatJSONObject | OpenAI.ResponseFormatJSONSchema | OpenAI.ResponseFormatText;
   }
 
-  const result = await openai.chat.completions.create(requestParams);
-  return result as unknown as InvokeResult;
+  try {
+    const result = await openai.chat.completions.create(requestParams);
+    return result as unknown as InvokeResult;
+  } catch (err: any) {
+    // Log the real cause so AI failures are diagnosable from server logs
+    // (the client only ever sees a short toast). Common causes: an invalid /
+    // missing API key, or the configured model not being served by the key.
+    console.error(
+      `[LLM] invoke failed (model=${requestParams.model}):`,
+      err?.status ?? "",
+      err?.message ?? err,
+    );
+    if (err?.status === 404 || /model/i.test(String(err?.message ?? ""))) {
+      throw new Error(`AI model "${requestParams.model}" is unavailable for this API key — set AI_INTEGRATIONS_OPENAI_MODEL to a model your key can use.`);
+    }
+    throw err;
+  }
 }

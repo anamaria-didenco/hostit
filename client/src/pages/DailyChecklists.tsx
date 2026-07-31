@@ -103,7 +103,7 @@ export default function DailyChecklists() {
       if (!data.success || data.items.length === 0) { toast.error("Couldn't extract any tasks. Try clearer text."); return; }
       setAiParsed({ name: data.name, category: data.category, items: data.items.map((it: { text: string; note?: string }) => ({ ...it, _selected: true })) });
     },
-    onError: () => toast.error("AI parse failed"),
+    onError: (err: any) => toast.error(err?.message || "AI parse failed"),
   });
   const createWithItemsMut = trpc.dailyChecklists.createWithItems.useMutation({
     onSuccess: () => { refetch(); setShowAiPaste(false); setAiPasteText(""); setAiParsed(null); toast.success("Checklist created from paste!"); },
