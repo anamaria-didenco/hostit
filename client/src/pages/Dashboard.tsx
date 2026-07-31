@@ -1784,7 +1784,10 @@ export default function Dashboard() {
     const d = new Date();
     const day = d.getDay();
     d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
-    return d.toISOString().slice(0, 10);
+    // Format from LOCAL date parts, not toISOString() (UTC) — in NZ (UTC+12/13)
+    // the UTC date is the previous day before ~noon, which defaulted the weekly
+    // briefing to Sunday instead of Monday.
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
   const [weeklyWeekStart, setWeeklyWeekStart] = React.useState(getMondayOfWeek);
   const [weeklySelectedStaff, setWeeklySelectedStaff] = React.useState<Set<string>>(new Set());
@@ -1900,7 +1903,7 @@ export default function Dashboard() {
             .filter(ev => ev.bookingId != null)
             .map(ev => ({
               bookingId: ev.bookingId,
-              filename: `${ev.name.replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event'} — BEO.pdf`,
+              filename: `${String(ev.name ?? '').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event'} — BEO.pdf`,
             }))
         : [];
       await emailSendForWeekly.mutateAsync({
@@ -2320,7 +2323,10 @@ export default function Dashboard() {
         cmp = aDate - bDate;
       } else if (leadSortBy === 'status') {
         const order = ['new','contacted','proposal_sent','site_visit','negotiating','function_pack_sent','booked','confirmed','lost','cancelled'];
-        cmp = (order.indexOf(a.status) ?? 99) - (order.indexOf(b.status) ?? 99);
+        // indexOf returns -1 (not undefined) for unknown/custom statuses, so
+        // `?? 99` was dead code and custom statuses sorted to the very top.
+        const rank = (s: string) => { const i = order.indexOf(s); return i < 0 ? 99 : i; };
+        cmp = rank(a.status) - rank(b.status);
       }
       return leadSortDir === 'asc' ? cmp : -cmp;
     });
@@ -3214,7 +3220,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 mb-0.5 min-w-0">
                         <div className="font-cormorant font-semibold text-base text-ink truncate flex-1 min-w-0">{lead.firstName} {lead.lastName}</div>
                         <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
-                          {pipelineStages.find(s => s.key === lead.status)?.label ?? lead.status.replace(/_/g, " ").toUpperCase()}
+                          {pipelineStages.find(s => s.key === lead.status)?.label ?? String(lead.status ?? "").replace(/_/g, " ").toUpperCase()}
                         </div>
                       </div>
                       {/* Row 2: email */}
@@ -9548,15 +9554,15 @@ export default function Dashboard() {
                     <p className="font-dm text-xs text-red-500 py-2">No events found for this week</p>
                   ) : (
                     <div className="space-y-1.5">
-                      {(weeklyEventsData.events as any[]).map((ev: any) => (
-                        <div key={ev.bookingId} className="flex items-start gap-2 px-3 py-2 bg-linen/50 border border-gold/20 rounded-sm">
+                      {(weeklyEventsData.events as any[]).map((ev: any, evIdx: number) => (
+                        <div key={ev.bookingId ?? ev.staffPortalToken ?? `${ev.name ?? 'event'}-${evIdx}`} className="flex items-start gap-2 px-3 py-2 bg-linen/50 border border-gold/20 rounded-sm">
                           <div className="flex-1 min-w-0">
                             <div className="font-cormorant font-semibold text-sm text-ink">{ev.name}</div>
                             <div className="font-dm text-xs text-ink/50">{ev.dateLabel} · {ev.timeLabel}{ev.guestCount ? ` · ${ev.guestCount} pax` : ''}{ev.spaceName ? ` · ${ev.spaceName}` : ''}</div>
                           </div>
                           <div className="flex gap-1 flex-shrink-0">
                             {ev.staffPortalToken && <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-forest/10 text-forest border border-forest/20">LIVE LINK ✓</span>}
-                            <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-gold/10 text-amber-700 border border-gold/30">BEO ✓</span>
+                            {ev.bookingId != null && <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-gold/10 text-amber-700 border border-gold/30">BEO ✓</span>}
                           </div>
                         </div>
                       ))}

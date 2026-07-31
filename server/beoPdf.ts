@@ -967,10 +967,16 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       .filter((i: any) => i.section === "foh" && (i.course ?? "") !== "Drinks" && Number(i.unitPrice ?? 0) > 0
         && !costLabelSet.has(normBillName(i.dishName)));
     const fnbFoodTotal = fnbFoodLines.reduce((s, i: any) => s + Number(i.qty ?? 0) * Number(i.unitPrice ?? 0), 0);
-    // Accumulate EVERY itemised cost line (AV, hire, styling, F&B — all of it),
-    // not just food/beverage. This is the same figure the runsheet Costs tab
-    // sums, so the BEO total matches what the operator sees on screen.
-    const costItemsTotal = costList.reduce((s, ci) => s + lineAmt(ci), 0);
+    // The client BEO bills only Food & Beverage cost lines (matching the
+    // runsheet's on-screen Running Total). Other cost lines (AV, hire, styling)
+    // are the operator's own costs — kept on the Costs tab for profitability but
+    // not auto-added to the client's bill; operators add anything else manually.
+    const isFbCost = (ci: any) => {
+      const c = String(ci.category ?? "").toLowerCase();
+      return c.includes("food") || c.includes("beverage");
+    };
+    const billCostList = costList.filter(isFbCost);
+    const costItemsTotal = billCostList.reduce((s, ci) => s + lineAmt(ci), 0);
     const minSpendAmt = Number((booking as any).minimumSpend ?? quoteSettingsRow?.minimumSpend ?? 0);
     // The entered total is priced food (from the F&B sheet) PLUS every itemised
     // cost line. When nothing has been priced anywhere, fall back to the booking
@@ -1001,7 +1007,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     const fnbLinesHtml = fnbFoodLines
       .map((i: any) => fnbLineHtml(i.dishName ?? "Item", Number(i.qty ?? 0), Number(i.qty ?? 0) * Number(i.unitPrice ?? 0)))
       .join("");
-    const costLinesHtml = costList
+    const costLinesHtml = billCostList
       .filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0)
       .map(ci => fnbLineHtml(ci.label ?? "Item", Number(ci.qty ?? 0), lineAmt(ci)))
       .join("");
@@ -1205,7 +1211,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       <div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">
         ${minSpendAmt > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 15px;background:var(--green);color:var(--on-green)"><span style="font-size:11.5px;font-weight:700">Minimum spend</span><span style="font-family:var(--serif);font-size:17px;font-weight:600">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
         ${depAmt > 0 ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink2)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:3px">Deposit</div><b style="font-weight:700">${fmtCurrency(depAmt)}</b> <span style="background:${booking.depositPaid ? "var(--brand-tint)" : "color-mix(in srgb,var(--red) 12%,#fff)"};color:${booking.depositPaid ? "var(--green)" : "var(--red)"};font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:4px">${booking.depositPaid ? "Paid" : "Due"}</span></div>` : ""}
-        ${paymentInstr.trim() ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink2);line-height:1.45">${escHtml(paymentInstr).replace(/\n/g, "<br>")}</div>` : ""}
+        ${(!hideSet.has('payment') && paymentInstr.trim()) ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink2);line-height:1.45">${escHtml(paymentInstr).replace(/\n/g, "<br>")}</div>` : ""}
       </div>` : "";
     // DF-5: no standalone "External Hire & Suppliers" page. Onsite contact is
     // already in the info band; the Set-up note moves to page 1 (setupSection);
@@ -1222,14 +1228,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
     ].filter(Boolean);
     const billRow = (item: string, sub: string, price: string, qty: string, total: string) => `<div style="break-inside:avoid;page-break-inside:avoid;display:grid;grid-template-columns:1fr 90px 60px 110px;padding:4px 12px;border-top:1px solid var(--hair);font-size:11.5px;align-items:baseline"><span style="color:var(--ink2)">${item}${sub ? `<div style="font-size:11px;color:var(--faint);margin-top:1px">${sub}</div>` : ""}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${price}</span><span style="text-align:right;color:var(--gray)">${qty}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${total}</span></div>`;
     const foodBillRows = fnbFoodLines.map((i: any) => billRow(`Food &amp; Beverage &mdash; ${escHtml(i.dishName ?? "Item")}`, "", fmtCurrency(Number(i.unitPrice) || 0), String(Number(i.qty) || 0), fmtCurrency((Number(i.qty) || 0) * (Number(i.unitPrice) || 0)))).join("");
-    const costBillRows = costList.filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0).map(ci => billRow(escHtml(ci.label ?? "Item"), "", fmtCurrency(Number(ci.unitPrice) || 0), String(Number(ci.qty) || 0), fmtCurrency(lineAmt(ci)))).join("");
+    const costBillRows = billCostList.filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0).map(ci => billRow(escHtml(ci.label ?? "Item"), "", fmtCurrency(Number(ci.unitPrice) || 0), String(Number(ci.qty) || 0), fmtCurrency(lineAmt(ci)))).join("");
     // Billing total: show the GST breakdown (subtotal → GST → total incl. GST),
     // mirroring the runsheet Costs tab, instead of only a single ex-GST figure.
     // Falls back to a plain "Day Estimated Total" when nothing has been priced.
     const billingTotalRows = enteredTotal > 0
       ? `<div style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--gray)"><span style="text-align:right">Subtotal (excl. GST)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(subtotalExGst)}</span></div><div style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;font-size:11px;color:var(--gray)"><span style="text-align:right">GST (15%)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(gstAmt)}</span></div><div style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Total (incl. GST)</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(totalInclGst)}</span></div>`
       : `<div style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Day Estimated Total</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(itemisedTotal > 0 ? itemisedTotal : enteredTotal)}</span></div>`;
-    const billingTable = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || costList.length > 0 || minSpendAmt > 0)) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px">${secLabel("Daily Billing Summary", { metaRight: escHtml(eventDate) })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden"><div style="display:grid;grid-template-columns:1fr 90px 60px 110px;background:var(--fill);padding:7px 14px;font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>${foodBillRows}${costBillRows}${billingTotalRows}</div></div>` : "";
+    const billingTable = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || billCostList.length > 0 || minSpendAmt > 0)) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px">${secLabel("Daily Billing Summary", { metaRight: escHtml(eventDate) })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden"><div style="display:grid;grid-template-columns:1fr 90px 60px 110px;background:var(--fill);padding:7px 14px;font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>${foodBillRows}${costBillRows}${billingTotalRows}</div></div>` : "";
     const closingNote = (!hideSet.has('footer') && footerNote.trim()) ? `<div style="margin-top:5px">${secLabel("Note")}<div style="font-size:11.5px;line-height:1.5;color:#332e26">${footerNote.replace(/\n/g, "<br>")}</div></div>` : "";
     const acceptanceBlk = `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:10px;padding-top:16px;border-top:1px solid var(--line)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:4px">Client Acceptance</div><div style="font-size:11.5px;color:var(--gray);margin-bottom:20px;line-height:1.5;max-width:80%">By signing below the client confirms the details, catering, beverages and estimated charges set out in this event order are correct.</div>${sigStrip(false)}</div>`;
     // Condense: the Event Summary stat cards duplicated the page-1 info band
