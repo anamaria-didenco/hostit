@@ -1124,15 +1124,29 @@ export default function Dashboard() {
     { enabled: !!selectedLead?.id }
   );
   const drawerLeadId = selectedBooking?._isLead ? selectedBooking.id : null;
+  const drawerBookingIdForRs = selectedBooking && !selectedBooking._isLead ? selectedBooking.id : null;
   const { data: drawerLeadRunsheets, refetch: refetchDrawerRunsheets } = trpc.runsheets.list.useQuery(
     { leadId: drawerLeadId ?? 0 },
     { enabled: !!drawerLeadId }
   );
-  // Fetch runsheet F&B content when a runsheet exists for the open drawer lead
-  const drawerRunsheetId = drawerLeadRunsheets && drawerLeadRunsheets.length > 0
-    ? drawerLeadRunsheets[drawerLeadRunsheets.length - 1].id : null;
+  // Confirmed bookings link their runsheet by bookingId — fetch it too so the
+  // event overview (menu / run of day / dietaries) shows for bookings, not just
+  // enquiries.
+  const { data: drawerBookingRunsheets } = trpc.runsheets.list.useQuery(
+    { bookingId: drawerBookingIdForRs ?? 0 },
+    { enabled: !!drawerBookingIdForRs }
+  );
+  const drawerRunsheets = selectedBooking?._isLead ? drawerLeadRunsheets : drawerBookingRunsheets;
+  const drawerRunsheetId = drawerRunsheets && drawerRunsheets.length > 0
+    ? drawerRunsheets[drawerRunsheets.length - 1].id : null;
   const { data: drawerFnbItems } = trpc.fnb.list.useQuery(
     { runsheetId: drawerRunsheetId! },
+    { enabled: !!drawerRunsheetId }
+  );
+  // Full runsheet (row + timeline items) for the drawer's event overview:
+  // dietaries, set-up note and run-of-day timings.
+  const { data: drawerRunsheetFull } = trpc.runsheets.get.useQuery(
+    { id: drawerRunsheetId! },
     { enabled: !!drawerRunsheetId }
   );
   // Inline payments sub-view state (for bookings only — not leads)
@@ -9168,20 +9182,49 @@ export default function Dashboard() {
               )}
 
               {/* ── Runsheet F&B summary (lead drawer) ────────────────────── */}
-              {selectedBooking._isLead && drawerRunsheetId && drawerFnbItems && drawerFnbItems.length > 0 && (() => {
-                const foodItems = (drawerFnbItems as any[]).filter(i => i.course !== 'Drinks' && i.dishName?.trim());
-                const drinkItems = (drawerFnbItems as any[]).filter(i => i.course === 'Drinks' && i.dishName?.trim());
+              {/* Event overview — a quick read of what the event actually IS
+                  (menu, run of day, dietaries, set-up) pulled from the linked
+                  runsheet, so you don't have to open the full runsheet. Shows
+                  for both confirmed bookings and enquiries. */}
+              {drawerRunsheetId && (() => {
+                const fnb = (drawerFnbItems as any[]) ?? [];
+                const foodItems = fnb.filter(i => i.course !== 'Drinks' && i.dishName?.trim());
+                const drinkItems = fnb.filter(i => i.course === 'Drinks' && i.dishName?.trim());
                 const courses = [...new Set(foodItems.map((i: any) => i.course).filter(Boolean))];
+                const timeline = (((drawerRunsheetFull as any)?.items) ?? []).filter((t: any) => (t.title ?? '').toString().trim());
+                const dietaries = (((drawerRunsheetFull as any)?.dietaries) ?? []).filter((d: any) => (d?.name ?? '').toString().trim());
+                const setupText = String((drawerRunsheetFull as any)?.venueSetup ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                const isSevere = (n: string) => /anaphyla|allerg|severe|coeliac|celiac/i.test(String(n || ''));
+                const hasAny = foodItems.length || drinkItems.length || timeline.length || dietaries.length || setupText;
+                if (!hasAny) return null;
+                const editHref = selectedBooking._isLead
+                  ? `/runsheet?id=${drawerRunsheetId}&leadId=${selectedBooking.id}`
+                  : `/runsheet?id=${drawerRunsheetId}&bookingId=${selectedBooking.id}`;
                 return (
                   <div className="border border-gold/20 overflow-hidden">
                     <div className="bg-forest-dark px-4 py-2 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <UtensilsCrossed className="w-3.5 h-3.5 text-gold" />
-                        <span className="font-bebas tracking-widest text-xs text-cream">FOOD & DRINKS (FROM RUNSHEET)</span>
+                        <span className="font-bebas tracking-widest text-xs text-cream">EVENT OVERVIEW (FROM RUNSHEET)</span>
                       </div>
-                      <button onClick={() => setLocation(`/runsheet?id=${drawerRunsheetId}&leadId=${selectedBooking.id}`)} className="font-bebas tracking-widest text-[10px] text-gold hover:text-gold/80">EDIT →</button>
+                      <button onClick={() => setLocation(editHref)} className="font-bebas tracking-widest text-[10px] text-gold hover:text-gold/80">EDIT →</button>
                     </div>
                     <div className="divide-y divide-gold/10">
+                      {/* Run of day */}
+                      {timeline.length > 0 && (
+                        <div className="px-4 py-2">
+                          <div className="font-bebas tracking-widest text-[10px] text-forest mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> RUN OF DAY</div>
+                          <div className="space-y-0.5">
+                            {timeline.map((t: any, idx: number) => (
+                              <div key={idx} className="flex items-baseline gap-2">
+                                {t.time && <span className="font-dm text-[11px] text-ink/50 tabular-nums flex-shrink-0 w-14">{t.time}</span>}
+                                <span className="font-dm text-xs text-ink">{t.title}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Food by course */}
                       {courses.map(course => {
                         const items = foodItems.filter((i: any) => i.course === course);
                         return (
@@ -9198,6 +9241,7 @@ export default function Dashboard() {
                           </div>
                         );
                       })}
+                      {/* Drinks */}
                       {drinkItems.length > 0 && (
                         <div className="px-4 py-2">
                           <div className="font-bebas tracking-widest text-[10px] text-forest mb-1">DRINKS</div>
@@ -9206,6 +9250,29 @@ export default function Dashboard() {
                               <span key={idx} className="bg-cream border border-gold/30 font-dm text-[11px] px-2 py-0.5 text-ink/70">{item.dishName}</span>
                             ))}
                           </div>
+                        </div>
+                      )}
+                      {/* Dietaries & allergies */}
+                      {dietaries.length > 0 && (
+                        <div className="px-4 py-2">
+                          <div className="font-bebas tracking-widest text-[10px] text-red-600 mb-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> DIETARY & ALLERGIES</div>
+                          <div className="space-y-0.5">
+                            {dietaries.map((d: any, idx: number) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isSevere(d.name) ? 'bg-red-500' : 'bg-amber-500'}`} />
+                                {d.count > 1 && <span className="font-dm text-[11px] text-ink/50 tabular-nums">×{d.count}</span>}
+                                <span className="font-dm text-xs text-ink">{d.name}</span>
+                                {isSevere(d.name) && <span className="font-bebas tracking-widest text-[8px] text-red-600">SEVERE</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Set-up */}
+                      {setupText && (
+                        <div className="px-4 py-2">
+                          <div className="font-bebas tracking-widest text-[10px] text-forest mb-1">SET-UP</div>
+                          <div className="font-dm text-xs text-ink/70 leading-relaxed">{setupText}</div>
                         </div>
                       )}
                     </div>
