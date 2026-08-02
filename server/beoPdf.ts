@@ -1172,7 +1172,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;align-items:center;gap:10px;padding:3px 10px;${first ? "" : "border-top:1px solid var(--hair);"}">`
         + `<span style="font-family:var(--serif);font-size:16px;font-weight:600;color:var(--ink);min-width:32px;text-align:right;line-height:1;flex:none">&times;${escHtml(String(n))}</span>`
         + `<span style="width:9px;height:9px;border-radius:50%;background:${dot};flex:none" aria-hidden></span>`
-        + `<span style="flex:1;min-width:0"><span style="font-size:12.5px;font-weight:600;color:var(--ink)">${escHtml(d.name)}</span>${severe ? ` <span style="font-size:9px;letter-spacing:.14em;font-weight:800;color:var(--red);text-transform:uppercase">Severe</span>` : ""}${d.notes ? `<span style="font-size:12.5px;color:var(--gray)"> &mdash; ${escHtml(d.notes)}</span>` : ""}</span>`
+        + `<span style="flex:1;min-width:0"><span style="font-size:12.5px;font-weight:600;color:var(--ink)">${escHtml(d.name)}</span>${severe ? ` <span style="font-size:9px;letter-spacing:.14em;font-weight:800;color:var(--red);text-transform:uppercase">Severe</span>` : ""}${d.notes ? `<span style="font-size:12.5px;color:var(--gray)"> &mdash; ${escHtml(d.notes)}</span>` : ""}`
+        + `${(Array.isArray(d.names) && d.names.length) ? `<div style="font-size:11px;color:var(--gray);margin-top:1px">${d.names.map((nm: any) => escHtml(String(nm))).join(" &middot; ")}</div>` : ""}</span>`
         + `</div>`;
     };
     const dietarySectionNew = dietaries.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">${orderedDiet.map((d, i) => dietRow(d, i === 0)).join("")}</div></div>` : "";

@@ -224,7 +224,7 @@ type Item = {
   highlight?: string;
 };
 
-type Dietary = { name: string; count: number; notes?: string };
+type Dietary = { name: string; count: number; notes?: string; names?: string[] };
 const DRINK_CATEGORIES = ['Cocktails', 'Wine', 'Beer & Cider', 'Spirits', 'Bubbles / Champagne', 'Soft Drinks & Mocktails', 'Other'];
 
 type FnbItem = {
@@ -363,6 +363,8 @@ export default function RunsheetBuilder() {
   // Dietaries
   const [dietaries, setDietaries] = useState<Dietary[]>([]);
   const [newDietary, setNewDietary] = useState({ name: "", count: "1", notes: "" });
+  // Draft "add a guest name" input per dietary card, keyed by card index.
+  const [dietNameDraft, setDietNameDraft] = useState<Record<number, string>>({});
   const [dietarySectionOpen, setDietarySectionOpen] = useState(true);
 
   // Costs
@@ -1942,6 +1944,25 @@ export default function RunsheetBuilder() {
     setDietaries(prev => prev.map((d, i) => i === idx ? { ...d, [field]: value } : d));
   }
 
+  // Named guests per dietary. Adding/removing a name keeps the guest count in
+  // sync with how many people are listed.
+  function addDietaryName(idx: number, rawName: string) {
+    const name = rawName.trim();
+    if (!name) return;
+    setDietaries(prev => prev.map((d, i) => {
+      if (i !== idx) return d;
+      const names = [...(d.names ?? []), name];
+      return { ...d, names, count: names.length };
+    }));
+  }
+  function removeDietaryName(idx: number, nameIdx: number) {
+    setDietaries(prev => prev.map((d, i) => {
+      if (i !== idx) return d;
+      const names = (d.names ?? []).filter((_, n) => n !== nameIdx);
+      return { ...d, names, count: names.length > 0 ? names.length : d.count };
+    }));
+  }
+
   function toggleChecklistItem(id: string) {
     const updated = checklistItems.map(item => item.id === id ? { ...item, checked: !item.checked, checkedAt: !item.checked ? new Date().toISOString() : undefined } : item);
     setChecklistItems(updated);
@@ -2893,6 +2914,27 @@ export default function RunsheetBuilder() {
                                   className="w-full font-dm text-xs text-ink/40 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20 no-print"
                                 />
                                 {d.notes && <div className="hidden print:block font-dm text-xs text-ink/40 mt-0.5">{d.notes}</div>}
+                                {/* Named guests with this dietary */}
+                                <div className="mt-2 pt-2 border-t border-gold/10 no-print">
+                                  {(d.names ?? []).length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mb-1">
+                                      {(d.names ?? []).map((nm, ni) => (
+                                        <span key={ni} className="inline-flex items-center gap-1 bg-white border border-gold/30 rounded-sm px-1.5 py-0.5 font-dm text-[11px] text-ink/70">
+                                          {nm}
+                                          <button onClick={() => removeDietaryName(idx, ni)} className="text-ink/30 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <input
+                                    value={dietNameDraft[idx] ?? ""}
+                                    onChange={e => setDietNameDraft(prev => ({ ...prev, [idx]: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDietaryName(idx, dietNameDraft[idx] ?? ""); setDietNameDraft(prev => ({ ...prev, [idx]: "" })); } }}
+                                    placeholder="+ Add guest name"
+                                    className="w-full font-dm text-[11px] text-ink bg-transparent border-0 focus:outline-none placeholder:text-forest/50"
+                                  />
+                                </div>
+                                {(d.names ?? []).length > 0 && <div className="hidden print:block font-dm text-xs text-ink/50 mt-0.5">{(d.names ?? []).join(', ')}</div>}
                               </div>
                             ))}
                           </div>
@@ -3521,6 +3563,27 @@ export default function RunsheetBuilder() {
                           placeholder="Notes..."
                           className="w-full font-dm text-xs text-ink/40 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20"
                         />
+                        {/* Named guests with this dietary — type a name + Enter to
+                            build the list; the guest count follows the names. */}
+                        <div className="mt-2 pt-2 border-t border-gold/10">
+                          {(d.names ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-1">
+                              {(d.names ?? []).map((nm, ni) => (
+                                <span key={ni} className="inline-flex items-center gap-1 bg-white border border-gold/30 rounded-sm px-1.5 py-0.5 font-dm text-[11px] text-ink/70">
+                                  {nm}
+                                  <button onClick={() => removeDietaryName(idx, ni)} className="text-ink/30 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <input
+                            value={dietNameDraft[idx] ?? ""}
+                            onChange={e => setDietNameDraft(prev => ({ ...prev, [idx]: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDietaryName(idx, dietNameDraft[idx] ?? ""); setDietNameDraft(prev => ({ ...prev, [idx]: "" })); } }}
+                            placeholder="+ Add guest name"
+                            className="w-full font-dm text-[11px] text-ink bg-transparent border-0 focus:outline-none placeholder:text-forest/50"
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
