@@ -57,6 +57,12 @@ export default function StaffPortal() {
     { enabled: !!token, retry: false, refetchInterval: 30000 }
   );
 
+  // Keep the embedded BEO document live: the query polls every 30s and, thanks
+  // to react-query structural sharing, `data` only changes identity when the
+  // content actually changed — so we reload the BEO iframe only on real edits.
+  const [beoNonce, setBeoNonce] = useState(0);
+  useEffect(() => { setBeoNonce(n => n + 1); }, [data]);
+
   const checklist: any = (data as any)?.checklist ?? null;
   const [localItems, setLocalItems] = useState<any[]>([]);
   const pendingToggles = useRef<Set<string>>(new Set());
@@ -251,7 +257,8 @@ export default function StaffPortal() {
             runsheets (no booking, so no BEO) fall back to the built-in layout. */}
         {activePortalTab === 'runsheet' && (runsheet as any).bookingId ? (
           <iframe
-            src={`/api/beo/staff/${token}?format=html`}
+            key={beoNonce}
+            src={`/api/beo/staff/${token}?format=html&_=${beoNonce}`}
             title="Event Order"
             className="w-full bg-cream border border-gold/30 shadow-sm"
             style={{ height: 'calc(100vh - 140px)' }}
@@ -667,10 +674,10 @@ export default function StaffPortal() {
           <>
             {localItems.length > 0 ? (
               <div className="bg-white border border-gold/30 shadow-sm">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-gold/30">
+                <div className="flex items-center justify-between px-5 py-3 border-b-2 border-forest/70">
                   <div className="flex items-center gap-2">
                     <ClipboardCheck className="w-4 h-4 text-forest" />
-                    <span className="font-bebas tracking-widest text-sm text-forest">STAFF CHECKLIST</span>
+                    <span className="font-bebas tracking-[0.2em] text-sm text-forest">STAFF CHECKLIST</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-dm text-xs text-ink/40">{checkedCount} of {localItems.length} done</span>
