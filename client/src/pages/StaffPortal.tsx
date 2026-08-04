@@ -4,7 +4,7 @@ import { trpc } from "@/lib/trpc";
 import {
   Clock, Calendar, ChefHat, UtensilsCrossed,
   AlertCircle, CheckCircle2, Loader2, User, Phone, Mail,
-  Building2, DollarSign, CheckSquare, Square, ClipboardCheck, FileText, Printer,
+  Building2, DollarSign, CheckSquare, Square, ClipboardCheck, FileText, Printer, Wine,
 } from "lucide-react";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
@@ -187,8 +187,8 @@ export default function StaffPortal() {
       <header className="bg-forest sticky top-0 z-10 shadow-md">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <p className="font-bebas tracking-widest text-white/60 text-xs">FUNCTION RUNSHEET — STAFF COPY</p>
-            <h1 className="font-bebas tracking-widest text-white text-lg leading-tight">{runsheet.title}</h1>
+            <p className="font-bebas tracking-[0.22em] text-white/60 text-[11px]">FUNCTION RUNSHEET · STAFF COPY</p>
+            <h1 className="font-serif text-white text-xl leading-tight">{runsheet.title}</h1>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -245,9 +245,9 @@ export default function StaffPortal() {
 
         {/* ── Event Details ── */}
         <div className="bg-white border border-gold/30 shadow-sm">
-          <div className="px-5 py-3 border-b border-gold/30 flex items-center gap-2">
+          <div className="px-5 py-3 border-b-2 border-forest/70 flex items-center gap-2">
             <Calendar className="w-4 h-4 text-forest" />
-            <span className="font-bebas tracking-widest text-sm text-forest">EVENT DETAILS</span>
+            <span className="font-bebas tracking-[0.2em] text-sm text-forest">EVENT DETAILS</span>
           </div>
           <div className="px-5 py-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -336,9 +336,9 @@ export default function StaffPortal() {
         {/* ── Venue Setup ── */}
         {runsheet.venueSetup && (
           <div className="bg-white border border-gold/30 shadow-sm">
-            <div className="px-5 py-3 border-b border-gold/30 flex items-center gap-2">
+            <div className="px-5 py-3 border-b-2 border-forest/70 flex items-center gap-2">
               <Building2 className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
+              <span className="font-bebas tracking-[0.2em] text-sm text-forest">VENUE SETUP</span>
             </div>
             <div className="px-5 py-4">
               <div className="font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.venueSetup }} />
@@ -349,9 +349,9 @@ export default function StaffPortal() {
         {/* ── Dietary Requirements ── */}
         {runsheet.dietaries && runsheet.dietaries.length > 0 && (
           <div className="bg-white border border-gold/30 shadow-sm">
-            <div className="px-5 py-3 border-b border-gold/30 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-500" />
-              <span className="font-bebas tracking-widest text-sm text-amber-600">DIETARY REQUIREMENTS</span>
+            <div className="px-5 py-3 border-b-2 border-red-400/70 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="font-bebas tracking-[0.2em] text-sm text-red-600">⚠ DIETARY &amp; ALLERGIES</span>
             </div>
             <div className="px-5 py-4 flex flex-wrap gap-2">
               {runsheet.dietaries.map((d, i) => (
@@ -372,11 +372,11 @@ export default function StaffPortal() {
         {/* ── Timeline ── */}
         {sortedItems.length > 0 && (
           <div className="bg-white border border-gold/30 shadow-sm">
-            <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
-              <Clock className="w-4 h-4 text-white" />
-              <span className="font-bebas tracking-widest text-sm text-white">EVENT TIMELINE</span>
+            <div className="flex items-center gap-2 px-5 py-3 border-b-2 border-forest/70">
+              <Clock className="w-4 h-4 text-forest" />
+              <span className="font-bebas tracking-[0.2em] text-sm text-forest">EVENT TIMELINE</span>
               {sortedItems.length > 0 && (
-                <span className="font-dm text-white/60 text-xs ml-1">
+                <span className="font-dm text-ink/45 text-xs ml-auto">
                   {formatTime12(sortedItems[0].time)} – {formatTime12(addMinutes(sortedItems[sortedItems.length - 1].time, sortedItems[sortedItems.length - 1].duration ?? 0))}
                 </span>
               )}
@@ -417,8 +417,9 @@ export default function StaffPortal() {
           const formatBar = (s: string) => (s || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
           return (
             <div className="bg-white border border-gold/30 shadow-sm">
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
-                <span className="font-bebas tracking-widest text-sm text-white">BAR ARRANGEMENT</span>
+              <div className="flex items-center gap-2 px-5 py-3 border-b-2 border-forest/70">
+                <Wine className="w-4 h-4 text-forest" />
+                <span className="font-bebas tracking-[0.2em] text-sm text-forest">BAR ARRANGEMENT</span>
               </div>
               <div className="px-5 py-4 space-y-2">
                 {dd.barOption && (
@@ -453,9 +454,9 @@ export default function StaffPortal() {
         {/* ── F&B: FOH ── */}
         {fohItems.length > 0 && (
           <div className="bg-white border border-gold/30 shadow-sm">
-            <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
-              <UtensilsCrossed className="w-4 h-4 text-white" />
-              <span className="font-bebas tracking-widest text-sm text-white">FRONT OF HOUSE — F&amp;B SHEET</span>
+            <div className="flex items-center gap-2 px-5 py-3 border-b-2 border-forest/70">
+              <UtensilsCrossed className="w-4 h-4 text-forest" />
+              <span className="font-bebas tracking-[0.2em] text-sm text-forest">FRONT OF HOUSE — F&amp;B SHEET</span>
             </div>
             {/* Column headers */}
             <div className="grid gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5"
@@ -497,9 +498,9 @@ export default function StaffPortal() {
         {/* ── F&B: Kitchen ── */}
         {kitchenItems.length > 0 && (
           <div className="bg-white border border-gold/30 shadow-sm">
-            <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
-              <ChefHat className="w-4 h-4 text-white" />
-              <span className="font-bebas tracking-widest text-sm text-white">KITCHEN SHEET</span>
+            <div className="flex items-center gap-2 px-5 py-3 border-b-2 border-forest/70">
+              <ChefHat className="w-4 h-4 text-forest" />
+              <span className="font-bebas tracking-[0.2em] text-sm text-forest">KITCHEN SHEET</span>
             </div>
             {/* Column headers */}
             <div className="grid gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5"
