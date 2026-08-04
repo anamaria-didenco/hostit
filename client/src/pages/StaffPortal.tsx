@@ -192,7 +192,12 @@ export default function StaffPortal() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => window.print()}
+              onClick={() => {
+                // Booking-backed runsheets print the real BEO PDF; lead-only
+                // runsheets print the built-in page.
+                if ((runsheet as any).bookingId) window.open(`/api/beo/staff/${token}`, '_blank');
+                else window.print();
+              }}
               className="print:hidden flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-sm transition-colors"
               title="Print or save as PDF"
             >
@@ -241,7 +246,19 @@ export default function StaffPortal() {
 
       <main className="max-w-4xl mx-auto px-4 py-5 space-y-4">
 
-        {activePortalTab === 'runsheet' && (<>
+        {/* Booking-backed runsheets render the REAL BEO document (same HTML the
+            PDF is built from) so the live link mirrors the BEO 1:1. Lead-only
+            runsheets (no booking, so no BEO) fall back to the built-in layout. */}
+        {activePortalTab === 'runsheet' && (runsheet as any).bookingId ? (
+          <iframe
+            src={`/api/beo/staff/${token}?format=html`}
+            title="Event Order"
+            className="w-full bg-cream border border-gold/30 shadow-sm"
+            style={{ height: 'calc(100vh - 140px)' }}
+          />
+        ) : null}
+
+        {activePortalTab === 'runsheet' && !(runsheet as any).bookingId && (<>
 
         {/* ── Event Details ── */}
         <div className="bg-white border border-gold/30 shadow-sm">
