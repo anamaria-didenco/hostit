@@ -2276,20 +2276,28 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             contentType: a.contentType,
           }));
 
-        // Render any requested BEO PDFs server-side and attach them. Fail loud:
-        // if a BEO can't be produced we abort the send rather than quietly
-        // email a staff briefing that's missing its function sheet.
+        // Render any requested BEO PDFs server-side and attach them. Attach every
+        // one that renders — a single bad booking must NOT drop the BEOs for a
+        // whole weekly briefing. Failures are logged and reported back; only if
+        // EVERY requested BEO fails do we abort (so a single-event briefing that
+        // can't produce its one sheet still fails loudly rather than sending an
+        // empty-handed email).
+        let beoRequested = 0;
+        let beoAttached = 0;
         if (input.beoAttach?.length) {
+          beoRequested = input.beoAttach.length;
           const { renderBeoPdfBuffer } = await import('./beoPdf');
           for (const b of input.beoAttach) {
-            let buf: Buffer;
             try {
-              buf = await renderBeoPdfBuffer({ bookingId: b.bookingId, userId: ctx.user.id, hide: input.beoHide });
+              const buf = await renderBeoPdfBuffer({ bookingId: b.bookingId, userId: ctx.user.id, hide: input.beoHide });
+              attachments.push({ filename: b.filename, content: buf, contentType: 'application/pdf' });
+              beoAttached++;
             } catch (err) {
               console.error('[email.send] BEO attach failed for booking', b.bookingId, err);
-              throw new Error("Couldn't generate the BEO PDF for this briefing — please try again, or check the booking exists.");
             }
-            attachments.push({ filename: b.filename, content: buf, contentType: 'application/pdf' });
+          }
+          if (beoAttached === 0) {
+            throw new Error("Couldn't generate the BEO PDF for this briefing — please try again, or check the booking exists.");
           }
         }
 
@@ -2363,7 +2371,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             });
           }
         }
-        return { success: true };
+        return { success: true, beoRequested, beoAttached, beoFailed: beoRequested - beoAttached };
       }),
 
     // ─── Weekly staff runsheet digest ──────────────────────────────────────
