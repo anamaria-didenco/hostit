@@ -1920,7 +1920,7 @@ export default function Dashboard() {
               filename: `${String(ev.name ?? '').replace(/[^a-z0-9_\- ]/gi, '').trim() || 'Event'} — BEO.pdf`,
             }))
         : [];
-      await emailSendForWeekly.mutateAsync({
+      const res: any = await emailSendForWeekly.mutateAsync({
         to: recipients,
         subject: weeklySubject,
         body: weeklyBody,
@@ -1928,7 +1928,14 @@ export default function Dashboard() {
         beoHide: getBeoHide() || undefined,
         signatureId: weeklySigId || undefined,
       });
-      toast.success(`Briefing sent — ${events.length} event${events.length !== 1 ? 's' : ''}, ${beoAttach.length} BEO${beoAttach.length !== 1 ? 's' : ''} attached`, { id: tId });
+      // Report the count the SERVER actually attached (a BEO that fails to render
+      // is skipped, not silently assumed attached).
+      const attached = res?.beoAttached ?? beoAttach.length;
+      const failed = res?.beoFailed ?? 0;
+      toast.success(
+        `Briefing sent — ${events.length} event${events.length !== 1 ? 's' : ''}, ${attached} BEO${attached !== 1 ? 's' : ''} attached${failed ? ` (${failed} couldn't be generated)` : ''}`,
+        { id: tId },
+      );
       setShowWeeklyModal(false);
       setWeeklyEventsData(null);
       setWeeklySubject('');
