@@ -7,7 +7,7 @@ import multer from "multer";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
-import { handleBeoPdf, handleBeoPdfPublic } from "../beoPdf";
+import { handleBeoPdf, handleBeoPdfPublic, handleBeoPdfStaff } from "../beoPdf";
 import { handleFloorPlanPdf } from "../floorPlanPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -372,6 +372,10 @@ async function startServer() {
 
   // BEO Live Link — public, token-gated. Used as the customer-facing event pack.
   app.get("/api/beo/public/:token", pdfPublicLimit, handleBeoPdfPublic);
+
+  // BEO Live Staff Link — token-gated (staff-portal link). Renders the exact
+  // internal BEO so the live staff link mirrors the printed BEO 1:1.
+  app.get("/api/beo/staff/:token", pdfPublicLimit, handleBeoPdfStaff);
 
   // NOTE: The old /api/staff-sheet/:runsheetId route and staffSheetPdf.ts
   // have been removed. The BEO (handleBeoPdf above) is now the single

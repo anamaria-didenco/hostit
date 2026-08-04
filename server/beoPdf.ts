@@ -36,6 +36,7 @@ import {
   leads,
   menuPackages,
   menuItems,
+  staffPortalLinks,
 } from "../drizzle/schema";
 import { eq, and, inArray } from "drizzle-orm";
 
@@ -330,6 +331,12 @@ export async function handleBeoPdfPublic(req: Request, res: Response) {
   return _renderBeo(req, res, "token");
 }
 
+// Live staff-portal link → the full internal BEO (HTML via ?format=html, or PDF).
+// Lets the staff link render the exact same document as the BEO.
+export async function handleBeoPdfStaff(req: Request, res: Response) {
+  return _renderBeo(req, res, "staff");
+}
+
 /**
  * Render the internal BEO to a PDF Buffer, server-side, for the given booking
  * and owner. Used by the staff-briefing email path so the attachment never
@@ -372,7 +379,7 @@ export async function renderBeoPdfBuffer(opts: {
   return body as Buffer;
 }
 
-async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
+async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | "staff") {
   const isPublic = mode === "token";
   try {
     const db = await getDb();
@@ -389,6 +396,23 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token") {
       if (!b) return res.status(404).send("Event pack not found or link revoked");
       booking = b;
       userId = b.ownerId;
+    } else if (mode === "staff") {
+      // Staff-portal link token → runsheet → its booking. Staff see the full
+      // internal BEO (isPublic is false for this mode), matching what they'd
+      // get on the printed sheet — the live link mirrors the BEO exactly.
+      const token = String(req.params.token || "").trim();
+      if (!token) return res.status(400).send("Invalid token");
+      const [link] = await db.select().from(staffPortalLinks)
+        .where(eq(staffPortalLinks.token, token)).limit(1);
+      if (!link) return res.status(404).send("Staff link not found or revoked");
+      const [sheet] = await db.select().from(runsheets)
+        .where(and(eq(runsheets.id, link.runsheetId), eq(runsheets.ownerId, link.ownerId))).limit(1);
+      if (!sheet || !sheet.bookingId) return res.status(404).send("No event linked to this runsheet yet");
+      const [b] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, sheet.bookingId), eq(bookings.ownerId, link.ownerId))).limit(1);
+      if (!b) return res.status(404).send("Booking not found");
+      booking = b;
+      userId = link.ownerId;
     } else {
       const bookingId = parseInt(req.params.bookingId, 10);
       if (isNaN(bookingId)) return res.status(400).send("Invalid booking ID");
@@ -1468,11 +1492,12 @@ ${sheetsHtml}
 </body>
 </html>`;
 
-    // ── Live in-app preview ──────────────────────────────────────────
-    // The "Preview & Print BEO" modal loads this exact HTML in an iframe
-    // (?format=html) so what the operator sees on screen is what prints.
-    // Auth route only — the public event-pack always renders the PDF.
-    if (mode === "auth" && String((req.query.format as string) || "").toLowerCase() === "html") {
+    // ── Live in-app / staff HTML preview ─────────────────────────────
+    // The "Preview & Print BEO" modal (auth) and the live staff link (staff)
+    // load this exact HTML in an iframe (?format=html), so the on-screen view
+    // is the same document that prints — the staff link mirrors the BEO 1:1.
+    // The public event-pack always renders the PDF.
+    if ((mode === "auth" || mode === "staff") && String((req.query.format as string) || "").toLowerCase() === "html") {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-store");
       return res.send(html);
