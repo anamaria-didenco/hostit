@@ -370,6 +370,17 @@ export default function StaffPortal() {
           </div>
         )}
 
+        {/* ── Kitchen Notes ── */}
+        {(runsheet as any).kitchenNotes && (
+          <div className="bg-white border border-gold/30 shadow-sm">
+            <div className="px-5 py-3 border-b-2 border-forest/70 flex items-center gap-2">
+              <ChefHat className="w-4 h-4 text-forest" />
+              <span className="font-bebas tracking-[0.2em] text-sm text-forest">KITCHEN NOTES</span>
+            </div>
+            <div className="px-5 py-4 font-dm text-sm text-ink/80 whitespace-pre-wrap">{(runsheet as any).kitchenNotes}</div>
+          </div>
+        )}
+
         {/* ── Dietary Requirements ── */}
         {runsheet.dietaries && runsheet.dietaries.length > 0 && (
           <div className="bg-white border border-gold/30 shadow-sm">

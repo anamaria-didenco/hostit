@@ -9263,13 +9263,21 @@ export default function Dashboard() {
                       {dietaries.length > 0 && (
                         <div className="px-4 py-2">
                           <div className="font-bebas tracking-widest text-[10px] text-red-600 mb-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> DIETARY & ALLERGIES</div>
-                          <div className="space-y-0.5">
+                          <div className="space-y-1">
                             {dietaries.map((d: any, idx: number) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isSevere(d.name) ? 'bg-red-500' : 'bg-amber-500'}`} />
-                                {d.count > 1 && <span className="font-dm text-[11px] text-ink/50 tabular-nums">×{d.count}</span>}
-                                <span className="font-dm text-xs text-ink">{d.name}</span>
-                                {isSevere(d.name) && <span className="font-bebas tracking-widest text-[8px] text-red-600">SEVERE</span>}
+                              <div key={idx} className="flex items-start gap-2">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${isSevere(d.name) ? 'bg-red-500' : 'bg-amber-500'}`} />
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {d.count > 1 && <span className="font-dm text-[11px] text-ink/50 tabular-nums">×{d.count}</span>}
+                                    <span className="font-dm text-xs text-ink font-medium">{d.name}</span>
+                                    {isSevere(d.name) && <span className="font-bebas tracking-widest text-[8px] text-red-600">SEVERE</span>}
+                                  </div>
+                                  {d.notes && <div className="font-dm text-[11px] text-ink/50 leading-snug">{d.notes}</div>}
+                                  {Array.isArray(d.names) && d.names.length > 0 && (
+                                    <div className="font-dm text-[11px] text-ink/60 leading-snug">{d.names.join(' · ')}</div>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>

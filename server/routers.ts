@@ -3449,6 +3449,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         venueSetup: z.string().optional().nullable(),
         setupSummary: z.string().optional().nullable(),
         footerText: z.string().optional().nullable(),
+        kitchenNotes: z.string().optional().nullable(),
         gstInclusive: z.boolean().optional(),
         paymentNotes: z.string().optional().nullable(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).optional(),
@@ -3494,6 +3495,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           venueSetup: input.venueSetup ?? null,
           setupSummary: input.setupSummary ?? null,
           footerText: input.footerText ?? null,
+          kitchenNotes: input.kitchenNotes ?? null,
           gstInclusive: input.gstInclusive ?? false,
           paymentNotes: input.paymentNotes ?? null,
           costItems: input.costItems ?? null,
@@ -3542,6 +3544,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         venueSetup: z.string().optional().nullable(),
         setupSummary: z.string().optional().nullable(),
         footerText: z.string().optional().nullable(),
+        kitchenNotes: z.string().optional().nullable(),
         proposalId: z.number().nullable().optional(),
         floorPlanId: z.number().nullable().optional(),
         fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional(), qty: z.boolean().optional() }).optional(),
@@ -3572,6 +3575,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.venueSetup !== undefined) updateData.venueSetup = fields.venueSetup;
         if (fields.setupSummary !== undefined) updateData.setupSummary = fields.setupSummary;
         if (fields.footerText !== undefined) updateData.footerText = fields.footerText;
+        if (fields.kitchenNotes !== undefined) updateData.kitchenNotes = fields.kitchenNotes;
         if (fields.proposalId !== undefined) updateData.proposalId = fields.proposalId;
         if (fields.floorPlanId !== undefined) updateData.floorPlanId = fields.floorPlanId;
         if (fields.fnbColumns !== undefined) updateData.fnbColumns = fields.fnbColumns;

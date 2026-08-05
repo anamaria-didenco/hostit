@@ -929,6 +929,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         <div class="bev-grid">${bevRows.join("")}</div>
       </div>` : "";
 
+    // Kitchen / chef notes — internal (mirrors the bar notes). Shown on the
+    // staff BEO + live runsheet, hidden from the public event pack.
+    const kitchenNotesText = isPublic ? "" : ((runsheet as any)?.kitchenNotes ?? "").toString();
+
     // ── Bar arrangement (page 2) — bordered box w/ green tag + notes ──────
     const barNotesText = ((drinks as any)?.barNotes ?? "").toString();
     const barOpt = (drinks as any)?.barOption as string | undefined;
@@ -1270,10 +1274,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
 
     // ── Assemble pages; collapse empties; number "Page N of N" dynamically ──
     const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
+    const kitchenNoteSection = kitchenNotesText.trim()
+      ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Kitchen Notes")}<div style="font-size:11.5px;color:var(--ink2);line-height:1.5">${escHtml(kitchenNotesText).replace(/\n/g, "<br>")}</div></div>`
+      : "";
     // DF-5: exactly one signature strip in the document — the formal Client
     // Acceptance block on the Event Summary page. No page-1 sign-off strip.
     const page1Content = `${p1Head}${p1Band}${clientDetailsSection}${setupNoteSection}${eventNotesSection}${show('timeline', runOfDaySection)}`;
-    const page2Content = (p2Food.trim() || p2Diet.trim() || p2Bev.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${p2Diet}${p2Bev}` : "";
+    const page2Content = (p2Food.trim() || p2Diet.trim() || p2Bev.trim() || kitchenNoteSection.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${kitchenNoteSection}${p2Diet}${p2Bev}` : "";
     // One continuous flow: sections condense onto as few physical A4 pages as
     // the content needs (no reserved page per section). Empty sections still
     // collapse. Page numbering is applied by the running PDF footer below; the
