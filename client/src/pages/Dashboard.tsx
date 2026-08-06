@@ -8834,41 +8834,47 @@ export default function Dashboard() {
                       doesn't nag the user about a deposit they were
                       never going to collect. */}
                   {selectedBooking.depositRequired === false ? (
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="font-bebas text-xs tracking-widest text-ink/50">— DEPOSIT NOT REQUIRED</span>
+                    <div className="mt-3 flex items-center justify-between gap-2 px-3 py-2 border border-gold/25 bg-linen/40">
+                      <span className="font-bebas text-xs tracking-widest text-ink/50">Deposit not required</span>
                       <button
                         onClick={() => {
                           setSelectedBooking((prev: any) => prev ? { ...prev, depositRequired: true } : prev);
                           rescheduleBooking.mutate({ id: selectedBooking.id, depositRequired: true } as any);
                         }}
-                        className="font-bebas text-[10px] tracking-widest text-forest hover:underline"
+                        className="font-bebas text-[10px] tracking-widest text-forest hover:underline flex-shrink-0"
                         title="Click to start tracking a deposit again">
-                        REQUIRE DEPOSIT
+                        REQUIRE
                       </button>
                     </div>
                   ) : (
-                    <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="mt-3 space-y-1.5">
                       <button
                         onClick={() => {
                           const next = !selectedBooking.depositPaid;
                           setSelectedBooking((prev: any) => prev ? { ...prev, depositPaid: next } : prev);
                           rescheduleBooking.mutate({ id: selectedBooking.id, depositPaid: next } as any);
                         }}
-                        className={`font-bebas text-xs tracking-widest cursor-pointer hover:opacity-80 ${
-                          selectedBooking.depositPaid ? 'text-forest' : 'text-amber-600'
+                        className={`w-full flex items-center gap-2 px-3 py-2 border text-left transition-colors hover:opacity-90 ${
+                          selectedBooking.depositPaid
+                            ? 'border-forest/30 bg-forest/5 text-forest'
+                            : 'border-amber-300 bg-amber-50 text-amber-700'
                         }`}
-                        title="Click to toggle">
-                        {selectedBooking.depositPaid ? '✓ DEPOSIT PAID — click to mark unpaid' : '⚠ DEPOSIT PENDING — click to mark paid'}
+                        title="Click to toggle deposit paid / unpaid">
+                        <span className="text-sm leading-none flex-shrink-0">{selectedBooking.depositPaid ? '✓' : '⚠'}</span>
+                        <span className="font-bebas text-xs tracking-widest flex-1">{selectedBooking.depositPaid ? 'DEPOSIT PAID' : 'DEPOSIT PENDING'}</span>
+                        <span className="font-dm text-[10px] opacity-60 flex-shrink-0">tap to {selectedBooking.depositPaid ? 'mark unpaid' : 'mark paid'}</span>
                       </button>
-                      <button
-                        onClick={() => {
-                          setSelectedBooking((prev: any) => prev ? { ...prev, depositRequired: false, depositPaid: false } : prev);
-                          rescheduleBooking.mutate({ id: selectedBooking.id, depositRequired: false } as any);
-                        }}
-                        className="font-bebas text-[10px] tracking-widest text-ink/40 hover:text-ink"
-                        title="This booking doesn't require a deposit at all">
-                        NO DEPOSIT
-                      </button>
+                      <div className="text-right">
+                        <button
+                          onClick={() => {
+                            setSelectedBooking((prev: any) => prev ? { ...prev, depositRequired: false, depositPaid: false } : prev);
+                            rescheduleBooking.mutate({ id: selectedBooking.id, depositRequired: false } as any);
+                          }}
+                          className="font-bebas text-[10px] tracking-widest text-ink/40 hover:text-ink"
+                          title="This booking doesn't require a deposit at all">
+                          MARK — NO DEPOSIT NEEDED
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -9200,7 +9206,10 @@ export default function Dashboard() {
                 const courses = [...new Set(foodItems.map((i: any) => i.course).filter(Boolean))];
                 const timeline = (((drawerRunsheetFull as any)?.items) ?? []).filter((t: any) => (t.title ?? '').toString().trim());
                 const dietaries = (((drawerRunsheetFull as any)?.dietaries) ?? []).filter((d: any) => (d?.name ?? '').toString().trim());
-                const setupText = String((drawerRunsheetFull as any)?.venueSetup ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                const setupText = String((drawerRunsheetFull as any)?.venueSetup ?? '')
+                  .replace(/<[^>]+>/g, ' ')
+                  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+                  .replace(/\s+/g, ' ').trim();
                 const isSevere = (n: string) => /anaphyla|allerg|severe|coeliac|celiac/i.test(String(n || ''));
                 const hasAny = foodItems.length || drinkItems.length || timeline.length || dietaries.length || setupText;
                 if (!hasAny) return null;
@@ -9208,13 +9217,13 @@ export default function Dashboard() {
                   ? `/runsheet?id=${drawerRunsheetId}&leadId=${selectedBooking.id}`
                   : `/runsheet?id=${drawerRunsheetId}&bookingId=${selectedBooking.id}`;
                 return (
-                  <div className="border border-gold/20 overflow-hidden">
-                    <div className="bg-forest-dark px-4 py-2 flex items-center justify-between">
+                  <div className="border border-gold/20 overflow-hidden bg-white">
+                    <div className="px-4 py-2.5 flex items-center justify-between border-b border-gold/20 bg-forest/5">
                       <div className="flex items-center gap-2">
-                        <UtensilsCrossed className="w-3.5 h-3.5 text-gold" />
-                        <span className="font-bebas tracking-widest text-xs text-cream">EVENT OVERVIEW (FROM RUNSHEET)</span>
+                        <UtensilsCrossed className="w-3.5 h-3.5 text-forest" />
+                        <span className="font-bebas tracking-widest text-xs text-forest">EVENT OVERVIEW</span>
                       </div>
-                      <button onClick={() => setLocation(editHref)} className="font-bebas tracking-widest text-[10px] text-gold hover:text-gold/80">EDIT →</button>
+                      <button onClick={() => setLocation(editHref)} className="font-bebas tracking-widest text-[10px] text-forest/70 hover:text-forest">EDIT →</button>
                     </div>
                     <div className="divide-y divide-gold/10">
                       {/* Run of day */}
