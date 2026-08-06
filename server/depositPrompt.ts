@@ -30,6 +30,13 @@ export async function sendDepositPromptEmail(
   opts: { source: string } = { source: "unknown" }
 ): Promise<{ sent: boolean; reason?: string }> {
   try {
+    // Turned OFF at the owner's request — the "send the client their deposit
+    // request" reminder no longer fires on confirm. Re-enable without a code
+    // change by setting DEPOSIT_PROMPT_ENABLED=true.
+    if (process.env.DEPOSIT_PROMPT_ENABLED !== "true") {
+      return { sent: false, reason: "disabled" };
+    }
+
     const db = await getDb();
     if (!db) return { sent: false, reason: "db_unavailable" };
 
