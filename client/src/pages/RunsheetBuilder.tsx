@@ -419,6 +419,8 @@ export default function RunsheetBuilder() {
   const [venueSetup, setVenueSetup] = useState("");
   const [setupSummary, setSetupSummary] = useState("");
   const [footerText, setFooterText] = useState("");
+  // Kitchen / chef notes (mirrors bar notes) — shown on the BEO + live runsheet.
+  const [kitchenNotes, setKitchenNotes] = useState("");
   const [setupSectionOpen, setSetupSectionOpen] = useState(true);
 
   // Proposal link
@@ -1460,6 +1462,7 @@ export default function RunsheetBuilder() {
       setVenueSetup(existing.venueSetup ?? "");
       setSetupSummary((existing as any).setupSummary ?? "");
       setFooterText(existing.footerText ?? "");
+      setKitchenNotes((existing as any).kitchenNotes ?? "");
       setLinkedProposalId((existing as any).proposalId ?? undefined);
       setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
       setItems((existing.items ?? []).map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
@@ -1703,6 +1706,7 @@ export default function RunsheetBuilder() {
         // made deleted notes/setup/footer reappear on reload.
         notes: notes || null,
         footerText: footerText || null,
+        kitchenNotes: kitchenNotes || null,
         paymentNotes: paymentNotes || null,
         spaceName: spaceName || null,
         venueArea: venueArea || null,
@@ -1723,7 +1727,7 @@ export default function RunsheetBuilder() {
       } as any);
     }, 1000);
     return () => clearTimeout(t);
-  }, [sheetId, notes, footerText, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices]);
+  }, [sheetId, notes, footerText, kitchenNotes, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices]);
 
   // Auto-save FOOD items (debounced) — same convenience as drinks/notes, so the
   // operator never has to click SAVE FOOD. Silent (no toast, no refetch) so it
@@ -1792,6 +1796,7 @@ export default function RunsheetBuilder() {
           venueSetup: venueSetup || null,
           setupSummary: setupSummary || null,
           footerText: footerText || null,
+          kitchenNotes: kitchenNotes || null,
           gstInclusive,
           paymentNotes: paymentNotes || null,
           drinksData: (rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length)
@@ -1828,6 +1833,7 @@ export default function RunsheetBuilder() {
           venueSetup: venueSetup || null,
           setupSummary: setupSummary || null,
           footerText: footerText || null,
+          kitchenNotes: kitchenNotes || null,
           proposalId: linkedProposalId,
           floorPlanId: linkedFloorPlanId ?? null,
           costItems: costItems.length ? costItems : null,
@@ -3621,6 +3627,18 @@ export default function RunsheetBuilder() {
                 )}
               </div>
             )}
+
+            {/* Kitchen / chef notes — mirrors the Drinks/Bar notes; prints on
+                the BEO and the live staff runsheet. */}
+            <div className="px-5 py-4 border-t border-gold/20 no-print">
+              <div className="font-bebas tracking-widest text-xs text-ink/40 mb-3 flex items-center gap-1.5"><ChefHat className="w-3.5 h-3.5" /> KITCHEN NOTES</div>
+              <Textarea
+                value={kitchenNotes}
+                onChange={e => setKitchenNotes(e.target.value)}
+                placeholder={`e.g.\n• Allergy plates to be prepped separately\n• Canapés out at 6:15, mains 7:00\n• Chef to plate desserts to order`}
+                className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm font-dm min-h-[120px]"
+              />
+            </div>
 
             {/* Print F&B header */}
             <div className="hidden print:flex items-center gap-2 px-5 py-2 border-b border-gold/30 bg-[var(--brand)]">

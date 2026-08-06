@@ -329,6 +329,13 @@
       "when": 1779800500000,
       "tag": "0046_email_signatures",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1779800600000,
+      "tag": "0047_kitchen_notes",
+      "breakpoints": true
     }
   ]
 }

@@ -385,6 +385,9 @@ export const runsheets = pgTable("runsheets", {
   // "Seated · 2 × tables of 8" — complements the rich-text venueSetup.
   setupSummary: varchar("setupSummary", { length: 255 }),
   footerText: text("footerText"),
+  // Free-text kitchen/chef notes (mirrors the bar notes in drinksData) — shown
+  // on the BEO and the live staff runsheet.
+  kitchenNotes: text("kitchenNotes"),
   proposalId: integer("proposalId"),
   floorPlanId: integer("floorPlanId"),
   costItems: json("costItems").$type<{ _id: string; label: string; qty: number; unitPrice: number; category?: string }[]>(),
