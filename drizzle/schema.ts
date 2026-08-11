@@ -284,6 +284,15 @@ export const bookings = pgTable("bookings", {
   // behaviour for existing rows.
   depositRequired: boolean("depositRequired").default(true).notNull(),
   minimumSpend: decimal("minimumSpend", { precision: 10, scale: 2 }),
+  // Payment-workflow tracking for the Payments board. Bar Franco's terms run
+  // two separate money streams per event on top of the deposit: food is
+  // invoiced/paid before the event, drinks settle on the night or by invoice
+  // (with the deposit deducted off the drinks bill). These track where each
+  // stream is at so the team can see who to invoice / who's paid at a glance.
+  //   foodStatus:   'to_invoice' | 'invoiced' | 'paid'
+  //   drinksStatus: 'on_night' | 'to_invoice' | 'invoiced' | 'paid'  (null → inferred from bar option)
+  foodStatus: varchar("foodStatus", { length: 20 }).default("to_invoice").notNull(),
+  drinksStatus: varchar("drinksStatus", { length: 20 }),
   status: bookingStatusEnum("status").default("confirmed").notNull(),
   notes: text("notes"),
   nbiBookingId: varchar("nbiBookingId", { length: 100 }),

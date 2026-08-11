@@ -1679,6 +1679,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         minimumSpend: z.number().nullable().optional(),
         status: z.enum(['confirmed', 'tentative', 'cancelled', 'finished']).optional(),
         notes: z.string().nullable().optional(),
+        // Payments board — food/drinks workflow stream statuses.
+        foodStatus: z.enum(['to_invoice', 'invoiced', 'paid']).optional(),
+        drinksStatus: z.enum(['on_night', 'to_invoice', 'invoiced', 'paid']).nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1729,6 +1732,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.minimumSpend !== undefined) updates.minimumSpend = rest.minimumSpend !== null ? String(rest.minimumSpend) : null;
         if (rest.status !== undefined) updates.status = rest.status;
         if (rest.notes !== undefined) updates.notes = rest.notes;
+        if (rest.foodStatus !== undefined) updates.foodStatus = rest.foodStatus;
+        if (rest.drinksStatus !== undefined) updates.drinksStatus = rest.drinksStatus;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
         // Cascade key shared fields back to the parent lead so the Events
         // table (which reads from leads.list) stays in sync with the
@@ -3852,6 +3857,107 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const outstanding = Math.max(0, total - netPaid);
         const status = netPaid <= 0 ? 'unpaid' : outstanding <= 0 ? 'paid_in_full' : netPaid >= Number(booking.depositNzd ?? 0) ? 'deposit_paid' : 'partial';
         return { totalPaid: netPaid, outstanding, status, total };
+      }),
+    // Cross-event payments board — one row per (non-cancelled) booking with the
+    // paid/outstanding numbers already computed, plus an inferred workflow
+    // "stage" so the team can see at a glance who to invoice, who's paid, who's
+    // still owing, and who's settling on the night. All derived from what's
+    // recorded (payment ledger + deposit flag + bar option / payment notes) —
+    // no extra data entry required.
+    overview: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getDb } = await import('./db');
+        const { payments, bookings, runsheets } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [] as any[];
+
+        const [allBookings, allPayments, allRunsheets] = await Promise.all([
+          db.select().from(bookings).where(eq(bookings.ownerId, ctx.user.id)),
+          db.select().from(payments).where(eq(payments.ownerId, ctx.user.id)),
+          db.select({ bookingId: runsheets.bookingId, drinksData: runsheets.drinksData, paymentNotes: runsheets.paymentNotes })
+            .from(runsheets).where(eq(runsheets.ownerId, ctx.user.id)),
+        ]);
+
+        // Index the payment ledger and the on-the-night signals by bookingId.
+        const payByBooking = new Map<number, any[]>();
+        for (const p of allPayments) {
+          const arr = payByBooking.get(p.bookingId) ?? [];
+          arr.push(p);
+          payByBooking.set(p.bookingId, arr);
+        }
+        const rsByBooking = new Map<number, { barOption?: string; paymentNotes?: string }>();
+        for (const r of allRunsheets) {
+          if (r.bookingId == null) continue;
+          const existing = rsByBooking.get(r.bookingId) ?? {};
+          const barOption = (r.drinksData as any)?.barOption;
+          if (barOption && !existing.barOption) existing.barOption = barOption;
+          if (r.paymentNotes && !existing.paymentNotes) existing.paymentNotes = r.paymentNotes;
+          rsByBooking.set(r.bookingId, existing);
+        }
+
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        // Phrases that signal "the client settles at/after the event" rather than
+        // being invoiced in advance.
+        const onNightRe = /(on the (night|day)|pay(?:ing)? on the|cash on|settle(?:d)? on|on arrival|on the door)/i;
+
+        return allBookings
+          .filter(b => b.status !== 'cancelled')
+          .map(b => {
+            const pmts = payByBooking.get(b.id) ?? [];
+            const net = pmts.reduce((s, p) => s + (p.type === 'refund' ? -1 : 1) * Number(p.amount || 0), 0);
+            const total = Number(b.totalNzd ?? 0);
+            const hasPrice = total > 0;
+            // Guard the null-total case: without a price we can't say "paid in full".
+            const outstanding = hasPrice ? Math.max(0, total - net) : null;
+            const depAmt = Number(b.depositNzd ?? 0);
+            const depositTaken = Boolean(b.depositPaid) || net > 0 || (depAmt > 0 && net >= depAmt);
+            const fullyPaid = hasPrice && net >= total - 0.01;
+            const rs = rsByBooking.get(b.id) ?? {};
+            const barOpt = rs.barOption ?? '';
+            const onNightSignal = barOpt === 'cash_bar' || barOpt === 'bar_tab_then_cash'
+              || onNightRe.test(rs.paymentNotes ?? '') || onNightRe.test(b.notes ?? '');
+            const eventTs = b.eventDate ? new Date(b.eventDate as any).getTime() : null;
+            const isFuture = eventTs == null || eventTs >= startOfToday;
+
+            let stage: 'to_invoice' | 'awaiting' | 'on_the_night' | 'paid_in_full';
+            if (fullyPaid) stage = 'paid_in_full';
+            else if (isFuture && onNightSignal) stage = 'on_the_night';
+            else if (depositTaken) stage = 'awaiting';
+            else stage = 'to_invoice';
+
+            // Food/drinks workflow streams. Food defaults to "to invoice";
+            // drinks default is inferred from the bar setup when the team
+            // hasn't chosen a settlement mode yet (cash-style bars settle on
+            // the night, otherwise it's invoiced).
+            const foodStatus = ((b as any).foodStatus as string) || 'to_invoice';
+            const drinksStatus = ((b as any).drinksStatus as string | null) ?? (onNightSignal ? 'on_night' : 'to_invoice');
+
+            return {
+              bookingId: b.id,
+              name: `${b.firstName ?? ''}${b.lastName ? ' ' + b.lastName : ''}`.trim() || 'Client',
+              eventDate: b.eventDate,
+              eventType: b.eventType ?? null,
+              spaceName: b.spaceName ?? null,
+              guestCount: b.guestCount ?? null,
+              status: b.status,
+              total,
+              hasPrice,
+              paidToDate: net,
+              outstanding,
+              depositNzd: depAmt,
+              depositPaid: Boolean(b.depositPaid),
+              depositRequired: (b as any).depositRequired !== false,
+              onNightSignal,
+              stage,
+              foodStatus,
+              drinksStatus,
+              // true when drinks mode was inferred (not explicitly set) — the UI
+              // can show it as a suggestion the team can confirm/override.
+              drinksInferred: (b as any).drinksStatus == null,
+            };
+          });
       }),
   }),
 

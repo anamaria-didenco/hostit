@@ -29,6 +29,7 @@ import StatusManager, { parseCustomStatuses, getStatusClasses, getStatusCalClass
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
+import PaymentsBoard from "@/pages/PaymentsBoard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
@@ -800,9 +801,9 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
 export default function Dashboard() {
   const { user, isAuthenticated, loading, isTeamMember } = useAuth();
   const [, setLocation] = useLocation();
-  type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"expressbook";
+  type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"payments"|"expressbook";
   type SettingsSubTab = "venue"|"brand-pack"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
-  const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","expressbook"];
+  const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","payments","expressbook"];
   const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","brand-pack","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist"];
   const isDashTab = (v: string | null): v is DashTab => v !== null && (DASH_TABS as readonly string[]).includes(v);
   const isSettingsSubTab = (v: string | null): v is SettingsSubTab => v !== null && (SETTINGS_SUB_TABS as readonly string[]).includes(v);
@@ -1322,16 +1323,26 @@ export default function Dashboard() {
     // need to refresh the lead-driven queries (events table, calendar
     // enquiry layer, dashboard tiles) — otherwise the table keeps the
     // stale row even after a successful save.
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       utils.bookings.list.invalidate();
       utils.bookings.byMonth.invalidate();
       utils.leads.list.invalidate();
       utils.leads.eventsByMonth.invalidate();
       utils.dashboard.invalidate();
+      utils.payments.overview.invalidate();
       refetchLeads();
-      toast.success("Event rescheduled");
+      // This mutation is reused for reschedules, deposit toggles, status
+      // changes and inline field edits — so tailor the toast to what actually
+      // changed rather than always saying "Event rescheduled".
+      const v = (vars ?? {}) as any;
+      let msg = "Event updated";
+      if (v.eventDate !== undefined) msg = "Event rescheduled";
+      else if (v.depositPaid !== undefined) msg = v.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
+      else if (v.depositRequired !== undefined) msg = v.depositRequired ? "Deposit now required" : "Marked as no deposit needed";
+      else if (v.status !== undefined) msg = "Status updated";
+      toast.success(msg);
     },
-    onError: () => toast.error("Failed to reschedule"),
+    onError: () => toast.error("Failed to save change"),
   });
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   function handleEventDrop(payload: { id: number; type: 'lead'|'booking'; eventDate: string }, newDateStr: string) {
@@ -2619,7 +2630,7 @@ export default function Dashboard() {
         {/* Mobile: current tab label */}
         <div className="md:hidden flex-1 text-center">
           <span className="font-inter text-sm font-semibold text-sage-dark">
-            {tab === "overview" ? "Home" : tab === "enquiries" ? "Events" : tab === "calendar" ? "Calendar" : tab === "tasks" ? "Tasks" : tab === "reports" ? "Reports" : "Settings"}
+            {tab === "overview" ? "Home" : tab === "enquiries" ? "Events" : tab === "calendar" ? "Calendar" : tab === "payments" ? "Payments" : tab === "tasks" ? "Tasks" : tab === "reports" ? "Reports" : "Settings"}
           </span>
         </div>
         {/* Spacer (desktop only) */}
@@ -2663,6 +2674,7 @@ export default function Dashboard() {
             { id: "overview",  label: "Dashboard", icon: <LayoutDashboard className="w-[17px] h-[17px]" /> },
             { id: "enquiries", label: "Enquiries", icon: <Mail className="w-[17px] h-[17px]" /> },
             { id: "calendar",  label: "Calendar",  icon: <Calendar className="w-[17px] h-[17px]" /> },
+            { id: "payments",  label: "Payments",  icon: <DollarSign className="w-[17px] h-[17px]" /> },
             { id: "tasks",     label: "Tasks",     icon: <CheckSquare className="w-[17px] h-[17px]" /> },
             { id: "reports",   label: "Reports",   icon: <BarChart2 className="w-[17px] h-[17px]" /> },
             { id: "settings",  label: "Settings",  icon: <Settings className="w-[17px] h-[17px]" /> },
@@ -5007,6 +5019,13 @@ export default function Dashboard() {
           {tab === "reports" && (
             <div className="flex-1">
               <ReportsPage />
+            </div>
+          )}
+
+          {/* ── PAYMENTS ────────────────────────────────────────────────────── */}
+          {tab === "payments" && (
+            <div className="flex-1">
+              <PaymentsBoard />
             </div>
           )}
 
