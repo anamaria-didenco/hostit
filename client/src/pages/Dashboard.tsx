@@ -187,7 +187,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
       <div className="p-3">
         <div className="grid grid-cols-7 mb-1">
           {dayLabels.map(d => (
-            <div key={d} className="text-center font-bebas text-[10px] tracking-widest text-ink/50 py-1">{d}</div>
+            <div key={d} className="text-center font-bebas text-[10px] tracking-widest text-ink/70 py-1">{d}</div>
           ))}
         </div>
         <div className="grid grid-cols-7 gap-0.5">
@@ -451,7 +451,7 @@ function ApiTokensSection() {
                 <div key={t.id} className="flex items-center justify-between bg-white border border-gold/20 px-3 py-2">
                   <div className="min-w-0">
                     <div className="font-dm text-sm text-ink truncate">{t.name} {t.revokedAt ? <span className="text-red-600 text-xs">(revoked)</span> : null}</div>
-                    <div className="font-mono text-[11px] text-ink/40">{t.prefix}…{t.lastUsedAt ? ` · last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : ''}</div>
+                    <div className="font-mono text-[11px] text-ink/60">{t.prefix}…{t.lastUsedAt ? ` · last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : ''}</div>
                   </div>
                   {!t.revokedAt && (
                     <button onClick={() => { if (confirm(`Revoke "${t.name}"?`)) revokeMutation.mutate({ id: t.id }); }}
@@ -1038,6 +1038,16 @@ export default function Dashboard() {
   const [editingSpace, setEditingSpace] = useState<any>(null);
   const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  // Event drawer accessibility: close on Escape and move focus into the panel
+  // when it opens (keyed on the booking id so inline edits don't steal focus).
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!selectedBooking) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectedBooking(null); };
+    document.addEventListener("keydown", onKey);
+    const t = setTimeout(() => drawerRef.current?.focus(), 0);
+    return () => { document.removeEventListener("keydown", onKey); clearTimeout(t); };
+  }, [selectedBooking?.id]);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
   const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked', spaceName: '' });
   const [widgetEditMode, setWidgetEditMode] = useState(false);
@@ -2754,7 +2764,7 @@ export default function Dashboard() {
                     </button>
                     {showStatsCustomize && (
                       <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg p-3 z-30 w-52">
-                        <div className="font-bebas text-xs tracking-widest text-ink/50 mb-2">SHOW / HIDE CARDS</div>
+                        <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
                         {allStats.map(s => (
                           <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
                             <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
@@ -3040,7 +3050,7 @@ export default function Dashboard() {
                         <div className="absolute z-50 mt-1 w-60 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[70vh] overflow-y-auto">
                           {/* Show section */}
                           <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
-                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">SHOW ONLY</span>
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/65">SHOW ONLY</span>
                             {leadStatusFilter.length > 0 && (
                               <button onClick={() => setLeadStatusFilter([])} className="text-[10px] font-dm text-forest hover:underline">CLEAR</button>
                             )}
@@ -3054,7 +3064,7 @@ export default function Dashboard() {
                           ))}
                           {/* Hidden section */}
                           <div className="flex items-center justify-between px-2 py-1 border-t border-gray-100 mt-1 mb-1">
-                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">HIDDEN BY DEFAULT</span>
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/65">HIDDEN BY DEFAULT</span>
                             {leadStatusExclude.length > 0 && (
                               <button onClick={() => setLeadStatusExcludeRaw([])} className="text-[10px] font-dm text-forest hover:underline">SHOW ALL</button>
                             )}
@@ -3106,7 +3116,7 @@ export default function Dashboard() {
                       title={leadSortDir === 'asc' ? 'Ascending' : 'Descending'}>
                       <ArrowUpDown className="w-3.5 h-3.5 text-ink/60" />
                     </button>
-                    <span className="font-dm text-xs text-ink/40 ml-auto">{filteredLeads.length} record{filteredLeads.length !== 1 ? 's' : ''}</span>
+                    <span className="font-dm text-xs text-ink/60 ml-auto">{filteredLeads.length} record{filteredLeads.length !== 1 ? 's' : ''}</span>
                   </div>
                 )}
                 {/* Bulk select all bar */}
@@ -3267,7 +3277,7 @@ export default function Dashboard() {
                             {fmtEventTime(lead.eventDate) && <span className="text-forest/70"> · {fmtEventTime(lead.eventDate)}</span>}
                           </span>
                         ) : (
-                          <span className="font-dm text-xs text-ink/30 italic">no date</span>
+                          <span className="font-dm text-xs text-ink/55 italic">no date</span>
                         )}
                       </div>
                       {/* Row 4: follow-up badge if set */}
@@ -3445,7 +3455,7 @@ export default function Dashboard() {
                     {/* Event Details */}
                     <div className="dante-card p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-bebas text-xs tracking-widest text-ink/40">EVENT DETAILS</h3>
+                        <h3 className="font-bebas text-xs tracking-widest text-ink/70">EVENT DETAILS</h3>
                         {!editingEventDetails ? (
                           <button onClick={() => {
                             setEventDetailForm({
@@ -3465,7 +3475,7 @@ export default function Dashboard() {
                           </button>
                         ) : (
                           <div className="flex gap-2">
-                            <button onClick={() => setEditingEventDetails(false)} className="text-xs text-ink/40 hover:text-ink font-bebas tracking-widest">CANCEL</button>
+                            <button onClick={() => setEditingEventDetails(false)} className="text-xs text-ink/60 hover:text-ink font-bebas tracking-widest">CANCEL</button>
                             <button onClick={() => {
                               updateLeadDetails.mutate({
                                 id: selectedLead.id,
@@ -3532,7 +3542,7 @@ export default function Dashboard() {
 
                     {/* Status & Actions */}
                     <div className="dante-card p-4">
-                      <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-3">PIPELINE STATUS</h3>
+                      <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-3">PIPELINE STATUS</h3>
                       {/* Confirm Booking CTA */}
                       {!['booked','confirmed'].includes(selectedLead.status) && (
                         <button
@@ -3600,14 +3610,14 @@ export default function Dashboard() {
                   {/* Message */}
                   {selectedLead.message && (
                   <div className="dante-card p-4 mb-6">
-                    <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-2">CLIENT MESSAGE</h3>
+                    <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-2">CLIENT MESSAGE</h3>
                       <p className="font-dm text-sm text-ink/60 italic">"{selectedLead.message}"</p>
                     </div>
                   )}
 
                   {/* Activity Log */}
                   <div className="dante-card p-4 mb-4">
-                    <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-3">ACTIVITY LOG</h3>
+                    <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-3">ACTIVITY LOG</h3>
                     <div className="space-y-2 mb-4 max-h-48 overflow-auto">
                       {(selectedLeadActivity ?? []).length === 0 ? (
                         <p className="font-dm text-xs text-ink/60">No activity yet</p>
@@ -3632,7 +3642,7 @@ export default function Dashboard() {
                   </div>
                   {/* Enquiry Source */}
                   <div className="dante-card p-4 mb-4">
-                    <h3 className="font-bebas text-xs tracking-widest text-ink/40 mb-3">ENQUIRY SOURCE</h3>
+                    <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-3">ENQUIRY SOURCE</h3>
                     <Select
                       value={selectedLead.source ?? ""}
                       onValueChange={(v) => updateLeadSource.mutate({ id: selectedLead.id, source: v })}
@@ -3732,25 +3742,25 @@ export default function Dashboard() {
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         {selectedLead.email && (
                           <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">EMAIL</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">EMAIL</p>
                             <p className="font-dm text-sm text-ink truncate">{selectedLead.email}</p>
                           </div>
                         )}
                         {selectedLead.phone && (
                           <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">PHONE</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">PHONE</p>
                             <p className="font-dm text-sm text-ink">{selectedLead.phone}</p>
                           </div>
                         )}
                         {selectedLead.eventType && (
                           <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">EVENT TYPE</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">EVENT TYPE</p>
                             <p className="font-dm text-sm text-ink">{selectedLead.eventType}</p>
                           </div>
                         )}
                         {selectedLead.eventDate && (
                           <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">EVENT DATE</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">EVENT DATE</p>
                             <p className="font-dm text-sm text-ink">
                               {new Date(selectedLead.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                               {fmtEventTime(selectedLead.eventDate) && (
@@ -3761,20 +3771,20 @@ export default function Dashboard() {
                         )}
                         {selectedLead.guestCount && (
                           <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">GUESTS</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">GUESTS</p>
                             <p className="font-dm text-sm text-ink">{selectedLead.guestCount}</p>
                           </div>
                         )}
                         {selectedLead.budget && (
                           <div>
-                            <p className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">BUDGET</p>
+                            <p className="font-bebas text-xs tracking-widest text-ink/70 mb-0.5">BUDGET</p>
                             <p className="font-dm text-sm text-ink">${Number(selectedLead.budget).toLocaleString()}</p>
                           </div>
                         )}
                       </div>
                       {selectedLead.message && (
                         <div>
-                          <p className="font-bebas text-xs tracking-widest text-ink/40 mb-1">MESSAGE</p>
+                          <p className="font-bebas text-xs tracking-widest text-ink/70 mb-1">MESSAGE</p>
                           <p className="font-dm text-sm text-ink/70 leading-relaxed line-clamp-3">{selectedLead.message}</p>
                         </div>
                       )}
@@ -3798,7 +3808,7 @@ export default function Dashboard() {
                         </button>
                         <button
                           onClick={() => { setLeadViewMode("list"); setKanbanDetailOpen(false); }}
-                          className="ml-auto font-bebas tracking-widest text-xs text-ink/40 hover:text-ink flex items-center gap-1 px-2 py-2">
+                          className="ml-auto font-bebas tracking-widest text-xs text-ink/60 hover:text-ink flex items-center gap-1 px-2 py-2">
                           FULL DETAILS <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -3883,7 +3893,7 @@ export default function Dashboard() {
                           <img src={(venueSettings as any).emailSignatureLogo} alt="Logo" className="h-8 w-auto object-contain mb-1 opacity-60" />
                         )}
                         {venueSettings?.emailSignature && (
-                          <pre className="font-dm text-xs text-ink/40 whitespace-pre-wrap leading-relaxed">{venueSettings.emailSignature}</pre>
+                          <pre className="font-dm text-xs text-ink/60 whitespace-pre-wrap leading-relaxed">{venueSettings.emailSignature}</pre>
                         )}
                       </div>
                     )}
@@ -4431,7 +4441,7 @@ export default function Dashboard() {
                       {eventStatusFilterOpen && (
                         <div className="absolute right-0 z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
                           <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
-                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">HIDE STATUSES</span>
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/65">HIDE STATUSES</span>
                             {eventTablePrefs.hideStatuses.length > 0 && (
                               <button
                                 onClick={() => setEventTablePrefs({ hideStatuses: [] })}
@@ -4578,11 +4588,11 @@ export default function Dashboard() {
                         <>
                           {/* Column header — desktop only */}
                           <div className="hidden lg:grid items-center gap-3 px-4 pb-1" style={{ gridTemplateColumns: GRID }}>
-                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">NAME</span>
-                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">EVENT TYPE</span>
-                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">EVENT DATE</span>
-                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">GUESTS</span>
-                            <span className="font-bebas tracking-widest text-[11px] text-ink/40">STATUS</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/60">NAME</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/60">EVENT TYPE</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/60">EVENT DATE</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/60">GUESTS</span>
+                            <span className="font-bebas tracking-widest text-[11px] text-ink/60">STATUS</span>
                             <span></span>
                           </div>
                           {list.map((item: any) => {
@@ -4595,7 +4605,7 @@ export default function Dashboard() {
                                 <div className="font-cormorant font-semibold text-base text-ink truncate min-w-0">{item.firstName} {item.lastName}</div>
                                 {/* Event type */}
                                 <div className="font-dm text-xs text-ink/75 truncate min-w-0">
-                                  <span className="lg:hidden font-bebas tracking-widest text-[10px] text-ink/40 mr-1">TYPE</span>
+                                  <span className="lg:hidden font-bebas tracking-widest text-[10px] text-ink/65 mr-1">TYPE</span>
                                   {item.eventType || (item._type === 'booking' ? 'Event' : 'Enquiry')}
                                 </div>
                                 {/* Date */}
@@ -4604,7 +4614,7 @@ export default function Dashboard() {
                                 </div>
                                 {/* Guests */}
                                 <div className="font-dm text-xs text-ink/75">
-                                  <span className="lg:hidden font-bebas tracking-widest text-[10px] text-ink/40 mr-1">GUESTS</span>
+                                  <span className="lg:hidden font-bebas tracking-widest text-[10px] text-ink/65 mr-1">GUESTS</span>
                                   {item.guestCount ?? '—'}
                                 </div>
                                 {/* Status (+ deposit for bookings) */}
@@ -4793,7 +4803,7 @@ export default function Dashboard() {
                       <div className="ml-auto flex items-center gap-3">
                         <div className="text-right">
                           <div className="font-bebas tracking-widest text-2xl text-ink/80">{totalEvents}</div>
-                          <div className="font-dm text-[10px] text-ink/40 leading-none">EVENT{totalEvents !== 1 ? 'S' : ''}</div>
+                          <div className="font-dm text-[10px] text-ink/65 leading-none">EVENT{totalEvents !== 1 ? 'S' : ''}</div>
                         </div>
                         <button
                           onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
@@ -5484,7 +5494,7 @@ export default function Dashboard() {
                             {s.minCapacity && s.maxCapacity ? `${s.minCapacity}–${s.maxCapacity} guests` : s.maxCapacity ? `Up to ${s.maxCapacity} guests` : ""}
                             {Number(s.minSpend) > 0 ? ` · Min spend $${Number(s.minSpend).toLocaleString()}` : ""}
                           </div>
-                          {s.description && <div className="font-dm text-xs text-ink/40 mt-0.5">{s.description}</div>}
+                          {s.description && <div className="font-dm text-xs text-ink/60 mt-0.5">{s.description}</div>}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -5812,7 +5822,7 @@ export default function Dashboard() {
                               className="text-left group/var"
                             >
                               <span className="font-mono text-xs text-forest group-hover/var:text-gold transition-colors">{v.token}</span>
-                              <span className="font-dm text-xs text-ink/40 ml-1">{v.label}</span>
+                              <span className="font-dm text-xs text-ink/60 ml-1">{v.label}</span>
                             </button>
                           ))}
                         </div>
@@ -6042,7 +6052,7 @@ export default function Dashboard() {
                             } catch { toast.error('Logo upload failed.'); }
                           }}
                           className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
-                        <p className="font-dm text-xs text-ink/40 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
+                        <p className="font-dm text-xs text-ink/60 mt-1">PNG, JPG or SVG. Recommended: square format.</p>
                         {settingsForm.logoUrl && (
                           <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, logoUrl: '' }))}
                             className="mt-1 font-dm text-xs text-red-400 hover:text-red-600">Remove logo</button>
@@ -6125,7 +6135,7 @@ export default function Dashboard() {
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formPageBg: e.target.value }))}
                           placeholder="#f8f5f0" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                       </div>
-                      <p className="font-dm text-[10px] text-ink/40 mt-1">Colour behind the form</p>
+                      <p className="font-dm text-[10px] text-ink/65 mt-1">Colour behind the form</p>
                     </div>
 
                     {/* Form card background colour */}
@@ -6139,7 +6149,7 @@ export default function Dashboard() {
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formCardBg: e.target.value }))}
                           placeholder="#ffffff" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                       </div>
-                      <p className="font-dm text-[10px] text-ink/40 mt-1">Colour of the form panels</p>
+                      <p className="font-dm text-[10px] text-ink/65 mt-1">Colour of the form panels</p>
                     </div>
 
                     {/* Button colour */}
@@ -6177,7 +6187,7 @@ export default function Dashboard() {
                     ) : (
                       <label className="flex items-center gap-3 border border-dashed border-gold/30 p-3 cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors rounded">
                         <Upload className="w-4 h-4 text-ink/30 flex-shrink-0" />
-                        <span className="font-dm text-xs text-ink/40">Upload a background image (JPG, PNG)</span>
+                        <span className="font-dm text-xs text-ink/60">Upload a background image (JPG, PNG)</span>
                         <input type="file" accept="image/*" className="hidden"
                           onChange={async e => {
                             const file = e.target.files?.[0]; if (!file) return;
@@ -6189,7 +6199,7 @@ export default function Dashboard() {
                           }} />
                       </label>
                     )}
-                    <p className="font-dm text-[10px] text-ink/40 mt-1">When set, the background image overlays your page background colour. The form cards sit on top.</p>
+                    <p className="font-dm text-[10px] text-ink/65 mt-1">When set, the background image overlays your page background colour. The form cards sit on top.</p>
                   </div>
 
                   {/* Live preview of bg */}
@@ -6231,7 +6241,7 @@ export default function Dashboard() {
                 <div className="dante-card p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <h2 className="font-bebas text-xs tracking-widest text-sage">PHOTOS</h2>
-                    <span className="font-dm text-xs text-ink/40">
+                    <span className="font-dm text-xs text-ink/60">
                       {(() => { try { return JSON.parse(settingsForm.formGalleryImages || '[]').length; } catch { return 0; } })()} / 6 photos
                     </span>
                   </div>
@@ -6304,7 +6314,7 @@ export default function Dashboard() {
                         imgs.length < 6 ? (
                           <label key="add" className="bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors flex-shrink-0" style={{ width: `${tileW}px`, height: `${ph}px` }}>
                             <Upload className="w-5 h-5 text-ink/30 mb-1" />
-                            <span className="font-dm text-xs text-ink/40">Upload photo</span>
+                            <span className="font-dm text-xs text-ink/60">Upload photo</span>
                             <input type="file" accept="image/*" className="hidden"
                               onChange={async e => {
                                 const file = e.target.files?.[0]; if (!file) return;
@@ -6342,16 +6352,16 @@ export default function Dashboard() {
                 <div className="dante-card p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <h2 className="font-bebas text-xs tracking-widest text-sage">FORM FIELDS</h2>
-                    <span className="font-dm text-xs text-ink/40">Toggle visibility, required, and labels</span>
+                    <span className="font-dm text-xs text-ink/60">Toggle visibility, required, and labels</span>
                   </div>
                   {formFields && (
                     <div className="border border-gold/20 divide-y divide-gold/10">
                       {/* Header */}
                       <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-linen">
-                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/40">VIS</div>
-                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/40">REQ</div>
-                        <div className="col-span-5 font-bebas text-[9px] tracking-widest text-ink/40">LABEL</div>
-                        <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">TYPE</div>
+                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/70">VIS</div>
+                        <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/70">REQ</div>
+                        <div className="col-span-5 font-bebas text-[9px] tracking-widest text-ink/70">LABEL</div>
+                        <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/70">TYPE</div>
                         <div className="col-span-3"></div>
                       </div>
                       {formFields.map((field, i) => (
@@ -6562,7 +6572,7 @@ export default function Dashboard() {
                           </button>
                         </div>
                         {nbiMappings.length === 0 && (
-                          <p className="font-dm text-xs text-ink/40 text-center py-2">No space mappings — all bookings use the default service above.</p>
+                          <p className="font-dm text-xs text-ink/60 text-center py-2">No space mappings — all bookings use the default service above.</p>
                         )}
                         {nbiMappings.map((m, i) => (
                           <div key={i} className="grid grid-cols-12 gap-2 items-center">
@@ -6828,7 +6838,7 @@ export default function Dashboard() {
                             } catch { toast.error("Logo upload failed."); }
                           }}
                           className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:border file:border-gold/30 file:text-xs file:font-bebas file:tracking-widest file:bg-transparent file:text-ink hover:file:bg-gold/10 cursor-pointer" />
-                        <p className="font-dm text-xs text-ink/40 mt-1">PNG or JPG. It sits at the top of page 1. This is the same logo used on your contact form.</p>
+                        <p className="font-dm text-xs text-ink/60 mt-1">PNG or JPG. It sits at the top of page 1. This is the same logo used on your contact form.</p>
                         {settingsForm.logoUrl && (
                           <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, logoUrl: "" }))}
                             className="mt-1 font-dm text-xs text-red-400 hover:text-red-600">Remove logo</button>
@@ -6852,7 +6862,7 @@ export default function Dashboard() {
                   {/* Accent colour */}
                   <div className="dante-card p-5 mb-4 space-y-3">
                     <h2 className="font-bebas tracking-widest text-base text-ink">ACCENT COLOUR</h2>
-                    <p className="font-dm text-xs text-ink/40">Recolours the header rule, status pill, guest count, timeline dots and the balance bar. Text on the colour stays readable automatically.</p>
+                    <p className="font-dm text-xs text-ink/60">Recolours the header rule, status pill, guest count, timeline dots and the balance bar. Text on the colour stays readable automatically.</p>
                     <div className="flex items-center gap-2">
                       <input type="color" value={accent}
                         onChange={e => setSettingsForm((f: any) => ({ ...f, brandAccentColor: e.target.value }))}
@@ -6862,7 +6872,7 @@ export default function Dashboard() {
                         placeholder="#2f5488" className="w-32 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                       {settingsForm.brandAccentColor && (
                         <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, brandAccentColor: "" }))}
-                          className="font-dm text-xs text-ink/40 hover:text-ink/70">Reset to navy</button>
+                          className="font-dm text-xs text-ink/60 hover:text-ink/70">Reset to navy</button>
                       )}
                     </div>
                   </div>
@@ -6908,7 +6918,7 @@ export default function Dashboard() {
                         <span style={{ fontFamily: pair.serif, fontSize: 15, fontWeight: 600 }}>$8,872.25</span>
                       </div>
                     </div>
-                    {isDefault && <p className="font-dm text-xs text-ink/40 mt-2">Currently showing the VenueFlow default (editorial navy + Spectral). Pick a colour or font above to make it yours.</p>}
+                    {isDefault && <p className="font-dm text-xs text-ink/60 mt-2">Currently showing the VenueFlow default (editorial navy + Spectral). Pick a colour or font above to make it yours.</p>}
                   </div>
                 </div>
                 );
@@ -6934,11 +6944,11 @@ export default function Dashboard() {
                     <h2 className="font-bebas tracking-widest text-base text-ink mb-4">ADD RECIPIENT</h2>
                     <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
                       <div className="flex-1">
-                        <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">NAME</label>
+                        <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">NAME</label>
                         <input value={newStaffName} onChange={e => setNewStaffName(e.target.value)} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
                       </div>
                       <div className="flex-1">
-                        <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">EMAIL</label>
+                        <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">EMAIL</label>
                         <input value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} type="email" className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz"
                           onKeyDown={e => { if (e.key === 'Enter' && newStaffName.trim() && emailValid) addStaffEmailMut.mutate({ name: newStaffName.trim(), email: newStaffEmail.trim() }); }} />
                       </div>
@@ -7028,15 +7038,15 @@ export default function Dashboard() {
                       <h2 className="font-bebas tracking-widest text-base text-ink mb-4">ADD TEAM MEMBER</h2>
                       <div className="space-y-3">
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">NAME *</label>
+                          <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">NAME *</label>
                           <input value={teamForm.name} onChange={e => setTeamForm(p => ({ ...p, name: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="e.g. Sarah Jones" />
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">EMAIL (OPTIONAL)</label>
+                          <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">EMAIL (OPTIONAL)</label>
                           <input value={teamForm.email} onChange={e => setTeamForm(p => ({ ...p, email: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest" placeholder="sarah@venue.co.nz" />
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">ROLE</label>
+                          <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">ROLE</label>
                           <select value={teamForm.role} onChange={e => setTeamForm(p => ({ ...p, role: e.target.value }))} className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white">
                             {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                           </select>
@@ -7064,7 +7074,7 @@ export default function Dashboard() {
                               <div className="font-dm text-sm font-semibold text-ink">{member.name}</div>
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 bg-linen text-ink/60">{member.role.toUpperCase()}</span>
-                                {member.email && <span className="font-dm text-xs text-ink/40 truncate">{member.email}</span>}
+                                {member.email && <span className="font-dm text-xs text-ink/60 truncate">{member.email}</span>}
                                 {member.lastAccessedAt && <span className="font-dm text-xs text-ink/30">Last login: {new Date(member.lastAccessedAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>}
                               </div>
                             </div>
@@ -7418,7 +7428,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-3 mb-3 flex-shrink-0">
                       <button
                         onClick={() => setEditingFloorPlan(null)}
-                        className="flex items-center gap-1 text-xs font-bebas tracking-widest text-ink/50 hover:text-ink transition-colors"
+                        className="flex items-center gap-1 text-xs font-bebas tracking-widest text-ink/70 hover:text-ink transition-colors"
                       >
                         <ChevronLeft className="w-3 h-3" /> BACK TO FLOOR PLANS
                       </button>
@@ -7693,7 +7703,7 @@ export default function Dashboard() {
                             <div className="p-3 flex items-center justify-between">
                               <div>
                                 <p className="font-dm text-sm font-semibold text-ink">{plan.name}</p>
-                                <p className="font-dm text-xs text-ink/40">
+                                <p className="font-dm text-xs text-ink/60">
                                   {plan.canvasData?.elements?.filter((e: any) => e.type?.includes('table')).length ?? 0} tables ·
                                   {' '}{plan.canvasData?.elements?.reduce((s: number, e: any) => s + (e.seats ?? 0), 0) ?? 0} seats
                                 </p>
@@ -7906,7 +7916,7 @@ export default function Dashboard() {
                       <div>
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CUSTOM PRICE LABEL (OPTIONAL)</label>
                         <Input value={menuForm.customPriceLabel} onChange={e => setMenuForm(f => ({ ...f, customPriceLabel: e.target.value }))} placeholder={'e.g. "$95pp" or "$1500 flat" or "POA" — shown instead of the price-per-head'} className="rounded-none border border-gold/30 text-sm" />
-                        <p className="font-dm text-[11px] text-ink/40 mt-1">When set, this overrides the per-head price wherever this menu is displayed.</p>
+                        <p className="font-dm text-[11px] text-ink/60 mt-1">When set, this overrides the per-head price wherever this menu is displayed.</p>
                       </div>
                       <div>
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SHORT DESCRIPTION</label>
@@ -7921,7 +7931,7 @@ export default function Dashboard() {
                           placeholder={"Paste the full menu here exactly as you want chefs to see it. Line breaks and spacing are preserved.\n\nENTRÉE\n— Hapuka crudo, finger lime, kohlrabi\n— Heirloom tomato, smoked ricotta, basil\n\nMAIN\n— Wagyu sirloin, bone marrow jus\n— Market fish, brown butter"}
                           className="w-full rounded-none border border-gold/30 text-sm font-mono p-2 whitespace-pre-wrap"
                         />
-                        <p className="font-dm text-[11px] text-ink/40 mt-1">Plain text only — paste from anywhere and the layout is kept as-is.</p>
+                        <p className="font-dm text-[11px] text-ink/60 mt-1">Plain text only — paste from anywhere and the layout is kept as-is.</p>
                       </div>
                       <div>
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CHEF MENU PDF (APPENDED TO BEO)</label>
@@ -7963,7 +7973,7 @@ export default function Dashboard() {
                             />
                           </label>
                         )}
-                        <p className="font-dm text-[11px] text-ink/40 mt-1">Staff can open or print this PDF straight from the menu — useful for printed table menus.</p>
+                        <p className="font-dm text-[11px] text-ink/60 mt-1">Staff can open or print this PDF straight from the menu — useful for printed table menus.</p>
                       </div>
                       <div className="flex gap-2">
                         <button type="submit" disabled={createMenuPackage.isPending || updateMenuPackage.isPending} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">{editingPackageId ? 'UPDATE' : 'ADD ITEM'}</button>
@@ -8151,7 +8161,7 @@ export default function Dashboard() {
                           <div className="p-4 border-b border-gold/10 bg-forest/5 space-y-3">
                             <div>
                               <p className="font-dm text-xs text-ink/70 mb-1"><span className="font-semibold text-forest">✨ AI Smart Add</span> — paste anything: a menu PDF excerpt, a supplier list, an email, even a rough description. AI will extract items into the current category.</p>
-                              <p className="font-dm text-[11px] text-ink/40">Adding to <span className="font-semibold text-ink/70">{(catalogCategories ?? []).find((c: any) => c.id === catalogActiveCategoryId)?.name ?? '—'}</span></p>
+                              <p className="font-dm text-[11px] text-ink/60">Adding to <span className="font-semibold text-ink/70">{(catalogCategories ?? []).find((c: any) => c.id === catalogActiveCategoryId)?.name ?? '—'}</span></p>
                             </div>
                             <Textarea value={catalogAiText} onChange={e => setCatalogAiText(e.target.value)}
                               placeholder={catalogActiveType === 'food'
@@ -8397,7 +8407,7 @@ export default function Dashboard() {
                                   }}
                                   className="cursor-pointer"
                                 />
-                                <span className="font-bebas tracking-widest text-[10px] text-ink/40">{allSelected ? 'DESELECT ALL' : 'SELECT ALL'}</span>
+                                <span className="font-bebas tracking-widest text-[10px] text-ink/65">{allSelected ? 'DESELECT ALL' : 'SELECT ALL'}</span>
                               </div>
                             )}
                             <div className="divide-y divide-gold/10">
@@ -8433,7 +8443,7 @@ export default function Dashboard() {
                                       <div className="text-right">
                                         <div className="font-dm text-sm font-semibold text-ink">
                                           ${unitPrice.toFixed(2)}
-                                          <span className="text-xs text-ink/40 font-normal"> /{item.unit ?? (item.pricingType === 'per_person' ? 'person' : 'item')}</span>
+                                          <span className="text-xs text-ink/60 font-normal"> /{item.unit ?? (item.pricingType === 'per_person' ? 'person' : 'item')}</span>
                                         </div>
                                         {lineTotal !== null && (
                                           <div className="font-bebas text-xs tracking-widest text-forest">
@@ -8474,7 +8484,7 @@ export default function Dashboard() {
                               <div className="flex items-center justify-between px-4 py-3 bg-linen/50 border-t border-gold/20">
                                 <div>
                                   <span className="font-bebas tracking-widest text-xs text-ink/50">ESTIMATED TOTAL</span>
-                                  <span className="font-dm text-xs text-ink/40 ml-2">({guests} guest{guests !== 1 ? 's' : ''})</span>
+                                  <span className="font-dm text-xs text-ink/60 ml-2">({guests} guest{guests !== 1 ? 's' : ''})</span>
                                 </div>
                                 <span className="font-cormorant text-2xl font-semibold text-ink">${totalCost.toFixed(2)}</span>
                               </div>
@@ -8532,16 +8542,24 @@ export default function Dashboard() {
       {selectedBooking && createPortal(
         <div className="fixed inset-0 z-[9999] flex">
           {/* Backdrop */}
-          <div className="hidden md:flex flex-1 bg-black/40" onClick={() => setSelectedBooking(null)} />
+          <div className="hidden md:flex flex-1 bg-black/40" onClick={() => setSelectedBooking(null)} aria-hidden="true" />
           {/* Drawer */}
-          <div className="w-full md:max-w-md bg-cream md:border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl">
+          <div
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="event-drawer-title"
+            tabIndex={-1}
+            className="w-full md:max-w-md bg-cream md:border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl outline-none"
+          >
             {/* Header */}
             <div className="bg-forest-dark px-4 md:px-5 py-4 flex items-center justify-between">
               <div>
                 <div className="font-bebas tracking-widest text-xs text-gold mb-0.5">EVENT DETAILS</div>
-                <div className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</div>
+                <h2 id="event-drawer-title" className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</h2>
               </div>
-              <button onClick={() => setSelectedBooking(null)} className="text-cream/60 hover:text-cream">
+              <button onClick={() => setSelectedBooking(null)} aria-label="Close event details"
+                className="text-cream/80 hover:text-cream rounded-sm p-1 -mr-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -8565,7 +8583,7 @@ export default function Dashboard() {
               })()}
               {/* Quick Status Changer — works for both leads and bookings */}
               <div>
-                <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1.5">CHANGE STATUS</div>
+                <div className="font-bebas text-xs tracking-widest text-ink/70 mb-1.5">CHANGE STATUS</div>
                 <Select
                   value={selectedBooking.status ?? ''}
                   onValueChange={(newStatus) => {
@@ -8622,10 +8640,10 @@ export default function Dashboard() {
                   <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <div className="font-bebas text-xs tracking-widest text-ink/40">DATE</div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/70">DATE</div>
                       {drawerEdit?.field !== "eventDate" && (
                         <button onClick={() => setDrawerEdit({ field: "eventDate", value: toDatetimeLocal(selectedBooking.eventDate) })}
-                          className="text-ink/30 hover:text-forest" aria-label="Edit date">
+                          className="text-ink/55 hover:text-forest" aria-label="Edit date">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
@@ -8648,7 +8666,7 @@ export default function Dashboard() {
                         {/* Always-on inline START / END time editors — change saves immediately */}
                         <div className="flex items-center gap-2 mt-1">
                           <div className="flex items-center gap-1">
-                            <span className="font-bebas text-[10px] tracking-widest text-ink/40">START</span>
+                            <span className="font-bebas text-[10px] tracking-widest text-ink/70">START</span>
                             <Input
                               type="time"
                               value={toTimeLocal(selectedBooking.eventDate)}
@@ -8661,7 +8679,7 @@ export default function Dashboard() {
                             />
                           </div>
                           <div className="flex items-center gap-1">
-                            <span className="font-bebas text-[10px] tracking-widest text-ink/40">END</span>
+                            <span className="font-bebas text-[10px] tracking-widest text-ink/70">END</span>
                             <Input
                               type="time"
                               value={toTimeLocal(selectedBooking.eventEndDate)}
@@ -8687,10 +8705,10 @@ export default function Dashboard() {
                   <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <div className="font-bebas text-xs tracking-widest text-ink/40">GUESTS</div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/70">GUESTS</div>
                       {drawerEdit?.field !== "guestCount" && (
                         <button onClick={() => setDrawerEdit({ field: "guestCount", value: selectedBooking.guestCount?.toString() ?? "" })}
-                          className="text-ink/30 hover:text-forest" aria-label="Edit guests">
+                          className="text-ink/55 hover:text-forest" aria-label="Edit guests">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
@@ -8715,10 +8733,10 @@ export default function Dashboard() {
                   <DollarSign className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <div className="font-bebas text-xs tracking-widest text-ink/40">MINIMUM SPEND</div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/70">MINIMUM SPEND</div>
                       {drawerEdit?.field !== "minimumSpend" && (
                         <button onClick={() => setDrawerEdit({ field: "minimumSpend", value: selectedBooking.minimumSpend != null ? String(selectedBooking.minimumSpend) : "" })}
-                          className="text-ink/30 hover:text-forest" aria-label="Edit minimum spend">
+                          className="text-ink/55 hover:text-forest" aria-label="Edit minimum spend">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
@@ -8737,7 +8755,7 @@ export default function Dashboard() {
                       <div className="font-dm text-sm text-ink">
                         {selectedBooking.minimumSpend != null && selectedBooking.minimumSpend !== ""
                           ? `$${Number(selectedBooking.minimumSpend).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}`
-                          : <span className="text-ink/30 italic">Not set</span>}
+                          : <span className="text-ink/55 italic">Not set</span>}
                       </div>
                     )}
                   </div>
@@ -8750,7 +8768,7 @@ export default function Dashboard() {
                 <div className="flex items-start gap-3">
                   <MapPin className={`w-4 h-4 mt-0.5 flex-shrink-0 ${!selectedBooking.spaceName?.trim() ? 'text-amber-600' : 'text-gold'}`} />
                   <div className="flex-1 min-w-0">
-                    <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">SPACE {!selectedBooking.spaceName?.trim() && <span className="text-amber-600 normal-case">— required to confirm</span>}</div>
+                    <div className="font-bebas text-xs tracking-widest text-ink/70 mb-1">SPACE {!selectedBooking.spaceName?.trim() && <span className="text-amber-600 normal-case">— required to confirm</span>}</div>
                     {/* Always-on space picker (no click-to-edit dance) so the
                         user can never get stuck unable to set one. */}
                     {spaces && spaces.length > 0 ? (
@@ -8770,10 +8788,10 @@ export default function Dashboard() {
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <div className="font-bebas text-xs tracking-widest text-ink/40">EMAIL</div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/70">EMAIL</div>
                       {drawerEdit?.field !== "email" && (
                         <button onClick={() => setDrawerEdit({ field: "email", value: selectedBooking.email ?? "" })}
-                          className="text-ink/30 hover:text-forest" aria-label="Edit email">
+                          className="text-ink/55 hover:text-forest" aria-label="Edit email">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
@@ -8798,15 +8816,15 @@ export default function Dashboard() {
                   the deposit-paid badge toggles on click. */}
               {!selectedBooking._isLead && (
                 <div className="bg-forest-dark/5 border border-gold/20 p-4">
-                  <div className="font-bebas text-xs tracking-widest text-ink/40 mb-3">FINANCIALS</div>
+                  <div className="font-bebas text-xs tracking-widest text-ink/70 mb-3">FINANCIALS</div>
                   <div className="grid grid-cols-2 gap-3">
                     {/* TOTAL */}
                     <div>
                       <div className="flex items-center justify-between">
-                        <div className="font-bebas text-xs tracking-widest text-ink/40">TOTAL</div>
+                        <div className="font-bebas text-xs tracking-widest text-ink/70">TOTAL</div>
                         {drawerEdit?.field !== "totalNzd" && (
                           <button onClick={() => setDrawerEdit({ field: "totalNzd", value: selectedBooking.totalNzd != null ? String(selectedBooking.totalNzd) : "" })}
-                            className="text-ink/30 hover:text-forest" aria-label="Edit total">
+                            className="text-ink/55 hover:text-forest" aria-label="Edit total">
                             <Pencil className="w-3 h-3" />
                           </button>
                         )}
@@ -8826,10 +8844,10 @@ export default function Dashboard() {
                     {/* DEPOSIT */}
                     <div>
                       <div className="flex items-center justify-between">
-                        <div className="font-bebas text-xs tracking-widest text-ink/40">DEPOSIT</div>
+                        <div className="font-bebas text-xs tracking-widest text-ink/70">DEPOSIT</div>
                         {drawerEdit?.field !== "depositNzd" && (
                           <button onClick={() => setDrawerEdit({ field: "depositNzd", value: selectedBooking.depositNzd != null ? String(selectedBooking.depositNzd) : "" })}
-                            className="text-ink/30 hover:text-forest" aria-label="Edit deposit">
+                            className="text-ink/55 hover:text-forest" aria-label="Edit deposit">
                             <Pencil className="w-3 h-3" />
                           </button>
                         )}
@@ -8854,7 +8872,7 @@ export default function Dashboard() {
                       never going to collect. */}
                   {selectedBooking.depositRequired === false ? (
                     <div className="mt-3 flex items-center justify-between gap-2 px-3 py-2 border border-gold/25 bg-linen/40">
-                      <span className="font-bebas text-xs tracking-widest text-ink/50">Deposit not required</span>
+                      <span className="font-bebas text-xs tracking-widest text-ink/70">Deposit not required</span>
                       <button
                         onClick={() => {
                           setSelectedBooking((prev: any) => prev ? { ...prev, depositRequired: true } : prev);
@@ -8881,7 +8899,7 @@ export default function Dashboard() {
                         title="Click to toggle deposit paid / unpaid">
                         <span className="text-sm leading-none flex-shrink-0">{selectedBooking.depositPaid ? '✓' : '⚠'}</span>
                         <span className="font-bebas text-xs tracking-widest flex-1">{selectedBooking.depositPaid ? 'DEPOSIT PAID' : 'DEPOSIT PENDING'}</span>
-                        <span className="font-dm text-[10px] opacity-60 flex-shrink-0">tap to {selectedBooking.depositPaid ? 'mark unpaid' : 'mark paid'}</span>
+                        <span className="font-dm text-[11px] opacity-80 flex-shrink-0">tap to {selectedBooking.depositPaid ? 'mark unpaid' : 'mark paid'}</span>
                       </button>
                       <div className="text-right">
                         <button
@@ -8889,7 +8907,7 @@ export default function Dashboard() {
                             setSelectedBooking((prev: any) => prev ? { ...prev, depositRequired: false, depositPaid: false } : prev);
                             rescheduleBooking.mutate({ id: selectedBooking.id, depositRequired: false } as any);
                           }}
-                          className="font-bebas text-[10px] tracking-widest text-ink/40 hover:text-ink"
+                          className="font-bebas text-[10px] tracking-widest text-ink/70 hover:text-ink"
                           title="This booking doesn't require a deposit at all">
                           MARK — NO DEPOSIT NEEDED
                         </button>
@@ -8900,7 +8918,7 @@ export default function Dashboard() {
               )}
               {/* Quick Actions */}
               <div>
-                <div className="font-bebas text-xs tracking-widest text-ink/40 mb-2">QUICK ACTIONS</div>
+                <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">QUICK ACTIONS</div>
                 <div className="grid grid-cols-2 gap-2">
                   {selectedBooking._isLead ? (
                     <>
@@ -9112,7 +9130,7 @@ export default function Dashboard() {
                   {drawerPaymentSummary && (
                     <div className="grid grid-cols-3 border-b border-gold/20 divide-x divide-gold/20">
                       <div className="p-3 text-center">
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">TOTAL VALUE</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/70">TOTAL VALUE</div>
                         <div className="font-cormorant text-lg font-semibold text-ink">${Number(drawerPaymentSummary.total ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
                       </div>
                       <div className="p-3 text-center bg-green-50/60">
@@ -9133,12 +9151,12 @@ export default function Dashboard() {
                           <div>
                             <span className="font-bebas tracking-widest text-xs text-forest capitalize">{p.type.replace(/_/g, ' ')}</span>
                             <span className="font-dm text-xs text-ink/50 ml-2">{p.method?.replace(/_/g, ' ')}</span>
-                            {p.notes && <div className="font-dm text-[11px] text-ink/40">{p.notes}</div>}
+                            {p.notes && <div className="font-dm text-[11px] text-ink/60">{p.notes}</div>}
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="text-right">
                               <div className="font-cormorant font-semibold text-sm text-ink">${Number(p.amount).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
-                              <div className="font-dm text-[10px] text-ink/40">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                              <div className="font-dm text-[10px] text-ink/65">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                             </div>
                             <button onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <X className="w-3.5 h-3.5" />
@@ -9149,11 +9167,11 @@ export default function Dashboard() {
                     </div>
                   )}
                   {(!drawerPayments || drawerPayments.length === 0) && (
-                    <div className="px-4 py-4 text-center font-dm text-xs text-ink/40">No payments recorded yet</div>
+                    <div className="px-4 py-4 text-center font-dm text-xs text-ink/60">No payments recorded yet</div>
                   )}
                   {/* Add payment form */}
                   <div className="border-t border-gold/20 bg-white/50 p-4 space-y-2">
-                    <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-2">RECORD PAYMENT</div>
+                    <div className="font-bebas tracking-widest text-[10px] text-ink/70 mb-2">RECORD PAYMENT</div>
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         type="number" step="0.01" min="0"
@@ -9268,8 +9286,8 @@ export default function Dashboard() {
                             <div className="space-y-0.5">
                               {items.map((item: any, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between">
-                                  <span className="font-dm text-xs text-ink">{item.dishName}{item.dietary ? <span className="text-ink/40 ml-1">({item.dietary})</span> : null}</span>
-                                  {item.qty > 1 && <span className="font-dm text-[11px] text-ink/40">×{item.qty}</span>}
+                                  <span className="font-dm text-xs text-ink">{item.dishName}{item.dietary ? <span className="text-ink/60 ml-1">({item.dietary})</span> : null}</span>
+                                  {item.qty > 1 && <span className="font-dm text-[11px] text-ink/60">×{item.qty}</span>}
                                 </div>
                               ))}
                             </div>
@@ -9325,7 +9343,7 @@ export default function Dashboard() {
 
               {selectedBooking.notes && (
                 <div>
-                  <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">NOTES</div>
+                  <div className="font-bebas text-xs tracking-widest text-ink/70 mb-1">NOTES</div>
                   <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap bg-cream border border-gold/20 p-3">{selectedBooking.notes}</div>
                 </div>
               )}
@@ -9726,7 +9744,7 @@ export default function Dashboard() {
                   <div>
                     <span className="font-dm text-sm text-ink">Attach BEO PDF for each event</span>
                     {weeklyEventsData && (weeklyEventsData.events as any[]).length > 0 && (
-                      <div className="font-dm text-xs text-ink/40 mt-0.5">
+                      <div className="font-dm text-xs text-ink/60 mt-0.5">
                         {(weeklyEventsData.events as any[]).map((ev: any) => ev.name).join(', ')} — BEO.pdf
                       </div>
                     )}
@@ -9747,9 +9765,9 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {staffEmailsForWeekly.isLoading ? (
-                  <p className="font-dm text-xs text-ink/40 px-3 py-2">Loading…</p>
+                  <p className="font-dm text-xs text-ink/60 px-3 py-2">Loading…</p>
                 ) : (staffEmailsForWeekly.data as any[] ?? []).length === 0 ? (
-                  <p className="font-dm text-xs text-ink/40 italic px-3 py-2">No staff saved yet — add one below.</p>
+                  <p className="font-dm text-xs text-ink/60 italic px-3 py-2">No staff saved yet — add one below.</p>
                 ) : (
                   <div className="space-y-0.5 max-h-36 overflow-y-auto p-2">
                     {(staffEmailsForWeekly.data as any[] ?? []).map((s: any) => (
@@ -9758,14 +9776,14 @@ export default function Dashboard() {
                           onChange={e => { const next = new Set(weeklySelectedStaff); e.target.checked ? next.add(s.email) : next.delete(s.email); setWeeklySelectedStaff(next); }}
                           className="accent-forest" />
                         <span className="font-dm text-sm text-ink">{s.name}</span>
-                        <span className="font-dm text-xs text-ink/40">{s.email}</span>
+                        <span className="font-dm text-xs text-ink/60">{s.email}</span>
                       </label>
                     ))}
                   </div>
                 )}
                 {/* Add to saved list */}
                 <div className="border-t border-gold/20 px-3 py-2.5 space-y-2">
-                  <div className="font-bebas tracking-widest text-[10px] text-ink/40">ADD TO LIST</div>
+                  <div className="font-bebas tracking-widest text-[10px] text-ink/65">ADD TO LIST</div>
                   <div className="flex gap-1.5">
                     <input value={weeklyNewStaffName} onChange={e => setWeeklyNewStaffName(e.target.value)}
                       placeholder="Name" className="flex-1 border border-gold/30 px-2 py-1.5 text-xs font-dm focus:outline-none focus:border-forest" />
@@ -9846,7 +9864,7 @@ export default function Dashboard() {
               <div className="bg-forest/5 border border-forest/20 p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-bebas tracking-widest text-xs text-forest">SMART PASTE</span>
-                  <span className="font-dm text-[10px] text-ink/40 ml-1">— paste a client email, booking request, or any text</span>
+                  <span className="font-dm text-[10px] text-ink/60 ml-1">— paste a client email, booking request, or any text</span>
                 </div>
                 <textarea
                   autoFocus
