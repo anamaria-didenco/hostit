@@ -606,6 +606,12 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // including the customer Event Pack, and doubles as a till reference (the
     // per-item unit price is what staff ring up).
     const showItemPrice = fnbCols.price === true;
+    // Drinks pricing has its own independent toggle on the runsheet's DRINKS
+    // tab (drinksData.showDrinkPrices). When the operator hasn't set it yet
+    // (legacy runsheets), fall back to the food PRICE toggle so older events
+    // are unchanged. Explicit true/false always wins.
+    const showDrinkPricesFlag = (rsDrinks as any)?.showDrinkPrices;
+    const showDrinkPrice = showDrinkPricesFlag === undefined ? showItemPrice : showDrinkPricesFlag === true;
 
     const escHtml = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -1206,9 +1212,12 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     };
     const dietarySectionNew = dietaries.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">${orderedDiet.map((d, i) => dietRow(d, i === 0)).join("")}</div></div>` : "";
 
-    const bevItems2: Array<{ name: string; desc?: string }> = hasDrinkSelection
-      ? [...selectedDrinkNames.map(n => ({ name: n })), ...customDrinkList.map((d: any) => ({ name: d.name, desc: d.description }))]
-      : legacyDrinkRows.map((f: any) => ({ name: f.dishName, desc: f.description }));
+    const bevItems2: Array<{ name: string; desc?: string; price?: any }> = hasDrinkSelection
+      ? [
+          ...selectedDrinkNames.map(n => ({ name: n, price: drinkPricesMap[n] })),
+          ...customDrinkList.map((d: any) => ({ name: d.name, desc: d.description, price: drinkPricesMap[d.name] ?? d.price })),
+        ]
+      : legacyDrinkRows.map((f: any) => ({ name: f.dishName, desc: f.description, price: drinkPricesMap[f.dishName] ?? f.unitPrice }));
     // DF-6: group beverages by category under italic-serif subheadings, in
     // order (Cocktails, Sparkling, White, Red, Rosé, Beer & Cider, then any
     // untyped as "Other"). The per-row colour chip is dropped — the category
@@ -1218,7 +1227,12 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       ["COCKTAIL", "Cocktails"], ["SPARK", "Sparkling"], ["WHITE", "White"],
       ["RED", "Red"], ["ROSE", "Ros&eacute;"], ["BEER", "Beer &amp; Cider"], ["", "Other"],
     ];
-    const bevGroupRow = (it: { name: string; desc?: string }) => `<div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-top:3px;line-height:1.3">${escHtml(it.name)}${it.desc ? ` <span style="font-weight:400;font-size:11.5px;color:var(--gray)">&mdash; ${escHtml(it.desc)}</span>` : ""}</div>`;
+    const bevGroupRow = (it: { name: string; desc?: string; price?: any }) => {
+      const unit = (it.price === null || it.price === undefined || it.price === "") ? null : Number(it.price);
+      const priceHtml = (showDrinkPrice && unit !== null && !isNaN(unit) && unit > 0)
+        ? `<span style="flex:none;margin-left:8px;font-weight:700;font-size:11.5px;color:var(--ink);white-space:nowrap">${fmtCurrency(unit)}</span>` : "";
+      return `<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;font-weight:600;color:var(--ink);margin-top:3px;line-height:1.3"><span>${escHtml(it.name)}${it.desc ? ` <span style="font-weight:400;font-size:11.5px;color:var(--gray)">&mdash; ${escHtml(it.desc)}</span>` : ""}</span>${priceHtml}</div>`;
+    };
     const bevGroupBlock = (label: string, items: Array<{ name: string; desc?: string }>) => items.length
       ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:4px"><div style="font-family:var(--serif);font-style:italic;font-size:11.5px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:4px">${label}</div>${items.map(bevGroupRow).join("")}</div>` : "";
     // Bar arrangement callout — bar option, tab limit and billing notes. The

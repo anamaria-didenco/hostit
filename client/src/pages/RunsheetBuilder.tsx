@@ -388,8 +388,11 @@ export default function RunsheetBuilder() {
   const [rsDrinkTypes, setRsDrinkTypes] = useState<Record<string, string>>({});
   // Per-drink price (the single-serve / till amount), keyed by drink name.
   // Auto-filled from the catalogue where available; editable. Shown on the BEO
-  // when the F&B "PRICE" toggle is on, same as food.
+  // when the DRINKS "SHOW PRICES" toggle below is on.
   const [rsDrinkPrices, setRsDrinkPrices] = useState<Record<string, number>>({});
+  // Independent "show drink prices on the BEO" toggle (separate from the food
+  // PRICE column). Defaults ON so priced drinks appear; persisted per runsheet.
+  const [showDrinkPrices, setShowDrinkPrices] = useState(true);
   const [newRsCustomDrink, setNewRsCustomDrink] = useState({ name: "", description: "" });
   const [drinksSaving, setDrinksSaving] = useState(false);
 
@@ -1490,6 +1493,7 @@ export default function RunsheetBuilder() {
         if (dd.barNotes) setRsBarNotes(dd.barNotes);
         if (dd.drinkTypes) setRsDrinkTypes(dd.drinkTypes);
         if (dd.drinkPrices) setRsDrinkPrices(dd.drinkPrices);
+        if (dd.showDrinkPrices !== undefined) setShowDrinkPrices(dd.showDrinkPrices);
       }
     }
   }, [existing]);
@@ -1723,11 +1727,11 @@ export default function RunsheetBuilder() {
         costItems: costItems.length ? costItems : null,
         proposalId: linkedProposalId,
         floorPlanId: linkedFloorPlanId ?? null,
-        drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices },
+        drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices, showDrinkPrices },
       } as any);
     }, 1000);
     return () => clearTimeout(t);
-  }, [sheetId, notes, footerText, kitchenNotes, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices]);
+  }, [sheetId, notes, footerText, kitchenNotes, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices, showDrinkPrices]);
 
   // Auto-save FOOD items (debounced) — same convenience as drinks/notes, so the
   // operator never has to click SAVE FOOD. Silent (no toast, no refetch) so it
@@ -1800,7 +1804,7 @@ export default function RunsheetBuilder() {
           gstInclusive,
           paymentNotes: paymentNotes || null,
           drinksData: (rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length)
-            ? { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices }
+            ? { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices, showDrinkPrices }
             : undefined,
           items: items.map((item, i) => ({
             time: item.time,
@@ -1837,7 +1841,7 @@ export default function RunsheetBuilder() {
           proposalId: linkedProposalId,
           floorPlanId: linkedFloorPlanId ?? null,
           costItems: costItems.length ? costItems : null,
-          drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices },
+          drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices, showDrinkPrices },
           gstInclusive,
           paymentNotes: paymentNotes || null,
         } as any);
@@ -4303,6 +4307,12 @@ export default function RunsheetBuilder() {
                   </span>
                 )}
               </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowDrinkPrices(v => !v)}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDrinkPrices ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  title="Show each drink's price on the BEO / Event Pack (independent of the food PRICE toggle)"
+                >SHOW PRICES</button>
               <button
                 onClick={async () => {
                   if (!sheetId) { toast.error("Save the runsheet first"); return; }
@@ -4310,7 +4320,7 @@ export default function RunsheetBuilder() {
                   try {
                     await silentUpdateMutation.mutateAsync({
                       id: sheetId,
-                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices },
+                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices, showDrinkPrices },
                     } as any);
                     toast.success("Drinks selection saved!");
                   } catch { toast.error("Failed to save drinks"); }
@@ -4322,6 +4332,7 @@ export default function RunsheetBuilder() {
                 <Save className="w-3.5 h-3.5" />
                 {drinksSaving ? 'SAVING...' : 'SAVE DRINKS'}
               </button>
+              </div>
             </div>
 
             <div className="px-5 py-5 space-y-6">
