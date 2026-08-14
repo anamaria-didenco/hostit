@@ -221,7 +221,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
                 <span className={`font-serif text-xs leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${isToday ? 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground font-semibold' : 'text-ink/70'}`}>{day}</span>
                 {/* + icon shown on empty cells when onCreateEvent is wired */}
                 {isEmpty && onCreateEvent && (
-                  <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="absolute inset-0 flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     <Plus className="w-3.5 h-3.5 text-forest/60" />
                   </span>
                 )}
@@ -2538,7 +2538,7 @@ export default function Dashboard() {
                                   {!isOverflow && (
                                     <button
                                       onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' }); }}
-                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
                                       title="Add event">
                                       <Plus className="w-3 h-3 text-forest" />
                                     </button>
@@ -6298,7 +6298,7 @@ export default function Dashboard() {
                           >
                             <img src={url} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover pointer-events-none" />
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors pointer-events-none" />
-                            <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                            <div className="absolute top-1 left-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity pointer-events-none">
                               <GripVertical className="w-3.5 h-3.5 text-white drop-shadow" />
                             </div>
                             <button type="button"
@@ -6306,7 +6306,7 @@ export default function Dashboard() {
                                 const newImgs = imgs.filter((_, j) => j !== i);
                                 setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify(newImgs) }));
                               }}
-                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                               <X className="w-3 h-3" />
                             </button>
                           </div>
@@ -7697,7 +7697,7 @@ export default function Dashboard() {
                                 <Grid className="w-10 h-10 text-gray-300" />
                               )}
                               <div className="absolute inset-0 bg-burgundy/0 group-hover:bg-burgundy/5 transition-colors flex items-center justify-center">
-                                <span className="opacity-0 group-hover:opacity-100 font-bebas tracking-widest text-xs text-burgundy bg-white/90 px-3 py-1 rounded transition-opacity">EDIT</span>
+                                <span className="opacity-100 md:opacity-0 md:group-hover:opacity-100 font-bebas tracking-widest text-xs text-burgundy bg-white/90 px-3 py-1 rounded transition-opacity">EDIT</span>
                               </div>
                             </div>
                             <div className="p-3 flex items-center justify-between">
@@ -8072,7 +8072,7 @@ export default function Dashboard() {
                             onClick={() => setCatalogActiveCategoryId(cat.id)}>
                             <span className={`font-dm text-sm truncate ${ catalogActiveCategoryId === cat.id ? 'text-forest font-semibold' : 'text-ink/70' }`}>{cat.name}</span>
                             <button onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cat.name}" and all its items?`)) deleteCatalogCategory.mutate({ id: cat.id }); }}
-                              className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         ))}
@@ -8463,16 +8463,16 @@ export default function Dashboard() {
                                         allergens: item.allergens ?? undefined,
                                       })}
                                       title="Duplicate item"
-                                      className="opacity-0 group-hover:opacity-100 text-sage hover:text-ink transition-opacity">
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-sage hover:text-ink transition-opacity">
                                       <Copy className="w-3.5 h-3.5" /></button>
                                     <button onClick={() => {
                                       setEditingCatalogItemId(item.id);
                                       setCatalogItemForm({ name: item.name, description: item.description ?? '', pricingType: item.pricingType, price: item.price > 0 ? String(item.price / 100) : '', unit: item.unit ?? 'person', allergens: item.allergens ?? '' });
                                       setShowCatalogItemForm(true);
-                                    }} className="opacity-0 group-hover:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
+                                    }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
                                       <Edit2 className="w-3.5 h-3.5" /></button>
                                     <button onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteCatalogItem.mutate({ id: item.id }); }}
-                                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                                       <Trash2 className="w-3.5 h-3.5" /></button>
                                   </div>
                                 </div>
@@ -9158,7 +9158,7 @@ export default function Dashboard() {
                               <div className="font-cormorant font-semibold text-sm text-ink">${Number(p.amount).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
                               <div className="font-dm text-[10px] text-ink/65">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                             </div>
-                            <button onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                            <button onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>

@@ -654,7 +654,7 @@ export default function FloorPlanEditor({
                         <button
                           type="button"
                           onClick={() => setCustomPalette(prev => prev.filter(p => p.type !== item.type))}
-                          className="opacity-0 group-hover:opacity-100 text-ink/65 hover:text-red-400 transition-all flex-shrink-0"
+                          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/65 hover:text-red-400 transition-all flex-shrink-0"
                         >
                           <X className="w-2.5 h-2.5" />
                         </button>

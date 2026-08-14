@@ -222,9 +222,10 @@ export default function Tasks() {
                   )}
                 </div>
                 <button
-                  onClick={() => deleteTask.mutate({ id: task.id })}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-sage hover:text-red-500 flex-shrink-0"
+                  onClick={() => { if (window.confirm(`Delete this task?\n\n"${task.title}"`)) deleteTask.mutate({ id: task.id }); }}
+                  className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-sage hover:text-red-500 flex-shrink-0"
                   title="Delete task"
+                  aria-label="Delete task"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

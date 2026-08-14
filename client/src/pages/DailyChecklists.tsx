@@ -400,7 +400,7 @@ export default function DailyChecklists() {
                                   {item.note && <div className="font-dm text-xs text-[#8a7a60] mt-0.5">{item.note}</div>}
                                   {item.photoUrl && <div className="mt-2"><img src={item.photoUrl} alt="step" className="w-24 h-16 object-cover rounded border border-[#c9a84c]/20" /></div>}
                                 </div>
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0">
                                   <button onClick={() => { setPendingPhotoItemId(item.id); fileInputRef.current?.click(); }} className="p-1 text-[#8a7a60] hover:text-[#2f5488] rounded" title={item.photoUrl ? "Replace photo" : "Add photo"}><Camera className="w-3.5 h-3.5" /></button>
                                   {item.photoUrl && <button onClick={() => updateItemMut.mutate({ id: item.id, photoUrl: "" })} className="p-1 text-[#8a7a60] hover:text-red-400 rounded" title="Remove photo"><X className="w-3 h-3" /></button>}
                                   <button onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#8a7a60] hover:text-[#2f5488] rounded"><Edit2 className="w-3.5 h-3.5" /></button>
@@ -961,11 +961,11 @@ function SettingsPanel({
                   {editingIdx === i ? (
                     <button onClick={() => saveEdit(i)} className="text-[#2f5488] hover:text-[#25426c]"><Check className="w-3.5 h-3.5" /></button>
                   ) : (
-                    <button onClick={() => { setEditingIdx(i); setEditLabel(sec.label); }} className="opacity-0 group-hover:opacity-100 text-[#8a7a60] hover:text-[#1a1209] transition-opacity">
+                    <button onClick={() => { setEditingIdx(i); setEditLabel(sec.label); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-[#8a7a60] hover:text-[#1a1209] transition-opacity">
                       <Pencil className="w-3 h-3" />
                     </button>
                   )}
-                  <button onClick={() => deleteSection(i)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                  <button onClick={() => deleteSection(i)} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                     <X className="w-3 h-3" />
                   </button>
                 </div>

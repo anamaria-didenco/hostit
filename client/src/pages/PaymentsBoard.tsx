@@ -59,7 +59,7 @@ export default function PaymentsBoard() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"action" | "upcoming" | "all">("action");
 
-  const { data, isLoading } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
+  const { data, isLoading, isError, refetch } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
 
   const update = trpc.bookings.update.useMutation({
     onSuccess: (_d, vars: any) => {
@@ -165,7 +165,16 @@ export default function PaymentsBoard() {
       </p>
 
       {/* Rows */}
-      {isLoading ? (
+      {isError ? (
+        <div className="text-center py-16">
+          <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
+          <p className="font-dm text-ink text-sm mb-3">Couldn't load payments.</p>
+          <button onClick={() => refetch()}
+            className="font-bebas tracking-widest text-xs px-4 py-2 rounded-md bg-forest text-cream hover:opacity-90">
+            RETRY
+          </button>
+        </div>
+      ) : isLoading ? (
         <div className="text-center py-16 text-sage font-dm text-sm">Loading payments…</div>
       ) : rows.length === 0 ? (
         <div className="text-center py-16">
