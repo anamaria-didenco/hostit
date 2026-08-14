@@ -51,8 +51,8 @@ export default function StaffChecklist() {
     return (
       <div className="min-h-screen bg-linen flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-bebas tracking-widest text-2xl text-ink/40">CHECKLIST NOT FOUND</p>
-          <p className="font-dm text-sm text-ink/30 mt-2">This link may be invalid or expired.</p>
+          <p className="font-bebas tracking-widest text-2xl text-ink/65">CHECKLIST NOT FOUND</p>
+          <p className="font-dm text-sm text-ink/65 mt-2">This link may be invalid or expired.</p>
         </div>
       </div>
     );
@@ -84,7 +84,7 @@ export default function StaffChecklist() {
             <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
           </div>
           <h1 className="font-bebas tracking-widest text-3xl text-ink mt-2">{instance.name}</h1>
-          <p className="font-dm text-sm text-ink/50 mt-1">{checkedCount} of {total} complete</p>
+          <p className="font-dm text-sm text-ink/70 mt-1">{checkedCount} of {total} complete</p>
         </div>
 
         <div className="h-1.5 bg-gold/20 rounded-full mb-6 overflow-hidden">
@@ -129,7 +129,7 @@ export default function StaffChecklist() {
             </div>
           ))}
           {effectiveItems.length === 0 && (
-            <div className="px-4 py-8 text-center font-dm text-sm text-ink/30">
+            <div className="px-4 py-8 text-center font-dm text-sm text-ink/65">
               No checklist items yet.
             </div>
           )}

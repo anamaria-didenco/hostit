@@ -117,7 +117,7 @@ export function RichTextarea({ value, onChange, placeholder, className = '', min
           <option value="21px">X-Large</option>
         </select>
         <div className="w-px h-4 bg-gold/30 mx-1 self-center" />
-        <span className="font-bebas tracking-widest text-[9px] text-ink/30 mr-0.5">COLOR</span>
+        <span className="font-bebas tracking-widest text-[9px] text-ink/65 mr-0.5">COLOR</span>
         {TEXT_COLORS.filter(c => c.value).map(({ label, value: color }) => (
           <button
             key={label}
@@ -132,11 +132,11 @@ export function RichTextarea({ value, onChange, placeholder, className = '', min
           type="button"
           onMouseDown={e => { e.preventDefault(); exec('removeFormat'); }}
           title="Remove text color"
-          className="w-4 h-4 border border-gold/30 hover:scale-125 transition-transform flex items-center justify-center text-[8px] text-ink/40 flex-shrink-0"
+          className="w-4 h-4 border border-gold/30 hover:scale-125 transition-transform flex items-center justify-center text-[8px] text-ink/65 flex-shrink-0"
           style={{ background: 'linear-gradient(135deg, white 45%, #e5e7eb 55%)' }}
         >✕</button>
         <div className="w-px h-4 bg-gold/30 mx-1 self-center" />
-        <span className="font-bebas tracking-widest text-[9px] text-ink/30 mr-0.5">HL</span>
+        <span className="font-bebas tracking-widest text-[9px] text-ink/65 mr-0.5">HL</span>
         {HIGHLIGHT_COLORS.map(({ label, value: color }) => (
           <button
             key={label}
@@ -151,7 +151,7 @@ export function RichTextarea({ value, onChange, placeholder, className = '', min
           type="button"
           onMouseDown={e => { e.preventDefault(); exec('hiliteColor', 'transparent'); }}
           title="Remove highlight"
-          className="w-4 h-4 border border-gold/30 hover:scale-125 transition-transform flex items-center justify-center text-[8px] text-ink/40 flex-shrink-0"
+          className="w-4 h-4 border border-gold/30 hover:scale-125 transition-transform flex items-center justify-center text-[8px] text-ink/65 flex-shrink-0"
           style={{ background: 'linear-gradient(135deg, white 45%, #e5e7eb 55%)' }}
         >✕</button>
       </div>

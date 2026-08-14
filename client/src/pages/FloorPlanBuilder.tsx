@@ -55,7 +55,7 @@ export default function FloorPlanBuilder() {
       <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
         <button
           onClick={() => setLocation("/dashboard")}
-          className="flex items-center gap-1 text-xs font-bebas tracking-widest text-ink/50 hover:text-ink transition-colors"
+          className="flex items-center gap-1 text-xs font-bebas tracking-widest text-ink/70 hover:text-ink transition-colors"
         >
           <ChevronLeft className="w-4 h-4" /> BACK
         </button>

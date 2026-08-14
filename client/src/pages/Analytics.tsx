@@ -27,10 +27,10 @@ function StatCard({ icon, label, value, sub, color = "text-burgundy" }: {
     <div className="bg-white border border-border p-5">
       <div className="flex items-center gap-3 mb-2">
         <div className={color}>{icon}</div>
-        <span className="font-bebas tracking-widest text-xs text-ink/50">{label}</span>
+        <span className="font-bebas tracking-widest text-xs text-ink/70">{label}</span>
       </div>
       <div className={`font-cormorant text-3xl font-semibold ${color}`}>{value}</div>
-      {sub && <div className="text-xs font-dm text-ink/40 mt-1">{sub}</div>}
+      {sub && <div className="text-xs font-dm text-ink/65 mt-1">{sub}</div>}
     </div>
   );
 }
@@ -220,7 +220,7 @@ export default function Analytics() {
               )}
             </div>
           ) : (
-            <div className="text-sm font-dm text-ink/40">No goal set for this month.</div>
+            <div className="text-sm font-dm text-ink/65">No goal set for this month.</div>
           )}
         </div>
 
@@ -254,7 +254,7 @@ export default function Analytics() {
                     <div className="flex-1 bg-burgundy/20 transition-all" style={{ height: `${barH(prev)}px` }} />
                     <div className="flex-1 bg-burgundy transition-all" style={{ height: `${barH(curr)}px` }} />
                   </div>
-                  <div className="text-xs font-bebas tracking-widest text-ink/40">{month}</div>
+                  <div className="text-xs font-bebas tracking-widest text-ink/65">{month}</div>
                 </div>
               );
             })}
@@ -280,13 +280,13 @@ export default function Analytics() {
                 <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
                   <div className="w-full sm:w-36 font-dm text-xs sm:text-sm text-ink/70 shrink-0 flex items-center justify-between sm:block">
                     <span>{row.label}</span>
-                    <span className="sm:hidden font-dm text-xs text-ink/50">{row.value} · {row.pct}%</span>
+                    <span className="sm:hidden font-dm text-xs text-ink/70">{row.value} · {row.pct}%</span>
                   </div>
                   <div className="flex-1 h-6 sm:h-7 bg-cream border border-border overflow-hidden">
                     <div className={`h-full ${row.color} transition-all`} style={{ width: `${row.pct}%` }} />
                   </div>
                   <div className="hidden sm:block w-10 text-right font-dm text-sm font-semibold text-ink">{row.value}</div>
-                  <div className="hidden sm:block w-8 text-right font-dm text-xs text-ink/50">{row.pct}%</div>
+                  <div className="hidden sm:block w-8 text-right font-dm text-xs text-ink/70">{row.pct}%</div>
                 </div>
               ))}
             </div>
@@ -299,7 +299,7 @@ export default function Analytics() {
               <span className="font-bebas tracking-widest text-sm text-ink">ENQUIRY SOURCE BREAKDOWN</span>
             </div>
             {(!sourceData || sourceData.length === 0) ? (
-              <div className="text-sm font-dm text-ink/40 py-4 text-center">No source data yet. Sources are tracked when enquiries are submitted.</div>
+              <div className="text-sm font-dm text-ink/65 py-4 text-center">No source data yet. Sources are tracked when enquiries are submitted.</div>
             ) : (
               <div className="space-y-2">
                 {/* Visual donut-style horizontal bars */}
@@ -321,11 +321,11 @@ export default function Analytics() {
                         />
                       </div>
                       <div className="w-8 text-right font-dm text-sm font-semibold text-ink">{row.count}</div>
-                      <div className="w-8 text-right font-dm text-xs text-ink/50">{pct}%</div>
+                      <div className="w-8 text-right font-dm text-xs text-ink/70">{pct}%</div>
                     </div>
                   );
                 })}
-                <div className="pt-2 border-t border-border/40 flex justify-between font-dm text-xs text-ink/50">
+                <div className="pt-2 border-t border-border/40 flex justify-between font-dm text-xs text-ink/70">
                   <span>Total enquiries tracked</span>
                   <span className="font-semibold text-ink">{totalSourceLeads}</span>
                 </div>
@@ -356,7 +356,7 @@ export default function Analytics() {
                     <div className="w-24 text-right font-dm text-sm font-semibold text-ink">
                       ${Number(row.revenue).toLocaleString("en-NZ")}
                     </div>
-                    <div className="w-10 text-right font-dm text-xs text-ink/50">{row.count}</div>
+                    <div className="w-10 text-right font-dm text-xs text-ink/70">{row.count}</div>
                   </div>
                 );
               })}

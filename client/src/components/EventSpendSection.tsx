@@ -115,7 +115,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <div className="font-bebas text-xs tracking-widest text-ink/40">{hasCharges ? "COSTS & PROFIT" : "EVENT SPEND"}</div>
+        <div className="font-bebas text-xs tracking-widest text-ink/65">{hasCharges ? "COSTS & PROFIT" : "EVENT SPEND"}</div>
         <button
           onClick={() => setShowAdd((v) => !v)}
           className="flex items-center gap-1 font-bebas text-xs tracking-widest text-forest hover:text-forest-dark transition-colors"
@@ -128,17 +128,17 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
       {hasCharges && (
         <div className="grid grid-cols-3 mb-3 border border-forest/20 bg-forest-dark/5 rounded-sm overflow-hidden">
           <div className="px-3 py-2 text-center">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/40">REVENUE</div>
+            <div className="font-bebas text-[10px] tracking-widest text-ink/65">REVENUE</div>
             <div className="font-cormorant text-base font-semibold text-forest">{money(revenueTotal)}</div>
             <div className="font-dm text-[9px] text-ink/35">client charges</div>
           </div>
           <div className="px-3 py-2 text-center border-l border-gold/20">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/40">EXPENSES</div>
+            <div className="font-bebas text-[10px] tracking-widest text-ink/65">EXPENSES</div>
             <div className="font-cormorant text-base font-semibold text-rose-500">{money(expensesTotal)}</div>
             <div className="font-dm text-[9px] text-ink/35">your costs</div>
           </div>
           <div className="px-3 py-2 text-center border-l border-gold/20">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/40">PROFIT</div>
+            <div className="font-bebas text-[10px] tracking-widest text-ink/65">PROFIT</div>
             <div className={`font-cormorant text-base font-semibold ${profit >= 0 ? "text-forest" : "text-rose-500"}`}>{money(profit)}</div>
             <div className="font-dm text-[9px] text-ink/35">{revenueTotal > 0 ? `${margin.toFixed(0)}% margin` : ""}</div>
           </div>
@@ -149,7 +149,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
       {showAdd && (
         <div className="border border-gold/30 bg-cream p-3 mb-3 space-y-2">
           <input
-            className="w-full border border-gold/30 bg-white px-2 py-1.5 font-dm text-sm text-ink focus:outline-none focus:border-forest/50 placeholder:text-ink/30"
+            className="w-full border border-gold/30 bg-white px-2 py-1.5 font-dm text-sm text-ink focus:outline-none focus:border-forest/50 placeholder:text-ink/65"
             placeholder="Item name (e.g. Bar tab, DJ, Canapés)"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -176,7 +176,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <div className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">ESTIMATED ($)</div>
+              <div className="font-bebas text-xs tracking-widest text-ink/65 mb-0.5">ESTIMATED ($)</div>
               <input
                 type="number"
                 min="0"
@@ -187,7 +187,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
               />
             </div>
             <div>
-              <div className="font-bebas text-xs tracking-widest text-ink/40 mb-0.5">ACTUAL ($)</div>
+              <div className="font-bebas text-xs tracking-widest text-ink/65 mb-0.5">ACTUAL ($)</div>
               <input
                 type="number"
                 min="0"
@@ -208,7 +208,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
             </button>
             <button
               onClick={() => setShowAdd(false)}
-              className="px-3 border border-gold/30 text-ink/50 font-bebas tracking-widest text-xs hover:bg-stone-50 transition-colors"
+              className="px-3 border border-gold/30 text-ink/70 font-bebas tracking-widest text-xs hover:bg-stone-50 transition-colors"
             >
               CANCEL
             </button>
@@ -219,7 +219,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
       {/* Items list */}
       {items.length === 0 && !showAdd && (
         <div className="border border-dashed border-gold/20 p-4 text-center">
-          <div className="font-dm text-xs text-ink/40">{hasCharges ? "No expenses yet. Add your costs (staff, ingredients, hire…) below to see your profit on this event." : "No spend items yet. Add income and expenses to track event profitability."}</div>
+          <div className="font-dm text-xs text-ink/65">{hasCharges ? "No expenses yet. Add your costs (staff, ingredients, hire…) below to see your profit on this event." : "No spend items yet. Add income and expenses to track event profitability."}</div>
         </div>
       )}
 
@@ -245,11 +245,11 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
                   </div>
                 </div>
                 <div className="text-right min-w-[56px]">
-                  <div className="font-bebas text-[10px] tracking-widest text-ink/40">EST</div>
+                  <div className="font-bebas text-[10px] tracking-widest text-ink/65">EST</div>
                   <div className="font-dm text-xs text-ink/60">${(item.estimatedAmount ?? 0).toLocaleString("en-NZ")}</div>
                 </div>
                 <div className="text-right min-w-[64px]">
-                  <div className="font-bebas text-[10px] tracking-widest text-ink/40">ACTUAL</div>
+                  <div className="font-bebas text-[10px] tracking-widest text-ink/65">ACTUAL</div>
                   {isEditing ? (
                     <input
                       type="number"
@@ -288,21 +288,21 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
       {items.length > 0 && !hasCharges && (
         <div className="bg-forest-dark/5 border border-gold/20 border-t-0 px-3 py-2 grid grid-cols-3 gap-2">
           <div className="text-center">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/40">EST NET</div>
+            <div className="font-bebas text-[10px] tracking-widest text-ink/65">EST NET</div>
             <div className={`font-cormorant text-base font-semibold ${totalEst >= 0 ? "text-forest" : "text-rose-500"}`}>
               {totalEst < 0 ? "-" : ""}${Math.abs(totalEst).toLocaleString("en-NZ")}
             </div>
           </div>
           <div className="text-center">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/40">ACTUAL NET</div>
+            <div className="font-bebas text-[10px] tracking-widest text-ink/65">ACTUAL NET</div>
             <div className={`font-cormorant text-base font-semibold ${totalActual >= 0 ? "text-forest" : "text-rose-500"}`}>
               {totalActual < 0 ? "-" : ""}${Math.abs(totalActual).toLocaleString("en-NZ")}
             </div>
           </div>
           <div className="text-center">
-            <div className="font-bebas text-[10px] tracking-widest text-ink/40">VARIANCE</div>
+            <div className="font-bebas text-[10px] tracking-widest text-ink/65">VARIANCE</div>
             <div className={`font-cormorant text-base font-semibold flex items-center justify-center gap-0.5 ${
-              variance > 0 ? "text-forest" : variance < 0 ? "text-rose-500" : "text-ink/50"
+              variance > 0 ? "text-forest" : variance < 0 ? "text-rose-500" : "text-ink/70"
             }`}>
               {variance > 0 ? <TrendingUp className="w-3 h-3" /> : variance < 0 ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
               {variance < 0 ? "-" : "+"}${Math.abs(variance).toLocaleString("en-NZ")}

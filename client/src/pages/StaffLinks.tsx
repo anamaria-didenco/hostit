@@ -73,7 +73,7 @@ export default function StaffLinks() {
             <h1 className="font-cormorant text-3xl font-semibold text-ink">Staff portal links</h1>
             <p className="font-dm text-sm text-ink/60 mt-1">Every live link you've shared with staff. Copy, open or revoke from one place.</p>
           </div>
-          <div className="font-bebas tracking-widest text-xs text-ink/40">
+          <div className="font-bebas tracking-widest text-xs text-ink/65">
             {links?.length ?? 0} TOTAL
           </div>
         </div>
@@ -86,7 +86,7 @@ export default function StaffLinks() {
         />
 
         {isLoading ? (
-          <div className="font-dm text-sm text-ink/50 py-12 text-center">Loading…</div>
+          <div className="font-dm text-sm text-ink/70 py-12 text-center">Loading…</div>
         ) : filtered.length === 0 ? (
           <div className="border border-dashed border-gold/30 px-6 py-16 text-center">
             <Link2 className="w-8 h-8 mx-auto mb-3 text-ink/20" />
@@ -131,9 +131,9 @@ export default function StaffLinks() {
                           </span>
                         )}
                         <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> Last opened {fmtDate(l.lastAccessedAt)}</span>
-                        <span className="text-ink/40">Created {fmtDate(l.createdAt)}</span>
+                        <span className="text-ink/65">Created {fmtDate(l.createdAt)}</span>
                       </div>
-                      <div className="font-mono text-[10px] text-ink/40 mt-1.5 truncate">
+                      <div className="font-mono text-[10px] text-ink/65 mt-1.5 truncate">
                         {origin}/staff/{l.token}
                       </div>
                     </div>
@@ -141,7 +141,7 @@ export default function StaffLinks() {
                       <button
                         onClick={() => copy(l.token)}
                         title="Copy link"
-                        className="h-9 w-9 flex items-center justify-center text-ink/50 hover:text-forest hover:bg-cream"
+                        className="h-9 w-9 flex items-center justify-center text-ink/70 hover:text-forest hover:bg-cream"
                       >
                         <Copy className="w-4 h-4" />
                       </button>
@@ -150,7 +150,7 @@ export default function StaffLinks() {
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Open link in new tab"
-                        className="h-9 w-9 flex items-center justify-center text-ink/50 hover:text-forest hover:bg-cream"
+                        className="h-9 w-9 flex items-center justify-center text-ink/70 hover:text-forest hover:bg-cream"
                       >
                         <ExternalLink className="w-4 h-4" />
                       </a>
@@ -161,7 +161,7 @@ export default function StaffLinks() {
                           }
                         }}
                         title="Delete link"
-                        className="h-9 w-9 flex items-center justify-center text-ink/50 hover:text-red-600 hover:bg-red-50"
+                        className="h-9 w-9 flex items-center justify-center text-ink/70 hover:text-red-600 hover:bg-red-50"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

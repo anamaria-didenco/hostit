@@ -164,8 +164,8 @@ export default function DailyChecklistLive() {
     return (
       <div className="min-h-screen bg-linen flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-bebas tracking-widest text-2xl text-ink/40">CHECKLIST NOT FOUND</p>
-          <p className="font-dm text-sm text-ink/30 mt-2">This link may be invalid or has been removed.</p>
+          <p className="font-bebas tracking-widest text-2xl text-ink/65">CHECKLIST NOT FOUND</p>
+          <p className="font-dm text-sm text-ink/65 mt-2">This link may be invalid or has been removed.</p>
         </div>
       </div>
     );
@@ -207,9 +207,9 @@ export default function DailyChecklistLive() {
             </div>
             <h1 className="font-bebas tracking-widest text-xl text-ink leading-none">{checklist.name}</h1>
             {checklist.description && (
-              <p className="font-dm text-xs text-ink/50 mt-1 leading-tight">{checklist.description}</p>
+              <p className="font-dm text-xs text-ink/70 mt-1 leading-tight">{checklist.description}</p>
             )}
-            <p className="font-dm text-[10px] text-ink/30 mt-1">{assignedDateDisplay}</p>
+            <p className="font-dm text-[10px] text-ink/65 mt-1">{assignedDateDisplay}</p>
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
             <div className="flex items-center gap-2">
@@ -223,7 +223,7 @@ export default function DailyChecklistLive() {
             </div>
             <button
               onClick={handleReset}
-              className="font-bebas tracking-widest text-[10px] text-ink/40 hover:text-red-500 flex items-center gap-1 transition-colors"
+              className="font-bebas tracking-widest text-[10px] text-ink/65 hover:text-red-500 flex items-center gap-1 transition-colors"
             >
               <RefreshCw className="w-3 h-3" /> RESET
             </button>
@@ -249,7 +249,7 @@ export default function DailyChecklistLive() {
       {/* Items */}
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-2">
         {total === 0 && !showAddForm && (
-          <p className="font-dm text-sm text-ink/40 text-center py-8">No items yet — tap + Add Item below to get started.</p>
+          <p className="font-dm text-sm text-ink/65 text-center py-8">No items yet — tap + Add Item below to get started.</p>
         )}
 
         {items.map(item => {
@@ -319,11 +319,11 @@ export default function DailyChecklistLive() {
                     }
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`font-dm text-sm leading-snug ${isChecked ? "line-through text-ink/40" : "text-ink"}`}>
+                    <p className={`font-dm text-sm leading-snug ${isChecked ? "line-through text-ink/65" : "text-ink"}`}>
                       {item.text}
                     </p>
                     {item.note && (
-                      <p className="font-dm text-xs text-ink/40 mt-0.5 leading-snug">{item.note}</p>
+                      <p className="font-dm text-xs text-ink/65 mt-0.5 leading-snug">{item.note}</p>
                     )}
                     {isChecked && item.checkedBy && (
                       <p className="font-dm text-[10px] text-forest/60 mt-1">
@@ -425,7 +425,7 @@ export default function DailyChecklistLive() {
           {editingName ? (
             <div className="flex items-center gap-2">
               <div className="flex-1">
-                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1">YOUR NAME (so we know who ticked what)</p>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1">YOUR NAME (so we know who ticked what)</p>
                 <input
                   ref={nameInputRef}
                   type="text"
@@ -447,12 +447,12 @@ export default function DailyChecklistLive() {
           ) : (
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bebas tracking-widest text-[10px] text-ink/40">CHECKING IN AS</p>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/65">CHECKING IN AS</p>
                 <p className="font-dm text-sm text-ink font-medium">{staffName || "Anonymous"}</p>
               </div>
               <button
                 onClick={() => { setNameInput(staffName); setEditingName(true); }}
-                className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-ink/40 hover:text-forest transition-colors"
+                className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-ink/65 hover:text-forest transition-colors"
               >
                 <Pencil className="w-3 h-3" /> CHANGE
               </button>

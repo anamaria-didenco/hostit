@@ -169,7 +169,7 @@ export default function Tasks() {
       {!taskList || taskList.length === 0 ? (
         <div className="text-center py-16">
           <CheckCircle2 className="w-12 h-12 text-sage/30 mx-auto mb-3" />
-          <p className="font-cormorant text-xl text-ink/40 italic">
+          <p className="font-cormorant text-xl text-ink/65 italic">
             {filter === "completed" ? "No completed tasks yet" : "No tasks here"}
           </p>
           <p className="font-dm text-xs text-sage/60 mt-1">
@@ -199,7 +199,7 @@ export default function Tasks() {
                 </button>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start gap-2 flex-wrap">
-                    <span className={`font-dm text-sm text-ink ${task.completed ? "line-through text-ink/40" : ""}`}>
+                    <span className={`font-dm text-sm text-ink ${task.completed ? "line-through text-ink/65" : ""}`}>
                       {task.title}
                     </span>
                     {task.priority !== "normal" && (

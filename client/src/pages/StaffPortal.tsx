@@ -100,7 +100,7 @@ export default function StaffPortal() {
       <div className="min-h-screen bg-linen flex items-center justify-center">
         <div className="text-center space-y-3">
           <Loader2 className="w-10 h-10 animate-spin text-forest/40 mx-auto" />
-          <p className="font-dm text-ink/50 text-sm">Loading runsheet…</p>
+          <p className="font-dm text-ink/70 text-sm">Loading runsheet…</p>
         </div>
       </div>
     );
@@ -112,7 +112,7 @@ export default function StaffPortal() {
         <div className="text-center space-y-4 max-w-sm">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto" />
           <h1 className="font-bebas tracking-widest text-xl text-ink">LINK NOT FOUND</h1>
-          <p className="font-dm text-ink/50 text-sm">
+          <p className="font-dm text-ink/70 text-sm">
             This staff portal link may have expired or been revoked. Please ask your venue manager for a new link.
           </p>
         </div>
@@ -276,15 +276,15 @@ export default function StaffPortal() {
           <div className="px-5 py-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div>
-                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">DATE</p>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-0.5">DATE</p>
                 <p className="font-dm text-sm font-semibold text-ink">{formatDate(runsheet.eventDate)}</p>
               </div>
               <div>
-                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">EVENT TYPE</p>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-0.5">EVENT TYPE</p>
                 <p className="font-dm text-sm font-semibold text-ink">{runsheet.eventType || "—"}</p>
               </div>
               <div>
-                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">VENUE / SPACE</p>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-0.5">VENUE / SPACE</p>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <p className="font-dm text-sm font-semibold text-ink">
                     {runsheet.spaceName || "—"}
@@ -304,7 +304,7 @@ export default function StaffPortal() {
                 </div>
               </div>
               <div>
-                <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">GUESTS</p>
+                <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-0.5">GUESTS</p>
                 <p className="font-dm text-sm font-semibold text-ink">{runsheet.guestCount ?? "TBC"}</p>
               </div>
             </div>
@@ -312,13 +312,13 @@ export default function StaffPortal() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 pt-3 border-t border-gold/20">
                 {(runsheet as any).eventStartTime && (
                   <div>
-                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">START TIME</p>
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-0.5">START TIME</p>
                     <p className="font-dm text-sm font-semibold text-ink">{formatTime12((runsheet as any).eventStartTime)}</p>
                   </div>
                 )}
                 {(runsheet as any).eventEndTime && (
                   <div>
-                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5">END TIME</p>
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-0.5">END TIME</p>
                     <p className="font-dm text-sm font-semibold text-ink">{formatTime12((runsheet as any).eventEndTime)}</p>
                   </div>
                 )}
@@ -330,7 +330,7 @@ export default function StaffPortal() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gold/30">
                 {contactName && (
                   <div>
-                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5 flex items-center gap-1">
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-0.5 flex items-center gap-1">
                       <User className="w-3 h-3" /> CLIENT NAME
                     </p>
                     <p className="font-dm text-sm text-ink">{contactName}</p>
@@ -338,7 +338,7 @@ export default function StaffPortal() {
                 )}
                 {contactPhone && (
                   <div>
-                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5 flex items-center gap-1">
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-0.5 flex items-center gap-1">
                       <Phone className="w-3 h-3" /> PHONE
                     </p>
                     <p className="font-dm text-sm text-ink">{contactPhone}</p>
@@ -346,7 +346,7 @@ export default function StaffPortal() {
                 )}
                 {contactEmail && (
                   <div>
-                    <p className="font-bebas tracking-widest text-[10px] text-ink/40 mb-0.5 flex items-center gap-1">
+                    <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-0.5 flex items-center gap-1">
                       <Mail className="w-3 h-3" /> EMAIL
                     </p>
                     <p className="font-dm text-sm text-ink">{contactEmail}</p>
@@ -496,12 +496,12 @@ export default function StaffPortal() {
             {/* Column headers */}
             <div className="grid gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5"
               style={{ gridTemplateColumns: ['1fr', '50px', showDietary && '70px', showServiceTime && '80px', showStaff && '1fr', showNotes && '1fr'].filter(Boolean).join(' ') }}>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">DISH</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">QTY</span>
-              {showDietary && <span className="font-bebas tracking-widest text-[10px] text-ink/40">DIETARY</span>}
-              {showServiceTime && <span className="font-bebas tracking-widest text-[10px] text-ink/40">SERVICE TIME</span>}
-              {showStaff && <span className="font-bebas tracking-widest text-[10px] text-ink/40">STAFF</span>}
-              {showNotes && <span className="font-bebas tracking-widest text-[10px] text-ink/40">NOTES</span>}
+              <span className="font-bebas tracking-widest text-[10px] text-ink/65">DISH</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/65">QTY</span>
+              {showDietary && <span className="font-bebas tracking-widest text-[10px] text-ink/65">DIETARY</span>}
+              {showServiceTime && <span className="font-bebas tracking-widest text-[10px] text-ink/65">SERVICE TIME</span>}
+              {showStaff && <span className="font-bebas tracking-widest text-[10px] text-ink/65">STAFF</span>}
+              {showNotes && <span className="font-bebas tracking-widest text-[10px] text-ink/65">NOTES</span>}
             </div>
             {orderedFohCourses.map(course => {
               const isDrinks = course === 'Drinks';
@@ -521,7 +521,7 @@ export default function StaffPortal() {
                       {showDietary && <span className="text-ink/60 text-xs">{item.dietary || "—"}</span>}
                       {showServiceTime && <span className="text-ink/60 text-xs">{item.serviceTime ? formatTime12(item.serviceTime) : "—"}</span>}
                       {showStaff && <span className="text-ink/60 text-xs">{item.staffAssigned || "—"}</span>}
-                      {showNotes && <span className="text-ink/50 text-xs">{(item as any).platingNotes || "—"}</span>}
+                      {showNotes && <span className="text-ink/70 text-xs">{(item as any).platingNotes || "—"}</span>}
                     </div>
                   ))}
                 </div>
@@ -540,12 +540,12 @@ export default function StaffPortal() {
             {/* Column headers */}
             <div className="grid gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5"
               style={{ gridTemplateColumns: ['1fr', '50px', showDietary && '70px', showServiceTime && '80px', showNotes && '1fr', showNotes && '1fr'].filter(Boolean).join(' ') }}>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">DISH</span>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/40">QTY</span>
-              {showDietary && <span className="font-bebas tracking-widest text-[10px] text-ink/40">DIETARY</span>}
-              {showServiceTime && <span className="font-bebas tracking-widest text-[10px] text-ink/40">SERVICE TIME</span>}
-              {showNotes && <span className="font-bebas tracking-widest text-[10px] text-ink/40">PREP NOTES</span>}
-              {showNotes && <span className="font-bebas tracking-widest text-[10px] text-ink/40">PLATING</span>}
+              <span className="font-bebas tracking-widest text-[10px] text-ink/65">DISH</span>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/65">QTY</span>
+              {showDietary && <span className="font-bebas tracking-widest text-[10px] text-ink/65">DIETARY</span>}
+              {showServiceTime && <span className="font-bebas tracking-widest text-[10px] text-ink/65">SERVICE TIME</span>}
+              {showNotes && <span className="font-bebas tracking-widest text-[10px] text-ink/65">PREP NOTES</span>}
+              {showNotes && <span className="font-bebas tracking-widest text-[10px] text-ink/65">PLATING</span>}
             </div>
             {orderedKitchenCourses.map(course => {
               const isDrinks = course === 'Drinks';
@@ -564,8 +564,8 @@ export default function StaffPortal() {
                       <span className="text-ink/70">{item.qty}</span>
                       {showDietary && <span className="text-ink/60 text-xs">{item.dietary || "—"}</span>}
                       {showServiceTime && <span className="text-ink/60 text-xs">{item.serviceTime ? formatTime12(item.serviceTime) : "—"}</span>}
-                      {showNotes && <span className="text-ink/50 text-xs">{(item as any).prepNotes || "—"}</span>}
-                      {showNotes && <span className="text-ink/50 text-xs">{(item as any).platingNotes || "—"}</span>}
+                      {showNotes && <span className="text-ink/70 text-xs">{(item as any).prepNotes || "—"}</span>}
+                      {showNotes && <span className="text-ink/70 text-xs">{(item as any).platingNotes || "—"}</span>}
                     </div>
                   ))}
                 </div>
@@ -576,7 +576,7 @@ export default function StaffPortal() {
 
         {/* ── Empty state ── */}
         {sortedItems.length === 0 && fohItems.length === 0 && kitchenItems.length === 0 && (
-          <div className="text-center py-16 text-ink/30 font-dm text-sm">
+          <div className="text-center py-16 text-ink/65 font-dm text-sm">
             <Clock className="w-10 h-10 mx-auto mb-3 opacity-20" />
             No items have been added to this runsheet yet.
           </div>
@@ -592,10 +592,10 @@ export default function StaffPortal() {
             <div className="divide-y divide-gold/20">
               {/* Column headers */}
               <div className="grid grid-cols-[120px_1fr_120px_100px] gap-2 px-5 py-2 bg-gold/5">
-                <span className="font-bebas tracking-widest text-[10px] text-ink/40">DATE</span>
-                <span className="font-bebas tracking-widest text-[10px] text-ink/40">TYPE / METHOD</span>
-                <span className="font-bebas tracking-widest text-[10px] text-ink/40">AMOUNT</span>
-                <span className="font-bebas tracking-widest text-[10px] text-ink/40">NOTES</span>
+                <span className="font-bebas tracking-widest text-[10px] text-ink/65">DATE</span>
+                <span className="font-bebas tracking-widest text-[10px] text-ink/65">TYPE / METHOD</span>
+                <span className="font-bebas tracking-widest text-[10px] text-ink/65">AMOUNT</span>
+                <span className="font-bebas tracking-widest text-[10px] text-ink/65">NOTES</span>
               </div>
               {payments.map((p: any) => (
                 <div key={p.id} className="grid grid-cols-[120px_1fr_120px_100px] gap-2 px-5 py-3 items-center text-sm font-dm">
@@ -604,18 +604,18 @@ export default function StaffPortal() {
                   </span>
                   <div>
                     <span className="font-bebas tracking-widest text-xs bg-gold/20 text-[#7a5c10] px-2 py-0.5 mr-1">{p.type?.toUpperCase()}</span>
-                    <span className="text-ink/50 text-xs">{p.method?.replace(/_/g, ' ')}</span>
+                    <span className="text-ink/70 text-xs">{p.method?.replace(/_/g, ' ')}</span>
                   </div>
                   <span className="font-semibold text-forest">
                     ${Number(p.amount).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
-                  <span className="text-ink/40 text-xs truncate">{p.notes || "—"}</span>
+                  <span className="text-ink/65 text-xs truncate">{p.notes || "—"}</span>
                 </div>
               ))}
               {/* Total */}
               <div className="grid grid-cols-[120px_1fr_120px_100px] gap-2 px-5 py-3 items-center bg-linen/60">
                 <span></span>
-                <span className="font-bebas tracking-widest text-xs text-ink/50">TOTAL RECEIVED</span>
+                <span className="font-bebas tracking-widest text-xs text-ink/70">TOTAL RECEIVED</span>
                 <span className="font-bebas tracking-widest text-sm text-forest">
                   ${payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
@@ -648,7 +648,7 @@ export default function StaffPortal() {
                   >
                     <FileText className="w-4 h-4 text-forest flex-shrink-0" />
                     <span className="flex-1 font-dm text-sm text-ink truncate">{att.name}</span>
-                    <span className="font-dm text-[11px] text-ink/40">{(att.size / 1024).toFixed(0)} KB</span>
+                    <span className="font-dm text-[11px] text-ink/65">{(att.size / 1024).toFixed(0)} KB</span>
                     <span className="font-bebas tracking-widest text-[11px] text-forest">OPEN</span>
                   </a>
                 ))}
@@ -691,7 +691,7 @@ export default function StaffPortal() {
                     <span className="font-bebas tracking-[0.2em] text-sm text-forest">STAFF CHECKLIST</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-dm text-xs text-ink/40">{checkedCount} of {localItems.length} done</span>
+                    <span className="font-dm text-xs text-ink/65">{checkedCount} of {localItems.length} done</span>
                     {checkedCount === localItems.length && (
                       <span className="flex items-center gap-1 font-bebas tracking-widest text-xs text-forest">
                         <CheckCircle2 className="w-3.5 h-3.5" /> ALL DONE
@@ -738,15 +738,15 @@ export default function StaffPortal() {
             ) : (
               <div className="bg-white border border-gold/30 shadow-sm px-6 py-16 text-center">
                 <ClipboardCheck className="w-12 h-12 mx-auto mb-4 text-ink/15" />
-                <p className="font-bebas tracking-widest text-sm text-ink/40">NO CHECKLIST ITEMS YET</p>
-                <p className="font-dm text-xs text-ink/30 mt-1">Your venue manager will add checklist items to this event.</p>
+                <p className="font-bebas tracking-widest text-sm text-ink/65">NO CHECKLIST ITEMS YET</p>
+                <p className="font-dm text-xs text-ink/65 mt-1">Your venue manager will add checklist items to this event.</p>
               </div>
             )}
           </>
         )}
 
         {/* ── Footer ── */}
-        <div className="text-center font-bebas tracking-widest text-xs text-ink/30 pb-8">
+        <div className="text-center font-bebas tracking-widest text-xs text-ink/65 pb-8">
           POWERED BY VENUEFLOWHQ · THIS PAGE UPDATES AUTOMATICALLY
         </div>
       </main>

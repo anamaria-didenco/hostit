@@ -86,7 +86,7 @@ export default function Reports() {
             </button>
             {showCustomize && (
               <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg p-3 z-30 w-52">
-                <div className="font-bebas text-xs tracking-widest text-ink/50 mb-2">SHOW / HIDE CARDS</div>
+                <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
                 {[
                   { id: "total_enquiries", label: "Total Enquiries" },
                   { id: "confirmed_bookings", label: "Confirmed Bookings" },
