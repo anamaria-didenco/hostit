@@ -161,7 +161,7 @@ export default function PaymentTracker() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="text-center p-4 bg-cream">
-                <div className="font-bebas tracking-widest text-xs text-ink/50 mb-1">TOTAL BOOKING VALUE</div>
+                <div className="font-bebas tracking-widest text-xs text-ink/70 mb-1">TOTAL BOOKING VALUE</div>
                 <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(summary.total ?? 0)}</div>
               </div>
               <div className="text-center p-4 bg-green-50">
@@ -185,7 +185,7 @@ export default function PaymentTracker() {
                     style={{ width: `${Math.min(100, (summary.totalPaid / (summary.total ?? 1)) * 100)}%` }}
                   />
                 </div>
-                <div className="text-xs font-dm text-ink/50 mt-1 text-right">
+                <div className="text-xs font-dm text-ink/70 mt-1 text-right">
                   {Math.round((summary.totalPaid / (summary.total ?? 1)) * 100)}% paid
                 </div>
               </div>
@@ -208,7 +208,7 @@ export default function PaymentTracker() {
             <div className="border-t border-border p-4 md:p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">AMOUNT (NZD) *</label>
+                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">AMOUNT (NZD) *</label>
                   <Input
                     type="number"
                     min={0}
@@ -220,7 +220,7 @@ export default function PaymentTracker() {
                   />
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">DATE PAID *</label>
+                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">DATE PAID *</label>
                   <Input
                     type="date"
                     value={newPayment.paidAt}
@@ -229,7 +229,7 @@ export default function PaymentTracker() {
                   />
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">TYPE</label>
+                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">TYPE</label>
                   <select
                     value={newPayment.type}
                     onChange={e => setNewPayment(p => ({ ...p, type: e.target.value }))}
@@ -239,7 +239,7 @@ export default function PaymentTracker() {
                   </select>
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">METHOD</label>
+                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">METHOD</label>
                   <select
                     value={newPayment.method}
                     onChange={e => setNewPayment(p => ({ ...p, method: e.target.value }))}
@@ -250,7 +250,7 @@ export default function PaymentTracker() {
                 </div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-1">NOTES</label>
+                <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">NOTES</label>
                 <Input
                   value={newPayment.notes}
                   onChange={e => setNewPayment(p => ({ ...p, notes: e.target.value }))}
@@ -285,7 +285,7 @@ export default function PaymentTracker() {
             <h3 className="font-bebas tracking-widest text-sm text-ink/70">PAYMENT HISTORY</h3>
           </div>
           {!payments || payments.length === 0 ? (
-            <div className="text-center py-10 text-ink/30 font-dm text-sm">
+            <div className="text-center py-10 text-ink/65 font-dm text-sm">
               No payments recorded yet.
             </div>
           ) : (
@@ -298,17 +298,17 @@ export default function PaymentTracker() {
                       <div className="font-dm text-sm font-medium text-ink">
                         {p.type === "refund" ? "−" : "+"}{fmtNZD(Number(p.amount))}
                       </div>
-                      <div className="text-xs text-ink/50 font-dm">
+                      <div className="text-xs text-ink/70 font-dm">
                         {PAYMENT_TYPES.find(t => t.value === p.type)?.label} ·{" "}
                         {PAYMENT_METHODS.find(m => m.value === p.method)?.label} ·{" "}
                         {new Date(p.paidAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
                       </div>
-                      {p.notes && <div className="text-xs text-ink/40 font-dm mt-0.5">{p.notes}</div>}
+                      {p.notes && <div className="text-xs text-ink/65 font-dm mt-0.5">{p.notes}</div>}
                     </div>
                   </div>
                   <button
                     onClick={() => deleteMutation.mutate({ id: p.id })}
-                    className="text-ink/30 hover:text-red-500 transition-colors"
+                    className="text-ink/65 hover:text-red-500 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

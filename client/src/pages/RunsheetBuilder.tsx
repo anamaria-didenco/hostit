@@ -46,7 +46,7 @@ function SortableSection({ id, children }: { id: string; children: React.ReactNo
         className="absolute left-0 top-0 h-[46px] w-5 flex items-center justify-center cursor-grab active:cursor-grabbing z-10 no-print opacity-0 group-hover/sortable:opacity-100 transition-opacity"
         title="Drag to reorder"
       >
-        <GripVertical className="w-3.5 h-3.5 text-ink/30" />
+        <GripVertical className="w-3.5 h-3.5 text-ink/65" />
       </div>
       {children}
     </div>
@@ -154,7 +154,7 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
   if (noSpacesYet) {
     return (
       <div className="border border-dashed border-gold/40 bg-linen/40 px-2.5 py-2 flex items-center justify-between gap-2 no-print">
-        <span className="font-dm text-xs text-ink/50">No spaces saved yet — add them in Settings → Venue → Spaces.</span>
+        <span className="font-dm text-xs text-ink/70">No spaces saved yet — add them in Settings → Venue → Spaces.</span>
         <button type="button" onClick={() => navigate("/dashboard?tab=settings&sub=venue")} className="font-bebas tracking-widest text-[10px] text-forest hover:underline whitespace-nowrap bg-transparent border-0 cursor-pointer">+ ADD SPACES</button>
       </div>
     );
@@ -2088,7 +2088,7 @@ export default function RunsheetBuilder() {
         <div className="max-w-4xl mx-auto px-4 py-8">
           <div className="flex items-center justify-between mb-6">
             <h1 className="font-bebas tracking-widest text-2xl text-ink">MY RUNSHEETS</h1>
-            <span className="font-dm text-sm text-ink/40">{(allRunsheets ?? []).length} total</span>
+            <span className="font-dm text-sm text-ink/65">{(allRunsheets ?? []).length} total</span>
           </div>
 
           {!allRunsheets ? (
@@ -2098,8 +2098,8 @@ export default function RunsheetBuilder() {
           ) : allRunsheets.length === 0 ? (
             <div className="text-center py-20 bg-white border border-gold/20">
               <ClipboardList className="w-12 h-12 text-ink/20 mx-auto mb-4" />
-              <div className="font-bebas tracking-widest text-xl text-ink/30 mb-2">NO RUNSHEETS YET</div>
-              <p className="font-dm text-sm text-ink/40 mb-6">Create your first runsheet to get started.</p>
+              <div className="font-bebas tracking-widest text-xl text-ink/65 mb-2">NO RUNSHEETS YET</div>
+              <p className="font-dm text-sm text-ink/65 mb-6">Create your first runsheet to get started.</p>
               <button
                 onClick={() => navigate("/runsheet?new=1")}
                 className="font-bebas tracking-widest text-sm bg-forest text-cream px-6 py-2.5 hover:bg-forest/90 transition-colors inline-flex items-center gap-2"
@@ -2133,23 +2133,23 @@ export default function RunsheetBuilder() {
                         </span>
                       )}
                       {rs.eventType && (
-                        <span className="font-bebas text-[10px] tracking-widest text-ink/40 border border-ink/15 px-1.5 py-0.5">
+                        <span className="font-bebas text-[10px] tracking-widest text-ink/65 border border-ink/15 px-1.5 py-0.5">
                           {rs.eventType}
                         </span>
                       )}
                       {rs.guestCount && (
-                        <span className="font-dm text-xs text-ink/40">
+                        <span className="font-dm text-xs text-ink/65">
                           {rs.guestCount} guests
                         </span>
                       )}
                       {rs.spaceName && (
-                        <span className="font-dm text-xs text-ink/40">{rs.spaceName}</span>
+                        <span className="font-dm text-xs text-ink/65">{rs.spaceName}</span>
                       )}
                     </div>
                   </div>
                   <div className="flex-shrink-0 text-right">
-                    <div className="font-bebas text-[10px] tracking-widest text-ink/30 mb-1">#{rs.id}</div>
-                    <div className="font-dm text-[10px] text-ink/30">
+                    <div className="font-bebas text-[10px] tracking-widest text-ink/65 mb-1">#{rs.id}</div>
+                    <div className="font-dm text-[10px] text-ink/65">
                       {new Date(rs.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
                     </div>
                   </div>
@@ -2251,11 +2251,11 @@ export default function RunsheetBuilder() {
                     <div className="inline-flex items-center bg-linen rounded-sm border border-gold/25 overflow-hidden">
                       <button
                         onClick={() => setPrintColumns(1)}
-                        className={`font-bebas tracking-widest text-[10px] px-2 py-1 transition-colors ${printColumns === 1 ? 'bg-forest text-cream' : 'text-ink/50 hover:text-ink'}`}
+                        className={`font-bebas tracking-widest text-[10px] px-2 py-1 transition-colors ${printColumns === 1 ? 'bg-forest text-cream' : 'text-ink/70 hover:text-ink'}`}
                       >1 COL</button>
                       <button
                         onClick={() => setPrintColumns(2)}
-                        className={`font-bebas tracking-widest text-[10px] px-2 py-1 transition-colors ${printColumns === 2 ? 'bg-forest text-cream' : 'text-ink/50 hover:text-ink'}`}
+                        className={`font-bebas tracking-widest text-[10px] px-2 py-1 transition-colors ${printColumns === 2 ? 'bg-forest text-cream' : 'text-ink/70 hover:text-ink'}`}
                       >2 COL</button>
                     </div>
                   </div>
@@ -2300,11 +2300,11 @@ export default function RunsheetBuilder() {
                     <span className="font-bebas tracking-widest text-xs text-forest">PRINT VIEW EDITOR</span>
                     <button
                       onClick={() => setPrintHide(new Set())}
-                      className="font-bebas tracking-widest text-[10px] text-ink/40 hover:text-forest"
+                      className="font-bebas tracking-widest text-[10px] text-ink/65 hover:text-forest"
                       title="Show all sections"
                     >RESET</button>
                   </div>
-                  <p className="px-4 pt-2 pb-1 font-dm text-[11px] text-ink/50 leading-snug">
+                  <p className="px-4 pt-2 pb-1 font-dm text-[11px] text-ink/70 leading-snug">
                     Tick sections to include them. Applies to the in-app print and the BEO PDF.
                   </p>
                   <div className="px-2 pb-2 max-h-80 overflow-y-auto">
@@ -2320,7 +2320,7 @@ export default function RunsheetBuilder() {
                           />
                           <div className="flex-1">
                             <div className="font-dm text-sm text-ink leading-tight">{s.label}</div>
-                            {s.beoOnly && <div className="font-dm text-[10px] text-ink/40">BEO PDF only</div>}
+                            {s.beoOnly && <div className="font-dm text-[10px] text-ink/65">BEO PDF only</div>}
                           </div>
                         </label>
                       );
@@ -2378,7 +2378,7 @@ export default function RunsheetBuilder() {
           {title || 'Untitled runsheet'}
         </div>
         {(eventType || sheetId) && (
-          <div className="font-dm text-xs sm:text-sm text-ink/50 truncate">
+          <div className="font-dm text-xs sm:text-sm text-ink/70 truncate">
             {eventType ? <span className="capitalize">{eventType}</span> : null}
             {eventType && sheetId ? ' · ' : ''}
             {sheetId ? `BEO #${sheetId}` : ''}
@@ -2398,7 +2398,7 @@ export default function RunsheetBuilder() {
         <div className="flex-1 min-w-[12px]" />
         {/* Section-ready progress */}
         <div className="flex items-center gap-2">
-          <span className="font-dm text-[11px] font-semibold text-ink/50 whitespace-nowrap">{readyCount} of {RUNSHEET_SECTIONS.length} ready</span>
+          <span className="font-dm text-[11px] font-semibold text-ink/70 whitespace-nowrap">{readyCount} of {RUNSHEET_SECTIONS.length} ready</span>
           <span className="hidden sm:inline-flex items-center gap-1">
             {RUNSHEET_SECTIONS.map(s => (
               <span
@@ -2558,9 +2558,9 @@ export default function RunsheetBuilder() {
               <div className="font-serif text-3xl font-semibold text-ink tracking-[-0.01em]">{title}</div>
             </div>
             <div className="text-right">
-              <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">PREPARED BY</div>
+              <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">PREPARED BY</div>
               <div className="font-dm text-sm font-semibold">{venueName || "VenueFlowHQ"}</div>
-              <div className="font-dm text-xs text-ink/50">{new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</div>
+              <div className="font-dm text-xs text-ink/70">{new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</div>
             </div>
           </div>
         </div>
@@ -2589,7 +2589,7 @@ export default function RunsheetBuilder() {
             {/* Event details grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DATE</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DATE</label>
                 <Input
                   type="date"
                   value={eventDate}
@@ -2599,7 +2599,7 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{formattedEventDate || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">EVENT TYPE</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">EVENT TYPE</label>
                 <Input
                   value={eventType}
                   onChange={e => setEventType(e.target.value)}
@@ -2609,12 +2609,12 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-dm text-sm font-semibold">{eventType || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">VENUE / SPACE</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">VENUE / SPACE</label>
                 <SpacePicker value={spaceName} onChange={setSpaceName} />
                 <div className="hidden print:block font-dm text-sm font-semibold">{spaceName || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">GUESTS</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">GUESTS</label>
                 <Input
                   type="number"
                   value={guestCount}
@@ -2628,7 +2628,7 @@ export default function RunsheetBuilder() {
             {/* Event time row — venue/space lives in the grid above; this is times only */}
             <div className="grid grid-cols-2 gap-4 mb-4 pt-3 border-t border-gold/20">
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">START TIME</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">START TIME</label>
                 <Input
                   type="time"
                   step={900}
@@ -2639,7 +2639,7 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{eventStartTime || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">END TIME</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">END TIME</label>
                 <Input
                   type="time"
                   step={900}
@@ -2654,7 +2654,7 @@ export default function RunsheetBuilder() {
             {/* Contact info row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gold/20">
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1 flex items-center gap-1"><User className="w-3 h-3" /> CLIENT NAME</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1 flex items-center gap-1"><User className="w-3 h-3" /> CLIENT NAME</label>
                 <Input
                   value={contactName}
                   onChange={e => setContactName(e.target.value)}
@@ -2664,7 +2664,7 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-dm text-sm">{contactName || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> PHONE</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> PHONE</label>
                 <Input
                   value={contactPhone}
                   onChange={e => setContactPhone(e.target.value)}
@@ -2674,7 +2674,7 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-dm text-sm">{contactPhone || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> EMAIL</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1 flex items-center gap-1"><Mail className="w-3 h-3" /> EMAIL</label>
                 <Input
                   value={contactEmail}
                   onChange={e => setContactEmail(e.target.value)}
@@ -2714,12 +2714,12 @@ export default function RunsheetBuilder() {
                 <div className={`mt-4 px-4 py-3 rounded border ${paid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-300'}`}>
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
                     <div>
-                      <div className="font-bebas tracking-widest text-[10px] text-ink/40">DEPOSIT {paid ? '✓ PAID' : '— OUTSTANDING'}</div>
+                      <div className="font-bebas tracking-widest text-[10px] text-ink/65">DEPOSIT {paid ? '✓ PAID' : '— OUTSTANDING'}</div>
                       <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{dep > 0 ? money(dep) : '—'}</div>
                     </div>
                     {balance != null && (
                       <div>
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">BALANCE TO COLLECT</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/65">BALANCE TO COLLECT</div>
                         <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{money(balance)}</div>
                       </div>
                     )}
@@ -2751,7 +2751,7 @@ export default function RunsheetBuilder() {
                         <Building2 className="w-4 h-4 text-forest flex-shrink-0" />
                         <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
                         {venueSetup && !isHidden && <span className="text-xs text-forest/50 font-dm truncate max-w-[160px]">{venueSetup.substring(0, 35)}{venueSetup.length > 35 ? "…" : ""}</span>}
-                        {isHidden && <span className="text-xs text-ink/30 font-dm italic">hidden from print</span>}
+                        {isHidden && <span className="text-xs text-ink/65 font-dm italic">hidden from print</span>}
                       </button>
                       <div className="flex items-center gap-1 pr-3">
                         <button
@@ -2762,7 +2762,7 @@ export default function RunsheetBuilder() {
                           {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                         </button>
                         {!isHidden && (
-                          <button onClick={() => setSetupSectionOpen(v => !v)} className="p-1 text-ink/30">
+                          <button onClick={() => setSetupSectionOpen(v => !v)} className="p-1 text-ink/65">
                             {setupSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                         )}
@@ -2777,7 +2777,7 @@ export default function RunsheetBuilder() {
                     {!isHidden && setupSectionOpen && (
                       <div className="px-5 pb-4 pt-2 space-y-3 no-print">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-bebas tracking-widest text-[10px] text-ink/40">QUICK FILL TEMPLATES</span>
+                          <span className="font-bebas tracking-widest text-[10px] text-ink/65">QUICK FILL TEMPLATES</span>
                           <button
                             onClick={openSetupManager}
                             className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
@@ -2797,7 +2797,7 @@ export default function RunsheetBuilder() {
                           ))}
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SETUP SUMMARY (ONE LINE)</label>
+                          <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">SETUP SUMMARY (ONE LINE)</label>
                           <input
                             value={setupSummary}
                             onChange={e => setSetupSummary(e.target.value)}
@@ -2838,7 +2838,7 @@ export default function RunsheetBuilder() {
                         {dietaries.length > 0 && !isHidden && (
                           <span className="bg-forest text-cream text-xs font-bebas px-2 py-0.5">{dietaries.length}</span>
                         )}
-                        {isHidden && <span className="text-xs text-ink/30 font-dm italic">hidden from print</span>}
+                        {isHidden && <span className="text-xs text-ink/65 font-dm italic">hidden from print</span>}
                       </button>
                       <div className="flex items-center gap-1 pr-3">
                         <button
@@ -2849,7 +2849,7 @@ export default function RunsheetBuilder() {
                           {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                         </button>
                         {!isHidden && (
-                          <button onClick={() => setDietarySectionOpen(v => !v)} className="p-1 text-ink/30">
+                          <button onClick={() => setDietarySectionOpen(v => !v)} className="p-1 text-ink/65">
                             {dietarySectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                         )}
@@ -2864,7 +2864,7 @@ export default function RunsheetBuilder() {
                     {!isHidden && dietarySectionOpen && (
                       <div className="px-5 pb-4 pt-2 space-y-4 no-print">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-bebas tracking-widest text-[10px] text-ink/40">QUICK ADD</span>
+                          <span className="font-bebas tracking-widest text-[10px] text-ink/65">QUICK ADD</span>
                           <button
                             onClick={openDietaryManager}
                             className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
@@ -2909,7 +2909,7 @@ export default function RunsheetBuilder() {
                                     className="font-serif text-3xl font-semibold text-forest [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] bg-transparent border-0 focus:outline-none w-16 no-print leading-none"
                                   />
                                   <div className="hidden print:block font-serif text-3xl font-semibold text-forest [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] leading-none">{d.count}</div>
-                                  <span className="font-bebas tracking-widest text-xs text-ink/40 mb-1">GUESTS</span>
+                                  <span className="font-bebas tracking-widest text-xs text-ink/65 mb-1">GUESTS</span>
                                 </div>
                                 <input
                                   value={d.name}
@@ -2921,9 +2921,9 @@ export default function RunsheetBuilder() {
                                   value={d.notes ?? ""}
                                   onChange={e => updateDietary(idx, "notes", e.target.value)}
                                   placeholder="Notes..."
-                                  className="w-full font-dm text-xs text-ink/40 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20 no-print"
+                                  className="w-full font-dm text-xs text-ink/65 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20 no-print"
                                 />
-                                {d.notes && <div className="hidden print:block font-dm text-xs text-ink/40 mt-0.5">{d.notes}</div>}
+                                {d.notes && <div className="hidden print:block font-dm text-xs text-ink/65 mt-0.5">{d.notes}</div>}
                                 {/* Named guests with this dietary */}
                                 <div className="mt-2 pt-2 border-t border-gold/10 no-print">
                                   {(d.names ?? []).length > 0 && (
@@ -2931,7 +2931,7 @@ export default function RunsheetBuilder() {
                                       {(d.names ?? []).map((nm, ni) => (
                                         <span key={ni} className="inline-flex items-center gap-1 bg-white border border-gold/30 rounded-sm px-1.5 py-0.5 font-dm text-[11px] text-ink/70">
                                           {nm}
-                                          <button onClick={() => removeDietaryName(idx, ni)} className="text-ink/30 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                                          <button onClick={() => removeDietaryName(idx, ni)} className="text-ink/65 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
                                         </span>
                                       ))}
                                     </div>
@@ -2944,7 +2944,7 @@ export default function RunsheetBuilder() {
                                     className="w-full font-dm text-[11px] text-ink bg-transparent border-0 focus:outline-none placeholder:text-forest/50"
                                   />
                                 </div>
-                                {(d.names ?? []).length > 0 && <div className="hidden print:block font-dm text-xs text-ink/50 mt-0.5">{(d.names ?? []).join(', ')}</div>}
+                                {(d.names ?? []).length > 0 && <div className="hidden print:block font-dm text-xs text-ink/70 mt-0.5">{(d.names ?? []).join(', ')}</div>}
                               </div>
                             ))}
                           </div>
@@ -2978,7 +2978,7 @@ export default function RunsheetBuilder() {
                           </Button>
                         </div>
                         {dietaries.length === 0 && (
-                          <div className="text-center py-3 text-ink/30 font-dm text-sm">No dietary requirements recorded</div>
+                          <div className="text-center py-3 text-ink/65 font-dm text-sm">No dietary requirements recorded</div>
                         )}
                       </div>
                     )}
@@ -2989,7 +2989,7 @@ export default function RunsheetBuilder() {
                           {dietaries.map((d, i) => (
                             <div key={i} className="border border-gold/30 px-3 py-1.5 text-sm font-dm">
                               <span className="font-semibold">{d.count}×</span> {d.name}
-                              {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
+                              {d.notes && <span className="text-ink/70 ml-1">— {d.notes}</span>}
                             </div>
                           ))}
                         </div>
@@ -3037,7 +3037,7 @@ export default function RunsheetBuilder() {
                         on ? 'bg-forest/10 text-[#2f5488]' : 'text-ink/55 hover:text-ink hover:bg-forest/5'
                       }`}
                     >
-                      <span className={on ? 'text-[#2f5488]' : 'text-ink/40'}>{s.icon}</span>
+                      <span className={on ? 'text-[#2f5488]' : 'text-ink/65'}>{s.icon}</span>
                       <span className={`flex-1 font-dm text-sm ${on ? 'font-semibold' : 'font-medium'}`}>{s.label}</span>
                       <span className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-[#2f5488]' : 'bg-gold/30'}`} />
                     </button>
@@ -3049,7 +3049,7 @@ export default function RunsheetBuilder() {
             <div className="bg-linen/70 border border-gold/20 rounded-md p-3.5">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-bebas tracking-[0.2em] text-[10px] text-forest/70">SETUP</span>
-                <span className="font-dm text-[11px] font-semibold text-ink/50">{readyCount}/{RUNSHEET_SECTIONS.length}</span>
+                <span className="font-dm text-[11px] font-semibold text-ink/70">{readyCount}/{RUNSHEET_SECTIONS.length}</span>
               </div>
               <div className="h-1.5 rounded-full bg-gold/15 overflow-hidden">
                 <div className="h-full bg-[#2f5488] transition-all" style={{ width: `${(readyCount / RUNSHEET_SECTIONS.length) * 100}%` }} />
@@ -3116,7 +3116,7 @@ export default function RunsheetBuilder() {
                   const sorted = [...items].sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
                   const first = sorted[0]; const last = sorted[sorted.length - 1];
                   return (
-                    <span className="font-serif text-sm text-ink/50 [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">
+                    <span className="font-serif text-sm text-ink/70 [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">
                       {formatTime12(first.time)} – {formatTime12(addMinutes(last.time, last.duration))}
                     </span>
                   );
@@ -3125,7 +3125,7 @@ export default function RunsheetBuilder() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setShowPasteImport(true); setParsedData(null); setPasteText(''); }}
-                  className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
+                  className="font-bebas tracking-widest text-xs text-ink/70 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
                 >
                   <FileText className="w-3.5 h-3.5" /> IMPORT FROM TEXT
                 </button>
@@ -3146,7 +3146,7 @@ export default function RunsheetBuilder() {
 
             {/* Event notes — at top */}
             <div data-print-section="notes" className="px-5 py-3 border-b border-gold/20 bg-linen/30">
-              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1.5">EVENT NOTES</label>
+              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1.5">EVENT NOTES</label>
               <RichTextarea
                 value={notes}
                 onChange={setNotes}
@@ -3158,7 +3158,7 @@ export default function RunsheetBuilder() {
             </div>
 
             {items.length === 0 ? (
-              <div className="text-center py-20 text-ink/30 font-dm text-sm">
+              <div className="text-center py-20 text-ink/65 font-dm text-sm">
                 <Clock className="w-12 h-12 mx-auto mb-4 opacity-15" />
                 <p className="mb-1">No items yet.</p>
                 <p className="text-ink/20 text-xs">Click "Add Item" above to build your runsheet timeline.</p>
@@ -3227,7 +3227,7 @@ export default function RunsheetBuilder() {
                           </div>
                           <div className="hidden print:block font-serif text-base font-semibold tracking-[-0.01em] whitespace-nowrap [font-variant-numeric:tabular-nums_lining-nums]">{formatTime12(item.time)}</div>
                           {item.duration > 0 && (
-                            <div className={`text-[11px] font-dm no-print ${isNow ? 'text-emerald-700/70 font-semibold' : 'text-ink/30'}`}>{item.duration}m</div>
+                            <div className={`text-[11px] font-dm no-print ${isNow ? 'text-emerald-700/70 font-semibold' : 'text-ink/65'}`}>{item.duration}m</div>
                           )}
                         </div>
 
@@ -3244,9 +3244,9 @@ export default function RunsheetBuilder() {
                             value={item.description ?? ""}
                             onChange={e => updateItemField(idx, "description", e.target.value)}
                             placeholder="Notes / details..."
-                            className="w-full font-dm text-xs text-ink/50 bg-transparent border-0 focus:outline-none placeholder:text-ink/25 mt-0.5 no-print"
+                            className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none placeholder:text-ink/25 mt-0.5 no-print"
                           />
-                          {item.description && <div className="hidden print:block font-dm text-xs text-ink/50 mt-0.5 whitespace-normal">{item.description}</div>}
+                          {item.description && <div className="hidden print:block font-dm text-xs text-ink/70 mt-0.5 whitespace-normal">{item.description}</div>}
                         </div>
 
                         {/* Assigned to — editorial owner tag on a colour-tinted
@@ -3268,7 +3268,7 @@ export default function RunsheetBuilder() {
                           <button
                             onClick={() => moveItem(idx, 'up')}
                             disabled={idx === 0}
-                            className="p-1 text-ink/30 hover:text-ink/60 disabled:opacity-20 transition-colors"
+                            className="p-1 text-ink/65 hover:text-ink/60 disabled:opacity-20 transition-colors"
                             title="Move up"
                           >
                             <MoveUp className="w-3.5 h-3.5" />
@@ -3276,27 +3276,27 @@ export default function RunsheetBuilder() {
                           <button
                             onClick={() => moveItem(idx, 'down')}
                             disabled={idx === items.length - 1}
-                            className="p-1 text-ink/30 hover:text-ink/60 disabled:opacity-20 transition-colors"
+                            className="p-1 text-ink/65 hover:text-ink/60 disabled:opacity-20 transition-colors"
                             title="Move down"
                           >
                             <MoveDown className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => duplicateItem(idx)}
-                            className="p-1 text-ink/30 hover:text-ink/60 transition-colors"
+                            className="p-1 text-ink/65 hover:text-ink/60 transition-colors"
                             title="Duplicate"
                           >
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setExpandedItem(isExpanded ? null : key)}
-                            className="p-1 text-ink/30 hover:text-ink/60 transition-colors"
+                            className="p-1 text-ink/65 hover:text-ink/60 transition-colors"
                           >
                             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                           </button>
                           <button
                             onClick={() => removeItem(idx)}
-                            className="p-1 text-ink/30 hover:text-red-500 transition-colors"
+                            className="p-1 text-ink/65 hover:text-red-500 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -3308,7 +3308,7 @@ export default function RunsheetBuilder() {
                         <div className="border-t border-gold/15 px-5 py-4 space-y-4 bg-linen/30 no-print">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
-                              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DURATION (MINS)</label>
+                              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DURATION (MINS)</label>
                               <Input
                                 type="text"
                                 inputMode="numeric"
@@ -3322,7 +3322,7 @@ export default function RunsheetBuilder() {
                               />
                             </div>
                             <div>
-                              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">CATEGORY</label>
+                              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">CATEGORY</label>
                               <select
                                 value={item.category}
                                 onChange={e => updateItemField(idx, "category", e.target.value)}
@@ -3334,7 +3334,7 @@ export default function RunsheetBuilder() {
                               </select>
                             </div>
                             <div>
-                              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">ASSIGNED TO</label>
+                              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">ASSIGNED TO</label>
                               <Input
                                 value={item.assignedTo ?? ""}
                                 onChange={e => updateItemField(idx, "assignedTo", e.target.value)}
@@ -3343,7 +3343,7 @@ export default function RunsheetBuilder() {
                               />
                             </div>
                             <div>
-                              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">NOTES</label>
+                              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">NOTES</label>
                               <Input
                                 value={item.description ?? ""}
                                 onChange={e => updateItemField(idx, "description", e.target.value)}
@@ -3354,18 +3354,18 @@ export default function RunsheetBuilder() {
                           </div>
                           {/* Style controls */}
                           <div className="flex items-center gap-3">
-                            <span className="font-bebas tracking-widest text-[10px] text-ink/40">STYLE</span>
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/65">STYLE</span>
                             <button
                               onClick={() => updateItemField(idx, "bold", !item.bold)}
-                              className={`font-bold text-xs px-2 py-1 border rounded-sm transition-colors font-dm ${item.bold ? 'bg-ink text-white border-ink' : 'bg-white text-ink/50 border-gold/20 hover:border-ink/30'}`}
+                              className={`font-bold text-xs px-2 py-1 border rounded-sm transition-colors font-dm ${item.bold ? 'bg-ink text-white border-ink' : 'bg-white text-ink/70 border-gold/20 hover:border-ink/30'}`}
                               title="Bold"
                             >B</button>
                             <button
                               onClick={() => updateItemField(idx, "italic", !item.italic)}
-                              className={`italic text-xs px-2 py-1 border rounded-sm transition-colors font-dm ${item.italic ? 'bg-ink text-white border-ink' : 'bg-white text-ink/50 border-gold/20 hover:border-ink/30'}`}
+                              className={`italic text-xs px-2 py-1 border rounded-sm transition-colors font-dm ${item.italic ? 'bg-ink text-white border-ink' : 'bg-white text-ink/70 border-gold/20 hover:border-ink/30'}`}
                               title="Italic"
                             >I</button>
-                            <span className="font-bebas tracking-widest text-[10px] text-ink/40 ml-2">HIGHLIGHT</span>
+                            <span className="font-bebas tracking-widest text-[10px] text-ink/65 ml-2">HIGHLIGHT</span>
                             {[
                               { label: 'None', value: '' },
                               { label: 'Blue', value: '#e8edf6' },
@@ -3392,7 +3392,7 @@ export default function RunsheetBuilder() {
 
             {/* Footer / payment notes */}
             <div className="px-5 py-4 border-t border-gold/20">
-              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">FOOTER NOTE</label>
+              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">FOOTER NOTE</label>
               <p className="font-dm text-[10px] text-ink/35 mb-2">Shown at the bottom of the runsheet — use for payment info, terms, or any closing note.</p>
               <RichTextarea
                 value={footerText}
@@ -3415,38 +3415,38 @@ export default function RunsheetBuilder() {
               <div className="flex items-center gap-2">
                 <UtensilsCrossed className="w-4 h-4 text-gold" />
                 <span className="font-bebas tracking-widest text-sm text-ink">FOOD</span>
-                <span className="text-xs text-ink/40 font-dm">({fnbItems.length} items)</span>
+                <span className="text-xs text-ink/65 font-dm">({fnbItems.length} items)</span>
               </div>
               <div className="flex items-center gap-2">
                 {/* Column visibility toggles */}
                 <button
                   onClick={() => setShowQtyCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showQtyCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showQtyCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
                   title="Toggle Quantity column"
                 >QTY</button>
                 <button
                   onClick={() => setShowPriceCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPriceCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPriceCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
                   title="Show each item's price on the BEO / Event Pack (per-item price = till amount)"
                 >PRICE</button>
                 <button
                   onClick={() => setShowDietaryCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDietaryCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDietaryCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
                   title="Toggle Dietary column"
                 >DIETARY</button>
                 <button
                   onClick={() => setShowTimeCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showTimeCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showTimeCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
                   title="Toggle Time column"
                 >SERVICE TIME</button>
                 <button
                   onClick={() => setShowStaffCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showStaffCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showStaffCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
                   title="Toggle Staff column"
                 >STAFF</button>
                 <button
                   onClick={() => setShowPrepPlatingCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPrepPlatingCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPrepPlatingCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
                   title="Toggle Notes column"
                 >NOTES</button>
                 <div className="w-px h-4 bg-ink/10 mx-1" />
@@ -3456,14 +3456,14 @@ export default function RunsheetBuilder() {
                     if (!name) return;
                     setFnbItems(prev => [...prev, { section: 'foh', course: name, dishName: '', qty: 1, dietary: '', serviceTime: '', staffAssigned: '', prepNotes: '', platingNotes: '', drinkCategory: '' } as any]);
                   }}
-                  className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
+                  className="font-bebas tracking-widest text-xs text-ink/70 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
                   title="Add a new course (e.g. Petit Fours, Coffee)"
                 >
                   <Plus className="w-3.5 h-3.5" /> ADD COURSE
                 </button>
                 <button
                   onClick={() => { setShowFnbPaste(true); setFnbPasteText(''); setFnbParsedItems([]); }}
-                  className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
+                  className="font-bebas tracking-widest text-xs text-ink/70 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
                 >
                   <Sparkles className="w-3.5 h-3.5" /> AI PASTE
                 </button>
@@ -3485,24 +3485,24 @@ export default function RunsheetBuilder() {
                 className={`px-5 py-2.5 font-bebas tracking-widest text-xs transition-colors flex items-center gap-2 ${
                   fnbSubTab === 'items'
                     ? 'bg-white text-amber-700 border-b-2 border-gold -mb-px'
-                    : 'text-ink/40 hover:text-ink/70 hover:bg-white/50'
+                    : 'text-ink/65 hover:text-ink/70 hover:bg-white/50'
                 }`}
               >
                 <UtensilsCrossed className="w-3.5 h-3.5" />
                 MENU & SERVICE
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${fnbSubTab === 'items' ? 'bg-gold/15 text-amber-700' : 'bg-ink/5 text-ink/40'}`}>{fnbItems.length}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${fnbSubTab === 'items' ? 'bg-gold/15 text-amber-700' : 'bg-ink/5 text-ink/65'}`}>{fnbItems.length}</span>
               </button>
               <button
                 onClick={() => setFnbSubTab('dietaries')}
                 className={`px-5 py-2.5 font-bebas tracking-widest text-xs transition-colors flex items-center gap-2 ${
                   fnbSubTab === 'dietaries'
                     ? 'bg-white text-amber-700 border-b-2 border-gold -mb-px'
-                    : 'text-ink/40 hover:text-ink/70 hover:bg-white/50'
+                    : 'text-ink/65 hover:text-ink/70 hover:bg-white/50'
                 }`}
               >
                 <Leaf className="w-3.5 h-3.5" />
                 DIETARY REQS
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${fnbSubTab === 'dietaries' ? 'bg-gold/15 text-amber-700' : 'bg-ink/5 text-ink/40'}`}>{dietaries.length}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${fnbSubTab === 'dietaries' ? 'bg-gold/15 text-amber-700' : 'bg-ink/5 text-ink/65'}`}>{dietaries.length}</span>
               </button>
             </div>
 
@@ -3512,7 +3512,7 @@ export default function RunsheetBuilder() {
                 <div className="flex items-center justify-between mb-1">
                   <div>
                     <span className="font-bebas tracking-widest text-sm text-forest">DIETARY REQUIREMENTS</span>
-                    <p className="font-dm text-xs text-ink/40 mt-0.5">Tag each guest's dietary needs — surfaces in BEO and on the F&B print sheet.</p>
+                    <p className="font-dm text-xs text-ink/65 mt-0.5">Tag each guest's dietary needs — surfaces in BEO and on the F&B print sheet.</p>
                   </div>
                   <button
                     onClick={openDietaryManager}
@@ -3522,7 +3522,7 @@ export default function RunsheetBuilder() {
                   </button>
                 </div>
                 <div>
-                  <span className="font-bebas tracking-widest text-[10px] text-ink/40 mb-2 block">QUICK ADD</span>
+                  <span className="font-bebas tracking-widest text-[10px] text-ink/65 mb-2 block">QUICK ADD</span>
                   <div className="flex flex-wrap gap-2">
                     {activeDietaryOptions.map(d => (
                       <button
@@ -3560,7 +3560,7 @@ export default function RunsheetBuilder() {
                             onChange={e => updateDietary(idx, "count", Number(e.target.value))}
                             className="font-serif text-3xl font-semibold text-forest [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] bg-transparent border-0 focus:outline-none w-16 leading-none"
                           />
-                          <span className="font-bebas tracking-widest text-xs text-ink/40 mb-1">GUESTS</span>
+                          <span className="font-bebas tracking-widest text-xs text-ink/65 mb-1">GUESTS</span>
                         </div>
                         <input
                           value={d.name}
@@ -3571,7 +3571,7 @@ export default function RunsheetBuilder() {
                           value={d.notes ?? ""}
                           onChange={e => updateDietary(idx, "notes", e.target.value)}
                           placeholder="Notes..."
-                          className="w-full font-dm text-xs text-ink/40 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20"
+                          className="w-full font-dm text-xs text-ink/65 bg-transparent border-0 focus:outline-none mt-0.5 placeholder:text-ink/20"
                         />
                         {/* Named guests with this dietary — type a name + Enter to
                             build the list; the guest count follows the names. */}
@@ -3581,7 +3581,7 @@ export default function RunsheetBuilder() {
                               {(d.names ?? []).map((nm, ni) => (
                                 <span key={ni} className="inline-flex items-center gap-1 bg-white border border-gold/30 rounded-sm px-1.5 py-0.5 font-dm text-[11px] text-ink/70">
                                   {nm}
-                                  <button onClick={() => removeDietaryName(idx, ni)} className="text-ink/30 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                                  <button onClick={() => removeDietaryName(idx, ni)} className="text-ink/65 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
                                 </span>
                               ))}
                             </div>
@@ -3627,7 +3627,7 @@ export default function RunsheetBuilder() {
                   </Button>
                 </div>
                 {dietaries.length === 0 && (
-                  <div className="text-center py-3 text-ink/30 font-dm text-sm">No dietary requirements recorded</div>
+                  <div className="text-center py-3 text-ink/65 font-dm text-sm">No dietary requirements recorded</div>
                 )}
               </div>
             )}
@@ -3635,7 +3635,7 @@ export default function RunsheetBuilder() {
             {/* Kitchen / chef notes — mirrors the Drinks/Bar notes; prints on
                 the BEO and the live staff runsheet. */}
             <div className="px-5 py-4 border-t border-gold/20 no-print">
-              <div className="font-bebas tracking-widest text-xs text-ink/40 mb-3 flex items-center gap-1.5"><ChefHat className="w-3.5 h-3.5" /> KITCHEN NOTES</div>
+              <div className="font-bebas tracking-widest text-xs text-ink/65 mb-3 flex items-center gap-1.5"><ChefHat className="w-3.5 h-3.5" /> KITCHEN NOTES</div>
               <Textarea
                 value={kitchenNotes}
                 onChange={e => setKitchenNotes(e.target.value)}
@@ -3658,7 +3658,7 @@ export default function RunsheetBuilder() {
                   {dietaries.map((d, i) => (
                     <div key={i} className="border border-gold/30 px-3 py-1.5 text-sm font-dm">
                       <span className="font-semibold">{d.count}×</span> {d.name}
-                      {d.notes && <span className="text-ink/50 ml-1">— {d.notes}</span>}
+                      {d.notes && <span className="text-ink/70 ml-1">— {d.notes}</span>}
                     </div>
                   ))}
                 </div>
@@ -3739,13 +3739,13 @@ export default function RunsheetBuilder() {
                     if (!foodItems.length) return null;
                     return (
                       <div>
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1.5">FOOD & PRICING</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1.5">FOOD & PRICING</div>
                         <div className="space-y-1">
                           {foodItems.map((item: any, i: number) => (
                             <div key={i} className="flex justify-between items-start text-xs font-dm">
                               <span className="text-ink/80 flex-1">
                                 {item.description}
-                                {item.qty > 1 ? <span className="text-ink/40 ml-1">× {item.qty}</span> : null}
+                                {item.qty > 1 ? <span className="text-ink/65 ml-1">× {item.qty}</span> : null}
                               </span>
                               <span className="font-semibold text-ink ml-3">${Number(item.total ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
                             </div>
@@ -3759,14 +3759,14 @@ export default function RunsheetBuilder() {
                 {/* Quote items (hire, styling, etc.) */}
                 {proposalQuote?.items && proposalQuote.items.length > 0 && (
                   <div>
-                    <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1.5">ADDITIONAL ITEMS</div>
+                    <div className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1.5">ADDITIONAL ITEMS</div>
                     <div className="space-y-1">
                       {proposalQuote.items.map((item: any) => (
                         <div key={item.id} className="flex justify-between items-start text-xs font-dm">
                           <div className="flex-1">
                             <span className="text-ink/80">{item.name}</span>
-                            {item.description && <span className="text-ink/40 ml-1">— {item.description}</span>}
-                            {Number(item.qty) > 1 && <span className="text-ink/40 ml-1">× {item.qty}</span>}
+                            {item.description && <span className="text-ink/65 ml-1">— {item.description}</span>}
+                            {Number(item.qty) > 1 && <span className="text-ink/65 ml-1">× {item.qty}</span>}
                           </div>
                           <span className="font-semibold text-ink ml-3">${(Number(item.qty) * Number(item.unitPrice)).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
                         </div>
@@ -3778,7 +3778,7 @@ export default function RunsheetBuilder() {
                 {/* Bar / Beverages */}
                 {proposalDrinks && (
                   <div>
-                    <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1.5">BAR & BEVERAGES</div>
+                    <div className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1.5">BAR & BEVERAGES</div>
                     <div className="text-xs font-dm text-ink/80 capitalize mb-1">
                       <span className="font-semibold">{proposalDrinks.barOption?.replace(/_/g, ' ')}</span>
                       {proposalDrinks.tabAmount ? ` — Bar tab: $${Number(proposalDrinks.tabAmount).toLocaleString('en-NZ')}` : ''}
@@ -3817,7 +3817,7 @@ export default function RunsheetBuilder() {
 
             {/* No proposal linked notice */}
             {!linkedProposalId && (
-              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/50 flex items-center gap-2">
+              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/70 flex items-center gap-2">
                 <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
                 Use the <strong className="text-forest/70">LINKED PROPOSAL</strong> section below to connect a proposal and auto-import F&amp;B selections.
               </div>
@@ -3826,12 +3826,12 @@ export default function RunsheetBuilder() {
             {/* Add new item form */}
             <div className="px-5 py-4 border-b border-gold/20 bg-linen/30 no-print">
               <div className="flex items-center justify-between mb-3">
-                <div className="font-bebas tracking-widest text-[10px] text-ink/40">ADD ITEM</div>
+                <div className="font-bebas tracking-widest text-[10px] text-ink/65">ADD ITEM</div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => { setFnbCustomMode(true); setFnbCustomName(''); }}
                     className={`font-bebas tracking-widest text-[10px] flex items-center gap-1 border px-2.5 py-1 transition-colors ${
-                      fnbCustomMode ? 'bg-gold/20 border-gold text-ink' : 'border-gold/20 text-ink/50 hover:bg-linen'
+                      fnbCustomMode ? 'bg-gold/20 border-gold text-ink' : 'border-gold/20 text-ink/70 hover:bg-linen'
                     }`}
                   >
                     <Plus className="w-3 h-3" /> CUSTOM ITEM
@@ -3857,7 +3857,7 @@ export default function RunsheetBuilder() {
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">COURSE</label>
                       <select
                         value={fnbCustomCourse}
                         onChange={e => { setFnbCustomCourse(e.target.value); setFnbCustomDrinkCat(''); }}
@@ -3868,7 +3868,7 @@ export default function RunsheetBuilder() {
                     </div>
                     {fnbCustomCourse === 'Drinks' && (
                       <div>
-                        <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DRINK CATEGORY</label>
+                        <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DRINK CATEGORY</label>
                         <select
                           value={fnbCustomDrinkCat}
                           onChange={e => setFnbCustomDrinkCat(e.target.value)}
@@ -3880,7 +3880,7 @@ export default function RunsheetBuilder() {
                       </div>
                     )}
                     <div>
-                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DISH NAME *</label>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DISH NAME *</label>
                       <Input
                         value={fnbCustomName}
                         onChange={e => setFnbCustomName(e.target.value)}
@@ -3891,7 +3891,7 @@ export default function RunsheetBuilder() {
                       />
                     </div>
                     <div>
-                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">SERVICE TIME</label>
                       <Input
                         type="time"
                         value={newFnbItem.serviceTime ?? ''}
@@ -3900,7 +3900,7 @@ export default function RunsheetBuilder() {
                       />
                     </div>
                     <div>
-                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">QTY / COVERS</label>
                       <Input
                         type="number" min={1}
                         value={newFnbItem.qty ?? 1}
@@ -3911,7 +3911,7 @@ export default function RunsheetBuilder() {
                   </div>
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
-                      <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY FLAGS</label>
+                      <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DIETARY FLAGS</label>
                       <Input
                         value={newFnbItem.dietary ?? ''}
                         onChange={e => setNewFnbItem(p => ({ ...p, dietary: e.target.value }))}
@@ -3938,7 +3938,7 @@ export default function RunsheetBuilder() {
                 /* Shared time/qty fields always shown for post-catalogue add */
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
+                    <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">SERVICE TIME</label>
                     <Input
                       type="time"
                       value={newFnbItem.serviceTime ?? ''}
@@ -3948,7 +3948,7 @@ export default function RunsheetBuilder() {
                   </div>
                   {newFnbItem.course !== 'Drinks' && (
                   <div>
-                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
+                    <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">QTY / COVERS</label>
                     <Input
                       type="number" min={1}
                       value={newFnbItem.qty ?? 1}
@@ -3958,7 +3958,7 @@ export default function RunsheetBuilder() {
                   </div>
                   )}
                   <div className="flex items-end">
-                    <p className="font-dm text-xs text-ink/40 pb-2">Use ADD FROM CATALOGUE to add dishes, or CUSTOM ITEM for one-off items.</p>
+                    <p className="font-dm text-xs text-ink/65 pb-2">Use ADD FROM CATALOGUE to add dishes, or CUSTOM ITEM for one-off items.</p>
                   </div>
                 </div>
               )}
@@ -3966,7 +3966,7 @@ export default function RunsheetBuilder() {
 
             {/* F&B items table */}
             {fnbItems.length === 0 ? (
-              <div className="text-center py-16 text-ink/30 font-dm text-sm">
+              <div className="text-center py-16 text-ink/65 font-dm text-sm">
                 <UtensilsCrossed className="w-10 h-10 mx-auto mb-3 opacity-20" />
                 No items yet. Add from catalogue or use Custom Item above.
               </div>
@@ -4051,7 +4051,7 @@ export default function RunsheetBuilder() {
                               <span className="flex-none text-xs text-forest font-semibold font-dm">${Number(item.unitPrice).toLocaleString('en-NZ', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{item.course !== 'Drinks' ? '/head' : ''}</span>
                             )}
                             {/* actions — chevron always visible */}
-                            <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="flex-none text-ink/40 hover:text-forest transition-colors" title={isExpanded ? 'Collapse' : 'Expand details'}>
+                            <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="flex-none text-ink/65 hover:text-forest transition-colors" title={isExpanded ? 'Collapse' : 'Expand details'}>
                               <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                             </button>
                             <button onClick={() => removeFnbItem(originalIdx)} className="flex-none text-ink/25 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Remove item"><Trash2 className="w-4 h-4" /></button>
@@ -4062,7 +4062,7 @@ export default function RunsheetBuilder() {
                             <div className={`text-xs font-bebas tracking-widest ${isDrinks ? 'text-blue-500' : cc.text}`}>{isDrinks ? (item.drinkCategory || 'Drink') : item.course}</div>
                             <div>
                               <span className="font-semibold text-ink">{item.dishName}</span>
-                              {item.description && <div className="text-xs text-ink/50">{item.description}</div>}
+                              {item.description && <div className="text-xs text-ink/70">{item.description}</div>}
                             </div>
                             {showQtyCol && <div className="text-center">{item.course !== 'Drinks' && Number(item.qty) > 1 ? item.qty : ''}</div>}
                             {showDietaryCol && <div>{item.dietary && <span className="bg-amber-100 text-amber-800 border border-amber-400 text-xs px-1.5 py-0.5 font-bebas tracking-widest font-bold rounded-sm">{item.dietary}</span>}</div>}
@@ -4074,7 +4074,7 @@ export default function RunsheetBuilder() {
                           {isExpanded && (
                             <div className={`px-5 py-4 border-b border-gold/20 grid grid-cols-2 md:grid-cols-4 gap-3 no-print ${isDrinks ? 'bg-blue-50/40' : 'bg-amber-50/30'}`}>
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">COURSE</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">COURSE</label>
                                 <select value={item.course ?? 'Other'} onChange={e => updateFnbItem(originalIdx, 'course', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
                                   {courses.map(c => <option key={c} value={c}>{c}</option>)}
                                   {!courses.includes(item.course ?? 'Other') && <option value={item.course ?? 'Other'}>{item.course ?? 'Other'}</option>}
@@ -4082,7 +4082,7 @@ export default function RunsheetBuilder() {
                               </div>
                               {isDrinks && (
                                 <div>
-                                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DRINK CATEGORY</label>
+                                  <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DRINK CATEGORY</label>
                                   <select value={item.drinkCategory || ''} onChange={e => updateFnbItem(originalIdx, 'drinkCategory', e.target.value)} className="w-full border border-gold/20 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9">
                                     <option value="">— No category —</option>
                                     {DRINK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -4090,31 +4090,31 @@ export default function RunsheetBuilder() {
                                 </div>
                               )}
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">SERVICE TIME</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">SERVICE TIME</label>
                                 <input type="time" value={item.serviceTime ?? ''} onChange={e => updateFnbItem(originalIdx, 'serviceTime', e.target.value)} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">QTY / COVERS</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">QTY / COVERS</label>
                                 <input type="number" min={1} value={item.qty || 1} onChange={e => updateFnbItem(originalIdx, 'qty', Math.max(1, Math.floor(Number(e.target.value)) || 1))} className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DIETARY / ALLERGEN</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DIETARY / ALLERGEN</label>
                                 <input value={item.dietary ?? ''} onChange={e => updateFnbItem(originalIdx, 'dietary', e.target.value)} placeholder="e.g. GF, VG, Nut-free..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">STAFF ASSIGNED</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">STAFF ASSIGNED</label>
                                 <input value={item.staffAssigned ?? ''} onChange={e => updateFnbItem(originalIdx, 'staffAssigned', e.target.value)} placeholder="Staff member..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PREP NOTES</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">PREP NOTES</label>
                                 <input value={item.prepNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'prepNotes', e.target.value)} placeholder="Preparation notes..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PLATING NOTES</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">PLATING NOTES</label>
                                 <input value={item.platingNotes ?? ''} onChange={e => updateFnbItem(originalIdx, 'platingNotes', e.target.value)} placeholder="Plating / presentation..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">UNIT PRICE (NZD)</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">UNIT PRICE (NZD)</label>
                                 <input
                                   type="number"
                                   min={0}
@@ -4126,17 +4126,17 @@ export default function RunsheetBuilder() {
                                   title="Per head for food, per drink for drinks — feeds the running total"
                                 />
                                 {item.unitPrice != null && item.unitPrice !== '' && Number(item.qty) > 0 && (
-                                  <div className="text-[10px] text-ink/40 font-dm mt-0.5">
+                                  <div className="text-[10px] text-ink/65 font-dm mt-0.5">
                                     {item.qty} × ${Number(item.unitPrice).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = <span className="text-forest font-semibold">${(Number(item.qty) * Number(item.unitPrice)).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                   </div>
                                 )}
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">DESCRIPTION</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DESCRIPTION</label>
                                 <input value={item.description ?? ''} onChange={e => updateFnbItem(originalIdx, 'description', e.target.value)} placeholder="Dish description..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">CHANGED FROM (OPTIONAL)</label>
+                                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">CHANGED FROM (OPTIONAL)</label>
                                 <input value={item.previousDishName ?? ''} onChange={e => updateFnbItem(originalIdx, 'previousDishName', e.target.value)} placeholder="Previous dish name..." className="w-full border border-gold/20 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9" />
                               </div>
                             </div>
@@ -4158,8 +4158,8 @@ export default function RunsheetBuilder() {
                             title="Click to rename this course"
                             placeholder="Course name..."
                           />
-                          <span className="text-[10px] text-ink/30 flex-shrink-0 font-dm italic no-print">click to rename</span>
-                          <button onClick={() => deleteCourse(course)} className="no-print flex-shrink-0 text-ink/30 hover:text-red-500 transition-colors p-0.5" title={`Delete all ${course} items`}>
+                          <span className="text-[10px] text-ink/65 flex-shrink-0 font-dm italic no-print">click to rename</span>
+                          <button onClick={() => deleteCourse(course)} className="no-print flex-shrink-0 text-ink/65 hover:text-red-500 transition-colors p-0.5" title={`Delete all ${course} items`}>
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
@@ -4239,13 +4239,13 @@ export default function RunsheetBuilder() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {booking?.minimumSpend != null && Number(booking.minimumSpend) > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">MINIMUM SPEND</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/65">MINIMUM SPEND</div>
                         <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(Number(booking.minimumSpend))}</div>
                       </div>
                     )}
                     {fnbFoodTotal > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">FOOD ({fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && Number(it.unitPrice ?? 0) > 0).length} items)</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/65">FOOD ({fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && Number(it.unitPrice ?? 0) > 0).length} items)</div>
                         <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(fnbFoodTotal)}</div>
                       </div>
                     )}
@@ -4253,13 +4253,13 @@ export default function RunsheetBuilder() {
                         totalled here (billed on consumption / bar tab). */}
                     {costFood > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">EXTRA F&amp;B (COSTS TAB)</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/65">EXTRA F&amp;B (COSTS TAB)</div>
                         <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(costFood)}</div>
                       </div>
                     )}
                     {rsTabAmount && Number(rsTabAmount) > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">BAR TAB</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/65">BAR TAB</div>
                         <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(Number(rsTabAmount))}</div>
                       </div>
                     )}
@@ -4271,14 +4271,14 @@ export default function RunsheetBuilder() {
                     )}
                     {booking?.depositNzd != null && Number(booking.depositNzd) > 0 && (
                       <div className={`border px-3 py-2 ${booking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-200'}`}>
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/40">DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
+                        <div className="font-bebas tracking-widest text-[10px] text-ink/65">DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
                         <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(Number(booking.depositNzd))}</div>
                       </div>
                     )}
                   </div>
                   {paymentInstructions && paymentInstructions.trim().length > 0 && (
                     <div data-print-section="payment" className="mt-3 bg-white border border-gold/30 px-4 py-3">
-                      <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1">PAYMENT INSTRUCTIONS</div>
+                      <div className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1">PAYMENT INSTRUCTIONS</div>
                       <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{paymentInstructions}</div>
                     </div>
                   )}
@@ -4310,7 +4310,7 @@ export default function RunsheetBuilder() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowDrinkPrices(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDrinkPrices ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/30 line-through'}`}
+                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDrinkPrices ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
                   title="Show each drink's price on the BEO / Event Pack (independent of the food PRICE toggle)"
                 >SHOW PRICES</button>
               <button
@@ -4338,7 +4338,7 @@ export default function RunsheetBuilder() {
             <div className="px-5 py-5 space-y-6">
               {/* Bar Arrangement */}
               <div>
-                <div className="font-bebas tracking-widest text-xs text-ink/40 mb-3">BAR ARRANGEMENT</div>
+                <div className="font-bebas tracking-widest text-xs text-ink/65 mb-3">BAR ARRANGEMENT</div>
                 <div className="grid grid-cols-2 gap-2">
                   {BAR_OPTIONS.map(opt => (
                     <button
@@ -4349,13 +4349,13 @@ export default function RunsheetBuilder() {
                       }`}
                     >
                       <div className="font-bebas text-xs tracking-widest text-ink">{opt.label}</div>
-                      <div className="font-dm text-xs text-ink/50 mt-0.5">{opt.description}</div>
+                      <div className="font-dm text-xs text-ink/70 mt-0.5">{opt.description}</div>
                     </button>
                   ))}
                 </div>
                 {(rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash') && (
                   <div className="mt-3 flex items-center gap-3">
-                    <label className="font-bebas text-xs tracking-widest text-ink/40">TAB AMOUNT (NZD)</label>
+                    <label className="font-bebas text-xs tracking-widest text-ink/65">TAB AMOUNT (NZD)</label>
                     <Input
                       type="number"
                       value={rsTabAmount}
@@ -4370,7 +4370,7 @@ export default function RunsheetBuilder() {
               {/* Pick from saved drinks menu */}
               <div className="border-t border-gold/20 pt-5">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="font-bebas tracking-widest text-xs text-ink/40">DRINKS SELECTION (FROM MENU)</div>
+                  <div className="font-bebas tracking-widest text-xs text-ink/65">DRINKS SELECTION (FROM MENU)</div>
                   <button
                     type="button"
                     onClick={() => { setCatalogSelectorType('drink'); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); setShowCatalogSelector(true); }}
@@ -4380,7 +4380,7 @@ export default function RunsheetBuilder() {
                   </button>
                 </div>
                 {rsSelectedDrinks.length === 0 && rsCustomDrinks.length === 0 ? (
-                  <div className="border border-dashed border-gold/30 px-3 py-4 text-center font-dm text-xs text-ink/50">
+                  <div className="border border-dashed border-gold/30 px-3 py-4 text-center font-dm text-xs text-ink/70">
                     No drinks selected yet. Click <span className="font-bebas tracking-widest text-forest">+ PICK DRINKS</span> to choose from your saved drinks menu.
                   </div>
                 ) : (
@@ -4401,13 +4401,13 @@ export default function RunsheetBuilder() {
                           <option value="beer">Beer</option>
                           <option value="other">Other</option>
                         </select>
-                        <span className="inline-flex items-center text-[10px] text-ink/50">$
+                        <span className="inline-flex items-center text-[10px] text-ink/70">$
                           <input type="number" min={0} step={0.5} value={rsDrinkPrices[k] ?? ''}
                             onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[k]; else n[k] = Number(e.target.value); return n; })}
                             placeholder="—" title="Price per drink (till amount)"
                             className="w-12 border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5" />
                         </span>
-                        <button type="button" onClick={() => setRsSelectedDrinks(prev => prev.filter(x => x !== k))} className="text-ink/40 hover:text-red-600">×</button>
+                        <button type="button" onClick={() => setRsSelectedDrinks(prev => prev.filter(x => x !== k))} className="text-ink/65 hover:text-red-600">×</button>
                       </span>
                     ))}
                     {rsCustomDrinks.map((d, i) => (
@@ -4426,13 +4426,13 @@ export default function RunsheetBuilder() {
                           <option value="beer">Beer</option>
                           <option value="other">Other</option>
                         </select>
-                        <span className="inline-flex items-center text-[10px] text-ink/50">$
+                        <span className="inline-flex items-center text-[10px] text-ink/70">$
                           <input type="number" min={0} step={0.5} value={rsDrinkPrices[d.name] ?? (d.price ?? '')}
                             onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[d.name]; else n[d.name] = Number(e.target.value); return n; })}
                             placeholder="—" title="Price per drink (till amount)"
                             className="w-12 border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5" />
                         </span>
-                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/40 hover:text-red-600">×</button>
+                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/65 hover:text-red-600">×</button>
                       </span>
                     ))}
                   </div>
@@ -4441,8 +4441,8 @@ export default function RunsheetBuilder() {
 
               {/* Add a custom drink (selected by us) */}
               <div className="border-t border-gold/20 pt-5">
-                <div className="font-bebas tracking-widest text-xs text-ink/40 mb-2">ADD A CUSTOM DRINK</div>
-                <div className="font-dm text-[11px] text-ink/40 mb-3">Anything not in your saved menu — bespoke cocktails, client-requested wines, signature drinks, etc.</div>
+                <div className="font-bebas tracking-widest text-xs text-ink/65 mb-2">ADD A CUSTOM DRINK</div>
+                <div className="font-dm text-[11px] text-ink/65 mb-3">Anything not in your saved menu — bespoke cocktails, client-requested wines, signature drinks, etc.</div>
                 <div className="grid grid-cols-12 gap-2">
                   <input
                     type="text"
@@ -4478,7 +4478,7 @@ export default function RunsheetBuilder() {
                     {rsCustomDrinks.map((d, i) => (
                       <span key={`cd${i}`} className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 text-xs px-2 py-1 font-dm border border-amber-200">
                         {d.name}{d.description ? ` — ${d.description}` : ''}
-                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/40 hover:text-red-600">×</button>
+                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/65 hover:text-red-600">×</button>
                       </span>
                     ))}
                   </div>
@@ -4487,14 +4487,14 @@ export default function RunsheetBuilder() {
 
               {/* Drinks / Bar Notes */}
               <div className="border-t border-gold/20 pt-5">
-                <div className="font-bebas tracking-widest text-xs text-ink/40 mb-3">DRINKS / BAR NOTES</div>
+                <div className="font-bebas tracking-widest text-xs text-ink/65 mb-3">DRINKS / BAR NOTES</div>
                 <Textarea
                   value={rsBarNotes}
                   onChange={e => setRsBarNotes(e.target.value)}
                   placeholder={`e.g. "Client will choose closer to the date"\n• Standard wine & beer package\n• Bartender to recommend cocktails on the night\n• Set up: 1× espresso martini station, 2× cocktail bartenders`}
                   className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm font-dm min-h-[160px]"
                 />
-                <div className="font-dm text-[11px] text-ink/40 mt-1.5">Notes appear on the BEO and the live runsheet (Drinks panel).</div>
+                <div className="font-dm text-[11px] text-ink/65 mt-1.5">Notes appear on the BEO and the live runsheet (Drinks panel).</div>
               </div>
             </div>
           </div>
@@ -4506,7 +4506,7 @@ export default function RunsheetBuilder() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-3">
                 <h2 className="font-bebas tracking-widest text-ink/60 text-sm">EVENT CHECKLIST</h2>
-                <span className="font-dm text-xs text-ink/40">{checkedCount} of {checklistItems.length} complete</span>
+                <span className="font-dm text-xs text-ink/65">{checkedCount} of {checklistItems.length} complete</span>
               </div>
               <div className="flex items-center gap-2">
                 {checkedCount === checklistItems.length && checklistItems.length > 0 && (
@@ -4524,7 +4524,7 @@ export default function RunsheetBuilder() {
                 {fnbItems.some(i => i.course === 'Drinks' && i.dishName?.trim()) && (
                   <button
                     onClick={pullDrinksFromFnb}
-                    className="font-bebas tracking-widest text-xs text-ink/50 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
+                    className="font-bebas tracking-widest text-xs text-ink/70 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
                     title="Add each drink from the F&B sheet as a bar stock item to tick off"
                   >
                     <Wine className="w-3.5 h-3.5" /> PULL BAR DRINKS
@@ -4543,7 +4543,7 @@ export default function RunsheetBuilder() {
                     <Share2 className="w-3.5 h-3.5" /> SHARE LINK
                   </button>
                 ) : sheetId && getOrCreateChecklist.isPending ? (
-                  <span className="font-dm text-xs text-ink/30">Generating link…</span>
+                  <span className="font-dm text-xs text-ink/65">Generating link…</span>
                 ) : null}
               </div>
             </div>
@@ -4562,11 +4562,11 @@ export default function RunsheetBuilder() {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => toggleChecklistItem(item.id)}
-                      className={`flex-shrink-0 transition-colors ${item.checked ? 'text-forest' : 'text-ink/30 hover:text-ink/60'}`}
+                      className={`flex-shrink-0 transition-colors ${item.checked ? 'text-forest' : 'text-ink/65 hover:text-ink/60'}`}
                     >
                       {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
                     </button>
-                    <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? 'line-through text-ink/40' : 'text-ink'}`}>
+                    <span className={`flex-1 font-dm text-sm transition-colors ${item.checked ? 'line-through text-ink/65' : 'text-ink'}`}>
                       {item.text}
                     </span>
                     <span className={`font-bebas tracking-widest text-[10px] rounded-[3px] px-2 py-0.5 ${
@@ -4583,7 +4583,7 @@ export default function RunsheetBuilder() {
                     <button
                       onClick={() => { setPendingChecklistPhotoId(item.id); checklistPhotoInputRef.current?.click(); }}
                       disabled={checklistPhotoUploading === item.id}
-                      className={`flex-shrink-0 transition-all ${item.imageUrl ? 'text-forest hover:text-forest/70' : 'opacity-0 group-hover:opacity-100 text-ink/30 hover:text-forest'}`}
+                      className={`flex-shrink-0 transition-all ${item.imageUrl ? 'text-forest hover:text-forest/70' : 'opacity-0 group-hover:opacity-100 text-ink/65 hover:text-forest'}`}
                       title={item.imageUrl ? 'Replace reference photo' : 'Add a reference photo for staff'}
                     >
                       {checklistPhotoUploading === item.id
@@ -4592,7 +4592,7 @@ export default function RunsheetBuilder() {
                     </button>
                     <button
                       onClick={() => removeChecklistItem(item.id)}
-                      className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-500 transition-all flex-shrink-0"
+                      className="opacity-0 group-hover:opacity-100 text-ink/65 hover:text-red-500 transition-all flex-shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -4604,7 +4604,7 @@ export default function RunsheetBuilder() {
                       </a>
                       <button
                         onClick={() => setChecklistItemImage(item.id, '')}
-                        className="text-ink/30 hover:text-red-500 transition-colors"
+                        className="text-ink/65 hover:text-red-500 transition-colors"
                         title="Remove photo"
                       >
                         <X className="w-3.5 h-3.5" />
@@ -4663,7 +4663,7 @@ export default function RunsheetBuilder() {
             </div>
             {/* Floor plan selector */}
             <div className="px-5 py-4 border-b border-gold/20">
-              <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">LINK A FLOOR PLAN</label>
+              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-2">LINK A FLOOR PLAN</label>
               <select
                 value={linkedFloorPlanId ?? ""}
                 onChange={e => setLinkedFloorPlanId(e.target.value ? Number(e.target.value) : undefined)}
@@ -4675,7 +4675,7 @@ export default function RunsheetBuilder() {
                 ))}
               </select>
               {!floorPlansList?.length && (
-                <p className="text-xs text-ink/40 font-dm mt-2">
+                <p className="text-xs text-ink/65 font-dm mt-2">
                   No floor plans yet.{' '}
                   <a href="/floor-plan" className="text-forest underline">Create one in Floor Plan Builder</a>.
                 </p>
@@ -4696,12 +4696,12 @@ export default function RunsheetBuilder() {
                             navigator.clipboard.writeText(url);
                             toast.success('Share link copied!');
                           }}
-                          className="font-bebas tracking-widest text-[10px] text-ink/50 hover:text-forest flex items-center gap-1 transition-colors"
+                          className="font-bebas tracking-widest text-[10px] text-ink/70 hover:text-forest flex items-center gap-1 transition-colors"
                         >
                           <Share2 className="w-3 h-3" /> COPY SHARE LINK
                         </button>
                       )}
-                      <span className="text-[10px] font-dm text-ink/30">READ ONLY VIEW</span>
+                      <span className="text-[10px] font-dm text-ink/65">READ ONLY VIEW</span>
                     </div>
                   </div>
                   {/* Canvas area - render elements */}
@@ -4730,7 +4730,7 @@ export default function RunsheetBuilder() {
                         ))}
                       </div>
                     ) : (
-                      <div className="flex items-center justify-center h-full text-ink/30 font-dm text-sm">
+                      <div className="flex items-center justify-center h-full text-ink/65 font-dm text-sm">
                         No canvas data — open the editor to design your floor plan.
                       </div>
                     )}
@@ -4738,7 +4738,7 @@ export default function RunsheetBuilder() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-ink/30">
+              <div className="flex flex-col items-center justify-center py-16 text-ink/65">
                 <LayoutGrid className="w-12 h-12 mb-3 opacity-20" />
                 <p className="font-dm text-sm">Link a floor plan above to view it here.</p>
                 <a href="/floor-plan" className="mt-3 font-bebas tracking-widest text-xs text-forest hover:underline flex items-center gap-1">
@@ -4762,12 +4762,12 @@ export default function RunsheetBuilder() {
                 <span className="font-bebas tracking-widest text-sm text-forest">LINKED PROPOSAL</span>
                 {linkedProposalId && <span className="text-xs text-forest/50 font-dm">(data auto-populated)</span>}
               </div>
-              {proposalSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
+              {proposalSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/65" /> : <ChevronDown className="w-4 h-4 text-ink/65" />}
             </button>
             {proposalSectionOpen && (
               <div className="px-5 pb-5 pt-2 space-y-4">
                 <div>
-                  <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">SELECT PROPOSAL</label>
+                  <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-2">SELECT PROPOSAL</label>
                   <select
                     value={linkedProposalId ?? ""}
                     onChange={e => setLinkedProposalId(e.target.value ? Number(e.target.value) : undefined)}
@@ -4783,19 +4783,19 @@ export default function RunsheetBuilder() {
                   <div className="bg-linen border border-gold/20 p-4 space-y-3">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
-                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest">TOTAL</div>
+                        <div className="font-bebas text-[10px] text-ink/65 tracking-widest">TOTAL</div>
                         <div className="font-dm font-semibold">${Number(linkedProposal.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
                       </div>
                       <div>
-                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest">GUESTS</div>
+                        <div className="font-bebas text-[10px] text-ink/65 tracking-widest">GUESTS</div>
                         <div className="font-dm font-semibold">{(linkedProposal.guestCount ?? guestCount) || "—"}</div>
                       </div>
                       <div>
-                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest">SPACE</div>
+                        <div className="font-bebas text-[10px] text-ink/65 tracking-widest">SPACE</div>
                         <div className="font-dm font-semibold">{linkedProposal.spaceName ?? "—"}</div>
                       </div>
                       <div>
-                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest">STATUS</div>
+                        <div className="font-bebas text-[10px] text-ink/65 tracking-widest">STATUS</div>
                         <div className="font-dm font-semibold capitalize">{linkedProposal.status}</div>
                       </div>
                     </div>
@@ -4804,7 +4804,7 @@ export default function RunsheetBuilder() {
                         const li = JSON.parse(linkedProposal.lineItems as string ?? "[]") as any[];
                         return li.length > 0 ? (
                           <div>
-                            <div className="font-bebas text-[10px] text-ink/40 tracking-widest mb-1">PRICING ITEMS</div>
+                            <div className="font-bebas text-[10px] text-ink/65 tracking-widest mb-1">PRICING ITEMS</div>
                             <div className="space-y-0.5">
                               {li.map((item: any, i: number) => (
                                 <div key={i} className="flex justify-between text-xs font-dm">
@@ -4819,7 +4819,7 @@ export default function RunsheetBuilder() {
                     })()}
                     {proposalDrinks && (
                       <div>
-                        <div className="font-bebas text-[10px] text-ink/40 tracking-widest mb-1">BAR</div>
+                        <div className="font-bebas text-[10px] text-ink/65 tracking-widest mb-1">BAR</div>
                         <div className="text-xs font-dm capitalize text-ink/70">
                           {proposalDrinks.barOption?.replace(/_/g, " ")}
                           {proposalDrinks.tabAmount ? ` — Tab: $${Number(proposalDrinks.tabAmount).toLocaleString("en-NZ")}` : ""}
@@ -4860,12 +4860,12 @@ export default function RunsheetBuilder() {
               <span className="font-bebas tracking-widest text-sm text-forest">FLOOR PLAN</span>
               {linkedFloorPlanId && <span className="text-xs text-forest/50 font-dm">(linked)</span>}
             </div>
-            {floorPlanSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/30" /> : <ChevronDown className="w-4 h-4 text-ink/30" />}
+            {floorPlanSectionOpen ? <ChevronUp className="w-4 h-4 text-ink/65" /> : <ChevronDown className="w-4 h-4 text-ink/65" />}
           </button>
           {floorPlanSectionOpen && (
             <div className="px-5 pb-5 pt-2 space-y-3">
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">SELECT FLOOR PLAN</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-2">SELECT FLOOR PLAN</label>
                 <select
                   value={linkedFloorPlanId ?? ""}
                   onChange={e => setLinkedFloorPlanId(e.target.value ? Number(e.target.value) : undefined)}
@@ -4897,7 +4897,7 @@ export default function RunsheetBuilder() {
                 </div>
               )}
               {!floorPlansList?.length && (
-                <p className="text-xs text-ink/40 font-dm">
+                <p className="text-xs text-ink/65 font-dm">
                   No floor plans yet.{' '}
                   <a href="/floor-plan" className="text-forest underline">Create one</a>.
                 </p>
@@ -4920,7 +4920,7 @@ export default function RunsheetBuilder() {
             </div>
             {(
               <div className="px-5 pb-5 pt-2 space-y-4">
-                <p className="text-xs font-dm text-ink/50">Generate a read-only link for staff to view the runsheet without logging in.</p>
+                <p className="text-xs font-dm text-ink/70">Generate a read-only link for staff to view the runsheet without logging in.</p>
                 {/* Existing links */}
                 {(staffLinks ?? []).length > 0 && (
                   <div className="space-y-2">
@@ -4931,16 +4931,16 @@ export default function RunsheetBuilder() {
                           <Key className="w-3.5 h-3.5 text-gold shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="font-dm text-xs font-semibold text-ink truncate">{link.label}</div>
-                            <div className="font-dm text-[10px] text-ink/40 truncate">{url}</div>
+                            <div className="font-dm text-[10px] text-ink/65 truncate">{url}</div>
                             {link.expiresAt && (
-                              <div className="font-dm text-[10px] text-ink/30">
+                              <div className="font-dm text-[10px] text-ink/65">
                                 Expires: {new Date(link.expiresAt).toLocaleDateString('en-NZ')}
                               </div>
                             )}
                           </div>
                           <button
                             onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied!'); }}
-                            className="p-1 hover:text-forest transition-colors text-ink/40"
+                            className="p-1 hover:text-forest transition-colors text-ink/65"
                             title="Copy link"
                           >
                             <Clipboard className="w-3.5 h-3.5" />
@@ -4949,7 +4949,7 @@ export default function RunsheetBuilder() {
                             href={url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1 hover:text-forest transition-colors text-ink/40"
+                            className="p-1 hover:text-forest transition-colors text-ink/65"
                             title="Open link"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -4963,14 +4963,14 @@ export default function RunsheetBuilder() {
                               setSelectedStaffIds(new Set(all));
                               setExtraEmails("");
                             }}
-                            className="p-1 hover:text-forest transition-colors text-ink/40"
+                            className="p-1 hover:text-forest transition-colors text-ink/65"
                             title="Email staff briefing (runsheet link + PDF)"
                           >
                             <Mail className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => deleteStaffLinkMutation.mutate({ id: link.id })}
-                            className="p-1 hover:text-red-500 transition-colors text-ink/30"
+                            className="p-1 hover:text-red-500 transition-colors text-ink/65"
                             title="Delete link"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -5032,7 +5032,7 @@ export default function RunsheetBuilder() {
               </div>
             </div>
             <div className="px-5 pb-5 pt-2 space-y-3">
-              <p className="text-xs font-dm text-ink/50">
+              <p className="text-xs font-dm text-ink/70">
                 Send a link the couple can fill in themselves — ceremony details, music, seating, dietary requirements and a day-of contact. Saves automatically as they go.
               </p>
               {weddingChecklist ? (
@@ -5041,11 +5041,11 @@ export default function RunsheetBuilder() {
                     <Heart className="w-3.5 h-3.5 text-gold shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="font-dm text-xs font-semibold text-ink truncate">Wedding checklist link</div>
-                      <div className="font-dm text-[10px] text-ink/40 truncate">{`${window.location.origin}/wedding-checklist/${weddingChecklist.shareToken}`}</div>
+                      <div className="font-dm text-[10px] text-ink/65 truncate">{`${window.location.origin}/wedding-checklist/${weddingChecklist.shareToken}`}</div>
                     </div>
                     <button
                       onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/wedding-checklist/${weddingChecklist.shareToken}`); toast.success('Link copied!'); }}
-                      className="p-1 hover:text-forest transition-colors text-ink/40"
+                      className="p-1 hover:text-forest transition-colors text-ink/65"
                       title="Copy link"
                     >
                       <Clipboard className="w-3.5 h-3.5" />
@@ -5054,14 +5054,14 @@ export default function RunsheetBuilder() {
                       href={`/wedding-checklist/${weddingChecklist.shareToken}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-1 hover:text-forest transition-colors text-ink/40"
+                      className="p-1 hover:text-forest transition-colors text-ink/65"
                       title="Open link"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                     <button
                       onClick={() => { if (confirm('Delete this link? The couple will no longer be able to access or update it.')) deleteWeddingChecklistMutation.mutate({ id: weddingChecklist.id }); }}
-                      className="p-1 hover:text-red-500 transition-colors text-ink/30"
+                      className="p-1 hover:text-red-500 transition-colors text-ink/65"
                       title="Delete link"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -5109,10 +5109,10 @@ export default function RunsheetBuilder() {
                 <FileText className="w-4 h-4 text-forest" />
                 <span className="font-bebas tracking-widest text-sm text-forest">ATTACHMENTS</span>
                 {Array.isArray(existing?.attachments) && existing.attachments.length > 0 && (
-                  <span className="font-dm text-xs text-ink/40">({existing.attachments.length})</span>
+                  <span className="font-dm text-xs text-ink/65">({existing.attachments.length})</span>
                 )}
               </div>
-              <span className="font-dm text-[11px] text-ink/40">Shown on the live staff link · PDFs only · max 10MB</span>
+              <span className="font-dm text-[11px] text-ink/65">Shown on the live staff link · PDFs only · max 10MB</span>
             </div>
             <div className="px-5 py-4 space-y-2">
               {(existing?.attachments ?? []).map((att: any) => (
@@ -5121,10 +5121,10 @@ export default function RunsheetBuilder() {
                   <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 font-dm text-sm text-ink hover:text-forest truncate" title={att.name}>
                     {att.name}
                   </a>
-                  <span className="font-dm text-[11px] text-ink/40 flex-shrink-0">{(att.size / 1024).toFixed(0)} KB</span>
+                  <span className="font-dm text-[11px] text-ink/65 flex-shrink-0">{(att.size / 1024).toFixed(0)} KB</span>
                   <button
                     onClick={() => { if (confirm(`Remove ${att.name}?`)) removeAttachmentMutation.mutate({ runsheetId: sheetId, attachmentId: att.id }); }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/30 hover:text-red-500"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
                     title="Remove"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -5146,7 +5146,7 @@ export default function RunsheetBuilder() {
                 <Plus className="w-3 h-3" /> {uploadingAttachment ? 'UPLOADING...' : 'ATTACH PDF'}
               </button>
               {(existing?.attachments ?? []).length === 0 && !uploadingAttachment && (
-                <p className="font-dm text-xs text-ink/40 italic pt-1">Attach menus, maps, or any PDF — staff can download them from the live link.</p>
+                <p className="font-dm text-xs text-ink/65 italic pt-1">Attach menus, maps, or any PDF — staff can download them from the live link.</p>
               )}
             </div>
           </div>
@@ -5208,18 +5208,18 @@ export default function RunsheetBuilder() {
               <table className="w-full text-sm font-dm">
                 <thead>
                   <tr className="border-b border-gold/20 bg-linen/30">
-                    <th className="text-left px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40">DESCRIPTION</th>
-                    <th className="text-left px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40 w-36">CATEGORY</th>
-                    <th className="text-center px-3 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40 w-16">QTY</th>
-                    <th className="text-right px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40 w-28">UNIT PRICE</th>
-                    <th className="text-right px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/40 w-28">TOTAL</th>
+                    <th className="text-left px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/65">DESCRIPTION</th>
+                    <th className="text-left px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/65 w-36">CATEGORY</th>
+                    <th className="text-center px-3 py-2.5 font-bebas tracking-widest text-[10px] text-ink/65 w-16">QTY</th>
+                    <th className="text-right px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/65 w-28">UNIT PRICE</th>
+                    <th className="text-right px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/65 w-28">TOTAL</th>
                     <th className="w-8" />
                   </tr>
                 </thead>
                 <tbody>
                   {costItems.length === 0 && fnbCostMirror.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center text-ink/30 font-dm text-sm">
+                      <td colSpan={6} className="px-4 py-10 text-center text-ink/65 font-dm text-sm">
                         No cost items yet — add one below{linkedProposalId ? ' or import from the linked proposal' : ''}
                       </td>
                     </tr>
@@ -5237,7 +5237,7 @@ export default function RunsheetBuilder() {
                           >F&amp;B SHEET</span>
                         </div>
                       </td>
-                      <td className="px-4 py-2 text-ink/50 font-dm text-xs">Food &amp; Beverage</td>
+                      <td className="px-4 py-2 text-ink/70 font-dm text-xs">Food &amp; Beverage</td>
                       <td className="px-3 py-2 text-center text-ink/70 font-dm text-sm">{it.qty}</td>
                       <td className="px-4 py-2 text-right text-ink/70 font-dm text-sm">
                         ${Number(it.unitPrice ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}
@@ -5279,7 +5279,7 @@ export default function RunsheetBuilder() {
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex items-center justify-end gap-1">
-                          <span className="text-ink/40 text-xs">$</span>
+                          <span className="text-ink/65 text-xs">$</span>
                           <input
                             type="number" min={0} step={0.01}
                             value={ci.unitPrice}
@@ -5294,7 +5294,7 @@ export default function RunsheetBuilder() {
                       <td className="px-2 py-2">
                         <button
                           onClick={() => setCostItems(prev => prev.filter((_, i) => i !== idx))}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/30 hover:text-red-500"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -5319,22 +5319,22 @@ export default function RunsheetBuilder() {
             <div className="px-5 py-3 border-t border-gold/20 bg-linen/20 flex flex-col gap-3">
               {/* GST toggle */}
               <div className="flex items-center gap-3">
-                <span className="font-bebas tracking-widest text-[10px] text-ink/40">PRICES ARE</span>
+                <span className="font-bebas tracking-widest text-[10px] text-ink/65">PRICES ARE</span>
                 <div className="flex rounded-sm overflow-hidden border border-gold/20">
                   <button
                     onClick={() => setGstInclusive(false)}
-                    className={`font-bebas tracking-widest text-[10px] px-3 py-1.5 transition-colors ${!gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/50 hover:bg-linen'}`}
+                    className={`font-bebas tracking-widest text-[10px] px-3 py-1.5 transition-colors ${!gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/70 hover:bg-linen'}`}
                   >GST EXCLUSIVE</button>
                   <button
                     onClick={() => setGstInclusive(true)}
-                    className={`font-bebas tracking-widest text-[10px] px-3 py-1.5 transition-colors ${gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/50 hover:bg-linen'}`}
+                    className={`font-bebas tracking-widest text-[10px] px-3 py-1.5 transition-colors ${gstInclusive ? 'bg-forest-dark text-cream' : 'text-ink/70 hover:bg-linen'}`}
                   >GST INCLUSIVE</button>
                 </div>
                 <span className="font-dm text-[10px] text-ink/35">{gstInclusive ? 'Prices already include 15% GST' : 'GST (15%) will be added on top'}</span>
               </div>
               {/* Payment notes */}
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PAYMENT NOTES</label>
+                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">PAYMENT NOTES</label>
                 <textarea
                   value={paymentNotes}
                   onChange={e => setPaymentNotes(e.target.value)}
@@ -5364,11 +5364,11 @@ export default function RunsheetBuilder() {
                 <div className="border-t border-gold/20 px-5 py-4 flex flex-col md:flex-row gap-6 items-start justify-between bg-linen/30">
                   {/* Category breakdown */}
                   <div className="space-y-1">
-                    <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-2">BY CATEGORY</div>
+                    <div className="font-bebas tracking-widest text-[10px] text-ink/65 mb-2">BY CATEGORY</div>
                     {Object.entries(byCategory).map(([cat, amt]) => (
                       <div key={cat} className="flex items-center gap-6 text-xs font-dm">
                         <span className="text-ink/60 w-36">{cat}</span>
-                        <span className="text-ink font-semibold">${(gstInclusive ? amt / 1.15 : amt).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}<span className="font-normal text-ink/40 text-[10px] ml-1">ex GST</span></span>
+                        <span className="text-ink font-semibold">${(gstInclusive ? amt / 1.15 : amt).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}<span className="font-normal text-ink/65 text-[10px] ml-1">ex GST</span></span>
                       </div>
                     ))}
                   </div>
@@ -5378,7 +5378,7 @@ export default function RunsheetBuilder() {
                       <span>Subtotal (excl. GST)</span>
                       <span className="font-semibold">${subtotal.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
                     </div>
-                    <div className="flex justify-between text-xs font-dm text-ink/50">
+                    <div className="flex justify-between text-xs font-dm text-ink/70">
                       <span>GST (15%)</span>
                       <span>${gstAmt.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
                     </div>
@@ -5425,7 +5425,7 @@ export default function RunsheetBuilder() {
           {footerText && (
             <div data-print-section="footer" className="font-dm text-sm text-ink/80 bg-linen/60 border border-gold/20 px-4 py-3" dangerouslySetInnerHTML={{ __html: footerText }} />
           )}
-          <div className="text-xs text-ink/40 font-dm text-center">
+          <div className="text-xs text-ink/65 font-dm text-center">
             Prepared by VenueFlowHQ — {new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
           </div>
         </div>
@@ -5465,7 +5465,7 @@ export default function RunsheetBuilder() {
                     </label>
                   );
                 })}
-                <button onClick={() => setPrintHide(new Set())} className="mt-2 font-bebas tracking-widest text-[10px] text-ink/40 hover:text-forest transition-colors">RESET — SHOW EVERYTHING</button>
+                <button onClick={() => setPrintHide(new Set())} className="mt-2 font-bebas tracking-widest text-[10px] text-ink/65 hover:text-forest transition-colors">RESET — SHOW EVERYTHING</button>
               </div>
               {/* Footer note editor */}
               <div className="px-4 py-3">
@@ -5497,7 +5497,7 @@ export default function RunsheetBuilder() {
 
           {/* Footer actions */}
           <div className="flex items-center justify-between gap-2 px-5 py-3 bg-white border-t border-gold/20 shrink-0">
-            <button onClick={() => setBeoPreviewOpen(false)} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink px-3 py-2 transition-colors">CLOSE</button>
+            <button onClick={() => setBeoPreviewOpen(false)} className="font-bebas tracking-widest text-xs text-ink/70 hover:text-ink px-3 py-2 transition-colors">CLOSE</button>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => window.open(beoUrl(effectiveBookingId), '_blank')}
@@ -5537,7 +5537,7 @@ export default function RunsheetBuilder() {
               {!parsedData ? (
                 <>
                   <div>
-                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">PASTE YOUR TEXT BELOW</label>
+                    <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-2">PASTE YOUR TEXT BELOW</label>
                     <textarea
                       autoFocus
                       value={pasteText}
@@ -5569,14 +5569,14 @@ export default function RunsheetBuilder() {
                         <><FileText className="w-4 h-4" /> EXTRACT WITH AI</>
                       )}
                     </Button>
-                    <span className="font-dm text-xs text-ink/40">AI will extract event details, dietaries, F&B items and timeline</span>
+                    <span className="font-dm text-xs text-ink/65">AI will extract event details, dietaries, F&B items and timeline</span>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="flex items-center justify-between">
                     <div className="font-bebas tracking-widest text-sm text-forest">REVIEW EXTRACTED DATA — CHOOSE WHAT TO APPLY</div>
-                    <button onClick={() => { setParsedData(null); setEditedParsedTimeline([]); }} className="font-dm text-xs text-ink/40 hover:text-ink underline">← Back to paste</button>
+                    <button onClick={() => { setParsedData(null); setEditedParsedTimeline([]); }} className="font-dm text-xs text-ink/65 hover:text-ink underline">← Back to paste</button>
                   </div>
 
                   {/* ── EVENT DETAILS ── */}
@@ -5585,17 +5585,17 @@ export default function RunsheetBuilder() {
                       <div className="flex items-center gap-2 px-4 py-2.5 bg-linen border-b border-gold/20">
                         <input type="checkbox" checked={includeEventDetails} onChange={e => setIncludeEventDetails(e.target.checked)} className="accent-forest" />
                         <span className="font-bebas tracking-widest text-xs text-forest">EVENT DETAILS</span>
-                        <span className="font-dm text-xs text-ink/40 ml-auto">Will overwrite existing fields</span>
+                        <span className="font-dm text-xs text-ink/65 ml-auto">Will overwrite existing fields</span>
                       </div>
                       <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-2">
-                        {parsedData.eventDetails.eventDate && <div className="font-dm text-xs"><span className="text-ink/40">Date:</span> <span className="text-ink font-medium">{parsedData.eventDetails.eventDate}</span></div>}
-                        {parsedData.eventDetails.guestCount && <div className="font-dm text-xs"><span className="text-ink/40">Guests:</span> <span className="text-ink font-medium">{parsedData.eventDetails.guestCount}</span></div>}
-                        {parsedData.eventDetails.eventType && <div className="font-dm text-xs"><span className="text-ink/40">Event type:</span> <span className="text-ink font-medium">{parsedData.eventDetails.eventType}</span></div>}
-                        {parsedData.eventDetails.spaceName && <div className="font-dm text-xs"><span className="text-ink/40">Space:</span> <span className="text-ink font-medium">{parsedData.eventDetails.spaceName}</span></div>}
-                        {parsedData.eventDetails.contactName && <div className="font-dm text-xs"><span className="text-ink/40">Contact:</span> <span className="text-ink font-medium">{parsedData.eventDetails.contactName}</span></div>}
-                        {parsedData.eventDetails.contactEmail && <div className="font-dm text-xs"><span className="text-ink/40">Email:</span> <span className="text-ink font-medium">{parsedData.eventDetails.contactEmail}</span></div>}
-                        {parsedData.eventDetails.contactPhone && <div className="font-dm text-xs"><span className="text-ink/40">Phone:</span> <span className="text-ink font-medium">{parsedData.eventDetails.contactPhone}</span></div>}
-                        {parsedData.eventDetails.venueSetup && <div className="font-dm text-xs col-span-2"><span className="text-ink/40">Setup:</span> <span className="text-ink font-medium">{parsedData.eventDetails.venueSetup}</span></div>}
+                        {parsedData.eventDetails.eventDate && <div className="font-dm text-xs"><span className="text-ink/65">Date:</span> <span className="text-ink font-medium">{parsedData.eventDetails.eventDate}</span></div>}
+                        {parsedData.eventDetails.guestCount && <div className="font-dm text-xs"><span className="text-ink/65">Guests:</span> <span className="text-ink font-medium">{parsedData.eventDetails.guestCount}</span></div>}
+                        {parsedData.eventDetails.eventType && <div className="font-dm text-xs"><span className="text-ink/65">Event type:</span> <span className="text-ink font-medium">{parsedData.eventDetails.eventType}</span></div>}
+                        {parsedData.eventDetails.spaceName && <div className="font-dm text-xs"><span className="text-ink/65">Space:</span> <span className="text-ink font-medium">{parsedData.eventDetails.spaceName}</span></div>}
+                        {parsedData.eventDetails.contactName && <div className="font-dm text-xs"><span className="text-ink/65">Contact:</span> <span className="text-ink font-medium">{parsedData.eventDetails.contactName}</span></div>}
+                        {parsedData.eventDetails.contactEmail && <div className="font-dm text-xs"><span className="text-ink/65">Email:</span> <span className="text-ink font-medium">{parsedData.eventDetails.contactEmail}</span></div>}
+                        {parsedData.eventDetails.contactPhone && <div className="font-dm text-xs"><span className="text-ink/65">Phone:</span> <span className="text-ink font-medium">{parsedData.eventDetails.contactPhone}</span></div>}
+                        {parsedData.eventDetails.venueSetup && <div className="font-dm text-xs col-span-2"><span className="text-ink/65">Setup:</span> <span className="text-ink font-medium">{parsedData.eventDetails.venueSetup}</span></div>}
                       </div>
                     </div>
                   )}
@@ -5606,8 +5606,8 @@ export default function RunsheetBuilder() {
                       <div className="flex items-center gap-2 px-4 py-2.5 bg-linen border-b border-gold/20">
                         <input type="checkbox" checked={includeDietaries} onChange={e => setIncludeDietaries(e.target.checked)} className="accent-forest" />
                         <span className="font-bebas tracking-widest text-xs text-forest">DIETARY REQUIREMENTS</span>
-                        <span className="font-dm text-xs text-ink/40 ml-1">({parsedData.dietaries.length})</span>
-                        <span className="font-dm text-xs text-ink/40 ml-auto">Added to existing requirements</span>
+                        <span className="font-dm text-xs text-ink/65 ml-1">({parsedData.dietaries.length})</span>
+                        <span className="font-dm text-xs text-ink/65 ml-auto">Added to existing requirements</span>
                       </div>
                       <div className="p-3 flex flex-wrap gap-2">
                         {parsedData.dietaries.map((d, i) => (
@@ -5627,22 +5627,22 @@ export default function RunsheetBuilder() {
                       <div className="flex items-center gap-2 px-4 py-2.5 bg-linen border-b border-gold/20">
                         <input type="checkbox" checked={includeFnb} onChange={e => setIncludeFnb(e.target.checked)} className="accent-forest" />
                         <span className="font-bebas tracking-widest text-xs text-forest">F&B ITEMS</span>
-                        <span className="font-dm text-xs text-ink/40 ml-1">({parsedData.fnbItems.length})</span>
-                        <span className="font-dm text-xs text-ink/40 ml-auto">Appended to F&B sheet</span>
+                        <span className="font-dm text-xs text-ink/65 ml-1">({parsedData.fnbItems.length})</span>
+                        <span className="font-dm text-xs text-ink/65 ml-auto">Appended to F&B sheet</span>
                       </div>
                       <div className="divide-y divide-gold/10">
                         <div className="grid grid-cols-12 gap-1 px-3 py-1.5 bg-linen/60">
-                          <div className="col-span-3 font-bebas text-[9px] tracking-widest text-ink/40">COURSE</div>
-                          <div className="col-span-5 font-bebas text-[9px] tracking-widest text-ink/40">DISH</div>
-                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">QTY</div>
-                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">TIME</div>
+                          <div className="col-span-3 font-bebas text-[9px] tracking-widest text-ink/65">COURSE</div>
+                          <div className="col-span-5 font-bebas text-[9px] tracking-widest text-ink/65">DISH</div>
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/65">QTY</div>
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/65">TIME</div>
                         </div>
                         {parsedData.fnbItems.map((fi, i) => (
                           <div key={i} className="grid grid-cols-12 gap-1 px-3 py-1.5 font-dm text-xs text-ink items-center">
-                            <div className="col-span-3 text-ink/50">{fi.course ?? '—'}</div>
+                            <div className="col-span-3 text-ink/70">{fi.course ?? '—'}</div>
                             <div className="col-span-5 font-medium">{fi.dishName}</div>
                             <div className="col-span-2">{fi.qty}</div>
-                            <div className="col-span-2 text-ink/50">{fi.serviceTime ?? '—'}</div>
+                            <div className="col-span-2 text-ink/70">{fi.serviceTime ?? '—'}</div>
                           </div>
                         ))}
                       </div>
@@ -5655,16 +5655,16 @@ export default function RunsheetBuilder() {
                       <div className="flex items-center gap-2 px-4 py-2.5 bg-linen border-b border-gold/20">
                         <input type="checkbox" checked={includeTimeline} onChange={e => setIncludeTimeline(e.target.checked)} className="accent-forest" />
                         <span className="font-bebas tracking-widest text-xs text-forest">TIMELINE ITEMS</span>
-                        <span className="font-dm text-xs text-ink/40 ml-1">({editedParsedTimeline.length})</span>
-                        <span className="font-dm text-xs text-ink/40 ml-auto">Appended to timeline — click to edit</span>
+                        <span className="font-dm text-xs text-ink/65 ml-1">({editedParsedTimeline.length})</span>
+                        <span className="font-dm text-xs text-ink/65 ml-auto">Appended to timeline — click to edit</span>
                       </div>
                       <div className="divide-y divide-gold/10">
                         <div className="grid grid-cols-12 gap-1 px-3 py-1.5 bg-linen/60">
-                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">TIME</div>
-                          <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/40">MINS</div>
-                          <div className="col-span-4 font-bebas text-[9px] tracking-widest text-ink/40">TITLE</div>
-                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">CATEGORY</div>
-                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/40">NOTES</div>
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/65">TIME</div>
+                          <div className="col-span-1 font-bebas text-[9px] tracking-widest text-ink/65">MINS</div>
+                          <div className="col-span-4 font-bebas text-[9px] tracking-widest text-ink/65">TITLE</div>
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/65">CATEGORY</div>
+                          <div className="col-span-2 font-bebas text-[9px] tracking-widest text-ink/65">NOTES</div>
                           <div className="col-span-1"></div>
                         </div>
                         {editedParsedTimeline.map((item: any, i: number) => (
@@ -5692,12 +5692,12 @@ export default function RunsheetBuilder() {
                           {/* DESCRIPTION */}
                           <div className="col-span-2">
                             <input type="text" value={item.description ?? ''} onChange={e => setEditedParsedTimeline(prev => prev.map((p, j) => j === i ? { ...p, description: e.target.value } : p))}
-                              className="w-full text-xs text-ink/50 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Notes…" />
+                              className="w-full text-xs text-ink/70 bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5" placeholder="Notes…" />
                           </div>
                           {/* DELETE */}
                           <div className="col-span-1 flex justify-end">
                             <button onClick={() => setEditedParsedTimeline(prev => prev.filter((_, j) => j !== i))}
-                              className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-500 transition-all p-0.5" title="Remove">
+                              className="opacity-0 group-hover:opacity-100 text-ink/65 hover:text-red-500 transition-all p-0.5" title="Remove">
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
@@ -5709,7 +5709,7 @@ export default function RunsheetBuilder() {
 
                   {/* No data found */}
                   {!parsedData.eventDetails && (!parsedData.dietaries || parsedData.dietaries.length === 0) && (!parsedData.fnbItems || parsedData.fnbItems.length === 0) && editedParsedTimeline.length === 0 && (
-                    <div className="text-center py-10 text-ink/40 font-dm text-sm">
+                    <div className="text-center py-10 text-ink/65 font-dm text-sm">
                       <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-30" />
                       Nothing recognisable was found. Try pasting more detailed text with dates, times, guest counts, or a menu.
                     </div>
@@ -5720,9 +5720,9 @@ export default function RunsheetBuilder() {
 
             {parsedData && (
               <div className="px-6 py-4 border-t border-gold/30 flex items-center justify-between bg-linen/50 shrink-0">
-                <span className="font-dm text-xs text-ink/50">Selected sections will be applied to the runsheet</span>
+                <span className="font-dm text-xs text-ink/70">Selected sections will be applied to the runsheet</span>
                 <div className="flex gap-3">
-                  <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
+                  <button onClick={() => { setShowPasteImport(false); setParsedData(null); setEditedParsedTimeline([]); setPasteText(''); }} className="font-bebas tracking-widest text-xs text-ink/70 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
                   <Button onClick={applyParsedData} className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-sm px-6 py-2 flex items-center gap-2">
                     <Plus className="w-4 h-4" /> APPLY TO RUNSHEET
                   </Button>
@@ -5747,12 +5747,12 @@ export default function RunsheetBuilder() {
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
-              <p className="font-dm text-xs text-ink/50">These options appear as quick-add buttons in the Dietary Requirements section.</p>
+              <p className="font-dm text-xs text-ink/70">These options appear as quick-add buttons in the Dietary Requirements section.</p>
               <div className="space-y-2">
                 {editingDietaries.map((d, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <span className="flex-1 font-dm text-sm text-ink bg-linen px-3 py-1.5 border border-gold/30">{d}</span>
-                    <button onClick={() => setEditingDietaries(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/30 hover:text-red-500 transition-colors">
+                    <button onClick={() => setEditingDietaries(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/65 hover:text-red-500 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -5803,22 +5803,22 @@ export default function RunsheetBuilder() {
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[50vh] overflow-y-auto">
-              <p className="font-dm text-xs text-ink/50">These templates appear as quick-fill buttons in the Venue Setup section.</p>
+              <p className="font-dm text-xs text-ink/70">These templates appear as quick-fill buttons in the Venue Setup section.</p>
               <div className="space-y-2">
                 {editingSetups.map((t, i) => (
                   <div key={i} className="flex items-start gap-2 p-3 border border-gold/30 bg-linen/50">
                     <div className="flex-1 min-w-0">
                       <div className="font-bebas tracking-widest text-xs text-ink mb-1">{t.label}</div>
-                      <div className="font-dm text-xs text-ink/50 truncate">{t.value}</div>
+                      <div className="font-dm text-xs text-ink/70 truncate">{t.value}</div>
                     </div>
-                    <button onClick={() => setEditingSetups(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/30 hover:text-red-500 transition-colors flex-shrink-0 mt-0.5">
+                    <button onClick={() => setEditingSetups(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/65 hover:text-red-500 transition-colors flex-shrink-0 mt-0.5">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 ))}
               </div>
               <div className="space-y-2 pt-1 border-t border-gold/20">
-                <div className="font-bebas tracking-widest text-[10px] text-ink/40">ADD NEW TEMPLATE</div>
+                <div className="font-bebas tracking-widest text-[10px] text-ink/65">ADD NEW TEMPLATE</div>
                 <Input
                   value={newSetupLabel}
                   onChange={e => setNewSetupLabel(e.target.value)}
@@ -5878,7 +5878,7 @@ export default function RunsheetBuilder() {
                   key={t}
                   onClick={() => { setCatalogSelectorType(t); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); }}
                   className={`flex-1 py-3 font-bebas tracking-widest text-sm transition-colors ${
-                    catalogSelectorType === t ? 'bg-forest text-white' : 'text-ink/50 hover:bg-linen'
+                    catalogSelectorType === t ? 'bg-forest text-white' : 'text-ink/70 hover:bg-linen'
                   }`}
                 >
                   {t === 'food' ? '🍽 FOOD' : '🍷 DRINKS'}
@@ -5889,9 +5889,9 @@ export default function RunsheetBuilder() {
             <div className="flex flex-1 overflow-hidden">
               {/* Category list */}
               <div className="w-44 border-r border-gold/30 overflow-y-auto bg-linen/50">
-                <div className="font-bebas tracking-widest text-[10px] text-ink/40 px-3 pt-3 pb-1">CATEGORIES</div>
+                <div className="font-bebas tracking-widest text-[10px] text-ink/65 px-3 pt-3 pb-1">CATEGORIES</div>
                 {!catalogCategories || catalogCategories.length === 0 ? (
-                  <div className="px-3 py-4 text-xs font-dm text-ink/40">No categories yet. Add them in Settings → Menu Catalogue.</div>
+                  <div className="px-3 py-4 text-xs font-dm text-ink/65">No categories yet. Add them in Settings → Menu Catalogue.</div>
                 ) : (
                   catalogCategories.map((cat: any) => (
                     <button
@@ -5902,7 +5902,7 @@ export default function RunsheetBuilder() {
                       }`}
                     >
                       {cat.name}
-                      {cat.description && <div className={`text-[10px] mt-0.5 truncate ${catalogSelectorCategoryId === cat.id ? 'text-white/60' : 'text-ink/40'}`}>{cat.description}</div>}
+                      {cat.description && <div className={`text-[10px] mt-0.5 truncate ${catalogSelectorCategoryId === cat.id ? 'text-white/60' : 'text-ink/65'}`}>{cat.description}</div>}
                     </button>
                   ))
                 )}
@@ -5911,12 +5911,12 @@ export default function RunsheetBuilder() {
               {/* Items list */}
               <div className="flex-1 overflow-y-auto">
                 {!catalogSelectorCategoryId ? (
-                  <div className="flex flex-col items-center justify-center h-full text-ink/30 font-dm text-sm">
+                  <div className="flex flex-col items-center justify-center h-full text-ink/65 font-dm text-sm">
                     <UtensilsCrossed className="w-8 h-8 mb-2 opacity-20" />
                     Select a category to browse items
                   </div>
                 ) : !catalogItems || catalogItems.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-ink/30 font-dm text-sm">
+                  <div className="flex flex-col items-center justify-center h-full text-ink/65 font-dm text-sm">
                     <UtensilsCrossed className="w-8 h-8 mb-2 opacity-20" />
                     No items in this category yet
                   </div>
@@ -5959,7 +5959,7 @@ export default function RunsheetBuilder() {
                           {/* Item info */}
                           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggle(item)}>
                             <div className="font-dm text-sm font-medium text-ink">{item.name}</div>
-                            {item.description && <div className="font-dm text-xs text-ink/50 mt-0.5 truncate">{item.description}</div>}
+                            {item.description && <div className="font-dm text-xs text-ink/70 mt-0.5 truncate">{item.description}</div>}
                             {item.allergens && <div className="font-dm text-[10px] text-amber-700 mt-0.5">⚠ {item.allergens}</div>}
                           </div>
                           {/* Qty input (only when selected) */}
@@ -5987,7 +5987,7 @@ export default function RunsheetBuilder() {
                           {item.price > 0 && (
                             <div className="text-right flex-shrink-0">
                               <div className="font-dm text-sm font-semibold text-ink">${(item.price / 100).toFixed(2)}</div>
-                              <div className="font-bebas text-[9px] text-ink/40 tracking-widest">{item.pricingType === 'per_person' ? 'PP' : 'EACH'}</div>
+                              <div className="font-bebas text-[9px] text-ink/65 tracking-widest">{item.pricingType === 'per_person' ? 'PP' : 'EACH'}</div>
                             </div>
                           )}
                         </div>
@@ -6016,7 +6016,7 @@ export default function RunsheetBuilder() {
                   : 'Select items to add across any category'}
               </span>
               <div className="flex gap-3">
-                <button onClick={() => setShowCatalogSelector(false)} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
+                <button onClick={() => setShowCatalogSelector(false)} className="font-bebas tracking-widest text-xs text-ink/70 hover:text-ink border border-ink/20 px-4 py-2">CANCEL</button>
                 <Button
                   onClick={addCatalogItemsToFnb}
                   disabled={catalogSelectedItems.size === 0}
@@ -6051,7 +6051,7 @@ export default function RunsheetBuilder() {
               {fnbParsedItems.length === 0 ? (
                 <div className="p-6 space-y-4">
                   <div>
-                    <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-2">PASTE CATERING TEXT</label>
+                    <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-2">PASTE CATERING TEXT</label>
                     <textarea
                       autoFocus
                       value={fnbPasteText}
@@ -6071,7 +6071,7 @@ export default function RunsheetBuilder() {
                       className="w-full min-h-[220px] border border-gold/20 rounded-sm font-dm text-sm resize-none focus:outline-none focus:border-forest p-3"
                     />
                   </div>
-                  <div className="flex items-center gap-3 text-xs font-dm text-ink/40">
+                  <div className="flex items-center gap-3 text-xs font-dm text-ink/65">
                     <span>Guest count: <strong className="text-ink/60">{guestCount || 'not set'}</strong></span>
                     <span>•</span>
                     <span>Event type: <strong className="text-ink/60">{eventType || 'not set'}</strong></span>
@@ -6093,7 +6093,7 @@ export default function RunsheetBuilder() {
                       <span className="text-ink/20">•</span>
                       <button
                         onClick={() => setFnbParsedItems(prev => prev.map(it => ({ ...it, _selected: false })))}
-                        className="font-bebas tracking-widest text-[10px] text-ink/40 hover:underline"
+                        className="font-bebas tracking-widest text-[10px] text-ink/65 hover:underline"
                       >
                         DESELECT ALL
                       </button>
@@ -6119,7 +6119,7 @@ export default function RunsheetBuilder() {
                             <span className="font-bebas text-[10px] tracking-widest text-gold bg-gold/10 px-1.5 py-0.5">{item.course}</span>
                             {item.dietary && <span className="font-dm text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5">{item.dietary}</span>}
                           </div>
-                          <div className="flex items-center gap-3 mt-0.5 text-[11px] font-dm text-ink/50">
+                          <div className="flex items-center gap-3 mt-0.5 text-[11px] font-dm text-ink/70">
                             {item.qty > 1 && <span>Qty: {item.qty}</span>}
                             {item.serviceTime && <span>⏰ {item.serviceTime}</span>}
                             {item.description && <span className="truncate">{item.description}</span>}
@@ -6131,7 +6131,7 @@ export default function RunsheetBuilder() {
                   </div>
                   <button
                     onClick={() => { setFnbParsedItems([]); }}
-                    className="font-bebas tracking-widest text-[10px] text-ink/40 hover:text-ink flex items-center gap-1"
+                    className="font-bebas tracking-widest text-[10px] text-ink/65 hover:text-ink flex items-center gap-1"
                   >
                     ← PASTE DIFFERENT TEXT
                   </button>
@@ -6142,7 +6142,7 @@ export default function RunsheetBuilder() {
             <div className="flex items-center justify-between px-6 py-4 border-t border-gold/30 bg-linen">
               <button
                 onClick={() => setShowFnbPaste(false)}
-                className="font-bebas tracking-widest text-sm text-ink/50 hover:text-ink transition-colors"
+                className="font-bebas tracking-widest text-sm text-ink/70 hover:text-ink transition-colors"
               >
                 CANCEL
               </button>
@@ -6176,7 +6176,7 @@ export default function RunsheetBuilder() {
                 <Sparkles className="w-4 h-4 text-gold" />
                 <h3 className="font-bebas tracking-widest text-sm">AI SMART PASTE — EVENT CHECKLIST</h3>
               </div>
-              <button onClick={() => setShowChecklistPaste(false)} className="text-ink/40 hover:text-ink"><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowChecklistPaste(false)} className="text-ink/65 hover:text-ink"><X className="w-4 h-4" /></button>
             </div>
             {!checklistParsed ? (
               <>
@@ -6218,7 +6218,7 @@ export default function RunsheetBuilder() {
                         <select value={it.category} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, category: e.target.value } : x) }))} className="font-bebas text-[11px] tracking-widest border border-gold/20 px-1 py-1 bg-white">
                           {['admin','staff','setup','bar','kitchen','guest','other'].map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
-                        <button onClick={() => setChecklistParsed(p => p && ({ ...p, items: p.items.filter((_, j) => j !== i) }))} className="text-ink/30 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => setChecklistParsed(p => p && ({ ...p, items: p.items.filter((_, j) => j !== i) }))} className="text-ink/65 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     ))}
                   </div>
@@ -6312,9 +6312,9 @@ export default function RunsheetBuilder() {
               <div className="px-5 py-4 border-b border-gold/20 flex items-center justify-between">
                 <div>
                   <h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2>
-                  <p className="font-dm text-xs text-ink/50 mt-0.5">Sends the live runsheet link + BEO PDF.</p>
+                  <p className="font-dm text-xs text-ink/70 mt-0.5">Sends the live runsheet link + BEO PDF.</p>
                 </div>
-                <button onClick={() => setEmailingLink(null)} disabled={sendingStaffEmail} className="text-ink/40 hover:text-ink p-1 disabled:opacity-30" title="Close">
+                <button onClick={() => setEmailingLink(null)} disabled={sendingStaffEmail} className="text-ink/65 hover:text-ink p-1 disabled:opacity-30" title="Close">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -6322,7 +6322,7 @@ export default function RunsheetBuilder() {
               {/* Saved staff list */}
               <div className="px-5 py-4 border-b border-gold/20">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-bebas tracking-widest text-[11px] text-ink/50">SAVED STAFF ({saved.length})</span>
+                  <span className="font-bebas tracking-widest text-[11px] text-ink/70">SAVED STAFF ({saved.length})</span>
                   {saved.length > 0 && (
                     <div className="flex items-center gap-2 text-[11px] font-dm">
                       <button
@@ -6332,13 +6332,13 @@ export default function RunsheetBuilder() {
                       <span className="text-ink/20">|</span>
                       <button
                         onClick={() => setSelectedStaffIds(new Set())}
-                        className="text-ink/50 hover:underline"
+                        className="text-ink/70 hover:underline"
                       >None</button>
                     </div>
                   )}
                 </div>
                 {saved.length === 0 ? (
-                  <p className="font-dm text-xs text-ink/40 italic">No saved staff yet — add some below or type ad-hoc emails.</p>
+                  <p className="font-dm text-xs text-ink/65 italic">No saved staff yet — add some below or type ad-hoc emails.</p>
                 ) : (
                   <div className="space-y-1 max-h-44 overflow-y-auto">
                     {saved.map(s => {
@@ -6357,11 +6357,11 @@ export default function RunsheetBuilder() {
                               className="accent-forest"
                             />
                             <span className="font-dm text-sm text-ink truncate">{s.name}</span>
-                            <span className="font-dm text-xs text-ink/40 truncate">{s.email}</span>
+                            <span className="font-dm text-xs text-ink/65 truncate">{s.email}</span>
                           </label>
                           <button
                             onClick={() => { if (confirm(`Remove ${s.email} from the staff list?`)) removeStaffEmailMutation.mutate({ id: s.id }); }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/30 hover:text-red-500"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
                             title="Remove from list"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -6374,7 +6374,7 @@ export default function RunsheetBuilder() {
 
                 {/* Add to saved list */}
                 <div className="mt-3 pt-3 border-t border-gold/10">
-                  <div className="font-bebas tracking-widest text-[10px] text-ink/40 mb-1.5">ADD TO LIST</div>
+                  <div className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1.5">ADD TO LIST</div>
                   <div className="flex gap-2">
                     <input
                       value={newStaffName}
@@ -6405,7 +6405,7 @@ export default function RunsheetBuilder() {
                       {showBulkStaffPaste ? '— HIDE BULK PASTE' : '+ PASTE A WHOLE LIST'}
                     </button>
                     {showBulkStaffPaste && (
-                      <span className="font-dm text-[10px] text-ink/40">Paste comma/line-separated emails or "Name &lt;email&gt;" pairs.</span>
+                      <span className="font-dm text-[10px] text-ink/65">Paste comma/line-separated emails or "Name &lt;email&gt;" pairs.</span>
                     )}
                   </div>
                   {showBulkStaffPaste && (
@@ -6433,7 +6433,7 @@ export default function RunsheetBuilder() {
 
               {/* Ad-hoc one-off addresses */}
               <div className="px-5 py-4 border-b border-gold/20">
-                <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1.5">EXTRA EMAILS (THIS SEND ONLY)</label>
+                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1.5">EXTRA EMAILS (THIS SEND ONLY)</label>
                 <textarea
                   value={extraEmails}
                   onChange={e => setExtraEmails(e.target.value)}
@@ -6452,7 +6452,7 @@ export default function RunsheetBuilder() {
                 if (sigs.length === 0) return null;
                 return (
                   <div className="px-5 py-4 border-b border-gold/20">
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1.5">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
+                    <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1.5">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
                     <select
                       value={staffSigId}
                       onChange={e => setStaffSigId(e.target.value)}
@@ -6471,7 +6471,7 @@ export default function RunsheetBuilder() {
               <div className="px-5 py-3 flex items-center justify-between gap-3">
                 <div className="font-dm text-xs text-ink/60">
                   {allRecipients.length === 0
-                    ? <span className="text-ink/40">Pick at least one recipient</span>
+                    ? <span className="text-ink/65">Pick at least one recipient</span>
                     : <span><b>{allRecipients.length}</b> recipient{allRecipients.length !== 1 ? 's' : ''}</span>}
                 </div>
                 <div className="flex gap-2">

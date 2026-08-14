@@ -128,10 +128,11 @@ export default function PaymentsBoard() {
           </p>
         </div>
         <div className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 text-sage absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-sage absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
             value={q}
             onChange={e => setQ(e.target.value)}
+            aria-label="Search payments by client, event type or space"
             placeholder="Search client, type, space…"
             className="w-full pl-9 pr-3 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
           />

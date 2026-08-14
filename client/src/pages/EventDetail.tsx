@@ -123,7 +123,7 @@ export default function EventDetail() {
   if (loading || isLoading) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
-        <div className="font-bebas tracking-widest text-ink/40 text-sm">LOADING EVENT...</div>
+        <div className="font-bebas tracking-widest text-ink/65 text-sm">LOADING EVENT...</div>
       </div>
     );
   }
@@ -201,7 +201,7 @@ export default function EventDetail() {
                 </span>
                 {editing ? (
                   <>
-                    <button onClick={() => setEditing(false)} className="font-bebas tracking-widest text-xs text-ink/50 hover:text-ink flex items-center gap-1 px-2 py-1">
+                    <button onClick={() => setEditing(false)} className="font-bebas tracking-widest text-xs text-ink/70 hover:text-ink flex items-center gap-1 px-2 py-1">
                       <X className="w-3 h-3" /> CANCEL
                     </button>
                     <button onClick={handleSave} disabled={updateBooking.isPending}
@@ -221,49 +221,49 @@ export default function EventDetail() {
             {editing ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">FIRST NAME</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">FIRST NAME</label>
                   <Input value={form.firstName} onChange={e => setForm((p: any) => ({ ...p, firstName: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">LAST NAME</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">LAST NAME</label>
                   <Input value={form.lastName} onChange={e => setForm((p: any) => ({ ...p, lastName: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">EMAIL</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EMAIL</label>
                   <Input type="email" value={form.email} onChange={e => setForm((p: any) => ({ ...p, email: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">EVENT TYPE</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT TYPE</label>
                   <Select value={form.eventType} onValueChange={v => setForm((p: any) => ({ ...p, eventType: v }))}>
                     <SelectTrigger className="font-dm text-sm"><SelectValue placeholder="Select type" /></SelectTrigger>
                     <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">EVENT STARTS</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT STARTS</label>
                   <div className="flex gap-2">
                     <Input type="date" value={form.eventDate} onChange={e => setForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="font-dm text-sm flex-1" aria-label="Event start date" />
                     <Input type="time" value={form.eventTime} onChange={e => setForm((p: any) => ({ ...p, eventTime: e.target.value }))} className="font-dm text-sm w-28" aria-label="Event start time" />
                   </div>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">EVENT ENDS</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">EVENT ENDS</label>
                   <div className="flex gap-2">
                     <Input type="date" value={form.eventEndDate} onChange={e => setForm((p: any) => ({ ...p, eventEndDate: e.target.value }))} className="font-dm text-sm flex-1" aria-label="Event end date" />
                     <Input type="time" value={form.eventEndTime} onChange={e => setForm((p: any) => ({ ...p, eventEndTime: e.target.value }))} className="font-dm text-sm w-28" aria-label="Event end time" />
                   </div>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">GUEST COUNT</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">GUEST COUNT</label>
                   <Input type="number" value={form.guestCount} onChange={e => setForm((p: any) => ({ ...p, guestCount: e.target.value }))} className="font-dm text-sm" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">SPACE / ROOM</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">SPACE / ROOM</label>
                   <Select value={form.spaceName} onValueChange={v => setForm((p: any) => ({ ...p, spaceName: v }))}>
                     <SelectTrigger className="font-dm text-sm"><SelectValue placeholder="Select space" /></SelectTrigger>
                     <SelectContent>
                       {(spaces ?? []).length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-ink/50 font-dm">
+                        <div className="px-3 py-2 text-xs text-ink/70 font-dm">
                           No spaces configured. Add them in Settings → Venue → Spaces.
                         </div>
                       ) : (
@@ -273,15 +273,15 @@ export default function EventDetail() {
                   </Select>
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">TOTAL (NZD)</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TOTAL (NZD)</label>
                   <Input type="number" value={form.totalNzd} onChange={e => setForm((p: any) => ({ ...p, totalNzd: e.target.value }))} className="font-dm text-sm" placeholder="0.00" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">DEPOSIT (NZD)</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">DEPOSIT (NZD)</label>
                   <Input type="number" value={form.depositNzd} onChange={e => setForm((p: any) => ({ ...p, depositNzd: e.target.value }))} className="font-dm text-sm" placeholder="0.00" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">STATUS</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">STATUS</label>
                   <Select value={form.status} onValueChange={v => setForm((p: any) => ({ ...p, status: v }))}>
                     <SelectTrigger className="font-dm text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -299,7 +299,7 @@ export default function EventDetail() {
                   <label htmlFor="depositPaid" className="font-bebas text-xs tracking-widest text-ink/70">DEPOSIT PAID</label>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">INTERNAL NOTES</label>
+                  <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">INTERNAL NOTES</label>
                   <Textarea value={form.notes} onChange={e => setForm((p: any) => ({ ...p, notes: e.target.value }))} rows={3} className="font-dm text-sm" />
                 </div>
               </div>
@@ -308,7 +308,7 @@ export default function EventDetail() {
                 <div className="flex items-start gap-2">
                   <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/40">DATE</div>
+                    <div className="font-bebas text-xs tracking-widest text-ink/65">DATE</div>
                     <div className="font-dm text-sm text-ink">
                       {new Date(booking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                       {fmtEventTime(booking.eventDate) && (
@@ -316,7 +316,7 @@ export default function EventDetail() {
                       )}
                     </div>
                     {booking.eventEndDate && (
-                      <div className="font-dm text-xs text-ink/50">
+                      <div className="font-dm text-xs text-ink/70">
                         until {new Date(booking.eventEndDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
                         {fmtEventTime(booking.eventEndDate) && ` · ${fmtEventTime(booking.eventEndDate)}`}
                       </div>
@@ -326,28 +326,28 @@ export default function EventDetail() {
                 <div className="flex items-start gap-2">
                   <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/40">GUESTS</div>
+                    <div className="font-bebas text-xs tracking-widest text-ink/65">GUESTS</div>
                     <div className="font-dm text-sm text-ink">{booking.guestCount ?? "—"}</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <MapPin className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/40">SPACE</div>
+                    <div className="font-bebas text-xs tracking-widest text-ink/65">SPACE</div>
                     <div className="font-dm text-sm text-ink">{booking.spaceName || "—"}</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/40">EMAIL</div>
+                    <div className="font-bebas text-xs tracking-widest text-ink/65">EMAIL</div>
                     <div className="font-dm text-sm text-ink">{booking.email}</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <FileText className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div>
-                    <div className="font-bebas text-xs tracking-widest text-ink/40">EVENT TYPE</div>
+                    <div className="font-bebas text-xs tracking-widest text-ink/65">EVENT TYPE</div>
                     <div className="font-dm text-sm text-ink">{booking.eventType || "—"}</div>
                   </div>
                 </div>
@@ -355,7 +355,7 @@ export default function EventDetail() {
                   <div className="col-span-2 md:col-span-3 flex items-start gap-2">
                     <ClipboardList className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="font-bebas text-xs tracking-widest text-ink/40">NOTES</div>
+                      <div className="font-bebas text-xs tracking-widest text-ink/65">NOTES</div>
                       <div className="font-dm text-sm text-ink whitespace-pre-wrap">{booking.notes}</div>
                     </div>
                   </div>
@@ -369,25 +369,25 @@ export default function EventDetail() {
             <div className="gold-rule max-w-xs mb-4"><span>FINANCIALS</span></div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-3 bg-cream border border-gold/20">
-                <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">TOTAL</div>
+                <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">TOTAL</div>
                 <div className="font-cormorant text-2xl font-semibold text-ink">
                   ${Number(booking.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                 </div>
               </div>
               <div className="text-center p-3 bg-cream border border-gold/20">
-                <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">DEPOSIT</div>
+                <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">DEPOSIT</div>
                 <div className="font-cormorant text-2xl font-semibold text-ink">
                   ${Number(booking.depositNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                 </div>
               </div>
               <div className="text-center p-3 bg-cream border border-gold/20">
-                <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">PAID</div>
+                <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">PAID</div>
                 <div className="font-cormorant text-2xl font-semibold text-forest">
                   ${totalPaid.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                 </div>
               </div>
               <div className={`text-center p-3 border ${outstanding > 0 ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
-                <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">OUTSTANDING</div>
+                <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">OUTSTANDING</div>
                 <div className={`font-cormorant text-2xl font-semibold ${outstanding > 0 ? 'text-red-600' : 'text-forest'}`}>
                   ${outstanding.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                 </div>
@@ -420,7 +420,7 @@ export default function EventDetail() {
                   <div key={p.id} className="flex items-center justify-between py-2 border-b border-gold/10 last:border-0">
                     <div>
                       <div className="font-dm text-sm text-ink">{p.description || p.type?.replace(/_/g, ' ')}</div>
-                      <div className="font-dm text-xs text-ink/50">
+                      <div className="font-dm text-xs text-ink/70">
                         {new Date(p.paidAt || p.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
                         {p.method && ` · ${p.method}`}
                       </div>
@@ -537,7 +537,7 @@ export default function EventDetail() {
                     }
                   }}
                   disabled={revokeBeoToken.isPending}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-xs font-dm text-ink/50 hover:text-red-600 transition-colors disabled:opacity-50">
+                  className="w-full flex items-center gap-3 px-4 py-2 text-xs font-dm text-ink/70 hover:text-red-600 transition-colors disabled:opacity-50">
                   <X className="w-3 h-3" />
                   {revokeBeoToken.isPending ? 'Revoking…' : 'Revoke event-pack link'}
                 </button>
@@ -609,7 +609,7 @@ function EventModuleTabs({ bookingId, booking }: { bookingId: number; booking: a
               className={`flex items-center gap-1.5 px-5 py-3 font-bebas tracking-widest text-xs whitespace-nowrap border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-gold text-amber-700'
-                  : 'border-transparent text-ink/40 hover:text-ink/70'
+                  : 'border-transparent text-ink/65 hover:text-ink/70'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -650,7 +650,7 @@ function CommsTab({ bookingId }: { bookingId: number }) {
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">TYPE</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
               <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 <option value="note">Note</option>
                 <option value="email">Email</option>
@@ -660,7 +660,7 @@ function CommsTab({ bookingId }: { bookingId: number }) {
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">DIRECTION</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">DIRECTION</label>
               <select value={form.direction} onChange={e => setForm(p => ({ ...p, direction: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 <option value="internal">Internal</option>
                 <option value="inbound">Inbound</option>
@@ -668,16 +668,16 @@ function CommsTab({ bookingId }: { bookingId: number }) {
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">SUBJECT</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">SUBJECT</label>
               <Input value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} placeholder="Optional subject" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CONTACT NAME</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTACT NAME</label>
               <Input value={form.contactName} onChange={e => setForm(p => ({ ...p, contactName: e.target.value }))} placeholder="Optional" className="text-sm" />
             </div>
           </div>
           <div>
-            <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">NOTES / BODY *</label>
+            <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES / BODY *</label>
             <Textarea value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={3} placeholder="What was discussed or noted?" className="text-sm" />
           </div>
           <div className="flex gap-2">
@@ -737,20 +737,20 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CONTRACT TITLE *</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT TITLE *</label>
               <Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Wedding Venue Agreement" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CLIENT NAME</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT NAME</label>
               <Input value={form.clientName} onChange={e => setForm(p => ({ ...p, clientName: e.target.value }))} className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CLIENT EMAIL</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CLIENT EMAIL</label>
               <Input type="email" value={form.clientEmail} onChange={e => setForm(p => ({ ...p, clientEmail: e.target.value }))} className="text-sm" />
             </div>
           </div>
           <div>
-            <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CONTRACT BODY *</label>
+            <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CONTRACT BODY *</label>
             <Textarea value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={8} placeholder="Paste or type the full contract text here…" className="text-sm font-mono" />
           </div>
           <div className="flex gap-2">
@@ -832,7 +832,7 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[{ label: 'EST. INCOME', val: totalEstIncome, color: 'text-green-600' }, { label: 'ACT. INCOME', val: totalActIncome, color: 'text-green-700' }, { label: 'EST. EXPENSE', val: totalEstExpense, color: 'text-red-500' }, { label: 'ACT. EXPENSE', val: totalActExpense, color: 'text-red-600' }].map(s => (
           <div key={s.label} className="dante-card p-3 text-center">
-            <div className="font-bebas text-xs tracking-widest text-ink/40 mb-1">{s.label}</div>
+            <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">{s.label}</div>
             <div className={`font-cormorant text-xl font-semibold ${s.color}`}>${s.val.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
           </div>
         ))}
@@ -841,28 +841,28 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">ITEM NAME *</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
               <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Venue hire, Catering" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">TYPE</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">TYPE</label>
               <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as any }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 <option value="expense">Expense</option>
                 <option value="income">Income</option>
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CATEGORY</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
               <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">ESTIMATED ($)</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ESTIMATED ($)</label>
               <Input type="number" value={form.estimatedAmount} onChange={e => setForm(p => ({ ...p, estimatedAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">ACTUAL ($)</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ACTUAL ($)</label>
               <Input type="number" value={form.actualAmount} onChange={e => setForm(p => ({ ...p, actualAmount: e.target.value }))} placeholder="0.00" className="text-sm" />
             </div>
           </div>
@@ -884,11 +884,11 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/50">ITEM</th>
-                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/50">CATEGORY</th>
-                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/50">TYPE</th>
-                <th className="text-right p-3 font-bebas tracking-widest text-xs text-ink/50">ESTIMATED</th>
-                <th className="text-right p-3 font-bebas tracking-widest text-xs text-ink/50">ACTUAL</th>
+                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/70">ITEM</th>
+                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/70">CATEGORY</th>
+                <th className="text-left p-3 font-bebas tracking-widest text-xs text-ink/70">TYPE</th>
+                <th className="text-right p-3 font-bebas tracking-widest text-xs text-ink/70">ESTIMATED</th>
+                <th className="text-right p-3 font-bebas tracking-widest text-xs text-ink/70">ACTUAL</th>
                 <th className="p-3"></th>
               </tr>
             </thead>
@@ -940,21 +940,21 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
         <div className="dante-card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">ITEM NAME *</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">ITEM NAME *</label>
               <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Round tables x 10, PA system" className="text-sm" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">CATEGORY</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">CATEGORY</label>
               <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
                 {CATEGORIES.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
               </select>
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">QUANTITY</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">QUANTITY</label>
               <Input type="number" value={form.quantity} onChange={e => setForm(p => ({ ...p, quantity: e.target.value }))} className="text-sm" />
             </div>
             <div className="col-span-2">
-              <label className="font-bebas text-xs tracking-widest text-ink/50 block mb-1">NOTES</label>
+              <label className="font-bebas text-xs tracking-widest text-ink/70 block mb-1">NOTES</label>
               <Input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" className="text-sm" />
             </div>
           </div>
@@ -1115,7 +1115,7 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
       <p className="text-xs text-gray-400">Share a secure link with your client so they can view their event details, approve proposals, and sign contracts — no login required.</p>
       {showForm && (
         <div className="dante-card p-4 space-y-3">
-          <div className="font-bebas text-xs tracking-widest text-ink/50 mb-2">PERMISSIONS</div>
+          <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">PERMISSIONS</div>
           <div className="grid grid-cols-2 gap-2">
             {Object.entries(PERM_LABELS).map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 cursor-pointer">

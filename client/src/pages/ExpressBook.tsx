@@ -114,22 +114,22 @@ export default function ExpressBook() {
           </div>
           <div className="bg-white border border-border p-5 text-left space-y-2">
             <div className="flex justify-between text-sm font-dm">
-              <span className="text-ink/50">Event</span>
+              <span className="text-ink/70">Event</span>
               <span className="text-ink font-medium">{eventType}</span>
             </div>
             <div className="flex justify-between text-sm font-dm">
-              <span className="text-ink/50">Date</span>
+              <span className="text-ink/70">Date</span>
               <span className="text-ink font-medium">
                 {new Date(eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
               </span>
             </div>
             <div className="flex justify-between text-sm font-dm">
-              <span className="text-ink/50">Guests</span>
+              <span className="text-ink/70">Guests</span>
               <span className="text-ink font-medium">{guestCount}</span>
             </div>
             {spaceName && (
               <div className="flex justify-between text-sm font-dm">
-                <span className="text-ink/50">Space</span>
+                <span className="text-ink/70">Space</span>
                 <span className="text-ink font-medium">{spaceName}</span>
               </div>
             )}
@@ -158,9 +158,9 @@ export default function ExpressBook() {
         <div className="max-w-2xl mx-auto flex items-center gap-0">
           {STEPS.map((s, i) => (
             <div key={i} className="flex items-center">
-              <div className={`flex items-center gap-2 px-3 py-1 ${i === step ? "text-burgundy" : i < step ? "text-green-600" : "text-ink/30"}`}>
+              <div className={`flex items-center gap-2 px-3 py-1 ${i === step ? "text-burgundy" : i < step ? "text-green-600" : "text-ink/65"}`}>
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bebas ${
-                  i < step ? "bg-green-600 text-white" : i === step ? "bg-burgundy text-white" : "bg-ink/10 text-ink/40"
+                  i < step ? "bg-green-600 text-white" : i === step ? "bg-burgundy text-white" : "bg-ink/10 text-ink/65"
                 }`}>
                   {i < step ? "✓" : i + 1}
                 </div>
@@ -178,12 +178,12 @@ export default function ExpressBook() {
           <div className="space-y-6">
             <div>
               <h2 className="font-cormorant text-2xl font-semibold text-ink mb-1">Tell us about your event</h2>
-              <p className="font-dm text-sm text-ink/50">We'll check availability and find the perfect space for you.</p>
+              <p className="font-dm text-sm text-ink/70">We'll check availability and find the perfect space for you.</p>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">EVENT TYPE *</label>
+                <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">EVENT TYPE *</label>
                 <div className="flex flex-wrap gap-2">
                   {EVENT_TYPES.map(t => (
                     <button
@@ -203,9 +203,10 @@ export default function ExpressBook() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">EVENT DATE *</label>
+                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">EVENT DATE *</label>
                   <Input
                     type="date"
+                    aria-label="Event date"
                     value={eventDate}
                     min={new Date().toISOString().split("T")[0]}
                     onChange={e => { setEventDate(e.target.value); setAvailabilityDate(""); }}
@@ -229,10 +230,11 @@ export default function ExpressBook() {
                   )}
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">GUEST COUNT *</label>
+                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">GUEST COUNT *</label>
                   <Input
                     type="number"
                     min={1}
+                    aria-label="Guest count"
                     value={guestCount}
                     onChange={e => setGuestCount(e.target.value)}
                     placeholder="e.g. 80"
@@ -242,8 +244,9 @@ export default function ExpressBook() {
               </div>
 
               <div>
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">ESTIMATED BUDGET</label>
+                <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">ESTIMATED BUDGET</label>
                 <Input
+                  aria-label="Estimated budget"
                   value={budget}
                   onChange={e => setBudget(e.target.value)}
                   placeholder="e.g. $5,000–$8,000"
@@ -271,13 +274,13 @@ export default function ExpressBook() {
           <div className="space-y-6">
             <div>
               <h2 className="font-cormorant text-2xl font-semibold text-ink mb-1">Choose your space</h2>
-              <p className="font-dm text-sm text-ink/50">Select a space and menu package (optional).</p>
+              <p className="font-dm text-sm text-ink/70">Select a space and menu package (optional).</p>
             </div>
 
             {/* Spaces */}
             {venueInfo?.spaces && venueInfo.spaces.length > 0 ? (
               <div className="space-y-3">
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block">AVAILABLE SPACES</label>
+                <label className="font-bebas tracking-widest text-xs text-ink/70 block">AVAILABLE SPACES</label>
                 {venueInfo.spaces.map((space: any) => (
                   <button
                     key={space.id}
@@ -290,7 +293,7 @@ export default function ExpressBook() {
                       <div>
                         <div className="font-dm font-semibold text-ink">{space.name}</div>
                         {space.capacity && (
-                          <div className="text-xs font-dm text-ink/50 flex items-center gap-1 mt-0.5">
+                          <div className="text-xs font-dm text-ink/70 flex items-center gap-1 mt-0.5">
                             <Users className="w-3 h-3" /> Up to {space.capacity} guests
                           </div>
                         )}
@@ -322,7 +325,7 @@ export default function ExpressBook() {
             {/* Menu packages */}
             {venueInfo?.packages && venueInfo.packages.length > 0 && (
               <div className="space-y-3">
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block">MENU PACKAGES (OPTIONAL)</label>
+                <label className="font-bebas tracking-widest text-xs text-ink/70 block">MENU PACKAGES (OPTIONAL)</label>
                 {venueInfo.packages.map((pkg: any) => (
                   <button
                     key={pkg.id}
@@ -337,7 +340,7 @@ export default function ExpressBook() {
                       <div>
                         <div className="font-dm font-semibold text-ink">{pkg.name}</div>
                         {pkg.pricePerHead && (
-                          <div className="text-xs font-dm text-ink/50 mt-0.5">
+                          <div className="text-xs font-dm text-ink/70 mt-0.5">
                             ${pkg.pricePerHead} per head
                           </div>
                         )}
@@ -377,14 +380,15 @@ export default function ExpressBook() {
           <div className="space-y-6">
             <div>
               <h2 className="font-cormorant text-2xl font-semibold text-ink mb-1">Your details</h2>
-              <p className="font-dm text-sm text-ink/50">We'll use these to get in touch with you.</p>
+              <p className="font-dm text-sm text-ink/70">We'll use these to get in touch with you.</p>
             </div>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">FIRST NAME *</label>
+                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">FIRST NAME *</label>
                   <Input
+                    aria-label="First name"
                     value={firstName}
                     onChange={e => setFirstName(e.target.value)}
                     placeholder="First name"
@@ -392,8 +396,9 @@ export default function ExpressBook() {
                   />
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">LAST NAME</label>
+                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">LAST NAME</label>
                   <Input
+                    aria-label="Last name"
                     value={lastName}
                     onChange={e => setLastName(e.target.value)}
                     placeholder="Last name"
@@ -402,9 +407,10 @@ export default function ExpressBook() {
                 </div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">EMAIL *</label>
+                <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">EMAIL *</label>
                 <Input
                   type="email"
+                  aria-label="Email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="your@email.com"
@@ -412,9 +418,10 @@ export default function ExpressBook() {
                 />
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">PHONE</label>
+                <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">PHONE</label>
                 <Input
                   type="tel"
+                  aria-label="Phone"
                   value={phone}
                   onChange={e => setPhone(e.target.value)}
                   placeholder="+64 21 000 0000"
@@ -422,8 +429,9 @@ export default function ExpressBook() {
                 />
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">DIETARY REQUIREMENTS</label>
+                <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">DIETARY REQUIREMENTS</label>
                 <Input
+                  aria-label="Dietary requirements"
                   value={dietaryNotes}
                   onChange={e => setDietaryNotes(e.target.value)}
                   placeholder="e.g. 3 vegetarian, 1 gluten free..."
@@ -431,8 +439,9 @@ export default function ExpressBook() {
                 />
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-xs text-ink/50 block mb-2">ANYTHING ELSE?</label>
+                <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-2">ANYTHING ELSE?</label>
                 <Textarea
+                  aria-label="Anything else?"
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                   placeholder="Any other details, questions, or special requests..."
@@ -469,7 +478,7 @@ export default function ExpressBook() {
           <div className="space-y-6">
             <div>
               <h2 className="font-cormorant text-2xl font-semibold text-ink mb-1">Review your enquiry</h2>
-              <p className="font-dm text-sm text-ink/50">Please check your details before submitting.</p>
+              <p className="font-dm text-sm text-ink/70">Please check your details before submitting.</p>
             </div>
 
             <div className="bg-white border border-border divide-y divide-border">
@@ -486,7 +495,7 @@ export default function ExpressBook() {
                 notes && { label: "Notes", value: notes },
               ].filter(Boolean).map((row: any, i) => (
                 <div key={i} className="flex justify-between px-5 py-3 text-sm font-dm">
-                  <span className="text-ink/50">{row.label}</span>
+                  <span className="text-ink/70">{row.label}</span>
                   <span className="text-ink font-medium text-right max-w-xs">{row.value}</span>
                 </div>
               ))}

@@ -132,7 +132,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
           <h2 className="font-cormorant text-lg font-semibold text-ink">{MONTHS[month]} {year}</h2>
           <button
             onClick={() => setShowSettings(v => !v)}
-            className={`p-1 transition-colors ${showSettings ? 'text-gold' : 'text-ink/30 hover:text-ink/60'}`}
+            className={`p-1 transition-colors ${showSettings ? 'text-gold' : 'text-ink/65 hover:text-ink/60'}`}
             title="Calendar settings"
           >
             <Settings className="w-3.5 h-3.5" />
@@ -145,7 +145,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
       {showSettings && (
         <div className="px-4 py-3 border-b border-gold/15 bg-linen/50 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-bebas tracking-widest text-[10px] text-ink/50">START WEEK ON</span>
+            <span className="font-bebas tracking-widest text-[10px] text-ink/70">START WEEK ON</span>
             <div className="flex">
               <button
                 onClick={() => setStartDay(0)}
@@ -162,7 +162,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-bebas tracking-widest text-[10px] text-ink/50">LEGEND</span>
+            <span className="font-bebas tracking-widest text-[10px] text-ink/70">LEGEND</span>
             <button
               onClick={() => setShowLegend(v => !v)}
               className={`font-bebas tracking-widest text-xs px-2.5 py-1 border transition-colors ${
@@ -362,7 +362,7 @@ function PipelineSnapshotWidget({ allLeads, onViewLeads, stages }: { allLeads: a
           </div>
         ))}
       </div>
-      <div className="mt-3 pt-3 border-t border-gold/15 font-dm text-xs text-ink/50"><span className="font-serif text-sm [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{total}</span> total leads</div>
+      <div className="mt-3 pt-3 border-t border-gold/15 font-dm text-xs text-ink/70"><span className="font-serif text-sm [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{total}</span> total leads</div>
     </div>
   );
 }
@@ -414,7 +414,7 @@ function ApiTokensSection() {
             <button onClick={() => { navigator.clipboard.writeText(mcpUrl); toast.success("Copied"); }}
               className="font-bebas tracking-widest text-xs px-3 py-2 border border-gold/30 hover:bg-gold/10">COPY</button>
           </div>
-          <p className="font-dm text-[11px] text-ink/50 mt-1">In Claude Desktop or Claude.ai, add this as a custom MCP connector with HTTP transport. Use a token below as the bearer auth header.</p>
+          <p className="font-dm text-[11px] text-ink/70 mt-1">In Claude Desktop or Claude.ai, add this as a custom MCP connector with HTTP transport. Use a token below as the bearer auth header.</p>
         </div>
 
         <div className="border-t border-gold/20 pt-4">
@@ -444,7 +444,7 @@ function ApiTokensSection() {
         <div className="border-t border-gold/20 pt-4">
           <div className="font-bebas text-xs tracking-widest text-forest mb-2">ACTIVE TOKENS</div>
           {(!tokens || tokens.length === 0) ? (
-            <div className="font-dm text-xs text-ink/50 italic">No tokens yet.</div>
+            <div className="font-dm text-xs text-ink/70 italic">No tokens yet.</div>
           ) : (
             <div className="space-y-2">
               {tokens.map((t: any) => (
@@ -710,7 +710,7 @@ function PostEventSpendPrompt() {
             <div key={b.id} className="flex flex-wrap items-center gap-2 p-3 bg-white border border-amber-200/60">
               <div className="flex-1 min-w-[180px]">
                 <div className="font-dm text-sm font-medium text-ink">{b.firstName} {b.lastName ?? ''}</div>
-                <div className="font-dm text-xs text-ink/50">{dateStr}{quoted ? ` · Quoted $${quoted.toLocaleString()}` : ''}</div>
+                <div className="font-dm text-xs text-ink/70">{dateStr}{quoted ? ` · Quoted $${quoted.toLocaleString()}` : ''}</div>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="font-dm text-sm text-ink/60">$</span>
@@ -744,7 +744,7 @@ function PostEventSpendPrompt() {
                   type="button"
                   onClick={() => dismiss.mutate({ id: b.id })}
                   title="Dismiss"
-                  className="text-ink/40 hover:text-ink transition-colors p-1">
+                  className="text-ink/65 hover:text-ink transition-colors p-1">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -2909,7 +2909,7 @@ export default function Dashboard() {
                     <DollarSign className="w-4 h-4 text-forest/60" />
                     <span className="font-bebas tracking-widest text-sm text-ink/70">RECORD ACTUAL SPEND</span>
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-ink/40 transition-transform duration-200 ${spendSectionOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-ink/65 transition-transform duration-200 ${spendSectionOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {spendSectionOpen && (
                   <div className="border-t border-gold/20">
@@ -2961,12 +2961,12 @@ export default function Dashboard() {
                   {newEnquiries.length > 0 ? (
                     <div className="flex bg-muted rounded-xl p-0.5 gap-0.5">
                       <button onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
-                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-ink/40 hover:text-ink"}`}>
+                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`}>
                         NEW
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
                       </button>
                       <button onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
-                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-ink/40 hover:text-ink"}`}>
+                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`}>
                         ALL EVENTS
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "all" ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
                       </button>
@@ -2988,7 +2988,7 @@ export default function Dashboard() {
                     ]).map(({ mode, icon, title }) => (
                       <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
                         title={title}
-                        className={`px-2.5 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/50 hover:bg-linen hover:text-ink"}`}>
+                        className={`px-2.5 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
                         {icon}
                       </button>
                     ))}
@@ -3023,7 +3023,7 @@ export default function Dashboard() {
                 {leadViewMode !== "kanban" && (
                   <div className="flex items-center gap-2 px-4 pb-3 flex-wrap gap-y-2">
                     <div className="relative flex-1 min-w-[160px] max-w-xs">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
                       <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
                         placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
                     </div>
@@ -3073,7 +3073,7 @@ export default function Dashboard() {
                             <label key={`excl-${s.key}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer">
                               <input type="checkbox" checked={leadStatusExclude.includes(s.key)} onChange={() => toggleLeadStatusExclude(s.key)} className="cursor-pointer" />
                               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: (s as any).swatch ?? '#9ca3af' }} />
-                              <span className="text-xs font-inter text-ink/70">{s.label} <span className="text-ink/40">(hide)</span></span>
+                              <span className="text-xs font-inter text-ink/70">{s.label} <span className="text-ink/65">(hide)</span></span>
                             </label>
                           ))}
                         </div>
@@ -3218,7 +3218,7 @@ export default function Dashboard() {
                                     ))}
                                   </select>
                                 </td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/50 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/70 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
                               </tr>
                             );
                           })}
@@ -3270,7 +3270,7 @@ export default function Dashboard() {
                       <div className="font-dm text-xs text-ink/55 truncate">{lead.email}{lead.phone ? ` · ${lead.phone}` : ""}</div>
                       {/* Row 3: event type + date on one line */}
                       <div className="flex items-center gap-2 mt-0.5 min-w-0 flex-wrap">
-                        <span className="font-dm text-xs text-ink/50 truncate">{lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}</span>
+                        <span className="font-dm text-xs text-ink/70 truncate">{lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}</span>
                         {lead.eventDate ? (
                           <span className="font-dm text-xs font-semibold text-forest whitespace-nowrap">
                             {new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -3470,7 +3470,7 @@ export default function Dashboard() {
                               budget: selectedLead.budget ?? '',
                             });
                             setEditingEventDetails(true);
-                          }} className="text-xs text-ink/50 hover:text-ink font-bebas tracking-widest flex items-center gap-1">
+                          }} className="text-xs text-ink/70 hover:text-ink font-bebas tracking-widest flex items-center gap-1">
                             <Edit2 className="w-3 h-3" /> EDIT
                           </button>
                         ) : (
@@ -4320,7 +4320,7 @@ export default function Dashboard() {
                             {!isOverflow && (
                               <button
                                 onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: dateStr })); setShowAddLead(true); }}
-                                className="self-start mt-auto text-ink/20 hover:text-ink/50 transition-colors p-0.5"
+                                className="self-start mt-auto text-ink/20 hover:text-ink/70 transition-colors p-0.5"
                                 title="Add event on this day">
                                 <Edit2 className="w-2.5 h-2.5" />
                               </button>
@@ -4370,7 +4370,7 @@ export default function Dashboard() {
                               {d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()}
                               {isToday && <span className="ml-2 opacity-80">· TODAY</span>}
                             </div>
-                            <div className={`text-[10px] font-dm ${isToday ? 'opacity-80' : 'text-ink/40'}`}>{events.length} event{events.length !== 1 ? 's' : ''}</div>
+                            <div className={`text-[10px] font-dm ${isToday ? 'opacity-80' : 'text-ink/65'}`}>{events.length} event{events.length !== 1 ? 's' : ''}</div>
                           </div>
                           <div className="divide-y divide-gold/10">
                             {events.map((e: any) => (
@@ -4691,7 +4691,7 @@ export default function Dashboard() {
                           onClick={() => { setCalDate(d); setCalendarView('day'); }}
                           className={`text-center py-2 border-r border-gold/10 last:border-r-0 hover:bg-linen/60 transition-colors w-full ${isToday ? 'bg-gold/10' : ''}`}
                           title={d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}>
-                          <div className="font-bebas tracking-widest text-[10px] text-ink/50">
+                          <div className="font-bebas tracking-widest text-[10px] text-ink/70">
                             {['MON','TUE','WED','THU','FRI','SAT','SUN'][i]}
                           </div>
                           <div className={`font-serif text-lg font-semibold leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
@@ -4747,7 +4747,7 @@ export default function Dashboard() {
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
                             <button
                               onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
-                              className="text-ink/20 hover:text-ink/50 transition-colors self-start mt-1 p-0.5"
+                              className="text-ink/20 hover:text-ink/70 transition-colors self-start mt-1 p-0.5"
                               title="Add event">
                               <Edit2 className="w-3 h-3" />
                             </button>
@@ -4792,7 +4792,7 @@ export default function Dashboard() {
                         {calDate.getDate()}
                       </div>
                       <div>
-                        <div className="font-bebas tracking-widest text-sm text-ink/50">
+                        <div className="font-bebas tracking-widest text-sm text-ink/70">
                           {calDate.toLocaleDateString('en-NZ', { weekday: 'long' }).toUpperCase()}
                         </div>
                         <div className="font-cormorant text-xl text-ink">
@@ -4817,7 +4817,7 @@ export default function Dashboard() {
                     {totalEvents === 0 ? (
                       <div className="text-center py-16">
                         <div className="font-cormorant text-3xl text-ink/20 mb-2">No events</div>
-                        <p className="font-dm text-sm text-ink/40">Nothing scheduled for this day.</p>
+                        <p className="font-dm text-sm text-ink/65">Nothing scheduled for this day.</p>
                         <button
                           onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
                           className="mt-4 font-bebas tracking-widest text-xs text-forest border border-forest/30 px-4 py-2 hover:bg-forest/5 transition-colors">
@@ -4966,7 +4966,7 @@ export default function Dashboard() {
                           </div>
                         ))}
                         {(dayBookings.length + dayLeads.length) > 2 && (
-                          <div className="text-[9px] text-ink/40">+{dayBookings.length + dayLeads.length - 2} more</div>
+                          <div className="text-[9px] text-ink/65">+{dayBookings.length + dayLeads.length - 2} more</div>
                         )}
                       </div>
                     );
@@ -5006,7 +5006,7 @@ export default function Dashboard() {
                           <div className="font-dm text-xs text-ink/60">{c.email}{c.phone ? ` · ${c.phone}` : ""}</div>
                           {c.company && <div className="font-dm text-xs text-ink/60">{c.company}</div>}
                         </div>
-                        <div className="font-dm text-xs text-ink/50">{new Date(c.createdAt).toLocaleDateString("en-NZ")}</div>
+                        <div className="font-dm text-xs text-ink/70">{new Date(c.createdAt).toLocaleDateString("en-NZ")}</div>
                       </div>
                     ))}
                   </div>
@@ -5091,7 +5091,7 @@ export default function Dashboard() {
                 ] as const).map(s => (
                   <button key={s.id} onClick={() => setVenueSettingsSection(s.id)}
                     className={`font-bebas tracking-widest text-sm px-4 md:px-5 py-2.5 border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
-                      venueSettingsSection === s.id ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink/70'
+                      venueSettingsSection === s.id ? 'border-forest text-forest' : 'border-transparent text-ink/65 hover:text-ink/70'
                     }`}>
                     {s.label}
                   </button>
@@ -5112,7 +5112,7 @@ export default function Dashboard() {
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">INTERNAL NAME <span className="text-ink/40 font-dm normal-case text-xs">(e.g. Westside or location)</span></label>
+                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">INTERNAL NAME <span className="text-ink/65 font-dm normal-case text-xs">(e.g. Westside or location)</span></label>
                         <Input value={settingsForm.internalName} onChange={e => setSettingsForm((f: any) => ({ ...f, internalName: e.target.value }))}
                           placeholder="Westside" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
@@ -5662,7 +5662,7 @@ export default function Dashboard() {
                           <button
                             type="button"
                             onClick={() => setSettingsForm((f: any) => ({ ...f, emailSignatures: (f.emailSignatures ?? []).filter((_: any, i: number) => i !== idx) }))}
-                            className="flex-none text-ink/30 hover:text-red-500 transition-colors"
+                            className="flex-none text-ink/65 hover:text-red-500 transition-colors"
                             title="Remove this signature"
                           ><Trash2 className="w-4 h-4" /></button>
                         </div>
@@ -5781,7 +5781,7 @@ export default function Dashboard() {
                         <div className="flex-1 min-w-0">
                           <div className="font-cormorant font-semibold text-base text-ink">{t.name}</div>
                           <div className="font-bebas tracking-widest text-xs text-forest mt-0.5">{t.subject}</div>
-                          <div className="font-dm text-xs text-ink/50 mt-1 line-clamp-2">{t.body}</div>
+                          <div className="font-dm text-xs text-ink/70 mt-1 line-clamp-2">{t.body}</div>
                         </div>
                         <button onClick={() => deleteTemplate.mutate({ id: t.id })} className="text-sage/40 hover:text-tomato transition-colors flex-shrink-0 mt-1">
                           <Trash2 className="w-4 h-4" />
@@ -6063,13 +6063,13 @@ export default function Dashboard() {
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="font-bebas text-xs tracking-widest text-sage">LOGO SIZE</label>
-                          <span className="font-dm text-xs text-ink/50">{settingsForm.logoScale ?? 100}%</span>
+                          <span className="font-dm text-xs text-ink/70">{settingsForm.logoScale ?? 100}%</span>
                         </div>
                         <input type="range" min={30} max={200} step={5}
                           value={settingsForm.logoScale ?? 100}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, logoScale: Number(e.target.value) }))}
                           className="w-full accent-sage-green" />
-                        <div className="flex justify-between font-dm text-[10px] text-ink/30 mt-0.5">
+                        <div className="flex justify-between font-dm text-[10px] text-ink/65 mt-0.5">
                           <span>Smaller</span><span>Larger</span>
                         </div>
                       </div>
@@ -6097,7 +6097,7 @@ export default function Dashboard() {
                             onClick={() => setSettingsForm((f: any) => ({ ...f, formFont: font.key }))}
                             className={`text-left px-3 py-2 border text-xs transition-colors ${(settingsForm.formFont ?? 'inter') === font.key ? 'border-forest bg-forest/5 text-forest' : 'border-gold/30 hover:border-gold/60'}`}>
                             <div className="font-dm font-semibold">{font.label}</div>
-                            <div className="text-ink/40">{font.sub}</div>
+                            <div className="text-ink/65">{font.sub}</div>
                           </button>
                         ))}
                       </div>
@@ -6154,7 +6154,7 @@ export default function Dashboard() {
 
                     {/* Button colour */}
                     <div>
-                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUTTON COLOUR <span className="font-dm text-[9px] tracking-normal normal-case text-ink/30">(optional — defaults to header colour)</span></label>
+                      <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUTTON COLOUR <span className="font-dm text-[9px] tracking-normal normal-case text-ink/65">(optional — defaults to header colour)</span></label>
                       <div className="flex items-center gap-2">
                         <input type="color" value={settingsForm.formButtonColor || settingsForm.primaryColor || '#2D4A3E'}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formButtonColor: e.target.value }))}
@@ -6172,7 +6172,7 @@ export default function Dashboard() {
 
                   {/* Background image */}
                   <div>
-                    <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BACKGROUND IMAGE <span className="font-dm text-[9px] tracking-normal normal-case text-ink/30">(optional — shows behind the form)</span></label>
+                    <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BACKGROUND IMAGE <span className="font-dm text-[9px] tracking-normal normal-case text-ink/65">(optional — shows behind the form)</span></label>
                     {settingsForm.formPageBgImage ? (
                       <div className="flex items-start gap-3">
                         <div className="w-32 h-20 rounded border border-gold/20 overflow-hidden flex-shrink-0">
@@ -6186,7 +6186,7 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       <label className="flex items-center gap-3 border border-dashed border-gold/30 p-3 cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors rounded">
-                        <Upload className="w-4 h-4 text-ink/30 flex-shrink-0" />
+                        <Upload className="w-4 h-4 text-ink/65 flex-shrink-0" />
                         <span className="font-dm text-xs text-ink/60">Upload a background image (JPG, PNG)</span>
                         <input type="file" accept="image/*" className="hidden"
                           onChange={async e => {
@@ -6228,7 +6228,7 @@ export default function Dashboard() {
                 {/* ── SUCCESS MESSAGE ── */}
                 <div className="dante-card p-5 space-y-3">
                   <h2 className="font-bebas text-xs tracking-widest text-sage">SUCCESS MESSAGE</h2>
-                  <p className="font-dm text-xs text-ink/50">Shown after the form is submitted. Use <code className="bg-gray-100 px-1 py-0.5 rounded text-[10px]">&#123;venueName&#125;</code> to insert your venue name.</p>
+                  <p className="font-dm text-xs text-ink/70">Shown after the form is submitted. Use <code className="bg-gray-100 px-1 py-0.5 rounded text-[10px]">&#123;venueName&#125;</code> to insert your venue name.</p>
                   <Textarea
                     value={settingsForm.formSuccessMessage ?? ''}
                     onChange={e => setSettingsForm((f: any) => ({ ...f, formSuccessMessage: e.target.value }))}
@@ -6245,19 +6245,19 @@ export default function Dashboard() {
                       {(() => { try { return JSON.parse(settingsForm.formGalleryImages || '[]').length; } catch { return 0; } })()} / 6 photos
                     </span>
                   </div>
-                  <p className="font-dm text-xs text-ink/50">Photos display as a gallery strip on your public contact form.</p>
+                  <p className="font-dm text-xs text-ink/70">Photos display as a gallery strip on your public contact form.</p>
 
                   {/* Photo height slider */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="font-bebas text-xs tracking-widest text-sage">PHOTO HEIGHT</label>
-                      <span className="font-dm text-xs text-ink/50">{settingsForm.galleryPhotoHeight ?? 128}px</span>
+                      <span className="font-dm text-xs text-ink/70">{settingsForm.galleryPhotoHeight ?? 128}px</span>
                     </div>
                     <input type="range" min={60} max={320} step={8}
                       value={settingsForm.galleryPhotoHeight ?? 128}
                       onChange={e => setSettingsForm((f: any) => ({ ...f, galleryPhotoHeight: Number(e.target.value) }))}
                       className="w-full accent-sage-green" />
-                    <div className="flex justify-between font-dm text-[10px] text-ink/30 mt-0.5">
+                    <div className="flex justify-between font-dm text-[10px] text-ink/65 mt-0.5">
                       <span>Shorter</span><span>Taller</span>
                     </div>
                   </div>
@@ -6313,7 +6313,7 @@ export default function Dashboard() {
                         )),
                         imgs.length < 6 ? (
                           <label key="add" className="bg-gray-50 border-2 border-dashed border-gold/30 flex flex-col items-center justify-center cursor-pointer hover:border-gold/60 hover:bg-gold/5 transition-colors flex-shrink-0" style={{ width: `${tileW}px`, height: `${ph}px` }}>
-                            <Upload className="w-5 h-5 text-ink/30 mb-1" />
+                            <Upload className="w-5 h-5 text-ink/65 mb-1" />
                             <span className="font-dm text-xs text-ink/60">Upload photo</span>
                             <input type="file" accept="image/*" className="hidden"
                               onChange={async e => {
@@ -6369,7 +6369,7 @@ export default function Dashboard() {
                           {/* Visible toggle */}
                           <div className="col-span-1">
                             <button type="button" onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, visible: !f.visible } : f) : prev)}
-                              className={`${field.visible ? 'text-forest' : 'text-ink/30'} hover:opacity-80 transition-colors`}>
+                              className={`${field.visible ? 'text-forest' : 'text-ink/65'} hover:opacity-80 transition-colors`}>
                               {field.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                             </button>
                           </div>
@@ -6390,24 +6390,24 @@ export default function Dashboard() {
                           </div>
                           {/* Type badge */}
                           <div className="col-span-2">
-                            <span className="font-bebas text-[10px] tracking-wide text-ink/40 bg-linen px-1.5 py-0.5">{field.type}</span>
+                            <span className="font-bebas text-[10px] tracking-wide text-ink/65 bg-linen px-1.5 py-0.5">{field.type}</span>
                           </div>
                           {/* Actions */}
                           <div className="col-span-3 flex items-center gap-1 justify-end">
                             <button type="button" disabled={i === 0}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })}
-                              className="text-ink/30 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
                               <MoveUp className="w-3.5 h-3.5" />
                             </button>
                             <button type="button" disabled={i === formFields.length - 1}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })}
-                              className="text-ink/30 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
+                              className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
                               <MoveDown className="w-3.5 h-3.5" />
                             </button>
                             {!field.isDefault && (
                               <button type="button"
                                 onClick={() => setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
-                                className="text-ink/30 hover:text-red-500 transition-colors p-0.5">
+                                className="text-ink/65 hover:text-red-500 transition-colors p-0.5">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
@@ -6464,7 +6464,7 @@ export default function Dashboard() {
                 return (
                 <div className="max-w-3xl mx-auto">
                 <h1 className="font-cormorant text-3xl font-semibold text-ink mb-2">Integrations</h1>
-                <p className="font-dm text-sm text-ink/50 mb-6">Connect VenueFlowHQ with your other tools. When a booking is confirmed, synced integrations update automatically.</p>
+                <p className="font-dm text-sm text-ink/70 mb-6">Connect VenueFlowHQ with your other tools. When a booking is confirmed, synced integrations update automatically.</p>
                 <div className="space-y-4">
 
                   {/* ── Claude / MCP ── */}
@@ -6555,14 +6555,14 @@ export default function Dashboard() {
                           </select>
                         </div>
                       </div>
-                      <p className="font-dm text-[11px] text-ink/50 -mt-2">Pick the service (e.g. <em>Drinks &amp; Snacks</em>) and the section/area where bookings land. Use <strong>Whole Area</strong> for large groups — individual sections have pax caps that reject 50+ person bookings.</p>
+                      <p className="font-dm text-[11px] text-ink/70 -mt-2">Pick the service (e.g. <em>Drinks &amp; Snacks</em>) and the section/area where bookings land. Use <strong>Whole Area</strong> for large groups — individual sections have pax caps that reject 50+ person bookings.</p>
 
                       {/* ── Space → NBI Service mappings ──────────────────── */}
                       <div className="border border-gold/20 bg-linen/30 p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-bebas tracking-widest text-xs text-forest">SPACE → SERVICE ROUTING</div>
-                            <p className="font-dm text-[11px] text-ink/50 mt-0.5">Override the default service per space — e.g. Restaurant bookings → Restaurant service, Bar → Drinks &amp; Snacks. Space name matching is partial (case-insensitive).</p>
+                            <p className="font-dm text-[11px] text-ink/70 mt-0.5">Override the default service per space — e.g. Restaurant bookings → Restaurant service, Bar → Drinks &amp; Snacks. Space name matching is partial (case-insensitive).</p>
                           </div>
                           <button
                             onClick={() => setNbiMappings(prev => [...prev, { spaceName: '', serviceId: '', sectionId: 'all' }])}
@@ -6694,7 +6694,7 @@ export default function Dashboard() {
                           <p className="font-dm text-[11px] text-ink/60 mb-2 leading-relaxed">
                             <strong className="text-ink/80">Only needed for the reverse direction.</strong> Paste this URL into NowBookIt → <strong>Integrations → Add API Key Integration → Bookings tab</strong>, then enable <em>Bookings Webhooks</em>. Bookings made <em>directly in NowBookIt</em> will then appear in VenueFlow automatically.
                             <br />
-                            <span className="text-ink/50">Bookings made in VenueFlow already push to NowBookIt via the auto-sync toggle above — you don't need this URL for that.</span>
+                            <span className="text-ink/70">Bookings made in VenueFlow already push to NowBookIt via the auto-sync toggle above — you don't need this URL for that.</span>
                           </p>
                           <div className="flex gap-2">
                             <input
@@ -6849,7 +6849,7 @@ export default function Dashboard() {
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="font-bebas text-xs tracking-widest text-sage">LOGO SIZE</label>
-                          <span className="font-dm text-xs text-ink/50">{settingsForm.logoScale ?? 100}%</span>
+                          <span className="font-dm text-xs text-ink/70">{settingsForm.logoScale ?? 100}%</span>
                         </div>
                         <input type="range" min={30} max={200} step={5}
                           value={settingsForm.logoScale ?? 100}
@@ -6931,7 +6931,7 @@ export default function Dashboard() {
                 <div className="max-w-3xl mx-auto">
                   <div className="flex items-center justify-between mb-2">
                     <h1 className="font-cormorant text-3xl font-semibold text-ink">BEO Email Recipients</h1>
-                    <span className="font-bebas tracking-widest text-xs text-ink/50">{list.length} saved</span>
+                    <span className="font-bebas tracking-widest text-xs text-ink/70">{list.length} saved</span>
                   </div>
                   <div className="dante-card p-5 mb-4">
                     <p className="font-dm text-sm text-ink/60">
@@ -6984,9 +6984,9 @@ export default function Dashboard() {
                       <span className="font-bebas tracking-widest text-sm text-ink">SAVED RECIPIENTS</span>
                     </div>
                     {staffEmailList.isLoading ? (
-                      <div className="px-5 py-8 text-center font-dm text-sm text-ink/40">Loading…</div>
+                      <div className="px-5 py-8 text-center font-dm text-sm text-ink/65">Loading…</div>
                     ) : list.length === 0 ? (
-                      <div className="px-5 py-10 text-center font-dm text-sm text-ink/40">
+                      <div className="px-5 py-10 text-center font-dm text-sm text-ink/65">
                         No recipients saved yet. Add your team above, or save people as you email BEOs from a runsheet.
                       </div>
                     ) : (
@@ -6998,12 +6998,12 @@ export default function Dashboard() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="font-dm text-sm font-medium text-ink truncate">{s.name}</div>
-                              <div className="font-dm text-xs text-ink/50 truncate">{s.email}</div>
+                              <div className="font-dm text-xs text-ink/70 truncate">{s.email}</div>
                             </div>
                             <button
                               onClick={() => { if (confirm(`Remove ${s.name} (${s.email}) from your BEO recipients?`)) removeStaffEmailMut.mutate({ id: s.id }); }}
                               disabled={removeStaffEmailMut.isPending}
-                              className="p-1.5 text-ink/30 hover:text-red-600 transition-colors shrink-0 disabled:opacity-40"
+                              className="p-1.5 text-ink/65 hover:text-red-600 transition-colors shrink-0 disabled:opacity-40"
                               title="Remove recipient"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -7075,7 +7075,7 @@ export default function Dashboard() {
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 bg-linen text-ink/60">{member.role.toUpperCase()}</span>
                                 {member.email && <span className="font-dm text-xs text-ink/60 truncate">{member.email}</span>}
-                                {member.lastAccessedAt && <span className="font-dm text-xs text-ink/30">Last login: {new Date(member.lastAccessedAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>}
+                                {member.lastAccessedAt && <span className="font-dm text-xs text-ink/65">Last login: {new Date(member.lastAccessedAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>}
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
@@ -7130,7 +7130,7 @@ export default function Dashboard() {
                     </div>
                     {taskRules.length === 0 ? (
                       <div className="p-8 text-center">
-                        <p className="font-dm text-sm text-ink/40">No automated task rules yet. Add one to get started.</p>
+                        <p className="font-dm text-sm text-ink/65">No automated task rules yet. Add one to get started.</p>
                       </div>
                     ) : (
                     <table className="w-full">
@@ -7463,7 +7463,7 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mb-6">
                       <div>
                         <h1 className="font-cormorant text-3xl font-semibold text-ink">Floor Plans</h1>
-                        <p className="font-dm text-sm text-ink/50 mt-1">Create and manage floor plan templates for your event spaces.</p>
+                        <p className="font-dm text-sm text-ink/70 mt-1">Create and manage floor plan templates for your event spaces.</p>
                       </div>
                       <button
                         onClick={() => setEditingFloorPlan({ id: null, name: 'New Floor Plan', canvasData: null })}
@@ -7711,14 +7711,14 @@ export default function Dashboard() {
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => setEditingFloorPlan(plan)}
-                                  className="p-1.5 text-ink/30 hover:text-ink transition-colors"
+                                  className="p-1.5 text-ink/65 hover:text-ink transition-colors"
                                   title="Edit"
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   onClick={() => { if (confirm('Delete this floor plan?')) deleteFloorPlan.mutate({ id: plan.id }); }}
-                                  className="p-1.5 text-ink/30 hover:text-red-500 transition-colors"
+                                  className="p-1.5 text-ink/65 hover:text-red-500 transition-colors"
                                   title="Delete"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -7744,7 +7744,7 @@ export default function Dashboard() {
                 {settingsForm && (
                   <div className="dante-card p-6 mb-6">
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-1">RUNSHEET F&amp;B COURSES</h2>
-                    <p className="font-dm text-xs text-ink/50 mb-3">Customise the course headers used inside Runsheet Builder (one per line). Leave blank to use defaults.</p>
+                    <p className="font-dm text-xs text-ink/70 mb-3">Customise the course headers used inside Runsheet Builder (one per line). Leave blank to use defaults.</p>
                     <textarea
                       rows={6}
                       value={settingsForm.customCourses || ''}
@@ -8025,14 +8025,14 @@ export default function Dashboard() {
 
                 {/* ── CATALOGUE TAB ── */}
                 {menuSettingsSection === 'catalogue' && (<div>
-                <p className="font-dm text-sm text-ink/50 mb-6">Build your food and drink catalogue. Items can be selected when building proposals and runsheets.</p>
+                <p className="font-dm text-sm text-ink/70 mb-6">Build your food and drink catalogue. Items can be selected when building proposals and runsheets.</p>
 
                 {/* Type tabs */}
                 <div className="flex gap-0 mb-6 border-b border-gold/20">
                   {(['food','drink'] as const).map(t => (
                     <button key={t} onClick={() => { setCatalogActiveType(t); setCatalogActiveCategoryId(null); }}
                       className={`font-bebas tracking-widest text-sm px-6 py-2.5 border-b-2 transition-colors ${
-                        catalogActiveType === t ? 'border-forest text-forest' : 'border-transparent text-ink/40 hover:text-ink/70'
+                        catalogActiveType === t ? 'border-forest text-forest' : 'border-transparent text-ink/65 hover:text-ink/70'
                       }`}>
                       {t === 'food' ? '🍽 FOOD' : '🍷 BEVERAGES'}
                     </button>
@@ -8044,7 +8044,7 @@ export default function Dashboard() {
                   <div className="w-56 flex-shrink-0">
                     <div className="bg-white border border-gold/20 rounded">
                       <div className="flex items-center justify-between px-3 py-2.5 border-b border-gold/10">
-                        <span className="font-bebas tracking-widest text-xs text-ink/50">CATEGORIES</span>
+                        <span className="font-bebas tracking-widest text-xs text-ink/70">CATEGORIES</span>
                         <button onClick={() => { setCatalogCategoryForm({ name: '', type: catalogActiveType, description: '' }); setShowCatalogCategoryForm(true); }}
                           className="text-forest hover:text-forest-dark"><Plus className="w-4 h-4" /></button>
                       </div>
@@ -8062,7 +8062,7 @@ export default function Dashboard() {
                       )}
                       <div className="divide-y divide-gold/10">
                         {(catalogCategories ?? []).filter((c: any) => c.type === catalogActiveType).length === 0 && !showCatalogCategoryForm && (
-                          <p className="p-4 text-xs text-center text-ink/40">No categories yet</p>
+                          <p className="p-4 text-xs text-center text-ink/65">No categories yet</p>
                         )}
                         {(catalogCategories ?? []).filter((c: any) => c.type === catalogActiveType).map((cat: any) => (
                           <div key={cat.id}
@@ -8084,12 +8084,12 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     {catalogActiveCategoryId === null ? (
                       <div className="bg-white border border-gold/20 rounded flex items-center justify-center h-48">
-                        <p className="font-dm text-sm text-ink/40">Select a category to view and manage its items</p>
+                        <p className="font-dm text-sm text-ink/65">Select a category to view and manage its items</p>
                       </div>
                     ) : (
                       <div className="bg-white border border-gold/20 rounded">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-gold/10">
-                          <span className="font-bebas tracking-widest text-xs text-ink/50">
+                          <span className="font-bebas tracking-widest text-xs text-ink/70">
                             {(catalogCategories ?? []).find((c: any) => c.id === catalogActiveCategoryId)?.name?.toUpperCase() ?? 'ITEMS'}
                           </span>
                           <div className="flex items-center gap-2">
@@ -8101,7 +8101,7 @@ export default function Dashboard() {
                                 value={catalogGuestCount}
                                 onChange={e => setCatalogGuestCount(e.target.value)}
                                 placeholder="Guests"
-                                className="w-16 font-dm text-xs text-ink bg-transparent outline-none placeholder:text-ink/30"
+                                className="w-16 font-dm text-xs text-ink bg-transparent outline-none placeholder:text-ink/65"
                               />
                             </div>
                             <button onClick={() => { setShowCatalogAiPanel(v => !v); setShowCatalogCsvImport(false); }}
@@ -8176,9 +8176,9 @@ export default function Dashboard() {
                                     <div key={i} className="flex items-center justify-between gap-2 px-1 py-1.5">
                                       <div className="min-w-0 flex-1">
                                         <div className="font-dm text-sm text-ink truncate">{it.name}</div>
-                                        {it.description && <div className="font-dm text-[11px] text-ink/50 truncate">{it.description}</div>}
+                                        {it.description && <div className="font-dm text-[11px] text-ink/70 truncate">{it.description}</div>}
                                       </div>
-                                      <span className="font-dm text-xs text-ink/70 whitespace-nowrap">${(it.price ?? 0).toFixed(2)} <span className="text-ink/40">/ {it.unit ?? (it.pricingType === 'per_item' ? 'item' : 'person')}</span></span>
+                                      <span className="font-dm text-xs text-ink/70 whitespace-nowrap">${(it.price ?? 0).toFixed(2)} <span className="text-ink/65">/ {it.unit ?? (it.pricingType === 'per_item' ? 'item' : 'person')}</span></span>
                                       <button onClick={() => setCatalogAiPreview(p => p.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                                     </div>
                                   ))}
@@ -8293,11 +8293,11 @@ export default function Dashboard() {
                                 <div className="flex">
                                   <button type="button" onClick={() => setCatalogItemForm(f => ({ ...f, pricingType: 'per_person', unit: 'person' }))}
                                     className={`flex-1 font-bebas tracking-widest text-xs py-2 border transition-colors ${
-                                      catalogItemForm.pricingType === 'per_person' ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/50 hover:border-forest'
+                                      catalogItemForm.pricingType === 'per_person' ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:border-forest'
                                     }`}>PER PERSON</button>
                                   <button type="button" onClick={() => setCatalogItemForm(f => ({ ...f, pricingType: 'per_item', unit: 'piece' }))}
                                     className={`flex-1 font-bebas tracking-widest text-xs py-2 border border-l-0 transition-colors ${
-                                      catalogItemForm.pricingType === 'per_item' ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/50 hover:border-forest'
+                                      catalogItemForm.pricingType === 'per_item' ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:border-forest'
                                     }`}>PER ITEM</button>
                                 </div>
                               </div>
@@ -8390,7 +8390,7 @@ export default function Dashboard() {
                                   </button>
                                   <button
                                     onClick={() => setCatalogSelectedIds(new Set())}
-                                    className="font-bebas tracking-widest text-[11px] px-2 py-1 text-ink/40 hover:text-ink/70">
+                                    className="font-bebas tracking-widest text-[11px] px-2 py-1 text-ink/65 hover:text-ink/70">
                                     CLEAR
                                   </button>
                                 </div>
@@ -8412,7 +8412,7 @@ export default function Dashboard() {
                             )}
                             <div className="divide-y divide-gold/10">
                               {items.length === 0 && !showCatalogItemForm && (
-                                <p className="p-6 text-center text-sm text-ink/40">No items yet. Click + Add Item to get started, or use CSV Import.</p>
+                                <p className="p-6 text-center text-sm text-ink/65">No items yet. Click + Add Item to get started, or use CSV Import.</p>
                               )}
                               {items.map((item: any) => {
                                 const unitPrice = item.price / 100;
@@ -8436,7 +8436,7 @@ export default function Dashboard() {
                                       }`}>{item.pricingType === 'per_person' ? 'PER PERSON' : 'PER ITEM'}</span>
                                       {item.allergens && <span className="font-dm text-[10px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{item.allergens}</span>}
                                     </div>
-                                    {item.description && <p className="font-dm text-xs text-ink/50 mt-0.5 truncate">{item.description}</p>}
+                                    {item.description && <p className="font-dm text-xs text-ink/70 mt-0.5 truncate">{item.description}</p>}
                                   </div>
                                   <div className="flex items-center gap-3 ml-3 flex-shrink-0">
                                     {item.price > 0 && (
@@ -8483,7 +8483,7 @@ export default function Dashboard() {
                             {guests > 0 && items.some((i: any) => i.price > 0) && (
                               <div className="flex items-center justify-between px-4 py-3 bg-linen/50 border-t border-gold/20">
                                 <div>
-                                  <span className="font-bebas tracking-widest text-xs text-ink/50">ESTIMATED TOTAL</span>
+                                  <span className="font-bebas tracking-widest text-xs text-ink/70">ESTIMATED TOTAL</span>
                                   <span className="font-dm text-xs text-ink/60 ml-2">({guests} guest{guests !== 1 ? 's' : ''})</span>
                                 </div>
                                 <span className="font-cormorant text-2xl font-semibold text-ink">${totalCost.toFixed(2)}</span>
@@ -9150,7 +9150,7 @@ export default function Dashboard() {
                         <div key={p.id} className="flex items-center justify-between px-4 py-2 group">
                           <div>
                             <span className="font-bebas tracking-widest text-xs text-forest capitalize">{p.type.replace(/_/g, ' ')}</span>
-                            <span className="font-dm text-xs text-ink/50 ml-2">{p.method?.replace(/_/g, ' ')}</span>
+                            <span className="font-dm text-xs text-ink/70 ml-2">{p.method?.replace(/_/g, ' ')}</span>
                             {p.notes && <div className="font-dm text-[11px] text-ink/60">{p.notes}</div>}
                           </div>
                           <div className="flex items-center gap-2">
@@ -9270,7 +9270,7 @@ export default function Dashboard() {
                           <div className="space-y-0.5">
                             {timeline.map((t: any, idx: number) => (
                               <div key={idx} className="flex items-baseline gap-2">
-                                {t.time && <span className="font-dm text-[11px] text-ink/50 tabular-nums flex-shrink-0 w-14">{t.time}</span>}
+                                {t.time && <span className="font-dm text-[11px] text-ink/70 tabular-nums flex-shrink-0 w-14">{t.time}</span>}
                                 <span className="font-dm text-xs text-ink">{t.title}</span>
                               </div>
                             ))}
@@ -9315,11 +9315,11 @@ export default function Dashboard() {
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${isSevere(d.name) ? 'bg-red-500' : 'bg-amber-500'}`} />
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    {d.count > 1 && <span className="font-dm text-[11px] text-ink/50 tabular-nums">×{d.count}</span>}
+                                    {d.count > 1 && <span className="font-dm text-[11px] text-ink/70 tabular-nums">×{d.count}</span>}
                                     <span className="font-dm text-xs text-ink font-medium">{d.name}</span>
                                     {isSevere(d.name) && <span className="font-bebas tracking-widest text-[8px] text-red-600">SEVERE</span>}
                                   </div>
-                                  {d.notes && <div className="font-dm text-[11px] text-ink/50 leading-snug">{d.notes}</div>}
+                                  {d.notes && <div className="font-dm text-[11px] text-ink/70 leading-snug">{d.notes}</div>}
                                   {Array.isArray(d.names) && d.names.length > 0 && (
                                     <div className="font-dm text-[11px] text-ink/60 leading-snug">{d.names.join(' · ')}</div>
                                   )}
@@ -9657,7 +9657,7 @@ export default function Dashboard() {
 
               {/* Week picker + load button */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1">WEEK STARTING (MONDAY)</label>
+                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">WEEK STARTING (MONDAY)</label>
                 <div className="flex gap-2">
                   <input type="date" value={weeklyWeekStart}
                     onChange={e => { setWeeklyWeekStart(e.target.value); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); }}
@@ -9675,7 +9675,7 @@ export default function Dashboard() {
               {/* Events summary */}
               {weeklyEventsData && (
                 <div>
-                  <div className="font-bebas tracking-widest text-[11px] text-ink/50 mb-1.5">
+                  <div className="font-bebas tracking-widest text-[11px] text-ink/70 mb-1.5">
                     EVENTS THIS WEEK ({(weeklyEventsData.events as any[]).length})
                   </div>
                   {(weeklyEventsData.events as any[]).length === 0 ? (
@@ -9686,7 +9686,7 @@ export default function Dashboard() {
                         <div key={ev.bookingId ?? ev.staffPortalToken ?? `${ev.name ?? 'event'}-${evIdx}`} className="flex items-start gap-2 px-3 py-2 bg-linen/50 border border-gold/20 rounded-sm">
                           <div className="flex-1 min-w-0">
                             <div className="font-cormorant font-semibold text-sm text-ink">{ev.name}</div>
-                            <div className="font-dm text-xs text-ink/50">{ev.dateLabel} · {ev.timeLabel}{ev.guestCount ? ` · ${ev.guestCount} pax` : ''}{ev.spaceName ? ` · ${ev.spaceName}` : ''}</div>
+                            <div className="font-dm text-xs text-ink/70">{ev.dateLabel} · {ev.timeLabel}{ev.guestCount ? ` · ${ev.guestCount} pax` : ''}{ev.spaceName ? ` · ${ev.spaceName}` : ''}</div>
                           </div>
                           <div className="flex gap-1 flex-shrink-0">
                             {ev.staffPortalToken && <span className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 bg-forest/10 text-forest border border-forest/20">LIVE LINK ✓</span>}
@@ -9701,7 +9701,7 @@ export default function Dashboard() {
 
               {/* Subject */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1">SUBJECT</label>
+                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SUBJECT</label>
                 <input type="text" value={weeklySubject} onChange={e => setWeeklySubject(e.target.value)}
                   placeholder="Staff Briefing — Weekly Runsheets"
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest" />
@@ -9709,7 +9709,7 @@ export default function Dashboard() {
 
               {/* Body */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1">EMAIL BODY</label>
+                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EMAIL BODY</label>
                 <textarea rows={12} value={weeklyBody} onChange={e => setWeeklyBody(e.target.value)}
                   className="w-full border border-gold/30 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest resize-y"
                   placeholder="Email body will auto-fill once events are loaded…" />
@@ -9721,7 +9721,7 @@ export default function Dashboard() {
                 if (sigs.length === 0) return null;
                 return (
                   <div>
-                    <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
+                    <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">SIGNATURE (SENDER &amp; SIGN-OFF)</label>
                     <select
                       value={weeklySigId}
                       onChange={e => setWeeklySigId(e.target.value)}
@@ -9738,7 +9738,7 @@ export default function Dashboard() {
 
               {/* Attach BEOs */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1.5">ATTACHMENTS</label>
+                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1.5">ATTACHMENTS</label>
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input type="checkbox" checked={weeklyAttachBeos} onChange={e => setWeeklyAttachBeos(e.target.checked)} className="accent-forest w-4 h-4 mt-0.5 flex-shrink-0" />
                   <div>
@@ -9755,13 +9755,13 @@ export default function Dashboard() {
               {/* Recipients — saved staff */}
               <div className="border border-gold/20">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-gold/20 bg-linen/30">
-                  <span className="font-bebas tracking-widest text-[11px] text-ink/50">SAVED STAFF ({(staffEmailsForWeekly.data as any[] ?? []).length})</span>
+                  <span className="font-bebas tracking-widest text-[11px] text-ink/70">SAVED STAFF ({(staffEmailsForWeekly.data as any[] ?? []).length})</span>
                   <div className="flex items-center gap-2 text-[11px] font-dm">
                     <button onClick={() => setWeeklySelectedStaff(new Set((staffEmailsForWeekly.data as any[] ?? []).map((s: any) => s.email)))}
                       className="text-forest hover:underline">Select all</button>
                     <span className="text-ink/20">|</span>
                     <button onClick={() => setWeeklySelectedStaff(new Set())}
-                      className="text-ink/50 hover:underline">None</button>
+                      className="text-ink/70 hover:underline">None</button>
                   </div>
                 </div>
                 {staffEmailsForWeekly.isLoading ? (
@@ -9804,7 +9804,7 @@ export default function Dashboard() {
 
               {/* Extra ad-hoc emails */}
               <div>
-                <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1">EXTRA EMAILS <span className="normal-case font-dm text-ink/30">(this send only)</span></label>
+                <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">EXTRA EMAILS <span className="normal-case font-dm text-ink/65">(this send only)</span></label>
                 <textarea value={weeklyExtraEmails} onChange={e => setWeeklyExtraEmails(e.target.value)}
                   placeholder="extra1@example.com, extra2@example.com"
                   rows={2}
@@ -9825,7 +9825,7 @@ export default function Dashboard() {
                 return (
                   <div className="font-dm text-xs text-ink/60">
                     {totalR === 0
-                      ? <span className="text-ink/40">Pick at least one recipient</span>
+                      ? <span className="text-ink/65">Pick at least one recipient</span>
                       : <span><b>{totalR}</b> recipient{totalR !== 1 ? 's' : ''}{weeklyEventsData ? `, ${(weeklyEventsData.events as any[]).length} event${(weeklyEventsData.events as any[]).length !== 1 ? 's' : ''}` : ''}</span>}
                   </div>
                 );
@@ -9833,7 +9833,7 @@ export default function Dashboard() {
               <div className="flex gap-2">
                 <button onClick={() => { setShowWeeklyModal(false); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); setWeeklyExtraEmails(''); }}
                   disabled={weeklySending}
-                  className="font-bebas tracking-widest text-xs px-4 py-2 border border-ink/20 text-ink/50 hover:text-ink hover:bg-ink/5 transition-colors disabled:opacity-40">CANCEL</button>
+                  className="font-bebas tracking-widest text-xs px-4 py-2 border border-ink/20 text-ink/70 hover:text-ink hover:bg-ink/5 transition-colors disabled:opacity-40">CANCEL</button>
                 <button
                   disabled={weeklySelectedStaff.size === 0 || weeklySending || !weeklyEventsData || (weeklyEventsData.events as any[]).length === 0}
                   onClick={doSendWeeklyBriefing}
@@ -9877,7 +9877,7 @@ export default function Dashboard() {
                   }}
                   onChange={e => setEnquiryPasteText(e.target.value)}
                   placeholder={"Paste a client email, message or booking request here...\n\nExamples:\n• \"Hi, I'm looking to book a wedding for 80 guests on 14 September...\"\n• A forwarded email from a client\n• A booking brief or inquiry form response"}
-                  className="w-full font-dm text-sm text-ink bg-white border border-gold/30 focus:outline-none focus:border-forest resize-none p-3 placeholder:text-ink/30"
+                  className="w-full font-dm text-sm text-ink bg-white border border-gold/30 focus:outline-none focus:border-forest resize-none p-3 placeholder:text-ink/65"
                   style={{ minHeight: 140 }}
                 />
                 <div className="flex gap-2 mt-3">
@@ -9899,7 +9899,7 @@ export default function Dashboard() {
                   <button
                     type="button"
                     onClick={() => setEnquiryPasteMode(false)}
-                    className="px-4 py-2.5 border border-gold/30 font-bebas tracking-widest text-xs text-ink/50 hover:text-ink hover:border-gold transition-colors"
+                    className="px-4 py-2.5 border border-gold/30 font-bebas tracking-widest text-xs text-ink/70 hover:text-ink hover:border-gold transition-colors"
                   >
                     MANUAL
                   </button>

@@ -604,14 +604,14 @@ export default function FloorPlanEditor({
             <button
               type="button"
               onClick={() => setSidebarTab("inventory")}
-              className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "inventory" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/40 hover:text-ink/70"}`}
+              className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "inventory" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/65 hover:text-ink/70"}`}
             >
               INVENTORY
             </button>
             <button
               type="button"
               onClick={() => setSidebarTab("elements")}
-              className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "elements" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/40 hover:text-ink/70"}`}
+              className={`flex-1 py-2 font-bebas text-[10px] tracking-widest transition-colors ${sidebarTab === "elements" ? "bg-white text-ink border-b-2 border-burgundy" : "text-ink/65 hover:text-ink/70"}`}
             >
               ELEMENTS
             </button>
@@ -621,7 +621,7 @@ export default function FloorPlanEditor({
           {sidebarTab === "elements" && (
             <>
               <div className="px-3 py-1.5 border-b border-border flex-shrink-0">
-                <p className="text-[10px] text-ink/40">Drag onto canvas</p>
+                <p className="text-[10px] text-ink/65">Drag onto canvas</p>
               </div>
               <div className="flex-1 overflow-y-auto py-1">
                 {PALETTE.map(item => (
@@ -654,7 +654,7 @@ export default function FloorPlanEditor({
                         <button
                           type="button"
                           onClick={() => setCustomPalette(prev => prev.filter(p => p.type !== item.type))}
-                          className="opacity-0 group-hover:opacity-100 text-ink/30 hover:text-red-400 transition-all flex-shrink-0"
+                          className="opacity-0 group-hover:opacity-100 text-ink/65 hover:text-red-400 transition-all flex-shrink-0"
                         >
                           <X className="w-2.5 h-2.5" />
                         </button>
@@ -670,7 +670,7 @@ export default function FloorPlanEditor({
                   <button
                     type="button"
                     onClick={() => setShowCustomForm(true)}
-                    className="w-full flex items-center gap-1.5 px-3 py-2.5 text-xs font-bebas tracking-widest text-ink/50 hover:text-ink hover:bg-gold/5 transition-colors"
+                    className="w-full flex items-center gap-1.5 px-3 py-2.5 text-xs font-bebas tracking-widest text-ink/70 hover:text-ink hover:bg-gold/5 transition-colors"
                   >
                     <Plus className="w-3 h-3" /> ADD CUSTOM ITEM
                   </button>
@@ -678,7 +678,7 @@ export default function FloorPlanEditor({
                   <div className="p-3 space-y-2 bg-linen/60">
                     <div className="flex items-center justify-between mb-1">
                       <p className="font-bebas text-[10px] tracking-widest text-sage">NEW ITEM</p>
-                      <button type="button" onClick={() => setShowCustomForm(false)} className="text-ink/30 hover:text-ink">
+                      <button type="button" onClick={() => setShowCustomForm(false)} className="text-ink/65 hover:text-ink">
                         <X className="w-3 h-3" />
                       </button>
                     </div>
@@ -691,24 +691,24 @@ export default function FloorPlanEditor({
                     />
                     <div className="grid grid-cols-2 gap-1.5">
                       <div>
-                        <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">W</label>
+                        <label className="font-bebas text-[9px] tracking-widest text-ink/65 block">W</label>
                         <input type="number" value={customForm.w} onChange={e => setCustomForm(f => ({ ...f, w: parseInt(e.target.value) || 80 }))}
                           className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">H</label>
+                        <label className="font-bebas text-[9px] tracking-widest text-ink/65 block">H</label>
                         <input type="number" value={customForm.h} onChange={e => setCustomForm(f => ({ ...f, h: parseInt(e.target.value) || 80 }))}
                           className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5 items-end">
                       <div>
-                        <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">COLOUR</label>
+                        <label className="font-bebas text-[9px] tracking-widest text-ink/65 block">COLOUR</label>
                         <input type="color" value={customForm.color} onChange={e => setCustomForm(f => ({ ...f, color: e.target.value }))}
                           className="w-full h-7 border border-border rounded cursor-pointer" />
                       </div>
                       <div>
-                        <label className="font-bebas text-[9px] tracking-widest text-ink/40 block">SEATS</label>
+                        <label className="font-bebas text-[9px] tracking-widest text-ink/65 block">SEATS</label>
                         <input type="number" value={customForm.seats} min={0}
                           onChange={e => setCustomForm(f => ({ ...f, seats: parseInt(e.target.value) || 0 }))}
                           className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
@@ -738,13 +738,13 @@ export default function FloorPlanEditor({
           {sidebarTab === "inventory" && (
             <>
               <div className="px-3 py-1.5 border-b border-border flex-shrink-0">
-                <p className="text-[10px] text-ink/40">Click to place on canvas</p>
+                <p className="text-[10px] text-ink/65">Click to place on canvas</p>
               </div>
               <div className="flex-1 overflow-y-auto">
                 {!inventory || inventory.length === 0 ? (
                   <div className="p-4 text-center">
-                    <p className="font-dm text-xs text-ink/40 mt-4">No furniture added yet.</p>
-                    <p className="font-dm text-[10px] text-ink/30 mt-1">Go to Settings → Floor Plans to manage your inventory.</p>
+                    <p className="font-dm text-xs text-ink/65 mt-4">No furniture added yet.</p>
+                    <p className="font-dm text-[10px] text-ink/65 mt-1">Go to Settings → Floor Plans to manage your inventory.</p>
                   </div>
                 ) : (
                   <div className="py-1">
@@ -789,7 +789,7 @@ export default function FloorPlanEditor({
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="font-dm text-xs text-ink/80 group-hover:text-ink truncate">{item.name}</p>
-                            <p className="font-dm text-[10px] text-ink/40">
+                            <p className="font-dm text-[10px] text-ink/65">
                               {item.seats ? `${item.seats} seats` : ""}
                               {item.seats && item.quantity ? " · " : ""}
                               {item.quantity ? `×${item.quantity} owned` : ""}
@@ -802,7 +802,7 @@ export default function FloorPlanEditor({
                 )}
               </div>
               <div className="border-t border-border flex-shrink-0 px-3 py-2">
-                <p className="font-dm text-[10px] text-ink/30">Manage in Settings → Floor Plans</p>
+                <p className="font-dm text-[10px] text-ink/65">Manage in Settings → Floor Plans</p>
               </div>
             </>
           )}
@@ -822,14 +822,14 @@ export default function FloorPlanEditor({
             />
             <div className="flex-1" />
             {/* Stats */}
-            <span className="text-xs text-ink/50 font-dm">{tableCount} tables · {totalSeats} seats</span>
+            <span className="text-xs text-ink/70 font-dm">{tableCount} tables · {totalSeats} seats</span>
             <div className="h-4 w-px bg-border" />
             {/* Templates */}
             {!readOnly && (
               <>
                 <div className="relative">
                   <button type="button" onClick={() => setShowTemplates(s => !s)}
-                    className={`p-1.5 rounded text-xs font-bebas tracking-wider flex items-center gap-1 ${showTemplates ? "bg-burgundy/10 text-burgundy" : "text-ink/50 hover:text-ink"}`}
+                    className={`p-1.5 rounded text-xs font-bebas tracking-wider flex items-center gap-1 ${showTemplates ? "bg-burgundy/10 text-burgundy" : "text-ink/70 hover:text-ink"}`}
                     title="Insert a preset layout">
                     <Plus className="w-3 h-3" /> TEMPLATES
                   </button>
@@ -849,7 +849,7 @@ export default function FloorPlanEditor({
                             {t.label}
                           </button>
                         ))}
-                        <div className="px-3 pt-1 pb-1 text-[9px] text-ink/30 border-t border-border mt-1">Adds to the current plan</div>
+                        <div className="px-3 pt-1 pb-1 text-[9px] text-ink/65 border-t border-border mt-1">Adds to the current plan</div>
                       </div>
                     </>
                   )}
@@ -858,22 +858,22 @@ export default function FloorPlanEditor({
               </>
             )}
             {/* Grid / Snap */}
-            <button onClick={() => setShowGrid(g => !g)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${showGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/40 hover:text-ink"}`}>
+            <button onClick={() => setShowGrid(g => !g)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${showGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/65 hover:text-ink"}`}>
               GRID
             </button>
-            <button onClick={() => setSnapToGrid(s => !s)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${snapToGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/40 hover:text-ink"}`}>
+            <button onClick={() => setSnapToGrid(s => !s)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${snapToGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/65 hover:text-ink"}`}>
               SNAP
             </button>
             <div className="h-4 w-px bg-border" />
             {/* Zoom */}
-            <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-1.5 rounded text-ink/40 hover:text-ink"><ZoomOut className="w-3.5 h-3.5" /></button>
-            <span className="text-xs font-dm text-ink/50 w-10 text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => setZoom(z => Math.min(3, z + 0.1))} className="p-1.5 rounded text-ink/40 hover:text-ink"><ZoomIn className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-1.5 rounded text-ink/65 hover:text-ink"><ZoomOut className="w-3.5 h-3.5" /></button>
+            <span className="text-xs font-dm text-ink/70 w-10 text-center">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom(z => Math.min(3, z + 0.1))} className="p-1.5 rounded text-ink/65 hover:text-ink"><ZoomIn className="w-3.5 h-3.5" /></button>
             <div className="h-4 w-px bg-border" />
             {/* Background upload */}
             <label className="cursor-pointer flex items-center gap-1 px-2 py-1.5 rounded border border-dashed border-gold/40 hover:border-gold hover:bg-gold/5 transition-colors" title="Upload background photo (blueprint, venue photo to trace over)">
-              <Upload className="w-3 h-3 text-ink/40" />
-              <span className="text-xs font-bebas tracking-wider text-ink/50">BG PHOTO</span>
+              <Upload className="w-3 h-3 text-ink/65" />
+              <span className="text-xs font-bebas tracking-wider text-ink/70">BG PHOTO</span>
               <input type="file" accept="image/*" className="hidden" onChange={e => {
                 const file = e.target.files?.[0]; if (!file) return;
                 const img = new Image();
@@ -899,7 +899,7 @@ export default function FloorPlanEditor({
                 <input type="range" min={0.1} max={1} step={0.05} value={bgOpacity}
                   onChange={e => setBgOpacity(Number(e.target.value))}
                   className="w-16 accent-forest" title="Background opacity" />
-                <button onClick={() => setBgImageUrl("")} className="p-1 text-ink/30 hover:text-red-500 transition-colors" title="Remove background">
+                <button onClick={() => setBgImageUrl("")} className="p-1 text-ink/65 hover:text-red-500 transition-colors" title="Remove background">
                   <X className="w-3 h-3" />
                 </button>
               </>
@@ -1012,7 +1012,7 @@ export default function FloorPlanEditor({
                       onChange={e => updateSelected({ color: e.target.value })}
                       className="w-8 h-8 border border-border rounded cursor-pointer"
                     />
-                    <span className="text-xs font-mono text-ink/50">{selectedEl.color}</span>
+                    <span className="text-xs font-mono text-ink/70">{selectedEl.color}</span>
                   </div>
                 </div>
                 {(selectedEl.seats !== undefined) && (
@@ -1076,8 +1076,8 @@ export default function FloorPlanEditor({
           ) : (
             <div className="p-4 text-center flex flex-col items-center justify-center h-full">
               <MousePointer className="w-8 h-8 text-ink/20 mb-2" />
-              <p className="font-dm text-xs text-ink/40">Select an element to edit its properties</p>
-              <p className="font-dm text-[10px] text-ink/30 mt-2">Or drag elements from the left panel onto the canvas</p>
+              <p className="font-dm text-xs text-ink/65">Select an element to edit its properties</p>
+              <p className="font-dm text-[10px] text-ink/65 mt-2">Or drag elements from the left panel onto the canvas</p>
               <div className="mt-4 border-t border-border w-full pt-3">
                 <p className="font-bebas tracking-widest text-[10px] text-sage mb-2">CANVAS SIZE</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -1094,7 +1094,7 @@ export default function FloorPlanEditor({
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                 </div>
-                <p className="font-dm text-[10px] text-ink/30 mt-2">Del=delete, R=rotate, Esc=deselect</p>
+                <p className="font-dm text-[10px] text-ink/65 mt-2">Del=delete, R=rotate, Esc=deselect</p>
               </div>
             </div>
           )}
@@ -1107,7 +1107,7 @@ export default function FloorPlanEditor({
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-cormorant text-xl font-semibold text-ink">Share Floor Plan</h3>
-              <button onClick={() => setShowShareDialog(false)} className="text-ink/30 hover:text-ink">
+              <button onClick={() => setShowShareDialog(false)} className="text-ink/65 hover:text-ink">
                 <X className="w-5 h-5" />
               </button>
             </div>

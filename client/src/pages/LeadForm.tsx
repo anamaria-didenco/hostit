@@ -153,7 +153,7 @@ export default function LeadForm() {
 
   if (isLoading) return (
     <div className={isEmbed ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center bg-[#f8f5f0]"}>
-      <div className="text-xl italic animate-pulse text-gray-400">Loading…</div>
+      <div className="text-xl italic animate-pulse text-gray-600">Loading…</div>
     </div>
   );
 
@@ -215,6 +215,7 @@ export default function LeadForm() {
     if (field.type === 'textarea') {
       return (
         <Textarea value={value} onChange={onChange} required={field.required}
+          aria-label={field.label}
           placeholder="Any additional details…"
           rows={isEmbed ? 2 : 4} className={`${inputClass} resize-none ${isEmbed ? 'text-xs py-1 px-2' : ''}`} />
       );
@@ -225,6 +226,7 @@ export default function LeadForm() {
         value={value}
         onChange={onChange}
         required={field.required}
+        aria-label={field.label}
         min={field.type === 'date' ? new Date().toISOString().split("T")[0] : undefined}
         placeholder={field.type === 'date' ? undefined : field.id === 'phone' ? '+64 21 000 0000' : field.id === 'guestCount' ? '50' : field.id === 'budget' ? '5000' : ''}
         className={inputClass}
@@ -319,7 +321,7 @@ export default function LeadForm() {
           <div className="text-center py-10 px-4">
             <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: formButtonColor }} />
             <p className="font-semibold text-gray-800 text-sm mb-1">Enquiry Received!</p>
-            <p className="text-xs text-gray-400 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
+            <p className="text-xs text-gray-600 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
           </div>
         ) : (
           <>
@@ -349,7 +351,7 @@ export default function LeadForm() {
                 <div className="space-y-3">
                   {eventFields.some(f => f.id === 'eventType') && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-400 uppercase">Event type</label>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type</label>
                       {renderEventTypeCards()}
                     </div>
                   )}
@@ -369,7 +371,7 @@ export default function LeadForm() {
                             className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded">›</button>
                         </div>
                         <div className="grid grid-cols-7 gap-0.5 text-center">
-                          {DOW.map(d => <div key={d} className="text-[9px] text-gray-400 font-semibold py-0.5">{d}</div>)}
+                          {DOW.map(d => <div key={d} className="text-[9px] text-gray-600 font-semibold py-0.5">{d}</div>)}
                           {cells.map((d, i) => {
                             if (d === null) return <div key={`e${i}`} />;
                             const cellDate = new Date(calYear, calIdx, d);
@@ -394,13 +396,13 @@ export default function LeadForm() {
                     <div className="grid grid-cols-2 gap-2">
                       {timeField && (
                         <div>
-                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{timeField.label}</label>
+                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{timeField.label}</label>
                           {renderField(timeField)}
                         </div>
                       )}
                       {guestField && (
                         <div>
-                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{guestField.label}</label>
+                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{guestField.label}</label>
                           {renderField(guestField)}
                         </div>
                       )}
@@ -419,26 +421,26 @@ export default function LeadForm() {
                   <div className="grid grid-cols-2 gap-2">
                     {detailFields.map(field => (
                       <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
-                        <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{field.label}{field.required && ' *'}</label>
+                        <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{field.required && ' *'}</label>
                         {renderField(field)}
                       </div>
                     ))}
                   </div>
                   {customFields.map(field => (
                     <div key={field.id}>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{field.label}{field.required && ' *'}</label>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{field.required && ' *'}</label>
                       {renderField(field, true)}
                     </div>
                   ))}
                   {messageField && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-400 uppercase">{messageField.label}</label>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{messageField.label}</label>
                       {renderField(messageField)}
                     </div>
                   )}
                   {sourceField && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-400 uppercase">{sourceField.label}</label>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-600 uppercase">{sourceField.label}</label>
                       {renderSourcePills()}
                     </div>
                   )}
@@ -466,7 +468,7 @@ export default function LeadForm() {
                       ['Phone', form.phone],
                     ] as [string, string | undefined][]).filter(([, v]) => v && v.trim()).map(([k, v]) => (
                       <div key={k} className="flex justify-between gap-3 px-3 py-1.5 text-xs">
-                        <span className="text-gray-400 font-semibold uppercase text-[10px] tracking-wider flex-shrink-0">{k}</span>
+                        <span className="text-gray-600 font-semibold uppercase text-[10px] tracking-wider flex-shrink-0">{k}</span>
                         <span className="text-gray-800 text-right">{v}</span>
                       </div>
                     ))}
@@ -551,9 +553,9 @@ export default function LeadForm() {
             <p className="text-gray-500 mb-2">
               {successMsg.replace('{venueName}', venueName)}
             </p>
-            <p className="text-sm text-gray-400">Please check your email for updates.</p>
+            <p className="text-sm text-gray-600">Please check your email for updates.</p>
             <div className="mt-8 pt-6 border-t border-dashed border-gray-200">
-              <div className="font-bold text-xs tracking-widest text-gray-400">POWERED BY VenueFlowHQ</div>
+              <div className="font-bold text-xs tracking-widest text-gray-600">POWERED BY VenueFlowHQ</div>
             </div>
           </div>
         ) : (
@@ -577,7 +579,7 @@ export default function LeadForm() {
                   <div className="grid grid-cols-2 gap-3">
                     {eventFields.filter(f => f.id !== 'eventType').map(field => (
                       <div key={field.id} className={field.id === 'budget' ? 'col-span-2' : ''}>
-                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-400">
+                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
                           {field.label.toUpperCase()}{field.required && ' *'}
                         </label>
                         {renderField(field)}
@@ -594,7 +596,7 @@ export default function LeadForm() {
                   <div className="grid grid-cols-2 gap-3">
                     {detailFields.map(field => (
                       <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
-                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-400">
+                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
                           {field.label.toUpperCase()}{field.required && ' *'}
                         </label>
                         {renderField(field)}
@@ -611,7 +613,7 @@ export default function LeadForm() {
                   <div className="space-y-3">
                     {customFields.map(field => (
                       <div key={field.id}>
-                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-400">
+                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
                           {field.label.toUpperCase()}{field.required && ' *'}
                         </label>
                         {renderField(field, true)}
@@ -644,7 +646,7 @@ export default function LeadForm() {
               {submitLead.isPending ? "SUBMITTING…" : "SUBMIT ENQUIRY"}
             </Button>
 
-            <p className="text-xs text-center text-gray-400">
+            <p className="text-xs text-center text-gray-600">
               By submitting this form you agree to be contacted by {venueName} regarding your event enquiry.
             </p>
           </form>
@@ -655,7 +657,7 @@ export default function LeadForm() {
         <div className="font-bold text-xs tracking-widest text-gray-500">POWERED BY VenueFlowHQ · EVENT CRM FOR NEW ZEALAND VENUES</div>
         <div className="mt-2">
           <Link href="/dashboard">
-            <span className="text-xs cursor-pointer transition-colors text-gray-600 hover:text-gray-400">Venue owner? Sign in →</span>
+            <span className="text-xs cursor-pointer transition-colors text-gray-600 hover:text-gray-600">Venue owner? Sign in →</span>
           </Link>
         </div>
       </div>

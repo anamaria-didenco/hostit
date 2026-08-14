@@ -51,7 +51,7 @@ export function AccountLoginsSection() {
       <div className="p-5 border-b border-gold/20 flex items-center justify-between">
         <div>
           <h2 className="font-bebas tracking-widest text-base text-ink">ACCOUNT LOGINS</h2>
-          <p className="font-dm text-xs text-ink/50 mt-1">
+          <p className="font-dm text-xs text-ink/70 mt-1">
             Email + password logins that share your workspace. They see and edit the same bookings, leads, and settings as you.
           </p>
         </div>
@@ -66,7 +66,7 @@ export function AccountLoginsSection() {
       {showForm && (
         <div className="p-5 border-b border-gold/20 bg-linen/40 space-y-3">
           <div>
-            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">NAME *</label>
+            <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">NAME *</label>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
@@ -75,7 +75,7 @@ export function AccountLoginsSection() {
             />
           </div>
           <div>
-            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">EMAIL *</label>
+            <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">EMAIL *</label>
             <input
               type="email"
               value={email}
@@ -86,7 +86,7 @@ export function AccountLoginsSection() {
             />
           </div>
           <div>
-            <label className="font-bebas tracking-widest text-[10px] text-ink/40 block mb-1">PASSWORD * (MIN 8 CHARS)</label>
+            <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">PASSWORD * (MIN 8 CHARS)</label>
             <input
               type="password"
               value={password}
@@ -95,7 +95,7 @@ export function AccountLoginsSection() {
               autoComplete="new-password"
               className="w-full border border-gold/30 px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
             />
-            <p className="font-dm text-[11px] text-ink/40 mt-1">Share this with them privately. You can change it later.</p>
+            <p className="font-dm text-[11px] text-ink/65 mt-1">Share this with them privately. You can change it later.</p>
           </div>
           <div className="pt-1">
             <button
@@ -110,7 +110,7 @@ export function AccountLoginsSection() {
       )}
 
       {isLoading ? (
-        <div className="p-5 text-sm font-dm text-ink/50">Loading…</div>
+        <div className="p-5 text-sm font-dm text-ink/70">Loading…</div>
       ) : !logins || logins.length === 0 ? (
         <div className="p-8 text-center">
           <p className="font-dm text-sage text-sm">No extra logins yet. Add one so a colleague can sign in alongside you.</p>
@@ -122,9 +122,9 @@ export function AccountLoginsSection() {
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="font-dm text-sm font-semibold text-ink truncate">{login.name ?? '(no name)'}</div>
-                  <div className="font-dm text-xs text-ink/50 truncate">{login.email}</div>
+                  <div className="font-dm text-xs text-ink/70 truncate">{login.email}</div>
                   {login.lastSignedIn && (
-                    <div className="font-dm text-[11px] text-ink/40 mt-0.5">
+                    <div className="font-dm text-[11px] text-ink/65 mt-0.5">
                       Last sign in: {new Date(login.lastSignedIn).toLocaleString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </div>
                   )}

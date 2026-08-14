@@ -25,8 +25,8 @@ const EMPTY: Answers = {};
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="font-bebas tracking-widest text-[11px] text-ink/50 block mb-1">{label}</label>
-      {hint && <p className="font-dm text-xs text-ink/40 mb-1.5">{hint}</p>}
+      <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">{label}</label>
+      {hint && <p className="font-dm text-xs text-ink/65 mb-1.5">{hint}</p>}
       {children}
     </div>
   );
@@ -97,8 +97,8 @@ export default function WeddingChecklist() {
     return (
       <div className="min-h-screen bg-linen flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-bebas tracking-widest text-2xl text-ink/40">LINK NOT FOUND</p>
-          <p className="font-dm text-sm text-ink/30 mt-2">This link may be invalid — please check with your venue.</p>
+          <p className="font-bebas tracking-widest text-2xl text-ink/65">LINK NOT FOUND</p>
+          <p className="font-dm text-sm text-ink/65 mt-2">This link may be invalid — please check with your venue.</p>
         </div>
       </div>
     );
@@ -117,10 +117,10 @@ export default function WeddingChecklist() {
           <h1 className="font-serif text-3xl font-semibold text-ink">
             {data.coupleNames ? `${data.coupleNames}'s` : "Your"} Wedding Checklist
           </h1>
-          <p className="font-dm text-sm text-ink/50 mt-1.5">
+          <p className="font-dm text-sm text-ink/70 mt-1.5">
             {data.eventTitle}{eventDateLabel ? ` · ${eventDateLabel}` : ""}
           </p>
-          <p className="font-dm text-xs text-ink/40 mt-3 max-w-sm mx-auto leading-relaxed">
+          <p className="font-dm text-xs text-ink/65 mt-3 max-w-sm mx-auto leading-relaxed">
             A few details to help your venue get everything right on the day. Fill in what you can — it saves automatically as you go, and you can always come back to this link.
           </p>
         </div>
@@ -174,7 +174,7 @@ export default function WeddingChecklist() {
           {/* Dietary & Allergies */}
           <div className="p-5 space-y-3">
             <div className="font-bebas tracking-widest text-xs text-forest">DIETARY &amp; ALLERGIES</div>
-            <p className="font-dm text-xs text-ink/40">Please list every guest requirement, especially allergies — this goes straight to the kitchen.</p>
+            <p className="font-dm text-xs text-ink/65">Please list every guest requirement, especially allergies — this goes straight to the kitchen.</p>
             <div className="space-y-2">
               {dietaries.map((d, i) => (
                 <div key={i} className="flex items-start gap-2 bg-linen/60 border border-gold/20 rounded-sm p-2.5">
@@ -202,7 +202,7 @@ export default function WeddingChecklist() {
                   />
                   <button
                     onClick={() => saveDietaries(dietaries.filter((_, j) => j !== i))}
-                    className="text-ink/30 hover:text-red-600 flex-shrink-0 p-1"
+                    className="text-ink/65 hover:text-red-600 flex-shrink-0 p-1"
                     title="Remove"
                   >
                     <X className="w-4 h-4" />
@@ -221,7 +221,7 @@ export default function WeddingChecklist() {
           {/* Contact */}
           <div className="p-5 space-y-4">
             <div className="font-bebas tracking-widest text-xs text-forest">DAY-OF CONTACT</div>
-            <p className="font-dm text-xs text-ink/40">Someone the venue can reach if they can't get hold of you on the day.</p>
+            <p className="font-dm text-xs text-ink/65">Someone the venue can reach if they can't get hold of you on the day.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Name">
                 <input className={inputCls} value={answers.dayOfContactName ?? ""} onChange={e => set("dayOfContactName", e.target.value)} onBlur={() => saveField("dayOfContactName")} />
