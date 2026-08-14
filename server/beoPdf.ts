@@ -613,7 +613,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const showDrinkPricesFlag = (rsDrinks as any)?.showDrinkPrices;
     const showDrinkPrice = showDrinkPricesFlag === undefined ? showItemPrice : showDrinkPricesFlag === true;
 
-    const escHtml = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const escHtml = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
     // Drinks source of truth: if the operator built a drinks list on the
     // dedicated DRINKS tab (selectedDrinks / customDrinks), render THOSE and

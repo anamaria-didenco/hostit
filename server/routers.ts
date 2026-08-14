@@ -110,14 +110,21 @@ export const appRouter = router({
         // internal field before returning (keeps the response shape so the
         // owner's own settings page — which reads the full object as "self" —
         // still type-checks). staffEmails is PII and was previously exposed.
-        const isOwnerSelf = ctx.user?.id === id;
-        if (!isOwnerSelf) {
+        // Only the real venue owner login receives the full row with secrets.
+        // Two cases must be stripped:
+        //  - a stranger fetching an arbitrary ownerId (not self), and
+        //  - a STAFF/TEAM-LINK session, which runs under the owner's id (so it
+        //    looks like "self") but must never be handed stored SMTP/NBI
+        //    credentials or internal config.
+        // Use the canonical VENUE_SECRET_FIELDS list so this can't drift out of
+        // sync with the sibling public endpoints (previously it omitted
+        // internalName / emailSignatures / nbiServiceMappings — a cross-tenant
+        // info leak).
+        const isRealOwner = ctx.user?.id === id && !ctx.isTeamMember;
+        if (!isRealOwner) {
           const safe: any = { ...vs };
-          for (const k of [
-            "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFromEmail", "smtpFromName", "smtpSecure",
-            "notificationEmail", "emailSignature", "staffEmails", "automatedTaskRules",
-            "nbiApiKey", "nbiAccountId", "nbiVenueId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret",
-          ]) safe[k] = null;
+          for (const k of VENUE_SECRET_FIELDS) safe[k] = null;
+          safe.staffEmails = null; // PII — not needed by non-owner callers
           return safe;
         }
         return vs;
@@ -598,6 +605,11 @@ export const appRouter = router({
                   })()
                 : null;
 
+              // Escape every attacker-controlled value before interpolating it
+              // into the notification email HTML. `input.*` comes straight from
+              // the public enquiry form, and the on-day rows can contain prior
+              // public enquiry text.
+              const { escapeHtml: esc } = await import('./sanitizeHtml');
               // Check for existing bookings/leads on the same event date
               let existingOnDayHtml = '';
               if (input.eventDate) {
@@ -638,20 +650,20 @@ export const appRouter = router({
                   const bookingRows = existingBookings
                     .filter(b => b.status !== 'cancelled')
                     .map(b => `<tr style="border-bottom:1px solid #f3f4f6">
-                      <td style="padding:5px 8px;font-size:13px">${b.firstName} ${b.lastName ?? ''}</td>
-                      <td style="padding:5px 8px;font-size:13px">${b.eventType ?? '—'}</td>
-                      <td style="padding:5px 8px;font-size:13px">${b.spaceName ? `<span style="color:#6b7280">${b.spaceName}</span>` : '—'}</td>
-                      <td style="padding:5px 8px;font-size:13px">${b.guestCount ?? '—'} guests</td>
-                      <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[b.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${statusLabel(b.status)}</span></td>
+                      <td style="padding:5px 8px;font-size:13px">${esc(b.firstName)} ${esc(b.lastName ?? '')}</td>
+                      <td style="padding:5px 8px;font-size:13px">${esc(b.eventType ?? '—')}</td>
+                      <td style="padding:5px 8px;font-size:13px">${b.spaceName ? `<span style="color:#6b7280">${esc(b.spaceName)}</span>` : '—'}</td>
+                      <td style="padding:5px 8px;font-size:13px">${esc(b.guestCount ?? '—')} guests</td>
+                      <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[b.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${esc(statusLabel(b.status))}</span></td>
                     </tr>`);
                   const leadRows = existingLeads
                     .filter((l: any) => l.id !== lead?.id && !['lost','cancelled'].includes(l.status))
                     .map((l: any) => `<tr style="border-bottom:1px solid #f3f4f6">
-                      <td style="padding:5px 8px;font-size:13px">${l.firstName} ${l.lastName ?? ''}</td>
-                      <td style="padding:5px 8px;font-size:13px">${l.eventType ?? '—'}</td>
-                      <td style="padding:5px 8px;font-size:13px">${(l as any).spaceName ? `<span style="color:#6b7280">${(l as any).spaceName}</span>` : '—'}</td>
-                      <td style="padding:5px 8px;font-size:13px">${l.guestCount ?? '—'} guests</td>
-                      <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[l.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${statusLabel(l.status)} (enquiry)</span></td>
+                      <td style="padding:5px 8px;font-size:13px">${esc(l.firstName)} ${esc(l.lastName ?? '')}</td>
+                      <td style="padding:5px 8px;font-size:13px">${esc(l.eventType ?? '—')}</td>
+                      <td style="padding:5px 8px;font-size:13px">${(l as any).spaceName ? `<span style="color:#6b7280">${esc((l as any).spaceName)}</span>` : '—'}</td>
+                      <td style="padding:5px 8px;font-size:13px">${esc(l.guestCount ?? '—')} guests</td>
+                      <td style="padding:5px 8px;font-size:12px"><span style="background:${statusColor[l.status] ?? '#6b7280'};color:#fff;padding:2px 7px;border-radius:3px;font-weight:600">${esc(statusLabel(l.status))} (enquiry)</span></td>
                     </tr>`);
                   const allRows = [...bookingRows, ...leadRows];
                   if (allRows.length > 0) {
@@ -676,20 +688,20 @@ export const appRouter = router({
               }
 
               const rows = [
-                input.email && `<tr><td style="padding:4px 0;color:#666;font-size:14px;width:130px">Email</td><td style="padding:4px 0;font-size:14px"><a href="mailto:${input.email}">${input.email}</a></td></tr>`,
-                input.phone && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Phone</td><td style="padding:4px 0;font-size:14px">${input.phone}</td></tr>`,
-                input.company && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Company</td><td style="padding:4px 0;font-size:14px">${input.company}</td></tr>`,
-                input.eventType && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event type</td><td style="padding:4px 0;font-size:14px">${input.eventType}</td></tr>`,
-                formattedEventDate && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event date</td><td style="padding:4px 0;font-size:14px;font-weight:bold;color:#2D4A3E">${formattedEventDate}</td></tr>`,
-                input.guestCount && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Guests</td><td style="padding:4px 0;font-size:14px">${input.guestCount}</td></tr>`,
-                input.budget && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px">$${input.budget} NZD</td></tr>`,
-                input.message && `<tr><td style="padding:4px 0;color:#666;font-size:14px;vertical-align:top">Message</td><td style="padding:4px 0;font-size:14px">${input.message}</td></tr>`,
+                input.email && `<tr><td style="padding:4px 0;color:#666;font-size:14px;width:130px">Email</td><td style="padding:4px 0;font-size:14px"><a href="mailto:${esc(input.email)}">${esc(input.email)}</a></td></tr>`,
+                input.phone && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Phone</td><td style="padding:4px 0;font-size:14px">${esc(input.phone)}</td></tr>`,
+                input.company && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Company</td><td style="padding:4px 0;font-size:14px">${esc(input.company)}</td></tr>`,
+                input.eventType && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event type</td><td style="padding:4px 0;font-size:14px">${esc(input.eventType)}</td></tr>`,
+                formattedEventDate && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event date</td><td style="padding:4px 0;font-size:14px;font-weight:bold;color:#2D4A3E">${esc(formattedEventDate)}</td></tr>`,
+                input.guestCount && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Guests</td><td style="padding:4px 0;font-size:14px">${esc(input.guestCount)}</td></tr>`,
+                input.budget && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px">$${esc(input.budget)} NZD</td></tr>`,
+                input.message && `<tr><td style="padding:4px 0;color:#666;font-size:14px;vertical-align:top">Message</td><td style="padding:4px 0;font-size:14px">${esc(input.message)}</td></tr>`,
               ].filter(Boolean).join('');
               const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto">
   <div style="background:#6b98e7;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
     <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.8">VenueFlowHQ</div>
     <div style="font-size:22px;font-weight:bold;margin-top:4px">New Enquiry Received</div>
-    <div style="font-size:15px;opacity:0.9;margin-top:2px">${clientName}</div>
+    <div style="font-size:15px;opacity:0.9;margin-top:2px">${esc(clientName)}</div>
   </div>
   <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
     <table style="width:100%;border-collapse:collapse">${rows}</table>
@@ -3272,12 +3284,16 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
         const { checklistTemplates, checklistInstances } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
+        const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const [template] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, input.templateId)).limit(1);
+        // Scope the template read to the caller's own tenant — without the
+        // ownerId filter any authenticated user could copy another venue's
+        // template by guessing numeric IDs (IDOR).
+        const [template] = await db.select().from(checklistTemplates)
+          .where(and(eq(checklistTemplates.id, input.templateId), eq(checklistTemplates.ownerId, ctx.user.id))).limit(1);
         if (!template) throw new Error('Template not found');
-        const items = (template.items as any[]).map(item => ({ ...item, checked: false }));
+        const items = ((template.items as any[]) ?? []).map(item => ({ ...item, checked: false }));
         const [result] = await db.insert(checklistInstances).values({ templateId: input.templateId, bookingId: input.bookingId, ownerId: ctx.user.id, name: input.name ?? template.name, items }).returning({ id: checklistInstances.id });
         return { id: result.id };
       }),
@@ -3373,7 +3389,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!db) throw new Error('DB not available');
         const [instance] = await db.select().from(checklistInstances).where(eq(checklistInstances.shareToken, input.token)).limit(1);
         if (!instance) throw new Error('Checklist not found');
-        const items = (instance.items as any[]).map(item =>
+        const items = ((instance.items as any[]) ?? []).map(item =>
           item.id === input.itemId
             ? { ...item, checked: input.checked, checkedAt: input.checked ? new Date().toISOString() : undefined }
             : item
@@ -3552,7 +3568,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         kitchenNotes: z.string().optional().nullable(),
         proposalId: z.number().nullable().optional(),
         floorPlanId: z.number().nullable().optional(),
-        fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional(), qty: z.boolean().optional() }).optional(),
+        fnbColumns: z.object({ dietary: z.boolean().optional(), serviceTime: z.boolean().optional(), staff: z.boolean().optional(), notes: z.boolean().optional(), qty: z.boolean().optional(), price: z.boolean().optional() }).optional(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).nullable().optional(),
         drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string(), z.string()).optional(), drinkPrices: z.record(z.string(), z.number()).optional(), showDrinkPrices: z.boolean().optional() }).nullable().optional(),
         gstInclusive: z.boolean().optional(),
@@ -4204,7 +4220,25 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         notes: z.string().optional(),
         origin: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // Anti-spam: 5 submissions / 10 min per (IP, ownerId), mirroring
+        // leads.submit. This public mutation creates a lead AND emails the
+        // owner, so it needs the same flood protection.
+        {
+          const ip = (ctx as any)?.req?.ip || "unknown";
+          const key = `${ip}::${input.ownerId}`;
+          const now = Date.now();
+          const WINDOW_MS = 10 * 60 * 1000, MAX = 5;
+          const g: any = globalThis as any;
+          if (!g.__expressBookRate) g.__expressBookRate = new Map<string, { count: number; resetAt: number }>();
+          const bucket: Map<string, { count: number; resetAt: number }> = g.__expressBookRate;
+          if (bucket.size > 5000) { for (const [k, v] of bucket) if (v.resetAt < now) bucket.delete(k); }
+          if (process.env.NODE_ENV !== 'test') {
+            const entry = bucket.get(key);
+            if (!entry || entry.resetAt < now) bucket.set(key, { count: 1, resetAt: now + WINDOW_MS });
+            else { entry.count += 1; if (entry.count > MAX) throw new Error("Too many submissions. Please wait a few minutes and try again."); }
+          }
+        }
         const { getDb } = await import('./db');
         const { leads } = await import('../drizzle/schema');
         const db = await getDb();
