@@ -2897,7 +2897,7 @@ export default function RunsheetBuilder() {
                               <div key={idx} className="border border-gold/20 bg-linen/40 p-3 group relative">
                                 <button
                                   onClick={() => removeDietary(idx)}
-                                  className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors no-print opacity-0 group-hover:opacity-100"
+                                  className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors no-print opacity-100 md:opacity-0 md:group-hover:opacity-100"
                                 >
                                   <X className="w-3.5 h-3.5" />
                                 </button>
@@ -3264,7 +3264,7 @@ export default function RunsheetBuilder() {
 
 
                         {/* Actions */}
-                        <div className="flex items-center gap-0.5 px-2 py-3 no-print opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-0.5 px-2 py-3 no-print opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={() => moveItem(idx, 'up')}
                             disabled={idx === 0}
@@ -3549,7 +3549,7 @@ export default function RunsheetBuilder() {
                       <div key={idx} className="border border-gold/20 bg-linen/40 p-3 group relative">
                         <button
                           onClick={() => removeDietary(idx)}
-                          className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                          className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -4054,7 +4054,7 @@ export default function RunsheetBuilder() {
                             <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="flex-none text-ink/65 hover:text-forest transition-colors" title={isExpanded ? 'Collapse' : 'Expand details'}>
                               <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                             </button>
-                            <button onClick={() => removeFnbItem(originalIdx)} className="flex-none text-ink/25 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Remove item"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => removeFnbItem(originalIdx)} className="flex-none text-ink/25 hover:text-red-500 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100" title="Remove item"><Trash2 className="w-4 h-4" /></button>
                           </div>
                           {/* PRINT — full static column row so the printed runsheet
                               keeps its structured table (honours the column toggles) */}
@@ -4583,7 +4583,7 @@ export default function RunsheetBuilder() {
                     <button
                       onClick={() => { setPendingChecklistPhotoId(item.id); checklistPhotoInputRef.current?.click(); }}
                       disabled={checklistPhotoUploading === item.id}
-                      className={`flex-shrink-0 transition-all ${item.imageUrl ? 'text-forest hover:text-forest/70' : 'opacity-0 group-hover:opacity-100 text-ink/65 hover:text-forest'}`}
+                      className={`flex-shrink-0 transition-all ${item.imageUrl ? 'text-forest hover:text-forest/70' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/65 hover:text-forest'}`}
                       title={item.imageUrl ? 'Replace reference photo' : 'Add a reference photo for staff'}
                     >
                       {checklistPhotoUploading === item.id
@@ -4592,7 +4592,7 @@ export default function RunsheetBuilder() {
                     </button>
                     <button
                       onClick={() => removeChecklistItem(item.id)}
-                      className="opacity-0 group-hover:opacity-100 text-ink/65 hover:text-red-500 transition-all flex-shrink-0"
+                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/65 hover:text-red-500 transition-all flex-shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -5124,7 +5124,7 @@ export default function RunsheetBuilder() {
                   <span className="font-dm text-[11px] text-ink/65 flex-shrink-0">{(att.size / 1024).toFixed(0)} KB</span>
                   <button
                     onClick={() => { if (confirm(`Remove ${att.name}?`)) removeAttachmentMutation.mutate({ runsheetId: sheetId, attachmentId: att.id }); }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
+                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
                     title="Remove"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -5294,7 +5294,7 @@ export default function RunsheetBuilder() {
                       <td className="px-2 py-2">
                         <button
                           onClick={() => setCostItems(prev => prev.filter((_, i) => i !== idx))}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
+                          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -5697,7 +5697,7 @@ export default function RunsheetBuilder() {
                           {/* DELETE */}
                           <div className="col-span-1 flex justify-end">
                             <button onClick={() => setEditedParsedTimeline(prev => prev.filter((_, j) => j !== i))}
-                              className="opacity-0 group-hover:opacity-100 text-ink/65 hover:text-red-500 transition-all p-0.5" title="Remove">
+                              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/65 hover:text-red-500 transition-all p-0.5" title="Remove">
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
@@ -6361,7 +6361,7 @@ export default function RunsheetBuilder() {
                           </label>
                           <button
                             onClick={() => { if (confirm(`Remove ${s.email} from the staff list?`)) removeStaffEmailMutation.mutate({ id: s.id }); }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
+                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
                             title="Remove from list"
                           >
                             <Trash2 className="w-3 h-3" />

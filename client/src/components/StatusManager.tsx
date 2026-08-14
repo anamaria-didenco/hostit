@@ -213,7 +213,7 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
                 ) : (
                   <>
                     <span className="flex-1 text-xs text-gray-400 font-mono">{s.key}</span>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       <button onClick={() => startEdit(s)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
