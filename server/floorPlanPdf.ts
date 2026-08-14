@@ -198,6 +198,7 @@ export async function handleFloorPlanPdf(req: Request, res: Response) {
   const { token } = req.params as { token: string };
   if (!token) return res.status(400).json({ error: "Missing token" });
 
+  let browser: any = null;
   try {
     const db = await getDb();
     if (!db) return res.status(503).json({ error: "Database unavailable" });
@@ -208,7 +209,7 @@ export async function handleFloorPlanPdf(req: Request, res: Response) {
     const html = buildHtml(plan);
 
     const puppeteer = await import("puppeteer");
-    const browser = await puppeteer.default.launch({
+    browser = await puppeteer.default.launch({
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
       headless: true,
     });
@@ -221,6 +222,7 @@ export async function handleFloorPlanPdf(req: Request, res: Response) {
       printBackground: true,
     });
     await browser.close();
+    browser = null;
 
     const safeName = (plan.name ?? "floor-plan").replace(/[^a-z0-9]/gi, "_").toLowerCase();
     res.setHeader("Content-Type", "application/pdf");
@@ -230,5 +232,8 @@ export async function handleFloorPlanPdf(req: Request, res: Response) {
   } catch (err) {
     console.error("[FloorPlanPDF] Error:", err);
     res.status(500).json({ error: "Failed to generate PDF" });
+  } finally {
+    // Never leak a Chromium process if setContent/page.pdf threw.
+    if (browser) await browser.close().catch(() => {});
   }
 }

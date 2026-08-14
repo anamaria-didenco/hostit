@@ -400,7 +400,7 @@ export const runsheets = pgTable("runsheets", {
   proposalId: integer("proposalId"),
   floorPlanId: integer("floorPlanId"),
   costItems: json("costItems").$type<{ _id: string; label: string; qty: number; unitPrice: number; category?: string }[]>(),
-  fnbColumns: json("fnbColumns").$type<{ dietary?: boolean; serviceTime?: boolean; staff?: boolean; notes?: boolean; qty?: boolean }>(),
+  fnbColumns: json("fnbColumns").$type<{ dietary?: boolean; serviceTime?: boolean; staff?: boolean; notes?: boolean; qty?: boolean; price?: boolean }>(),
   drinksData: json("drinksData").$type<{ barOption: string; tabAmount?: number; selectedDrinks: string[]; customDrinks: { name: string; description?: string; price?: number }[]; barNotes?: string; drinkTypes?: Record<string, string>; drinkPrices?: Record<string, number>; showDrinkPrices?: boolean }>(),
   gstInclusive: boolean("gstInclusive").default(false),
   paymentNotes: text("paymentNotes"),
