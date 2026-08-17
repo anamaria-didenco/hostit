@@ -6,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend
 } from "recharts";
-import { FileText, TrendingUp, DollarSign, Users, Calendar, ArrowUpRight, Settings, Download } from "lucide-react";
+import { FileText, TrendingUp, DollarSign, Users, Calendar, ArrowUpRight, Settings, Download, AlertCircle } from "lucide-react";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -28,8 +28,9 @@ export default function Reports() {
   const currentYear = new Date().getFullYear();
   const { data: revenueData } = trpc.analytics.revenueByMonth.useQuery({ year: currentYear });
   const { data: sourceData } = trpc.analytics.sourceBreakdown.useQuery();
-  const { data: allLeads } = trpc.leads.list.useQuery({});
-  const { data: allBookings } = trpc.bookings.list.useQuery();
+  const { data: allLeads, isError: leadsError, refetch: refetchLeads } = trpc.leads.list.useQuery({});
+  const { data: allBookings, isError: bookingsError, refetch: refetchBookings } = trpc.bookings.list.useQuery();
+  const primaryError = leadsError || bookingsError;
 
   const confirmedBookings = (allBookings ?? []).filter((b: any) => b.status === "confirmed" || b.status === "tentative" || b.status === "finished");
   const totalRevenue = (allBookings ?? []).reduce((sum: number, b: any) => sum + (Number(b.totalValue) || 0), 0);
@@ -67,6 +68,22 @@ export default function Reports() {
       month: new Date(key + "-01").toLocaleDateString("en-NZ", { month: "short", year: "2-digit" }),
       leads: count,
     }));
+
+  if (primaryError) return (
+    <div className="p-6">
+      <h1 className="font-cormorant text-3xl font-semibold text-ink">Reports</h1>
+      <div className="mt-8 text-center py-16">
+        <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
+        <p className="font-dm text-ink text-sm mb-3">Couldn't load reports.</p>
+        <button
+          onClick={() => { refetchLeads(); refetchBookings(); }}
+          className="font-bebas tracking-widest text-xs px-4 py-2 rounded-md bg-forest text-cream hover:opacity-90"
+        >
+          RETRY
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-6">

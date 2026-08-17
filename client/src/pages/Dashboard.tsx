@@ -20,6 +20,8 @@ import { trpc } from "@/lib/trpc";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
 import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { Spinner } from "@/components/ui/spinner";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
@@ -127,7 +129,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
   return (
     <div className="dante-card shadow-sm">
       <div className="flex items-center justify-between p-4 border-b border-gold/15">
-        <button onClick={onPrev} className="p-1 hover:text-gold transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+        <button aria-label="Previous month" onClick={onPrev} className="p-1 hover:text-gold transition-colors"><ChevronLeft className="w-4 h-4" /></button>
         <div className="flex items-center gap-2">
           <h2 className="font-cormorant text-lg font-semibold text-ink">{MONTHS[month]} {year}</h2>
           <button
@@ -138,7 +140,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
             <Settings className="w-3.5 h-3.5" />
           </button>
         </div>
-        <button onClick={onNext} className="p-1 hover:text-gold transition-colors"><ChevronRight className="w-4 h-4" /></button>
+        <button aria-label="Next month" onClick={onNext} className="p-1 hover:text-gold transition-colors"><ChevronRight className="w-4 h-4" /></button>
       </div>
 
       {/* Settings panel */}
@@ -1070,7 +1072,7 @@ export default function Dashboard() {
   const utils = trpc.useUtils();
 
   const { data: stats } = trpc.dashboard.stats.useQuery(undefined, { enabled: !!user?.id });
-  const { data: allLeads, refetch: refetchLeads } = trpc.leads.list.useQuery(
+  const { data: allLeads, refetch: refetchLeads, isError: leadsError } = trpc.leads.list.useQuery(
     // Server filters by a single status; multi-select filters fan out client-side.
     { status: leadStatusFilter.length === 1 ? leadStatusFilter[0] : undefined },
     { enabled: !!user?.id, refetchInterval: 30_000 }
@@ -1250,7 +1252,7 @@ export default function Dashboard() {
   }, [pipelineStages, kanbanStagePrefs]);
   const { data: contacts, refetch: refetchContacts } = trpc.contacts.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
-  const { data: monthBookings } = trpc.bookings.byMonth.useQuery(
+  const { data: monthBookings, isError: monthBookingsError, refetch: refetchMonthBookings } = trpc.bookings.byMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
   );
@@ -1836,6 +1838,18 @@ export default function Dashboard() {
   const [weeklyNewStaffName, setWeeklyNewStaffName] = React.useState('');
   const [weeklyNewStaffEmail, setWeeklyNewStaffEmail] = React.useState('');
 
+  // Escape-to-close for the custom modal/drawer overlays. Each mirrors the
+  // setter the modal's own close button calls; the hook only binds while open.
+  useEscapeKey(showEmailModal, () => setShowEmailModal(false));
+  useEscapeKey(showBulkDeleteConfirm, () => setShowBulkDeleteConfirm(false));
+  useEscapeKey(showWeeklyModal, () => {
+    setShowWeeklyModal(false);
+    setWeeklyEventsData(null);
+    setWeeklySubject('');
+    setWeeklyBody('');
+    setWeeklyExtraEmails('');
+  });
+
   // ── Saved BEO / briefing email recipients (Settings → BEO Email Recipients) ──
   const staffEmailList = trpc.staffEmails.list.useQuery(undefined, { enabled: settingsSubTab === "staff-emails" });
   const [newStaffName, setNewStaffName] = React.useState("");
@@ -2391,7 +2405,7 @@ export default function Dashboard() {
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="font-cormorant text-3xl text-forest/30 animate-pulse italic">Loading...</div>
+      <Spinner className="size-8 text-forest/40" />
     </div>
   );
 
@@ -2426,8 +2440,8 @@ export default function Dashboard() {
   const monthCalendarCard = (
                   <div className="lg:col-span-2 dante-card overflow-hidden flex flex-col">
                   <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0 relative">
-                    <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
-                    <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
+                    <button aria-label="Previous month" onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
+                    <button aria-label="Next month" onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
                     <div className="flex-1 min-w-0 relative">
                       <button
                         type="button"
@@ -2444,10 +2458,10 @@ export default function Dashboard() {
                           <div className="fixed inset-0 z-40" onClick={() => setShowJumpDate(false)} />
                           <div role="dialog" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
                             <div className="flex items-center justify-between mb-3">
-                              <button onClick={() => setCalDate(new Date(year - 1, month, 1))}
+                              <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
                                 className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
                               <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
-                              <button onClick={() => setCalDate(new Date(year + 1, month, 1))}
+                              <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
                                 className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
                             </div>
                             <div className="grid grid-cols-3 gap-1 mb-3">
@@ -3229,7 +3243,18 @@ export default function Dashboard() {
                 )}
                 {/* ── LIST VIEW sidebar ─────────────────────────────── */}
                 {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:flex md:flex-col md:w-[360px] lg:w-[420px] flex-shrink-0" : "flex-1"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
-                  {filteredLeads.length === 0 ? (
+                  {leadsError ? (
+                    <div className="p-8 text-center">
+                      <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
+                      <p className="font-dm text-ink text-sm mb-3">Couldn't load enquiries.</p>
+                      <button
+                        onClick={() => refetchLeads()}
+                        className="font-bebas tracking-widest text-xs px-4 py-2 rounded-md bg-forest text-cream hover:opacity-90"
+                      >
+                        RETRY
+                      </button>
+                    </div>
+                  ) : filteredLeads.length === 0 ? (
                     <div className="p-8 text-center">
                       <MessageSquare className="w-8 h-8 text-sage/30 mx-auto mb-2" />
                       <p className="font-dm text-sage text-sm">No leads found</p>
@@ -3823,7 +3848,7 @@ export default function Dashboard() {
           {/* ── EMAIL COMPOSE MODAL ───────────────────────────────────────── */}
           {showEmailModal && selectedLead && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-              <div className="bg-cream border-2 border-forest w-full max-w-lg shadow-2xl">
+              <div role="dialog" aria-modal="true" className="bg-cream border-2 border-forest w-full max-w-lg shadow-2xl">
                 <div className="bg-forest text-cream px-6 py-4 flex items-center justify-between">
                   <div>
                     <div className="font-bebas tracking-widest text-sm">COMPOSE EMAIL</div>
@@ -3937,7 +3962,7 @@ export default function Dashboard() {
                         {emailAttachments.map((att, i) => (
                           <div key={i} className="flex items-center justify-between bg-linen border border-gold/20 px-3 py-1.5 text-xs font-dm">
                             <span className="truncate text-ink/70">{att.filename}</span>
-                            <button onClick={() => setEmailAttachments(prev => prev.filter((_, j) => j !== i))} className="text-sage hover:text-tomato ml-2 flex-shrink-0 transition-colors">
+                            <button aria-label="Remove attachment" onClick={() => setEmailAttachments(prev => prev.filter((_, j) => j !== i))} className="text-sage hover:text-tomato ml-2 flex-shrink-0 transition-colors">
                               <X className="w-3 h-3" />
                             </button>
                           </div>
@@ -3993,6 +4018,8 @@ export default function Dashboard() {
                       <div className="space-y-2.5">
                         {stageLeads.map((lead: any) => (
                           <div key={lead.id} onClick={() => { selectLead(lead); setTab("enquiries"); }}
+                            role="button" tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectLead(lead); setTab("enquiries"); } }}
                             className="dante-card p-3 cursor-grab flex flex-col gap-2 hover:shadow-md hover:border-foreground/30 transition-all">
                             <div className="font-serif font-semibold text-base text-foreground leading-tight tracking-[-0.01em]">{lead.firstName} {lead.lastName}</div>
                             <div className="font-sans text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">{lead.eventType || "Event"}</div>
@@ -4025,6 +4052,18 @@ export default function Dashboard() {
           {/* ── CALENDAR ─────────────────────────────────────────────────────── */}
           {tab === "calendar" && (
             <div className="flex flex-col h-full overflow-hidden">
+              {monthBookingsError && (
+                <div className="flex items-center justify-center gap-3 px-4 py-2 bg-red-50 border-b border-red-200">
+                  <AlertCircle className="w-4 h-4 text-red-500/80 flex-shrink-0" />
+                  <span className="font-dm text-xs text-ink">Couldn't load calendar events.</span>
+                  <button
+                    onClick={() => refetchMonthBookings()}
+                    className="font-bebas tracking-widest text-[11px] px-3 py-1 rounded-md bg-forest text-cream hover:opacity-90"
+                  >
+                    RETRY
+                  </button>
+                </div>
+              )}
               {/* Calendar Toolbar */}
               <div className="border-b border-gold/15 bg-cream flex-shrink-0">
                 {/* Row 1 (mobile): Title + Add. Desktop: everything in one row */}
@@ -4066,10 +4105,10 @@ export default function Dashboard() {
                         <div id="cal-jump-popover" role="dialog" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
                           {/* Year stepper */}
                           <div className="flex items-center justify-between mb-3">
-                            <button onClick={() => setCalDate(new Date(year - 1, month, 1))}
+                            <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
                               className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
                             <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
-                            <button onClick={() => setCalDate(new Date(year + 1, month, 1))}
+                            <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
                               className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
                           </div>
                           {/* Month grid */}
@@ -4897,11 +4936,11 @@ export default function Dashboard() {
 
               <div className="dante-card p-6 max-w-2xl hidden">
                 <div className="flex items-center justify-between mb-4">
-                  <button onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-2 hover:bg-linen transition-colors text-forest">
+                  <button aria-label="Previous month" onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-2 hover:bg-linen transition-colors text-forest">
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <div className="font-cormorant text-2xl font-semibold text-ink">{MONTHS[month]} {year}</div>
-                  <button onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-2 hover:bg-linen transition-colors text-forest">
+                  <button aria-label="Next month" onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-2 hover:bg-linen transition-colors text-forest">
                     <ChevronRight className="w-5 h-5" />
                   </button>
                 </div>
@@ -5299,7 +5338,7 @@ export default function Dashboard() {
                               (e.target as HTMLImageElement).style.display = 'none';
                               toast.error("Banner image could not be loaded. Please upload a new image.");
                             }} />
-                          <button type="button" onClick={() => {
+                          <button type="button" aria-label="Remove banner image" onClick={() => {
                             setSettingsForm((f: any) => ({ ...f, bannerImageUrl: "" }));
                             updateSettings.mutate({ bannerImageUrl: "" });
                           }}
@@ -5783,7 +5822,7 @@ export default function Dashboard() {
                           <div className="font-bebas tracking-widest text-xs text-forest mt-0.5">{t.subject}</div>
                           <div className="font-dm text-xs text-ink/70 mt-1 line-clamp-2">{t.body}</div>
                         </div>
-                        <button onClick={() => deleteTemplate.mutate({ id: t.id })} className="text-sage/40 hover:text-tomato transition-colors flex-shrink-0 mt-1">
+                        <button aria-label="Delete template" onClick={() => deleteTemplate.mutate({ id: t.id })} className="text-sage/40 hover:text-tomato transition-colors flex-shrink-0 mt-1">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -5913,7 +5952,7 @@ export default function Dashboard() {
                                 {items.length > 5 && <div className="font-dm text-xs text-sage">+{items.length - 5} more items...</div>}
                               </div>
                             </div>
-                            <button onClick={() => { if (confirm('Delete this template?')) deleteChecklistTemplate.mutate({ id: t.id }); }}
+                            <button aria-label="Delete template" onClick={() => { if (confirm('Delete this template?')) deleteChecklistTemplate.mutate({ id: t.id }); }}
                               className="text-sage hover:text-tomato transition-colors ml-4 flex-shrink-0">
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -6302,6 +6341,7 @@ export default function Dashboard() {
                               <GripVertical className="w-3.5 h-3.5 text-white drop-shadow" />
                             </div>
                             <button type="button"
+                              aria-label="Remove image"
                               onClick={() => {
                                 const newImgs = imgs.filter((_, j) => j !== i);
                                 setSettingsForm((f: any) => ({ ...f, formGalleryImages: JSON.stringify(newImgs) }));
@@ -6368,7 +6408,7 @@ export default function Dashboard() {
                         <div key={field.id} className={`grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm ${!field.visible ? 'opacity-50' : ''}`}>
                           {/* Visible toggle */}
                           <div className="col-span-1">
-                            <button type="button" onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, visible: !f.visible } : f) : prev)}
+                            <button type="button" aria-label="Toggle field visibility" onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, visible: !f.visible } : f) : prev)}
                               className={`${field.visible ? 'text-forest' : 'text-ink/65'} hover:opacity-80 transition-colors`}>
                               {field.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                             </button>
@@ -6376,6 +6416,7 @@ export default function Dashboard() {
                           {/* Required toggle */}
                           <div className="col-span-1">
                             <button type="button"
+                              aria-label="Toggle field required"
                               disabled={field.id === 'firstName' || field.id === 'email'}
                               onClick={() => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, required: !f.required } : f) : prev)}
                               className={`${field.required ? 'text-amber-500' : 'text-ink/20'} hover:opacity-80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed`}>
@@ -6406,6 +6447,7 @@ export default function Dashboard() {
                             </button>
                             {!field.isDefault && (
                               <button type="button"
+                                aria-label="Delete field"
                                 onClick={() => setFormFields(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
                                 className="text-ink/65 hover:text-red-500 transition-colors p-0.5">
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -6605,7 +6647,7 @@ export default function Dashboard() {
                                 ));
                               })()}
                             </select>
-                            <button onClick={() => setNbiMappings(prev => prev.filter((_, j) => j !== i))} className="col-span-1 flex justify-center text-red-400 hover:text-red-600">
+                            <button aria-label="Remove mapping" onClick={() => setNbiMappings(prev => prev.filter((_, j) => j !== i))} className="col-span-1 flex justify-center text-red-400 hover:text-red-600">
                               <X className="w-4 h-4" />
                             </button>
                           </div>
@@ -6727,7 +6769,10 @@ export default function Dashboard() {
                   </div>
 
                   {/* ── Placeholder integrations ── */}
-                  {[{name:'Google Calendar',desc:'Sync bookings to your Google Calendar automatically.',icon:'📅'},{name:'Xero',desc:'Export invoices and payments to Xero accounting.',icon:'💼'},{name:'Mailchimp',desc:'Add new contacts to your Mailchimp mailing list.',icon:'📧'},{name:'Zapier',desc:'Connect VenueFlowHQ to 5,000+ apps via Zapier webhooks.',icon:'⚡'}].map(i => (
+                  {/* Hidden until built: these cards only fire toast.info('coming soon')
+                      and read as half-finished scaffolding. Gated behind `false`
+                      so they don't render; re-enable when the integrations ship. */}
+                  {false && [{name:'Google Calendar',desc:'Sync bookings to your Google Calendar automatically.',icon:'📅'},{name:'Xero',desc:'Export invoices and payments to Xero accounting.',icon:'💼'},{name:'Mailchimp',desc:'Add new contacts to your Mailchimp mailing list.',icon:'📧'},{name:'Zapier',desc:'Connect VenueFlowHQ to 5,000+ apps via Zapier webhooks.',icon:'⚡'}].map(i => (
                     <div key={i.name} className="dante-card p-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">{i.icon}</span>
@@ -6758,6 +6803,10 @@ export default function Dashboard() {
                     </div>
                     <span className="font-bebas text-sm text-forest bg-forest/10 px-3 py-1">15%</span>
                   </div>
+                  {/* Hidden until built: custom service fees only fire
+                      toast.info('coming soon'). Gated behind `false` so the row
+                      doesn't read as half-finished; re-enable when implemented. */}
+                  {false && (
                   <div className="flex items-center justify-between py-3">
                     <div>
                       <div className="font-cormorant font-semibold text-ink">Service Fee</div>
@@ -6765,6 +6814,7 @@ export default function Dashboard() {
                     </div>
                     <button onClick={() => toast.info('Custom fees coming soon')} className="font-bebas tracking-widest text-xs px-3 py-1 border border-gold/30 text-ink hover:bg-gold/10">CONFIGURE</button>
                   </div>
+                  )}
                 </div>
               </div>
               </div>
@@ -7133,7 +7183,8 @@ export default function Dashboard() {
                         <p className="font-dm text-sm text-ink/65">No automated task rules yet. Add one to get started.</p>
                       </div>
                     ) : (
-                    <table className="w-full">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[600px]">
                       <thead>
                         <tr className="border-b border-gray-100">
                           <th className="text-left p-3 text-xs font-medium text-gray-500">Task Name</th>
@@ -7152,12 +7203,13 @@ export default function Dashboard() {
                             </td>
                             <td className="p-3 text-sm text-gray-500 capitalize">{row.priority}</td>
                             <td className="p-3 text-right">
-                              <button onClick={() => { const next = taskRules.filter((_, j) => j !== i); saveRules(next); }} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                              <button aria-label="Delete rule" onClick={() => { const next = taskRules.filter((_, j) => j !== i); saveRules(next); }} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    </div>
                     )}
                   </div>
                 </div>
@@ -7187,7 +7239,7 @@ export default function Dashboard() {
                           <td className="p-3 text-sm text-gray-700">{row.name}</td>
                           <td className="p-3 text-sm text-gray-500">{row.when}</td>
                           <td className="p-3 text-sm text-gray-500">{row.type}</td>
-                          <td className="p-3 text-right"><button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
+                          <td className="p-3 text-right"><button aria-label="Delete" className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -7203,7 +7255,7 @@ export default function Dashboard() {
                   {['Available - Pay Deposit','Available - Select Menu Items','Lead Follow Up','New Event Software Email','Not Available','Proposal Sent Follow Up'].map((name,i) => (
                     <div key={i} className="flex items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50">
                       <span className="text-sm text-gray-700">{name}</span>
-                      <button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                      <button aria-label="Delete" className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   ))}
                 </div>
@@ -7241,7 +7293,7 @@ export default function Dashboard() {
                   {['Anniversary','Birthday','Catering','Corporate','Engagement','Graduation','Happy Hour','Holiday Party','Large Group','Non Profit','Rehearsal Dinner','Wedding'].map((type,i) => (
                     <div key={i} className="flex items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50">
                       <span className="text-sm text-gray-700">{type}</span>
-                      <button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                      <button aria-label="Delete" className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   ))}
                 </div>
@@ -7258,7 +7310,8 @@ export default function Dashboard() {
                     <h2 className="font-semibold text-gray-800">Automated Reminder Emails</h2>
                     <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
                   </div>
-                  <table className="w-full">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[600px]">
                     <thead><tr className="border-b border-gray-100">
                       <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
                       <th className="text-left p-3 text-xs font-medium text-gray-500">Send When</th>
@@ -7274,6 +7327,7 @@ export default function Dashboard() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
                 {/* System Emails */}
                 <div className="bg-white border border-gray-200 rounded">
@@ -7293,14 +7347,15 @@ export default function Dashboard() {
                   {['Available - Pay Deposit','Available - Select Menu Items','Lead Follow Up','New Event Software Email','Not Available','Proposal Sent Follow Up'].map((name,i) => (
                     <div key={i} className="flex items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50">
                       <span className="text-sm text-gray-700">{name}</span>
-                      <button className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                      <button aria-label="Delete" className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   ))}
                 </div>
                 {/* Venue Out of Office */}
                 <div className="bg-white border border-gray-200 rounded">
                   <div className="p-4 border-b border-gray-200"><h2 className="font-semibold text-gray-800">Venue Out of Office Email</h2></div>
-                  <table className="w-full">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[600px]">
                     <thead><tr className="border-b border-gray-100">
                       <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
                       <th className="text-left p-3 text-xs font-medium text-gray-500">Start Date</th>
@@ -7316,6 +7371,7 @@ export default function Dashboard() {
                       </tr>
                     </tbody>
                   </table>
+                  </div>
                 </div>
                 {/* Attachment Library */}
                 <div className="bg-white border border-gray-200 rounded">
@@ -7323,7 +7379,8 @@ export default function Dashboard() {
                     <h2 className="font-semibold text-gray-800">Attachment Library</h2>
                     <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
                   </div>
-                  <table className="w-full">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[600px]">
                     <thead><tr className="border-b border-gray-100">
                       <th className="text-left p-3 text-xs font-medium text-gray-500">Name</th>
                       <th className="text-left p-3 text-xs font-medium text-gray-500">From Action</th>
@@ -7331,6 +7388,7 @@ export default function Dashboard() {
                     </tr></thead>
                     <tbody><tr><td colSpan={3} className="p-6 text-center text-sm text-gray-400">No attachments yet</td></tr></tbody>
                   </table>
+                  </div>
                 </div>
                 {/* AI Reply Customisation */}
                 <div className="bg-white border border-gray-200 rounded p-4">
@@ -7401,6 +7459,10 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {/* Password */}
+                {/* Hidden until built: this panel is fully disabled/greyed and
+                    stamped "coming soon". Gated behind `false` so it doesn't read
+                    as half-finished; re-enable when password change is wired up. */}
+                {false && (
                 <div className="bg-white border border-gray-200 rounded p-4 opacity-60">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="font-semibold text-gray-800">Password</h2>
@@ -7414,6 +7476,7 @@ export default function Dashboard() {
                   </div>
                   <p className="text-xs text-gray-500 mt-3">Password change is being wired up — for now, contact your admin to reset your password.</p>
                 </div>
+                )}
               </div>
               )}
 
@@ -7565,7 +7628,7 @@ export default function Dashboard() {
                                 {invForm.imageUrl ? (
                                   <div className="relative flex-shrink-0">
                                     <img src={invForm.imageUrl} alt="" className="w-12 h-12 object-contain border border-gray-200 rounded bg-gray-50" />
-                                    <button type="button" onClick={() => setInvForm(f => ({ ...f, imageUrl: '' }))}
+                                    <button type="button" aria-label="Remove image" onClick={() => setInvForm(f => ({ ...f, imageUrl: '' }))}
                                       className="absolute -top-1.5 -right-1.5 bg-white border border-gray-300 rounded-full w-4 h-4 flex items-center justify-center text-gray-400 hover:text-red-500">
                                       <X className="w-2.5 h-2.5" />
                                     </button>
@@ -7613,7 +7676,8 @@ export default function Dashboard() {
                           <p className="font-dm text-xs mt-1">Add your tables and chairs to use them when building floor plans.</p>
                         </div>
                       ) : (
-                        <table className="w-full">
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[600px]">
                           <thead>
                             <tr className="border-b border-gray-50">
                               <th className="text-left p-3 pl-5 text-xs font-medium text-gray-400 font-bebas tracking-widest">ITEM</th>
@@ -7644,9 +7708,9 @@ export default function Dashboard() {
                                 <td className="p-3 font-dm text-sm text-gray-500">{item.quantity ?? '—'}</td>
                                 <td className="p-3 text-right">
                                   <div className="flex items-center justify-end gap-2">
-                                    <button onClick={() => { setEditingInvId(item.id); setShowInvForm(false); setInvForm({ name: item.name, type: item.type, color: item.color, width: item.width, height: item.height, seats: item.seats?.toString() ?? '', quantity: item.quantity?.toString() ?? '', notes: item.notes ?? '', imageUrl: item.imageUrl ?? '' }); }}
+                                    <button aria-label="Edit item" onClick={() => { setEditingInvId(item.id); setShowInvForm(false); setInvForm({ name: item.name, type: item.type, color: item.color, width: item.width, height: item.height, seats: item.seats?.toString() ?? '', quantity: item.quantity?.toString() ?? '', notes: item.notes ?? '', imageUrl: item.imageUrl ?? '' }); }}
                                       className="text-gray-400 hover:text-gray-700 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => { if (confirm(`Remove "${item.name}"?`)) deleteFurniture.mutate({ id: item.id }); }}
+                                    <button aria-label="Delete item" onClick={() => { if (confirm(`Remove "${item.name}"?`)) deleteFurniture.mutate({ id: item.id }); }}
                                       className="text-red-300 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                   </div>
                                 </td>
@@ -7654,6 +7718,7 @@ export default function Dashboard() {
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       )}
                     </div>
 
@@ -7807,7 +7872,8 @@ export default function Dashboard() {
                       </div>
                     </form>
                   )}
-                  <table className="w-full">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50">
                         <th className="text-left p-3 text-xs font-medium text-gray-500">#</th>
@@ -7833,11 +7899,12 @@ export default function Dashboard() {
                           <td className="p-3 text-center">{s.hasGratuity ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
                           <td className="p-3 text-center">{s.applyToMin ? <span className="text-forest">✓</span> : <span className="text-gray-300">—</span>}</td>
                           <td className="p-3 text-sm text-gray-500">{s.salesCategory || 'None'}</td>
-                          <td className="p-3 text-right"><button onClick={() => deleteMenuSection.mutate({ id: s.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
+                          <td className="p-3 text-right"><button aria-label="Delete section" onClick={() => deleteMenuSection.mutate({ id: s.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 {/* Sales Categories */}
@@ -7863,7 +7930,7 @@ export default function Dashboard() {
                     {(salesCategoriesList ?? []).map((c: any) => (
                       <div key={c.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
                         <span className="text-sm text-gray-800">{c.name}</span>
-                        <button onClick={() => deleteSalesCategory.mutate({ id: c.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                        <button aria-label="Delete category" onClick={() => deleteSalesCategory.mutate({ id: c.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     ))}
                   </div>
@@ -8005,7 +8072,7 @@ export default function Dashboard() {
                               ? <span className="text-sm font-semibold text-gray-700">{pkg.customPriceLabel}</span>
                               : pkg.pricePerHead && <span className="text-sm font-semibold text-gray-700">${Number(pkg.pricePerHead).toFixed(2)} <span className="text-xs text-gray-400 font-normal">per person</span></span>
                             }
-                            <button onClick={() => { setEditingPackageId(pkg.id); setMenuForm({ name: pkg.name, type: pkg.type, description: pkg.description ?? '', pricePerHead: pkg.pricePerHead ? String(pkg.pricePerHead) : '', customPriceLabel: pkg.customPriceLabel ?? '', chefNotes: pkg.chefNotes ?? '', pdfUrl: pkg.pdfUrl ?? '', pdfName: pkg.pdfName ?? '' }); setShowMenuForm(true); }} className="text-blue-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
+                            <button aria-label="Edit package" onClick={() => { setEditingPackageId(pkg.id); setMenuForm({ name: pkg.name, type: pkg.type, description: pkg.description ?? '', pricePerHead: pkg.pricePerHead ? String(pkg.pricePerHead) : '', customPriceLabel: pkg.customPriceLabel ?? '', chefNotes: pkg.chefNotes ?? '', pdfUrl: pkg.pdfUrl ?? '', pdfName: pkg.pdfName ?? '' }); setShowMenuForm(true); }} className="text-blue-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
                             <button onClick={() => deleteMenuPackage.mutate({ id: pkg.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         </div>
@@ -8045,7 +8112,7 @@ export default function Dashboard() {
                     <div className="bg-white border border-gold/20 rounded">
                       <div className="flex items-center justify-between px-3 py-2.5 border-b border-gold/10">
                         <span className="font-bebas tracking-widest text-xs text-ink/70">CATEGORIES</span>
-                        <button onClick={() => { setCatalogCategoryForm({ name: '', type: catalogActiveType, description: '' }); setShowCatalogCategoryForm(true); }}
+                        <button aria-label="Add category" onClick={() => { setCatalogCategoryForm({ name: '', type: catalogActiveType, description: '' }); setShowCatalogCategoryForm(true); }}
                           className="text-forest hover:text-forest-dark"><Plus className="w-4 h-4" /></button>
                       </div>
                       {showCatalogCategoryForm && (
@@ -8071,7 +8138,7 @@ export default function Dashboard() {
                             }`}
                             onClick={() => setCatalogActiveCategoryId(cat.id)}>
                             <span className={`font-dm text-sm truncate ${ catalogActiveCategoryId === cat.id ? 'text-forest font-semibold' : 'text-ink/70' }`}>{cat.name}</span>
-                            <button onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cat.name}" and all its items?`)) deleteCatalogCategory.mutate({ id: cat.id }); }}
+                            <button aria-label="Delete category" onClick={e => { e.stopPropagation(); if (confirm(`Delete "${cat.name}" and all its items?`)) deleteCatalogCategory.mutate({ id: cat.id }); }}
                               className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
@@ -8179,7 +8246,7 @@ export default function Dashboard() {
                                         {it.description && <div className="font-dm text-[11px] text-ink/70 truncate">{it.description}</div>}
                                       </div>
                                       <span className="font-dm text-xs text-ink/70 whitespace-nowrap">${(it.price ?? 0).toFixed(2)} <span className="text-ink/65">/ {it.unit ?? (it.pricingType === 'per_item' ? 'item' : 'person')}</span></span>
-                                      <button onClick={() => setCatalogAiPreview(p => p.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                                      <button aria-label="Remove item" onClick={() => setCatalogAiPreview(p => p.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                                     </div>
                                   ))}
                                 </div>
@@ -8465,13 +8532,13 @@ export default function Dashboard() {
                                       title="Duplicate item"
                                       className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-sage hover:text-ink transition-opacity">
                                       <Copy className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => {
+                                    <button aria-label="Edit item" onClick={() => {
                                       setEditingCatalogItemId(item.id);
                                       setCatalogItemForm({ name: item.name, description: item.description ?? '', pricingType: item.pricingType, price: item.price > 0 ? String(item.price / 100) : '', unit: item.unit ?? 'person', allergens: item.allergens ?? '' });
                                       setShowCatalogItemForm(true);
                                     }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-blue-400 hover:text-blue-600 transition-opacity">
                                       <Edit2 className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteCatalogItem.mutate({ id: item.id }); }}
+                                    <button aria-label="Delete item" onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteCatalogItem.mutate({ id: item.id }); }}
                                       className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                                       <Trash2 className="w-3.5 h-3.5" /></button>
                                   </div>
@@ -9125,7 +9192,7 @@ export default function Dashboard() {
                       <DollarSign className="w-3.5 h-3.5 text-gold" />
                       <span className="font-bebas tracking-widest text-sm text-cream">PAYMENTS</span>
                     </div>
-                    <button onClick={() => setDrawerPaymentsOpen(false)} className="text-cream/50 hover:text-cream"><X className="w-4 h-4" /></button>
+                    <button aria-label="Close payments panel" onClick={() => setDrawerPaymentsOpen(false)} className="text-cream/50 hover:text-cream"><X className="w-4 h-4" /></button>
                   </div>
                   {drawerPaymentSummary && (
                     <div className="grid grid-cols-3 border-b border-gold/20 divide-x divide-gold/20">
@@ -9158,7 +9225,7 @@ export default function Dashboard() {
                               <div className="font-cormorant font-semibold text-sm text-ink">${Number(p.amount).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
                               <div className="font-dm text-[10px] text-ink/65">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                             </div>
-                            <button onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                            <button aria-label="Remove payment" onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -9606,7 +9673,7 @@ export default function Dashboard() {
       {/* Bulk Delete Confirmation */}
       {showBulkDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+          <div role="dialog" aria-modal="true" className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedLeadIds.size} record{selectedLeadIds.size === 1 ? '' : 's'}?</h3>
             <p className="text-sm text-gray-500 mb-6">This will permanently remove the selected records and all their activity history. This cannot be undone.</p>
             <div className="flex gap-3 justify-end">
@@ -9639,14 +9706,14 @@ export default function Dashboard() {
       {/* ── Weekly Staff Runsheets Modal ───────────────────────────────────── */}
       {showWeeklyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>
+          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>
             {/* Header */}
             <div className="bg-forest px-5 py-4 flex items-center justify-between flex-shrink-0">
               <div>
                 <div className="font-bebas tracking-widest text-cream text-base">EMAIL STAFF BRIEFING — WEEKLY</div>
                 <p className="font-dm text-cream/60 text-xs mt-0.5">Sends live runsheet links + BEO PDFs for the whole week</p>
               </div>
-              <button onClick={() => { setShowWeeklyModal(false); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); setWeeklyExtraEmails(''); }}
+              <button aria-label="Close" onClick={() => { setShowWeeklyModal(false); setWeeklyEventsData(null); setWeeklySubject(''); setWeeklyBody(''); setWeeklyExtraEmails(''); }}
                 className="text-cream/60 hover:text-cream transition-colors ml-4 flex-shrink-0">
                 <X className="w-5 h-5" />
               </button>

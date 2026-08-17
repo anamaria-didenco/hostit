@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { RichTextarea } from "@/components/ui/RichTextarea";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
   GripVertical, Save, FileText, Leaf, Building2, Link as LinkIcon,
@@ -1366,6 +1367,17 @@ export default function RunsheetBuilder() {
   });
   // Which staff link the user is currently emailing (drives the modal).
   const [emailingLink, setEmailingLink] = useState<{ id: number; token: string; label: string } | null>(null);
+
+  // Escape-to-close for the custom modal overlays. Each mirrors the setter the
+  // modal's own close button calls; the hook only binds a listener while open.
+  useEscapeKey(beoPreviewOpen, () => setBeoPreviewOpen(false));
+  useEscapeKey(showPasteImport, () => setShowPasteImport(false));
+  useEscapeKey(showDietaryManager, () => setShowDietaryManager(false));
+  useEscapeKey(showSetupManager, () => setShowSetupManager(false));
+  useEscapeKey(showCatalogSelector, () => setShowCatalogSelector(false));
+  useEscapeKey(showFnbPaste, () => setShowFnbPaste(false));
+  useEscapeKey(showChecklistPaste, () => setShowChecklistPaste(false));
+  useEscapeKey(emailingLink !== null, () => { if (!sendingStaffEmail) setEmailingLink(null); });
   // Which saved emails are ticked, plus a free-text field for ad-hoc adds.
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
   const [extraEmails, setExtraEmails] = useState("");
@@ -2072,7 +2084,7 @@ export default function RunsheetBuilder() {
       <div className="min-h-screen bg-cream">
         <div className="bg-forest border-b border-white/10 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate("/dashboard")} className="text-white/50 hover:text-white transition-colors">
+            <button aria-label="Back to dashboard" onClick={() => navigate("/dashboard")} className="text-white/50 hover:text-white transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <span className="font-bebas tracking-widest text-gold text-sm">RUNSHEET BUILDER</span>
@@ -2464,6 +2476,7 @@ export default function RunsheetBuilder() {
                         </button>
                         <button
                           onClick={() => { if (confirm(`Delete template "${tpl.name}"?`)) deleteTemplateMutation.mutate({ id: tpl.id }); }}
+                          aria-label="Delete template"
                           className="text-white/30 hover:text-red-400 transition-colors flex-shrink-0 p-1"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -2762,7 +2775,7 @@ export default function RunsheetBuilder() {
                           {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                         </button>
                         {!isHidden && (
-                          <button onClick={() => setSetupSectionOpen(v => !v)} className="p-1 text-ink/65">
+                          <button aria-label="Toggle setup section" onClick={() => setSetupSectionOpen(v => !v)} className="p-1 text-ink/65">
                             {setupSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                         )}
@@ -2849,7 +2862,7 @@ export default function RunsheetBuilder() {
                           {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                         </button>
                         {!isHidden && (
-                          <button onClick={() => setDietarySectionOpen(v => !v)} className="p-1 text-ink/65">
+                          <button aria-label="Toggle dietary section" onClick={() => setDietarySectionOpen(v => !v)} className="p-1 text-ink/65">
                             {dietarySectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                         )}
@@ -2897,6 +2910,7 @@ export default function RunsheetBuilder() {
                               <div key={idx} className="border border-gold/20 bg-linen/40 p-3 group relative">
                                 <button
                                   onClick={() => removeDietary(idx)}
+                                  aria-label="Remove dietary requirement"
                                   className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors no-print opacity-100 md:opacity-0 md:group-hover:opacity-100"
                                 >
                                   <X className="w-3.5 h-3.5" />
@@ -2931,7 +2945,7 @@ export default function RunsheetBuilder() {
                                       {(d.names ?? []).map((nm, ni) => (
                                         <span key={ni} className="inline-flex items-center gap-1 bg-white border border-gold/30 rounded-sm px-1.5 py-0.5 font-dm text-[11px] text-ink/70">
                                           {nm}
-                                          <button onClick={() => removeDietaryName(idx, ni)} className="text-ink/65 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                                          <button aria-label="Remove name" onClick={() => removeDietaryName(idx, ni)} className="text-ink/65 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
                                         </span>
                                       ))}
                                     </div>
@@ -3290,12 +3304,14 @@ export default function RunsheetBuilder() {
                           </button>
                           <button
                             onClick={() => setExpandedItem(isExpanded ? null : key)}
+                            aria-label="Toggle item details"
                             className="p-1 text-ink/65 hover:text-ink/60 transition-colors"
                           >
                             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                           </button>
                           <button
                             onClick={() => removeItem(idx)}
+                            aria-label="Remove item"
                             className="p-1 text-ink/65 hover:text-red-500 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -3549,6 +3565,7 @@ export default function RunsheetBuilder() {
                       <div key={idx} className="border border-gold/20 bg-linen/40 p-3 group relative">
                         <button
                           onClick={() => removeDietary(idx)}
+                          aria-label="Remove dietary requirement"
                           className="absolute top-2 right-2 text-ink/20 hover:text-red-500 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -3581,7 +3598,7 @@ export default function RunsheetBuilder() {
                               {(d.names ?? []).map((nm, ni) => (
                                 <span key={ni} className="inline-flex items-center gap-1 bg-white border border-gold/30 rounded-sm px-1.5 py-0.5 font-dm text-[11px] text-ink/70">
                                   {nm}
-                                  <button onClick={() => removeDietaryName(idx, ni)} className="text-ink/65 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                                  <button aria-label="Remove name" onClick={() => removeDietaryName(idx, ni)} className="text-ink/65 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
                                 </span>
                               ))}
                             </div>
@@ -4562,6 +4579,7 @@ export default function RunsheetBuilder() {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => toggleChecklistItem(item.id)}
+                      aria-label="Toggle checklist item"
                       className={`flex-shrink-0 transition-colors ${item.checked ? 'text-forest' : 'text-ink/65 hover:text-ink/60'}`}
                     >
                       {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
@@ -4592,6 +4610,7 @@ export default function RunsheetBuilder() {
                     </button>
                     <button
                       onClick={() => removeChecklistItem(item.id)}
+                      aria-label="Remove checklist item"
                       className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/65 hover:text-red-500 transition-all flex-shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -5294,6 +5313,7 @@ export default function RunsheetBuilder() {
                       <td className="px-2 py-2">
                         <button
                           onClick={() => setCostItems(prev => prev.filter((_, i) => i !== idx))}
+                          aria-label="Remove cost item"
                           className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -5434,7 +5454,7 @@ export default function RunsheetBuilder() {
 
       {/* ── BEO PREVIEW & PRINT MODAL ────────────────────────────────────── */}
       {beoPreviewOpen && effectiveBookingId && (
-        <div className="fixed inset-0 z-[70] bg-ink/70 backdrop-blur-sm flex flex-col no-print">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-[70] bg-ink/70 backdrop-blur-sm flex flex-col no-print">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3 bg-forest text-cream shadow-lg shrink-0">
             <div className="flex items-center gap-2.5">
@@ -5521,7 +5541,7 @@ export default function RunsheetBuilder() {
       {/* ── SMART PASTE IMPORT MODAL ─────────────────────────────────────── */}
       {showPasteImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div className="bg-white w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
+          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest shrink-0">
               <div>
@@ -5736,13 +5756,13 @@ export default function RunsheetBuilder() {
       {/* ── DIETARY OPTIONS MANAGER MODAL ────────────────────────────────── */}
       {showDietaryManager && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white w-full max-w-md shadow-2xl">
+          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gold/30 bg-forest">
               <div className="flex items-center gap-2">
                 <Leaf className="w-4 h-4 text-cream" />
                 <span className="font-bebas tracking-widest text-cream">MANAGE DIETARY OPTIONS</span>
               </div>
-              <button onClick={() => setShowDietaryManager(false)} className="text-cream/60 hover:text-cream transition-colors">
+              <button aria-label="Close" onClick={() => setShowDietaryManager(false)} className="text-cream/60 hover:text-cream transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -5752,7 +5772,7 @@ export default function RunsheetBuilder() {
                 {editingDietaries.map((d, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <span className="flex-1 font-dm text-sm text-ink bg-linen px-3 py-1.5 border border-gold/30">{d}</span>
-                    <button onClick={() => setEditingDietaries(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/65 hover:text-red-500 transition-colors">
+                    <button aria-label="Delete dietary" onClick={() => setEditingDietaries(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/65 hover:text-red-500 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -5792,13 +5812,13 @@ export default function RunsheetBuilder() {
       {/* ── SETUP TEMPLATES MANAGER MODAL ─────────────────────────────────── */}
       {showSetupManager && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white w-full max-w-lg shadow-2xl">
+          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-lg shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gold/30 bg-forest">
               <div className="flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-cream" />
                 <span className="font-bebas tracking-widest text-cream">MANAGE SETUP TEMPLATES</span>
               </div>
-              <button onClick={() => setShowSetupManager(false)} className="text-cream/60 hover:text-cream transition-colors">
+              <button aria-label="Close" onClick={() => setShowSetupManager(false)} className="text-cream/60 hover:text-cream transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -5811,7 +5831,7 @@ export default function RunsheetBuilder() {
                       <div className="font-bebas tracking-widest text-xs text-ink mb-1">{t.label}</div>
                       <div className="font-dm text-xs text-ink/70 truncate">{t.value}</div>
                     </div>
-                    <button onClick={() => setEditingSetups(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/65 hover:text-red-500 transition-colors flex-shrink-0 mt-0.5">
+                    <button aria-label="Delete setup" onClick={() => setEditingSetups(prev => prev.filter((_, idx) => idx !== i))} className="text-ink/65 hover:text-red-500 transition-colors flex-shrink-0 mt-0.5">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -5859,7 +5879,7 @@ export default function RunsheetBuilder() {
       {/* ── MENU CATALOGUE SELECTOR MODAL ────────────────────────────────── */}
       {showCatalogSelector && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest">
               <div>
@@ -6033,7 +6053,7 @@ export default function RunsheetBuilder() {
       {/* ── AI F&B PASTE MODAL ──────────────────────────────────────────── */}
       {showFnbPaste && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print">
-          <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+          <div role="dialog" aria-modal="true" className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest">
               <div>
@@ -6042,7 +6062,7 @@ export default function RunsheetBuilder() {
                 </div>
                 <div className="font-dm text-white/60 text-xs mt-0.5">Paste a catering brief, menu notes, or email — AI will extract the F&B items</div>
               </div>
-              <button onClick={() => setShowFnbPaste(false)} className="text-white/50 hover:text-white transition-colors">
+              <button aria-label="Close" onClick={() => setShowFnbPaste(false)} className="text-white/50 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -6170,13 +6190,13 @@ export default function RunsheetBuilder() {
       )}
       {showChecklistPaste && (
         <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 no-print" onClick={() => setShowChecklistPaste(false)}>
-          <div className="bg-linen w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" className="bg-linen w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-gold" />
                 <h3 className="font-bebas tracking-widest text-sm">AI SMART PASTE — EVENT CHECKLIST</h3>
               </div>
-              <button onClick={() => setShowChecklistPaste(false)} className="text-ink/65 hover:text-ink"><X className="w-4 h-4" /></button>
+              <button aria-label="Close" onClick={() => setShowChecklistPaste(false)} className="text-ink/65 hover:text-ink"><X className="w-4 h-4" /></button>
             </div>
             {!checklistParsed ? (
               <>
@@ -6218,7 +6238,7 @@ export default function RunsheetBuilder() {
                         <select value={it.category} onChange={e => setChecklistParsed(p => p && ({ ...p, items: p.items.map((x, j) => j === i ? { ...x, category: e.target.value } : x) }))} className="font-bebas text-[11px] tracking-widest border border-gold/20 px-1 py-1 bg-white">
                           {['admin','staff','setup','bar','kitchen','guest','other'].map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
-                        <button onClick={() => setChecklistParsed(p => p && ({ ...p, items: p.items.filter((_, j) => j !== i) }))} className="text-ink/65 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button aria-label="Remove item" onClick={() => setChecklistParsed(p => p && ({ ...p, items: p.items.filter((_, j) => j !== i) }))} className="text-ink/65 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     ))}
                   </div>
@@ -6308,7 +6328,7 @@ export default function RunsheetBuilder() {
 
         return (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print" onClick={() => !sendingStaffEmail && setEmailingLink(null)}>
-            <div className="bg-white max-w-lg w-full max-h-[90vh] overflow-y-auto rounded-sm shadow-xl" onClick={e => e.stopPropagation()}>
+            <div role="dialog" aria-modal="true" className="bg-white max-w-lg w-full max-h-[90vh] overflow-y-auto rounded-sm shadow-xl" onClick={e => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-gold/20 flex items-center justify-between">
                 <div>
                   <h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2>

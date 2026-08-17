@@ -493,6 +493,8 @@ export default function StaffPortal() {
               <UtensilsCrossed className="w-4 h-4 text-forest" />
               <span className="font-bebas tracking-[0.2em] text-sm text-forest">FRONT OF HOUSE — F&amp;B SHEET</span>
             </div>
+            <div className="overflow-x-auto">
+            <div className="min-w-[640px]">
             {/* Column headers */}
             <div className="grid gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5"
               style={{ gridTemplateColumns: ['1fr', '50px', showDietary && '70px', showServiceTime && '80px', showStaff && '1fr', showNotes && '1fr'].filter(Boolean).join(' ') }}>
@@ -527,6 +529,8 @@ export default function StaffPortal() {
                 </div>
               );
             })}
+            </div>
+            </div>
           </div>
         )}
 
@@ -537,6 +541,8 @@ export default function StaffPortal() {
               <ChefHat className="w-4 h-4 text-forest" />
               <span className="font-bebas tracking-[0.2em] text-sm text-forest">KITCHEN SHEET</span>
             </div>
+            <div className="overflow-x-auto">
+            <div className="min-w-[640px]">
             {/* Column headers */}
             <div className="grid gap-2 px-5 py-2 border-b border-gold/30 bg-gold/5"
               style={{ gridTemplateColumns: ['1fr', '50px', showDietary && '70px', showServiceTime && '80px', showNotes && '1fr', showNotes && '1fr'].filter(Boolean).join(' ') }}>
@@ -571,6 +577,8 @@ export default function StaffPortal() {
                 </div>
               );
             })}
+            </div>
+            </div>
           </div>
         )}
 
@@ -589,7 +597,8 @@ export default function StaffPortal() {
               <DollarSign className="w-4 h-4 text-white" />
               <span className="font-bebas tracking-widest text-sm text-white">PAYMENT SUMMARY</span>
             </div>
-            <div className="divide-y divide-gold/20">
+            <div className="overflow-x-auto">
+            <div className="divide-y divide-gold/20 min-w-[500px]">
               {/* Column headers */}
               <div className="grid grid-cols-[120px_1fr_120px_100px] gap-2 px-5 py-2 bg-gold/5">
                 <span className="font-bebas tracking-widest text-[10px] text-ink/65">DATE</span>
@@ -621,6 +630,7 @@ export default function StaffPortal() {
                 </span>
                 <span></span>
               </div>
+            </div>
             </div>
           </div>
         )}
