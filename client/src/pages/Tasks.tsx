@@ -189,6 +189,7 @@ export default function Tasks() {
                 }`}
               >
                 <button
+                  aria-label={task.completed ? "Mark task incomplete" : "Mark task complete"}
                   onClick={() => completeTask.mutate({ id: task.id, completed: !task.completed })}
                   className="mt-0.5 flex-shrink-0 text-sage hover:text-burgundy transition-colors"
                 >

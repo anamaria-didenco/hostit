@@ -376,7 +376,7 @@ export default function DailyChecklists() {
                           <span className="font-dm text-xs text-[#2f5488]">Live staff link:</span>
                           <div className="flex items-center gap-1 min-w-0">
                             <span className="font-dm text-xs text-[#2f5488] truncate">{getLiveLink(cl.token)}</span>
-                            <button onClick={() => copyLink(cl.token)} className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><Copy className="w-3 h-3" /></button>
+                            <button aria-label="Copy checklist link" onClick={() => copyLink(cl.token)} className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><Copy className="w-3 h-3" /></button>
                             <a href={getLiveLink(cl.token)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><ExternalLink className="w-3 h-3" /></a>
                           </div>
                         </div>
@@ -403,8 +403,8 @@ export default function DailyChecklists() {
                                 <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0">
                                   <button onClick={() => { setPendingPhotoItemId(item.id); fileInputRef.current?.click(); }} className="p-1 text-[#8a7a60] hover:text-[#2f5488] rounded" title={item.photoUrl ? "Replace photo" : "Add photo"}><Camera className="w-3.5 h-3.5" /></button>
                                   {item.photoUrl && <button onClick={() => updateItemMut.mutate({ id: item.id, photoUrl: "" })} className="p-1 text-[#8a7a60] hover:text-red-400 rounded" title="Remove photo"><X className="w-3 h-3" /></button>}
-                                  <button onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#8a7a60] hover:text-[#2f5488] rounded"><Edit2 className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => { if (confirm('Delete this item?')) deleteItemMut.mutate({ id: item.id }); }} className="p-1 text-[#8a7a60] hover:text-red-400 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  <button aria-label="Edit item" onClick={() => { setEditingItem(item.id); setEditItemText(item.text); setEditItemNote(item.note ?? ""); }} className="p-1 text-[#8a7a60] hover:text-[#2f5488] rounded"><Edit2 className="w-3.5 h-3.5" /></button>
+                                  <button aria-label="Delete item" onClick={() => { if (confirm('Delete this item?')) deleteItemMut.mutate({ id: item.id }); }} className="p-1 text-[#8a7a60] hover:text-red-400 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
                                 </div>
                               </div>
                             )}
@@ -500,7 +500,7 @@ export default function DailyChecklists() {
                 </div>
                 <div className="font-dm text-white/70 text-xs mt-0.5">Paste a to-do list and AI turns it into a new checklist</div>
               </div>
-              <button onClick={() => setShowAiPaste(false)} className="text-white/70 hover:text-white">
+              <button aria-label="Close" onClick={() => setShowAiPaste(false)} className="text-white/70 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -836,7 +836,7 @@ function ShiftCard({ sr, shiftLink, onCopyLink, onEdit, onDelete, availableCheck
         <span className="font-dm text-xs text-[#2f5488]">Staff link:</span>
         <div className="flex items-center gap-1 min-w-0">
           <span className="font-dm text-xs text-[#2f5488] truncate">{shiftLink}</span>
-          <button onClick={onCopyLink} className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><Copy className="w-3 h-3" /></button>
+          <button aria-label="Copy link" onClick={onCopyLink} className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><Copy className="w-3 h-3" /></button>
           <a href={shiftLink} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-[#2f5488] hover:text-[#25426c]"><ExternalLink className="w-3 h-3" /></a>
         </div>
       </div>
@@ -901,7 +901,7 @@ function SettingsPanel({
         {/* Header */}
         <div className="bg-[#2f5488] px-5 py-4 flex items-center justify-between flex-shrink-0">
           <h2 className="font-bebas text-xl tracking-wider text-white">Daily Operations Settings</h2>
-          <button onClick={onClose} className="text-white/80 hover:text-white"><X className="w-5 h-5" /></button>
+          <button aria-label="Close" onClick={onClose} className="text-white/80 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="flex-1 p-5 space-y-6">
@@ -938,10 +938,10 @@ function SettingsPanel({
                 <div key={sec.key} className="flex items-center gap-2 p-2 border border-[#c9a84c]/30 rounded bg-white group">
                   {/* Reorder */}
                   <div className="flex flex-col gap-0.5">
-                    <button onClick={() => moveUp(i)} disabled={i === 0} className="text-[#8a7a60] hover:text-[#1a1209] disabled:opacity-20 transition-colors">
+                    <button aria-label="Move section up" onClick={() => moveUp(i)} disabled={i === 0} className="text-[#8a7a60] hover:text-[#1a1209] disabled:opacity-20 transition-colors">
                       <ArrowUp className="w-3 h-3" />
                     </button>
-                    <button onClick={() => moveDown(i)} disabled={i === sections.length - 1} className="text-[#8a7a60] hover:text-[#1a1209] disabled:opacity-20 transition-colors">
+                    <button aria-label="Move section down" onClick={() => moveDown(i)} disabled={i === sections.length - 1} className="text-[#8a7a60] hover:text-[#1a1209] disabled:opacity-20 transition-colors">
                       <ArrowDown className="w-3 h-3" />
                     </button>
                   </div>
@@ -959,13 +959,13 @@ function SettingsPanel({
                   )}
                   {/* Actions */}
                   {editingIdx === i ? (
-                    <button onClick={() => saveEdit(i)} className="text-[#2f5488] hover:text-[#25426c]"><Check className="w-3.5 h-3.5" /></button>
+                    <button aria-label="Save section" onClick={() => saveEdit(i)} className="text-[#2f5488] hover:text-[#25426c]"><Check className="w-3.5 h-3.5" /></button>
                   ) : (
-                    <button onClick={() => { setEditingIdx(i); setEditLabel(sec.label); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-[#8a7a60] hover:text-[#1a1209] transition-opacity">
+                    <button aria-label="Edit section" onClick={() => { setEditingIdx(i); setEditLabel(sec.label); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-[#8a7a60] hover:text-[#1a1209] transition-opacity">
                       <Pencil className="w-3 h-3" />
                     </button>
                   )}
-                  <button onClick={() => deleteSection(i)} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                  <button aria-label="Delete section" onClick={() => deleteSection(i)} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
                     <X className="w-3 h-3" />
                   </button>
                 </div>

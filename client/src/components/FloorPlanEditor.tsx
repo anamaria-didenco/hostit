@@ -653,6 +653,7 @@ export default function FloorPlanEditor({
                         <span className="font-dm text-xs text-ink/70 group-hover:text-ink truncate flex-1">{item.label}</span>
                         <button
                           type="button"
+                          aria-label="Remove custom item"
                           onClick={() => setCustomPalette(prev => prev.filter(p => p.type !== item.type))}
                           className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink/65 hover:text-red-400 transition-all flex-shrink-0"
                         >
@@ -678,7 +679,7 @@ export default function FloorPlanEditor({
                   <div className="p-3 space-y-2 bg-linen/60">
                     <div className="flex items-center justify-between mb-1">
                       <p className="font-bebas text-[10px] tracking-widest text-sage">NEW ITEM</p>
-                      <button type="button" onClick={() => setShowCustomForm(false)} className="text-ink/65 hover:text-ink">
+                      <button type="button" aria-label="Close" onClick={() => setShowCustomForm(false)} className="text-ink/65 hover:text-ink">
                         <X className="w-3 h-3" />
                       </button>
                     </div>
@@ -866,9 +867,9 @@ export default function FloorPlanEditor({
             </button>
             <div className="h-4 w-px bg-border" />
             {/* Zoom */}
-            <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-1.5 rounded text-ink/65 hover:text-ink"><ZoomOut className="w-3.5 h-3.5" /></button>
+            <button aria-label="Zoom out" onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-1.5 rounded text-ink/65 hover:text-ink"><ZoomOut className="w-3.5 h-3.5" /></button>
             <span className="text-xs font-dm text-ink/70 w-10 text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => setZoom(z => Math.min(3, z + 0.1))} className="p-1.5 rounded text-ink/65 hover:text-ink"><ZoomIn className="w-3.5 h-3.5" /></button>
+            <button aria-label="Zoom in" onClick={() => setZoom(z => Math.min(3, z + 0.1))} className="p-1.5 rounded text-ink/65 hover:text-ink"><ZoomIn className="w-3.5 h-3.5" /></button>
             <div className="h-4 w-px bg-border" />
             {/* Background upload */}
             <label className="cursor-pointer flex items-center gap-1 px-2 py-1.5 rounded border border-dashed border-gold/40 hover:border-gold hover:bg-gold/5 transition-colors" title="Upload background photo (blueprint, venue photo to trace over)">
@@ -1107,7 +1108,7 @@ export default function FloorPlanEditor({
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-cormorant text-xl font-semibold text-ink">Share Floor Plan</h3>
-              <button onClick={() => setShowShareDialog(false)} className="text-ink/65 hover:text-ink">
+              <button aria-label="Close" onClick={() => setShowShareDialog(false)} className="text-ink/65 hover:text-ink">
                 <X className="w-5 h-5" />
               </button>
             </div>

@@ -166,11 +166,11 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
               <div key={s.key} className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 group">
                 {/* Order arrows */}
                 <div className="flex flex-col gap-0.5 shrink-0">
-                  <button onClick={() => moveUp(idx)} disabled={idx === 0}
+                  <button aria-label="Move status up" onClick={() => moveUp(idx)} disabled={idx === 0}
                     className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed transition">
                     <ChevronUp className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => moveDown(idx)} disabled={idx === statuses.length - 1}
+                  <button aria-label="Move status down" onClick={() => moveDown(idx)} disabled={idx === statuses.length - 1}
                     className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed transition">
                     <ChevronDown className="w-3.5 h-3.5" />
                   </button>
@@ -207,17 +207,17 @@ export default function StatusManager({ initialStatuses, onSaved }: Props) {
                         />
                       ))}
                     </div>
-                    <button onClick={commitEdit} className="p-1.5 rounded-lg bg-[#8D957E] text-white hover:bg-[#7a8269]"><Check className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => setEditingKey(null)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-700"><X className="w-3.5 h-3.5" /></button>
+                    <button aria-label="Save status" onClick={commitEdit} className="p-1.5 rounded-lg bg-[#8D957E] text-white hover:bg-[#7a8269]"><Check className="w-3.5 h-3.5" /></button>
+                    <button aria-label="Cancel edit" onClick={() => setEditingKey(null)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-700"><X className="w-3.5 h-3.5" /></button>
                   </div>
                 ) : (
                   <>
                     <span className="flex-1 text-xs text-gray-400 font-mono">{s.key}</span>
                     <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => startEdit(s)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
+                      <button aria-label="Edit status" onClick={() => startEdit(s)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => deleteStatus(s.key)}
+                      <button aria-label="Delete status" onClick={() => deleteStatus(s.key)}
                         disabled={statuses.length <= 1}
                         className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-30 disabled:cursor-not-allowed">
                         <Trash2 className="w-3.5 h-3.5" />
