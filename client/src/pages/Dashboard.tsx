@@ -32,6 +32,7 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import TasksPage from "@/pages/Tasks";
 import ReportsPage from "@/pages/Reports";
 import PaymentsBoard from "@/pages/PaymentsBoard";
+import XeroSettingsCard from "@/components/XeroSettingsCard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
@@ -6767,6 +6768,9 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
+
+                  {/* ── Xero (live) ── */}
+                  <XeroSettingsCard />
 
                   {/* ── Placeholder integrations ── */}
                   {/* Hidden until built: these cards only fire toast.info('coming soon')

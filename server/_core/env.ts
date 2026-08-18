@@ -21,4 +21,8 @@ export const ENV = {
   // whose key doesn't serve the default can switch models without a code change.
   forgeModel: process.env.AI_INTEGRATIONS_OPENAI_MODEL ?? process.env.BUILT_IN_FORGE_MODEL ?? "gpt-5",
   adminPassword: process.env.ADMIN_PASSWORD ?? "",
+  // Xero OAuth app credentials (developer.xero.com). Empty = integration
+  // shows "not configured" in Settings; nothing else breaks.
+  xeroClientId: process.env.XERO_CLIENT_ID ?? "",
+  xeroClientSecret: process.env.XERO_CLIENT_SECRET ?? "",
 };

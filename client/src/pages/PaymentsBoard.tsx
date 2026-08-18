@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import XeroPushModal from "@/components/XeroPushModal";
 import {
   DollarSign, FileText, Clock, CheckCircle2, Moon, Search,
   CalendarDays, Users, AlertCircle, ExternalLink,
@@ -58,6 +59,7 @@ export default function PaymentsBoard() {
   const utils = trpc.useUtils();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"action" | "upcoming" | "all">("action");
+  const [xeroFor, setXeroFor] = useState<Row | null>(null);
 
   const { data, isLoading, isError, refetch } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
 
@@ -192,11 +194,25 @@ export default function PaymentsBoard() {
               onDeposit={() => setDeposit(r, !r.depositPaid)}
               onOpen={() => navigate(`/event/${r.bookingId}`)}
               onRecord={() => navigate(`/payments?bookingId=${r.bookingId}`)}
+              onXero={() => setXeroFor(r)}
               busy={update.isPending}
             />
           ))}
         </div>
       )}
+
+      <XeroPushModal
+        open={xeroFor !== null}
+        onClose={() => setXeroFor(null)}
+        booking={xeroFor ? {
+          bookingId: xeroFor.bookingId,
+          name: xeroFor.name,
+          eventDate: xeroFor.eventDate,
+          depositPaid: xeroFor.depositPaid,
+          depositNzd: xeroFor.depositNzd,
+        } : null}
+        initialStream={xeroFor && xeroFor.foodStatus === "paid" ? "drinks" : "food"}
+      />
     </div>
   );
 }
@@ -240,9 +256,9 @@ function Chip({ label, state, onClick, title, disabled }: {
   );
 }
 
-function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, busy }: {
+function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, busy }: {
   row: Row; onFood: () => void; onDrinks: () => void; onDeposit: () => void;
-  onOpen: () => void; onRecord: () => void; busy: boolean;
+  onOpen: () => void; onRecord: () => void; onXero: () => void; busy: boolean;
 }) {
   // Deposit chip
   const depositChip = !row.depositRequired
@@ -298,6 +314,10 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, busy }: 
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
+        <button onClick={onXero} title="Send a food or drinks invoice to Xero as a draft"
+          className="font-bebas tracking-widest text-[11px] text-blue-800 border border-blue-800/30 rounded-md px-2.5 py-1.5 hover:bg-blue-800/5 transition-colors flex items-center gap-1">
+          <FileText className="w-3 h-3" /> XERO
+        </button>
         <button onClick={onRecord}
           className="font-bebas tracking-widest text-[11px] text-forest border border-forest/30 rounded-md px-2.5 py-1.5 hover:bg-forest/5 transition-colors flex items-center gap-1">
           <DollarSign className="w-3 h-3" /> RECORD

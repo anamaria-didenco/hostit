@@ -3977,6 +3977,160 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
   }),
 
+  // ─── Xero integration ─────────────────────────────────────────────────────
+  // Connection status/config + draft-invoice push. Tokens never leave the
+  // server; invoices are created as DRAFTs in Xero so the operator approves
+  // them there before anything reaches a client. Owner-only for anything that
+  // writes — team-link sessions can view status but not connect/push.
+  xero: router({
+    status: protectedProcedure.query(async ({ ctx }) => {
+      const { ENV } = await import('./_core/env');
+      const { getDb } = await import('./db');
+      const { xeroConnections } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const configured = Boolean(ENV.xeroClientId && ENV.xeroClientSecret);
+      const db = await getDb();
+      if (!db) return { configured, connected: false as const };
+      const [conn] = await db.select({
+        tenantName: xeroConnections.tenantName,
+        salesAccountCode: xeroConnections.salesAccountCode,
+        lineAmountsInclusive: xeroConnections.lineAmountsInclusive,
+        updatedAt: xeroConnections.updatedAt,
+      }).from(xeroConnections).where(eq(xeroConnections.ownerId, ctx.user.id)).limit(1);
+      if (!conn) return { configured, connected: false as const };
+      return { configured, connected: true as const, ...conn };
+    }),
+    disconnect: protectedProcedure.mutation(async ({ ctx }) => {
+      if (ctx.isTeamMember) throw new Error('Only the venue owner can disconnect Xero');
+      const { getDb } = await import('./db');
+      const { xeroConnections } = await import('../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) throw new Error('DB not available');
+      await db.delete(xeroConnections).where(eq(xeroConnections.ownerId, ctx.user.id));
+      return { success: true };
+    }),
+    saveMapping: protectedProcedure
+      .input(z.object({
+        salesAccountCode: z.string().trim().min(1).max(20).optional(),
+        lineAmountsInclusive: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.isTeamMember) throw new Error('Only the venue owner can change Xero settings');
+        const { getDb } = await import('./db');
+        const { xeroConnections } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (input.salesAccountCode !== undefined) updates.salesAccountCode = input.salesAccountCode;
+        if (input.lineAmountsInclusive !== undefined) updates.lineAmountsInclusive = input.lineAmountsInclusive;
+        await db.update(xeroConnections).set(updates).where(eq(xeroConnections.ownerId, ctx.user.id));
+        return { success: true };
+      }),
+    invoicesForBooking: protectedProcedure
+      .input(z.object({ bookingId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { xeroInvoices } = await import('../drizzle/schema');
+        const { eq, and, desc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(xeroInvoices)
+          .where(and(eq(xeroInvoices.bookingId, input.bookingId), eq(xeroInvoices.ownerId, ctx.user.id)))
+          .orderBy(desc(xeroInvoices.createdAt));
+      }),
+    pushInvoice: protectedProcedure
+      .input(z.object({
+        bookingId: z.number(),
+        stream: z.enum(['food', 'drinks']),
+        lines: z.array(z.object({
+          description: z.string().trim().min(1).max(500),
+          quantity: z.number().positive().max(100000),
+          // Negative allowed: the "$575 deposit received" deduction line on drinks.
+          unitAmount: z.number().min(-100000).max(1000000),
+        })).min(1).max(100),
+        dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        // Set true to knowingly create a second invoice for the same stream.
+        allowDuplicate: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.isTeamMember) throw new Error('Only the venue owner can send invoices to Xero');
+        const { getDb } = await import('./db');
+        const { bookings, xeroInvoices } = await import('../drizzle/schema');
+        const { eq, and, ne } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [booking] = await db.select().from(bookings)
+          .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+        if (!booking) throw new Error('Booking not found');
+        if (!input.allowDuplicate) {
+          const [dup] = await db.select({ id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber })
+            .from(xeroInvoices)
+            .where(and(
+              eq(xeroInvoices.bookingId, input.bookingId),
+              eq(xeroInvoices.ownerId, ctx.user.id),
+              eq(xeroInvoices.stream, input.stream),
+              ne(xeroInvoices.status, 'VOIDED'),
+            )).limit(1);
+          if (dup) throw new Error(`A ${input.stream} invoice${dup.invoiceNumber ? ` (${dup.invoiceNumber})` : ''} was already sent for this event. Void it in Xero first, or confirm sending another.`);
+        }
+        const { createXeroDraftInvoice } = await import('./xero');
+        const clientName = `${booking.firstName ?? ''}${booking.lastName ? ' ' + booking.lastName : ''}`.trim() || 'Client';
+        const evDate = booking.eventDate
+          ? new Date(booking.eventDate as any).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
+          : '';
+        const result = await createXeroDraftInvoice(ctx.user.id, {
+          contactName: clientName,
+          contactEmail: booking.email ?? undefined,
+          reference: `${input.stream === 'food' ? 'Food' : 'Drinks'} — ${clientName}${evDate ? ` · ${evDate}` : ''} (VenueFlow #${booking.id})`,
+          dueDate: input.dueDate,
+          lines: input.lines,
+        });
+        await db.insert(xeroInvoices).values({
+          ownerId: ctx.user.id,
+          bookingId: input.bookingId,
+          stream: input.stream,
+          xeroInvoiceId: result.invoiceId,
+          invoiceNumber: result.invoiceNumber,
+          status: result.status,
+          total: String(result.total),
+        });
+        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status };
+      }),
+    // Pull current statuses from Xero for a booking's invoices; when one is
+    // PAID, tick the matching food/drinks stream on the Payments board too.
+    syncStatuses: protectedProcedure
+      .input(z.object({ bookingId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings, xeroInvoices } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const rows = await db.select().from(xeroInvoices)
+          .where(and(eq(xeroInvoices.bookingId, input.bookingId), eq(xeroInvoices.ownerId, ctx.user.id)));
+        const ids = rows.map(r => r.xeroInvoiceId).filter((v): v is string => !!v);
+        if (ids.length === 0) return { updated: 0 };
+        const { getXeroInvoiceStatuses } = await import('./xero');
+        const statuses = await getXeroInvoiceStatuses(ctx.user.id, ids);
+        let updated = 0;
+        for (const r of rows) {
+          const s = r.xeroInvoiceId ? statuses[r.xeroInvoiceId] : undefined;
+          if (!s || s.status === r.status) continue;
+          await db.update(xeroInvoices).set({ status: s.status, invoiceNumber: s.invoiceNumber ?? r.invoiceNumber })
+            .where(eq(xeroInvoices.id, r.id));
+          updated++;
+          if (s.status === 'PAID') {
+            const streamUpdate = r.stream === 'food' ? { foodStatus: 'paid' } : { drinksStatus: 'paid' };
+            await db.update(bookings).set(streamUpdate as any)
+              .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
+          }
+        }
+        return { updated };
+      }),
+  }),
+
   // ─── F&B Items (FOH / Kitchen) ────────────────────────────────────────────
   fnb: router({
     list: protectedProcedure
