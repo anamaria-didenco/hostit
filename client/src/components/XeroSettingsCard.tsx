@@ -1,0 +1,108 @@
+import { useEffect, useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { CheckCircle2, Link2, Unlink } from "lucide-react";
+
+/**
+ * Settings → Integrations card for Xero.
+ * States: not configured (env keys missing) → connect → connected (+ mapping).
+ * The OAuth flow is a full-page redirect: /api/xero/connect → Xero consent →
+ * /api/xero/callback → back here with ?xero=connected|error.
+ */
+export default function XeroSettingsCard() {
+  const utils = trpc.useUtils();
+  const { data: status, isLoading } = trpc.xero.status.useQuery();
+  const [accountCode, setAccountCode] = useState("");
+  const [inclusive, setInclusive] = useState(true);
+
+  useEffect(() => {
+    if (status?.connected) {
+      setAccountCode(status.salesAccountCode ?? "200");
+      setInclusive(status.lineAmountsInclusive ?? true);
+    }
+  }, [status?.connected]);
+
+  // Toast the result of the OAuth round-trip exactly once, then clean the URL.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const result = sp.get("xero");
+    if (!result) return;
+    if (result === "connected") toast.success("Xero connected");
+    else toast.error(sp.get("xeroMsg") || "Xero connection failed");
+    sp.delete("xero"); sp.delete("xeroMsg");
+    const qs = sp.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+    utils.xero.status.invalidate();
+  }, []);
+
+  const saveMapping = trpc.xero.saveMapping.useMutation({
+    onSuccess: () => { toast.success("Xero settings saved"); utils.xero.status.invalidate(); },
+    onError: (e) => toast.error(e.message || "Failed to save"),
+  });
+  const disconnect = trpc.xero.disconnect.useMutation({
+    onSuccess: () => { toast.success("Xero disconnected"); utils.xero.status.invalidate(); },
+    onError: (e) => toast.error(e.message || "Failed to disconnect"),
+  });
+
+  return (
+    <div className="dante-card p-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl" aria-hidden="true">💼</span>
+          <div>
+            <div className="font-cormorant font-semibold text-base text-ink flex items-center gap-2">
+              Xero
+              {status?.connected && (
+                <span className="inline-flex items-center gap-1 font-bebas tracking-widest text-[10px] text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                  <CheckCircle2 className="w-3 h-3" /> CONNECTED
+                </span>
+              )}
+            </div>
+            <div className="font-dm text-xs text-ink/60">
+              {isLoading ? "Checking connection…"
+                : !status?.configured ? "Needs XERO_CLIENT_ID + XERO_CLIENT_SECRET set on the server (developer.xero.com app)."
+                : status?.connected ? <>Sending draft invoices to <b>{status.tenantName ?? "your Xero organisation"}</b>. Drafts are approved inside Xero before clients see them.</>
+                : "Send event invoices (food & drinks) straight to Xero as drafts."}
+            </div>
+          </div>
+        </div>
+        {status?.configured && !status?.connected && (
+          <a href="/api/xero/connect"
+            className="font-bebas tracking-widest text-xs px-4 py-2 bg-forest text-cream hover:opacity-90 inline-flex items-center gap-1.5">
+            <Link2 className="w-3.5 h-3.5" /> CONNECT XERO
+          </a>
+        )}
+        {status?.connected && (
+          <button
+            onClick={() => { if (confirm("Disconnect Xero? Already-sent invoices stay in Xero; you just won't be able to push new ones until you reconnect.")) disconnect.mutate(); }}
+            disabled={disconnect.isPending}
+            className="font-bebas tracking-widest text-xs px-3 py-2 border border-gold/30 text-ink/70 hover:bg-gold/10 inline-flex items-center gap-1.5 disabled:opacity-50">
+            <Unlink className="w-3.5 h-3.5" /> DISCONNECT
+          </button>
+        )}
+      </div>
+
+      {status?.connected && (
+        <div className="mt-4 pt-4 border-t border-gold/15 flex items-end gap-4 flex-wrap">
+          <div>
+            <label htmlFor="xero-account-code" className="font-bebas tracking-widest text-[10px] text-ink/70 block mb-1">SALES ACCOUNT CODE</label>
+            <input id="xero-account-code" value={accountCode}
+              onChange={e => setAccountCode(e.target.value)}
+              placeholder="200"
+              className="w-28 border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest" />
+          </div>
+          <label className="flex items-center gap-2 font-dm text-sm text-ink pb-2 cursor-pointer">
+            <input type="checkbox" checked={inclusive} onChange={e => setInclusive(e.target.checked)} />
+            Amounts are GST-inclusive
+          </label>
+          <button
+            onClick={() => saveMapping.mutate({ salesAccountCode: accountCode.trim() || "200", lineAmountsInclusive: inclusive })}
+            disabled={saveMapping.isPending}
+            className="font-bebas tracking-widest text-xs px-4 py-2 border border-forest/40 text-forest hover:bg-forest/5 disabled:opacity-50">
+            {saveMapping.isPending ? "SAVING…" : "SAVE"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

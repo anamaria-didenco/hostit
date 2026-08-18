@@ -594,6 +594,43 @@ export const payments = pgTable("payments", {
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = typeof payments.$inferInsert;
 
+// ─── Xero integration ────────────────────────────────────────────────────────
+// One row per venue owner holding the OAuth tokens for their Xero org plus the
+// account-mapping config. Tokens are secrets: never return this row (or any of
+// its token fields) through tRPC — status endpoints must project safe fields.
+export const xeroConnections = pgTable("xero_connections", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull().unique(),
+  tenantId: varchar("tenantId", { length: 64 }),
+  tenantName: varchar("tenantName", { length: 255 }),
+  accessToken: text("accessToken"),
+  refreshToken: text("refreshToken"),
+  expiresAt: timestamp("expiresAt"),
+  // Mapping config: Xero sales account code for invoice lines, and whether
+  // line amounts are GST-inclusive (Bar Franco quotes most things inclusive).
+  salesAccountCode: varchar("salesAccountCode", { length: 20 }).default("200"),
+  lineAmountsInclusive: boolean("lineAmountsInclusive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// Ledger of invoices pushed to Xero, so the UI can show sent/paid state and
+// prevent accidental duplicates per booking+stream.
+export const xeroInvoices = pgTable("xero_invoices", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  bookingId: integer("bookingId").notNull(),
+  stream: varchar("stream", { length: 10 }).notNull(), // 'food' | 'drinks'
+  xeroInvoiceId: varchar("xeroInvoiceId", { length: 64 }),
+  invoiceNumber: varchar("invoiceNumber", { length: 50 }),
+  status: varchar("status", { length: 20 }), // DRAFT | AUTHORISED | PAID | VOIDED
+  total: decimal("total", { precision: 10, scale: 2 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type XeroConnection = typeof xeroConnections.$inferSelect;
+export type XeroInvoice = typeof xeroInvoices.$inferSelect;
+
 // ─── FOH/Kitchen F&B Items (linked to runsheets) ─────────────────────────────
 export const fnbItems = pgTable("fnb_items", {
   id: serial("id").primaryKey(),

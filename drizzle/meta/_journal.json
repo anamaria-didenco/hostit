@@ -343,6 +343,13 @@
       "when": 1779800700000,
       "tag": "0048_payment_streams",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1779800800000,
+      "tag": "0049_xero",
+      "breakpoints": true
     }
   ]
 }

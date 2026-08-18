@@ -8,6 +8,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
 import { handleBeoPdf, handleBeoPdfPublic, handleBeoPdfStaff } from "../beoPdf";
+import { handleXeroConnect, handleXeroCallback } from "../xero";
 import { handleFloorPlanPdf } from "../floorPlanPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -376,6 +377,13 @@ async function startServer() {
   // BEO Live Staff Link — token-gated (staff-portal link). Renders the exact
   // internal BEO so the live staff link mirrors the printed BEO 1:1.
   app.get("/api/beo/staff/:token", pdfPublicLimit, handleBeoPdfStaff);
+
+  // Xero OAuth — connect starts the consent flow (owner session required),
+  // callback receives the code from Xero and stores tokens. Rate-limited to
+  // keep the public callback from being hammered.
+  const xeroLimit = expressRateLimit("xero:oauth", 20, 60_000);
+  app.get("/api/xero/connect", xeroLimit, handleXeroConnect);
+  app.get("/api/xero/callback", xeroLimit, handleXeroCallback);
 
   // NOTE: The old /api/staff-sheet/:runsheetId route and staffSheetPdf.ts
   // have been removed. The BEO (handleBeoPdf above) is now the single
