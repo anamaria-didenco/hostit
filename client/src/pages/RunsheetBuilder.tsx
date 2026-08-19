@@ -3443,7 +3443,7 @@ export default function RunsheetBuilder() {
                 <button
                   onClick={() => setShowPriceCol(v => !v)}
                   className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPriceCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
-                  title="Show each item's price on the BEO / Event Pack (per-item price = till amount)"
+                  title="Show each item's price on the CUSTOMER Event Pack. Staff/kitchen copies always show prices."
                 >PRICE</button>
                 <button
                   onClick={() => setShowDietaryCol(v => !v)}
@@ -4328,7 +4328,7 @@ export default function RunsheetBuilder() {
                 <button
                   onClick={() => setShowDrinkPrices(v => !v)}
                   className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDrinkPrices ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
-                  title="Show each drink's price on the BEO / Event Pack (independent of the food PRICE toggle)"
+                  title="Show each drink's price on the CUSTOMER Event Pack. Staff/kitchen copies always show prices."
                 >SHOW PRICES</button>
               <button
                 onClick={async () => {
