@@ -24,13 +24,25 @@ const XERO_AUTH_URL = "https://login.xero.com/identity/connect/authorize";
 const XERO_TOKEN_URL = "https://identity.xero.com/connect/token";
 const XERO_CONNECTIONS_URL = "https://api.xero.com/connections";
 const XERO_API = "https://api.xero.com/api.xro/2.0";
-const SCOPES = "offline_access accounting.transactions accounting.contacts";
+// Xero apps registered after the 2 March 2026 granular-scope cutover have NO
+// access to the old broad `accounting.transactions` scope — requesting it fails
+// the authorize request outright. This app was registered 18 Aug 2026, so it
+// must use the granular scopes. Do not "simplify" this back to the old scope,
+// which is what almost every pre-2026 tutorial and snippet still shows.
+//   accounting.invoices        → granular replacement for accounting.transactions
+//   accounting.contacts        → find/create the customer
+//   accounting.settings.read   → read chart of accounts + tax rates
+//   offline_access             → REQUIRED, else no refresh token is issued and
+//                                the connection dies after 30 minutes
+const SCOPES = "openid profile email offline_access accounting.contacts accounting.invoices accounting.settings.read";
 
 function baseUrl(): string {
   return (process.env.PUBLIC_BASE_URL || "https://venueflowhq.com").replace(/\/$/, "");
 }
 function redirectUri(): string {
-  return `${baseUrl()}/api/xero/callback`;
+  // Xero requires an EXACT match against the URI registered on the app, so an
+  // explicitly-configured value always wins over the derived one.
+  return (process.env.XERO_REDIRECT_URI || `${baseUrl()}/api/xero/callback`).trim();
 }
 
 /** HMAC-signed state so the callback can trust the ownerId round-tripped
@@ -147,9 +159,23 @@ export async function handleXeroCallback(req: Request, res: Response) {
   }
 }
 
+// Xero ROTATES the refresh token on every use: the old one dies the instant a
+// refresh succeeds. Two concurrent refreshes therefore race and permanently
+// break the connection (the loser writes back a dead token). Single Render
+// instance, so an in-process promise lock per owner is sufficient.
+const refreshLocks = new Map<number, Promise<{ accessToken: string; tenantId: string; conn: any }>>();
+
 /** Returns a valid access token + tenant for the owner, refreshing (and
  *  persisting the rotated refresh token) when expired. Throws if not connected. */
 export async function getXeroAccess(ownerId: number): Promise<{ accessToken: string; tenantId: string; conn: any }> {
+  const inFlight = refreshLocks.get(ownerId);
+  if (inFlight) return inFlight;
+  const p = getXeroAccessUncached(ownerId).finally(() => refreshLocks.delete(ownerId));
+  refreshLocks.set(ownerId, p);
+  return p;
+}
+
+async function getXeroAccessUncached(ownerId: number): Promise<{ accessToken: string; tenantId: string; conn: any }> {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const [conn] = await db.select().from(xeroConnections).where(eq(xeroConnections.ownerId, ownerId)).limit(1);
@@ -159,7 +185,17 @@ export async function getXeroAccess(ownerId: number): Promise<{ accessToken: str
   if (stillValid) return { accessToken: conn.accessToken!, tenantId: conn.tenantId, conn };
 
   // Refresh (Xero rotates the refresh token on every use — must persist it).
-  const tok = await tokenRequest({ grant_type: "refresh_token", refresh_token: conn.refreshToken });
+  // A refresh token is valid 60 days unused; past that Xero returns
+  // invalid_grant and the only fix is reauthorising — never retry in a loop.
+  let tok: any;
+  try {
+    tok = await tokenRequest({ grant_type: "refresh_token", refresh_token: conn.refreshToken });
+  } catch (err: any) {
+    if (String(err?.message ?? "").includes("invalid_grant")) {
+      throw new Error("Xero disconnected — please reconnect it in Settings → Integrations.");
+    }
+    throw err;
+  }
   await db.update(xeroConnections).set({
     accessToken: tok.access_token,
     refreshToken: tok.refresh_token ?? conn.refreshToken,
@@ -193,6 +229,45 @@ async function xeroApi(ownerId: number, method: "GET" | "POST" | "PUT", path: st
   return json;
 }
 
+/** The org's GST-on-income tax type, read from Xero once and cached on the
+ *  connection. Hardcoding is unsafe: OUTPUT is the legacy 12.5% rate, so
+ *  guessing wrong silently produces incorrect GST on every invoice. */
+async function resolveSalesTaxType(ownerId: number): Promise<string> {
+  const db = await getDb();
+  if (!db) return "OUTPUT2";
+  const [conn] = await db.select().from(xeroConnections).where(eq(xeroConnections.ownerId, ownerId)).limit(1);
+  if (conn?.salesTaxType) return conn.salesTaxType;
+  try {
+    const json = await xeroApi(ownerId, "GET", "/TaxRates");
+    const usable = (json?.TaxRates ?? []).filter((r: any) => r.Status === "ACTIVE" && r.CanApplyToRevenue);
+    const gst = usable.find((r: any) => Number(r.EffectiveRate) === 15)
+      ?? usable.find((r: any) => Number(r.EffectiveRate) > 0);
+    const taxType = gst?.TaxType ?? "OUTPUT2";
+    await db.update(xeroConnections).set({ salesTaxType: taxType, updatedAt: new Date() })
+      .where(eq(xeroConnections.ownerId, ownerId));
+    return taxType;
+  } catch (err: any) {
+    console.warn("[Xero] could not read tax rates, defaulting to OUTPUT2:", err?.message ?? err);
+    return "OUTPUT2";
+  }
+}
+
+/** Find an existing Xero contact by email so repeat clients reuse one contact
+ *  record instead of colliding on Xero's unique-Name constraint. */
+async function findContactIdByEmail(ownerId: number, email?: string): Promise<string | null> {
+  if (!email?.trim()) return null;
+  try {
+    const where = encodeURIComponent(`EmailAddress=="${email.replace(/"/g, "")}"`);
+    const json = await xeroApi(ownerId, "GET", `/Contacts?where=${where}`);
+    return json?.Contacts?.[0]?.ContactID ?? null;
+  } catch {
+    return null; // matching is best-effort; fall back to creating by name
+  }
+}
+
+/** Money must reach Xero at 2dp — float drift produces cent-level GST errors. */
+const money2 = (n: number) => Math.round(n * 100) / 100;
+
 export interface XeroLine {
   description: string;
   quantity: number;
@@ -206,31 +281,49 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
   reference: string;
   dueDate?: string;      // YYYY-MM-DD
   lines: XeroLine[];
-}): Promise<{ invoiceId: string; invoiceNumber: string | null; total: number; status: string }> {
+}): Promise<{ invoiceId: string; invoiceNumber: string | null; total: number; status: string; xeroUrl: string }> {
   const { conn } = await getXeroAccess(ownerId);
   const accountCode = conn.salesAccountCode || "200";
-  const payload = {
+  const taxType = await resolveSalesTaxType(ownerId);
+  const contactId = await findContactIdByEmail(ownerId, opts.contactEmail);
+  const buildPayload = (contactName: string) => ({
     Invoices: [{
       Type: "ACCREC",
-      Contact: {
-        Name: opts.contactName,
-        ...(opts.contactEmail ? { EmailAddress: opts.contactEmail } : {}),
-      },
+      // Reuse the matched contact when we have one; otherwise create by name.
+      Contact: contactId
+        ? { ContactID: contactId }
+        : { Name: contactName, ...(opts.contactEmail ? { EmailAddress: opts.contactEmail } : {}) },
       Date: new Date().toISOString().slice(0, 10),
       ...(opts.dueDate ? { DueDate: opts.dueDate } : {}),
       Reference: opts.reference,
+      // ALWAYS a draft: a mapping bug that posted AUTHORISED invoices would put
+      // wrong numbers straight into a live GST return. The operator approves in
+      // Xero. Any auto-approve must be an explicit opt-in, never the default.
       Status: "DRAFT",
       LineAmountTypes: conn.lineAmountsInclusive ? "Inclusive" : "Exclusive",
       LineItems: opts.lines.map(l => ({
         Description: l.description,
-        Quantity: l.quantity,
-        UnitAmount: l.unitAmount,
+        Quantity: money2(l.quantity),
+        UnitAmount: money2(l.unitAmount),
         AccountCode: accountCode,
-        TaxType: "OUTPUT2", // NZ GST on income (15%)
+        TaxType: taxType,
       })),
     }],
-  };
-  const json = await xeroApi(ownerId, "POST", "/Invoices", payload);
+  });
+  let json: any;
+  try {
+    json = await xeroApi(ownerId, "POST", "/Invoices", buildPayload(opts.contactName));
+  } catch (err: any) {
+    // Xero enforces unique contact names — two different "John Smith" clients
+    // collide. Retry once disambiguated by the email local-part.
+    const msg = String(err?.message ?? "");
+    if (!contactId && /contact name must be unique/i.test(msg) && opts.contactEmail) {
+      const suffix = opts.contactEmail.split("@")[0];
+      json = await xeroApi(ownerId, "POST", "/Invoices", buildPayload(`${opts.contactName} (${suffix})`));
+    } else {
+      throw err;
+    }
+  }
   const inv = json?.Invoices?.[0];
   if (!inv?.InvoiceID) throw new Error("Xero did not return an invoice");
   return {
@@ -238,6 +331,9 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
     invoiceNumber: inv.InvoiceNumber ?? null,
     total: Number(inv.Total ?? 0),
     status: inv.Status ?? "DRAFT",
+    // Deep link straight to the draft in Xero so the operator can review and
+    // approve it without hunting for it.
+    xeroUrl: `https://go.xero.com/app/${conn.tenantId}/invoicing/edit/${inv.InvoiceID}`,
   };
 }
 
