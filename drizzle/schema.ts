@@ -609,6 +609,10 @@ export const xeroConnections = pgTable("xero_connections", {
   // Mapping config: Xero sales account code for invoice lines, and whether
   // line amounts are GST-inclusive (Bar Franco quotes most things inclusive).
   salesAccountCode: varchar("salesAccountCode", { length: 20 }).default("200"),
+  // The org's actual GST-on-income tax type, read from Xero's /TaxRates on
+  // first use. Never hardcode: OUTPUT is the legacy 12.5% rate and picking it
+  // silently produces wrong GST. Null until resolved.
+  salesTaxType: varchar("salesTaxType", { length: 20 }),
   lineAmountsInclusive: boolean("lineAmountsInclusive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),

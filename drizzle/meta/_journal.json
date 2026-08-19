@@ -350,6 +350,13 @@
       "when": 1779800800000,
       "tag": "0049_xero",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1779800900000,
+      "tag": "0050_xero_tax_type",
+      "breakpoints": true
     }
   ]
 }

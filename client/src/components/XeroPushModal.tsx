@@ -60,7 +60,10 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
 
   const push = trpc.xero.pushInvoice.useMutation({
     onSuccess: (r) => {
-      toast.success(`Draft sent to Xero${r.invoiceNumber ? ` — ${r.invoiceNumber}` : ""} (${fmtNZD(r.total)})`);
+      toast.success(`Draft sent to Xero${r.invoiceNumber ? ` — ${r.invoiceNumber}` : ""} (${fmtNZD(r.total)})`, {
+        action: r.xeroUrl ? { label: "Open in Xero", onClick: () => window.open(r.xeroUrl, "_blank", "noopener") } : undefined,
+        duration: 8000,
+      });
       utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
       onClose();
     },

@@ -4096,7 +4096,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           status: result.status,
           total: String(result.total),
         });
-        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status };
+        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, xeroUrl: result.xeroUrl };
       }),
     // Pull current statuses from Xero for a booking's invoices; when one is
     // PAID, tick the matching food/drinks stream on the Payments board too.
