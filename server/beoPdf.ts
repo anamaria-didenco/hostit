@@ -605,13 +605,18 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // when the operator ticks "PRICE" on the F&B sheet. Shown to everyone,
     // including the customer Event Pack, and doubles as a till reference (the
     // per-item unit price is what staff ring up).
-    const showItemPrice = fnbCols.price === true;
+    // Internal copies (staff runsheet / owner BEO) ALWAYS show prices — the
+    // kitchen and floor need to know a grazing table is $1,800 and what the
+    // fries cost. The operator toggles only govern the customer-facing pack.
+    const showItemPrice = !isPublic || fnbCols.price === true;
     // Drinks pricing has its own independent toggle on the runsheet's DRINKS
     // tab (drinksData.showDrinkPrices). When the operator hasn't set it yet
     // (legacy runsheets), fall back to the food PRICE toggle so older events
     // are unchanged. Explicit true/false always wins.
     const showDrinkPricesFlag = (rsDrinks as any)?.showDrinkPrices;
-    const showDrinkPrice = showDrinkPricesFlag === undefined ? showItemPrice : showDrinkPricesFlag === true;
+    const showDrinkPrice = !isPublic
+      ? true
+      : (showDrinkPricesFlag === undefined ? showItemPrice : showDrinkPricesFlag === true);
 
     const escHtml = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
@@ -1104,6 +1109,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const footerBiz = [escHtml(venueName), escHtml(eventType || clientName), escHtml(eventDate)].filter(Boolean).join(" &middot; ");
     const clientOrg = escHtml((booking as any).company ?? (booking as any).organisation ?? (booking as any).organisationName ?? "");
     const paymentInstr = ((venue as any)?.paymentInstructions ?? "").toString();
+    // Per-event payment notes from the runsheet Costs tab (e.g. "balance due on
+    // the day"). Internal only — surfaced in the billing steps below.
+    const paymentNotesTxt = ((runsheet as any)?.paymentNotes ?? "").toString();
 
     // Reusable brand/red section-label rule with an optional right-aligned meta.
     const secLabel = (title: string, opts?: { red?: boolean; metaRight?: string }) => {
@@ -1135,7 +1143,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     if (timeRange && timeRange !== "—") bandData.push(["Service", escHtml(timeRange)]);
     if (roomLabel || spaceName) bandData.push(["Space", escHtml(roomLabel || spaceName)]);
     if (!isPublic && clientName) bandData.push(["Onsite Contact", escHtml(clientName)]);
-    const p1Band = `<div style="display:grid;grid-template-columns:auto repeat(${bandData.length},1fr);margin-top:5px;border:1px solid var(--line);border-radius:6px;overflow:hidden">
+    const p1Band = `<div class="p1band" style="display:grid;grid-template-columns:auto repeat(${bandData.length},1fr);margin-top:5px;border:1px solid var(--line);border-radius:6px;overflow:hidden">
       <div style="padding:5px 10px;border-right:1px solid var(--line);background:var(--green);color:var(--on-green)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--on-green);opacity:.75;text-transform:uppercase">Guests</div><div style="font-family:var(--serif);font-size:30px;font-weight:600;line-height:1;margin-top:4px">${guestCount ? escHtml(String(guestCount)) : "&mdash;"}</div></div>
       ${bandData.map(([k, v], i) => bandCell4(k, v, i === bandData.length - 1)).join("")}
     </div>`;
@@ -1148,7 +1156,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     if (leadEmail) cdCells.push(cdCard("Email", escHtml(leadEmail)));
     if (cdContactVal) cdCells.push(cdCard("Contact", cdContactVal));
     const cdCols = cdCells.length >= 3 ? "1.4fr 1fr 1fr" : cdCells.length === 2 ? "1.4fr 1fr" : "1fr";
-    const clientDetailsSection = (!isPublic && cdCells.length > 0) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Client Details")}<div style="display:grid;grid-template-columns:${cdCols};gap:10px">${cdCells.join("")}</div></div>` : "";
+    const clientDetailsSection = (!isPublic && cdCells.length > 0) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Client Details")}<div class="cd-grid" style="display:grid;grid-template-columns:${cdCols};gap:10px">${cdCells.join("")}</div></div>` : "";
     // DF-5: the Set-up note lives on page 1 (under the band) instead of reserving
     // a standalone "External Hire & Suppliers" page for a lone note.
     const setupNoteSection = (!hideSet.has('setup') && venueSetup && String(venueSetup).trim()) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Set-up")}<div style="font-size:11.5px;color:var(--ink2);line-height:1.55">${venueSetup}</div></div>` : "";
@@ -1171,7 +1179,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const runOfDaySection = healedTimeline.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Run of Day", { metaRight: (timeRange && timeRange !== "—") ? escHtml(timeRange) : undefined })}
       <div>${healedTimeline.map((it: any, i: number) => rodItem(it, i === healedTimeline.length - 1)).join("")}</div></div>` : "";
 
-    const sigStrip = (top: boolean) => `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:8px;border-top:1px solid var(--line)">${["Name", "Signature", "Date"].map(l => top
+    const sigStrip = (top: boolean) => `<div class="sig-grid" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:8px;border-top:1px solid var(--line)">${["Name", "Signature", "Date"].map(l => top
       ? `<div><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:8px">${l}</div><div style="border-bottom:1.5px solid var(--gray2)"></div></div>`
       : `<div><div style="border-bottom:1.5px solid var(--gray2)"></div><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-top:6px">${l}</div></div>`).join("")}</div>`;
 
@@ -1185,7 +1193,16 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         const qHtml = q > 0
           ? `<span style="font-family:var(--serif);font-size:11.5px;font-weight:600;color:var(--green);min-width:30px;text-align:right;flex:none;line-height:1.35">&times;${escHtml(String(q))}</span>`
           : `<span style="min-width:38px;flex:none"></span>`;
-        return `<div style="display:flex;gap:8px;margin-top:1px;line-height:1.3;align-items:baseline">${qHtml}<span><span style="font-size:12.5px;font-weight:600;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` <span style="font-size:11.5px;color:var(--gray)">&mdash; ${escHtml(f.description)}</span>` : ""}</span></div>`;
+        // Price column (internal copies): line total in serif with the unit
+        // price beneath, so the kitchen can see both "what this dish costs"
+        // and "what the whole line is worth".
+        const unit = (f.unitPrice === null || f.unitPrice === undefined || f.unitPrice === "") ? null : Number(f.unitPrice);
+        const hasPrice = unit !== null && !isNaN(unit) && unit > 0;
+        const lineTotal = hasPrice ? unit * (q > 0 ? q : 1) : 0;
+        const priceHtml = (showItemPrice && hasPrice)
+          ? `<span class="dish-price"><b>${fmtCurrency(lineTotal)}</b>${q > 1 ? `<span class="ea">${fmtCurrency(unit)} ea</span>` : ""}</span>`
+          : "";
+        return `<div class="dish-row" style="display:flex;gap:8px;margin-top:1px;line-height:1.3;align-items:baseline">${qHtml}<span style="flex:1;min-width:0"><span style="font-size:12.5px;font-weight:600;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` <span style="font-size:11.5px;color:var(--gray)">&mdash; ${escHtml(f.description)}</span>` : ""}</span>${priceHtml}</div>`;
       };
       return `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:6px 10px;background:var(--cream)"><div style="font-family:var(--serif);font-style:italic;font-size:14px;font-weight:500;color:var(--green)">${escHtml(title)}</div><div style="margin-top:3px">${its.map(dishRow).join("")}</div></div>`;
     };
@@ -1246,10 +1263,58 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const bevBillingCallout = bevCalloutBits.length ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px;background:var(--change-fill);border:1.5px solid var(--change-line);border-radius:6px;padding:9px 13px;font-size:11.5px;color:#5b4a2b;line-height:1.5"><b style="font-weight:700;color:var(--amber)">Bar &mdash;</b> ${bevCalloutBits.join(" &middot; ")}</div>` : "";
     // Render whenever there are drinks OR a bar arrangement (option/tab/notes),
     // so a tab limit still prints when no drink list was selected.
-    const beverageSectionNew = (bevItems2.length > 0 || bevBillingCallout) ? `${bevItems2.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Beverage")}<div style="column-count:2;column-gap:26px">${BEV_GROUPS.map(([k, lbl]) => bevGroupBlock(lbl, bevItems2.filter(it => drinkType(it.name) === k))).join("")}</div></div>` : `<div style="margin-top:5px">${secLabel("Beverage")}</div>`}${bevBillingCallout}` : "";
+    const beverageSectionNew = (bevItems2.length > 0 || bevBillingCallout) ? `${bevItems2.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Beverage")}<div class="bev-cols" style="column-count:2;column-gap:26px">${BEV_GROUPS.map(([k, lbl]) => bevGroupBlock(lbl, bevItems2.filter(it => drinkType(it.name) === k))).join("")}</div></div>` : `<div style="margin-top:5px">${secLabel("Beverage")}</div>`}${bevBillingCallout}` : "";
 
     // ── PAGE 3 — billing instructions, onsite contact, set-up ──
     const noFinancials = hideSet.has('financials');
+    // ── "How this event is billed" — plain-English staff instructions ──
+    // Internal only. Staff kept asking how a given event gets charged, so the
+    // three money streams (deposit / food / drinks + bar) are spelled out as
+    // numbered steps with their live status, instead of leaving people to infer
+    // it from the numbers table below.
+    const billHowTo = (() => {
+      if (isPublic || noFinancials) return "";
+      const depositRequired = (booking as any).depositRequired !== false;
+      const foodState = ((booking as any).foodStatus as string) || "to_invoice";
+      const drinksState = ((booking as any).drinksStatus as string | null)
+        ?? ((barOpt === "cash_bar" || barOpt === "bar_tab_then_cash") ? "on_night" : "to_invoice");
+      const stateLabel: Record<string, string> = {
+        to_invoice: "To invoice", invoiced: "Invoiced &mdash; awaiting payment",
+        paid: "Paid", on_night: "Settled on the night",
+      };
+      const pill = (txt: string, good: boolean) =>
+        `<span style="background:${good ? "var(--brand-tint)" : "var(--amber-tint)"};color:${good ? "var(--green)" : "var(--amber)"};font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:6px;white-space:nowrap">${txt}</span>`;
+      const step = (n: number, title: string, body: string, pillHtml: string) =>
+        `<div style="display:flex;gap:9px;padding:9px 14px;border-top:1px solid var(--hair);align-items:flex-start">`
+        + `<span style="font-family:var(--serif);font-size:13px;font-weight:600;color:var(--green);flex:none;line-height:1.3">${n}</span>`
+        + `<span style="flex:1;min-width:0"><span style="font-size:11.5px;font-weight:700;color:var(--ink)">${title}</span>${pillHtml}`
+        + `<div style="font-size:11px;color:var(--gray);line-height:1.45;margin-top:2px">${body}</div></span></div>`;
+      const steps: string[] = [];
+      let n = 0;
+      if (depositRequired && depAmt > 0) {
+        steps.push(step(++n, "Deposit", `${fmtCurrency(depAmt)} to secure the date &mdash; deducted off the final drinks bill.`,
+          pill(booking.depositPaid ? "Received" : "Outstanding", Boolean(booking.depositPaid))));
+      }
+      steps.push(step(++n, "Food", "Invoiced and paid before the event. Do not charge food on the night.",
+        pill(stateLabel[foodState] ?? foodState, foodState === "paid")));
+      const barBits = [
+        barTagLabel ? escHtml(barTagLabel) : "",
+        barTabVal ? `tab limit ${fmtCurrency(barTabVal)}` : "",
+      ].filter(Boolean).join(" &middot; ");
+      const drinksBody = (drinksState === "on_night"
+        ? "Bar bill is settled on the night."
+        : "Bar bill is invoiced after the event.")
+        + (depAmt > 0 && depositRequired ? ` The ${fmtCurrency(depAmt)} deposit comes off this total.` : "")
+        + (barBits ? `<div style="margin-top:2px"><b style="color:var(--amber);font-weight:700">Bar &mdash;</b> ${barBits}</div>` : "")
+        + (barNotesText.trim() ? `<div style="margin-top:2px">${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : "");
+      steps.push(step(++n, "Drinks / bar", drinksBody, pill(stateLabel[drinksState] ?? drinksState, drinksState === "paid")));
+      if (!hideSet.has("payment") && paymentNotesTxt.trim()) {
+        steps.push(step(++n, "Notes for this event", escHtml(paymentNotesTxt).replace(/\n/g, "<br>"), ""));
+      }
+      return `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px">${secLabel("How This Event Is Billed")}`
+        + `<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden;background:var(--cream)">${steps.join("")}</div></div>`;
+    })();
+
     const billingInstrBlk = (!isPublic && !noFinancials && (minSpendAmt > 0 || depAmt > 0 || paymentInstr.trim())) ? `${secLabel("Billing Instructions")}
       <div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">
         ${minSpendAmt > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 15px;background:var(--green);color:var(--on-green)"><span style="font-size:11.5px;font-weight:700">Minimum spend</span><span style="font-family:var(--serif);font-size:17px;font-weight:600">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
@@ -1269,22 +1334,22 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       (roomLabel || spaceName) ? statCard("Space", escHtml(roomLabel || spaceName), "") : "",
       (!isPublic && minSpendAmt > 0) ? statCard("F&amp;B Minimum", fmtCurrency(minSpendAmt), "Food &amp; Beverage") : "",
     ].filter(Boolean);
-    const billRow = (item: string, sub: string, price: string, qty: string, total: string) => `<div style="break-inside:avoid;page-break-inside:avoid;display:grid;grid-template-columns:1fr 90px 60px 110px;padding:4px 12px;border-top:1px solid var(--hair);font-size:11.5px;align-items:baseline"><span style="color:var(--ink2)">${item}${sub ? `<div style="font-size:11px;color:var(--faint);margin-top:1px">${sub}</div>` : ""}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${price}</span><span style="text-align:right;color:var(--gray)">${qty}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${total}</span></div>`;
+    const billRow = (item: string, sub: string, price: string, qty: string, total: string) => `<div class="bill-row" style="break-inside:avoid;page-break-inside:avoid;display:grid;grid-template-columns:1fr 90px 60px 110px;padding:4px 12px;border-top:1px solid var(--hair);font-size:11.5px;align-items:baseline"><span style="color:var(--ink2)">${item}${sub ? `<div style="font-size:11px;color:var(--faint);margin-top:1px">${sub}</div>` : ""}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${price}</span><span style="text-align:right;color:var(--gray)">${qty}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${total}</span></div>`;
     const foodBillRows = fnbFoodLines.map((i: any) => billRow(`Food &amp; Beverage &mdash; ${escHtml(i.dishName ?? "Item")}`, "", fmtCurrency(Number(i.unitPrice) || 0), String(Number(i.qty) || 0), fmtCurrency((Number(i.qty) || 0) * (Number(i.unitPrice) || 0)))).join("");
     const costBillRows = billCostList.filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0).map(ci => billRow(escHtml(ci.label ?? "Item"), "", fmtCurrency(Number(ci.unitPrice) || 0), String(Number(ci.qty) || 0), fmtCurrency(lineAmt(ci)))).join("");
     // Billing total: show the GST breakdown (subtotal → GST → total incl. GST),
     // mirroring the runsheet Costs tab, instead of only a single ex-GST figure.
     // Falls back to a plain "Day Estimated Total" when nothing has been priced.
     const billingTotalRows = enteredTotal > 0
-      ? `<div style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--gray)"><span style="text-align:right">Subtotal (excl. GST)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(subtotalExGst)}</span></div><div style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;font-size:11px;color:var(--gray)"><span style="text-align:right">GST (15%)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(gstAmt)}</span></div><div style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Total (incl. GST)</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(totalInclGst)}</span></div>`
-      : `<div style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Day Estimated Total</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(itemisedTotal > 0 ? itemisedTotal : enteredTotal)}</span></div>`;
-    const billingTable = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || billCostList.length > 0 || minSpendAmt > 0)) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px">${secLabel("Daily Billing Summary", { metaRight: escHtml(eventDate) })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden"><div style="display:grid;grid-template-columns:1fr 90px 60px 110px;background:var(--fill);padding:7px 14px;font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>${foodBillRows}${costBillRows}${billingTotalRows}</div></div>` : "";
+      ? `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--gray)"><span style="text-align:right">Subtotal (excl. GST)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(subtotalExGst)}</span></div><div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;font-size:11px;color:var(--gray)"><span style="text-align:right">GST (15%)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(gstAmt)}</span></div><div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Total (incl. GST)</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(totalInclGst)}</span></div>`
+      : `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Day Estimated Total</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(itemisedTotal > 0 ? itemisedTotal : enteredTotal)}</span></div>`;
+    const billingTable = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || billCostList.length > 0 || minSpendAmt > 0)) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px">${secLabel("Daily Billing Summary", { metaRight: escHtml(eventDate) })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden"><div class="bill-row bill-head" style="display:grid;grid-template-columns:1fr 90px 60px 110px;background:var(--fill);padding:7px 14px;font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>${foodBillRows}${costBillRows}${billingTotalRows}</div></div>` : "";
     const closingNote = (!hideSet.has('footer') && footerNote.trim()) ? `<div style="margin-top:5px">${secLabel("Note")}<div style="font-size:11.5px;line-height:1.5;color:#332e26">${footerNote.replace(/\n/g, "<br>")}</div></div>` : "";
     const acceptanceBlk = `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:10px;padding-top:16px;border-top:1px solid var(--line)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:4px">Client Acceptance</div><div style="font-size:11.5px;color:var(--gray);margin-bottom:20px;line-height:1.5;max-width:80%">By signing below the client confirms the details, catering, beverages and estimated charges set out in this event order are correct.</div>${sigStrip(false)}</div>`;
     // Condense: the Event Summary stat cards duplicated the page-1 info band
     // (date / service / space / attendees), so they're dropped to save a block.
-    const page4Inner = `${billingInstrSection}${billingTable}${closingNote}${acceptanceBlk}`;
-    const page4Content = (statCards.length > 0 || billingTable.trim()) ? `${pageHeadR("Event Summary", escHtml(eventDate))}${page4Inner}` : "";
+    const page4Inner = `${billHowTo}${billingInstrSection}${billingTable}${closingNote}${acceptanceBlk}`;
+    const page4Content = (statCards.length > 0 || billingTable.trim() || billHowTo.trim()) ? `${pageHeadR("Event Summary", escHtml(eventDate))}${page4Inner}` : "";
 
     // ── Assemble pages; collapse empties; number "Page N of N" dynamically ──
     const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
@@ -1502,9 +1567,43 @@ ${pageContents.join("\n")}
     .foot{display:none;}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
+  /* Per-dish price column (internal copies) — line total over unit price. */
+  .dish-price{flex:none;margin-left:10px;text-align:right;white-space:nowrap;}
+  .dish-price b{font-family:var(--serif);font-size:12.5px;font-weight:600;color:var(--ink);}
+  .dish-price .ea{display:block;font-size:10px;color:var(--faint);line-height:1.25;font-weight:500;}
+
   @media screen{
     html,body{background:var(--paper-edge);}
     .doc{margin:10mm auto;padding:14mm 15mm 12mm;box-shadow:0 8px 40px rgba(0,0,0,.16);}
+  }
+  /* ── Phones / narrow embeds ────────────────────────────────────────────────
+     The document is authored at A4 (210mm ≈ 794px). On a phone that overflows
+     the viewport and the page reads as squashed and clipped. Below ~820px the
+     sheet becomes fluid and every fixed multi-column grid collapses. Screen
+     only — print/PDF keeps the exact A4 layout. Inline grid-template-columns
+     need !important to be overridden here. */
+  @media screen and (max-width:820px){
+    html,body{background:var(--cream);}
+    .doc{max-width:100%;margin:0;padding:14px 13px 26px;box-shadow:none;}
+    img{max-width:100%;height:auto;}
+    body{overflow-wrap:break-word;}
+    /* Info band + client details stack two-up, then single-file on small phones */
+    .band,.p1band{grid-template-columns:1fr 1fr !important;}
+    .band-cell{border-right:0;border-bottom:1px solid var(--line);}
+    .cd-grid,.sig-grid{grid-template-columns:1fr !important;}
+    .bev-cols{column-count:1 !important;}
+    .diet-grid,.changes-grid{grid-template-columns:1fr;}
+    /* Billing table: keep the columns aligned but tighten them to fit */
+    .bill-row{grid-template-columns:1fr 58px 30px 78px !important;font-size:10.5px !important;padding-left:9px !important;padding-right:9px !important;}
+    .bill-tot{grid-template-columns:1fr 84px !important;padding-left:9px !important;padding-right:9px !important;}
+    /* Money must never wrap mid-figure ("$1,756.5 / 2") */
+    .bill-row>span+span,.bill-tot>span{white-space:nowrap;}
+    .bill-row>span:first-child{white-space:normal;}
+    .dish-price .ea{font-size:9.5px;}
+  }
+  @media screen and (max-width:480px){
+    .band,.p1band{grid-template-columns:1fr !important;}
+    .band-cell:last-child{border-bottom:0;}
   }
 </style>
 </head>
