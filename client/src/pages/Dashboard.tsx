@@ -130,7 +130,7 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
 
   return (
     <div className="dante-card shadow-sm">
-      <div className="flex items-center justify-between p-4 border-b border-gold/15">
+      <div className="flex items-center justify-between flex-wrap gap-y-2 p-4 border-b border-gold/15">
         <button aria-label="Previous month" onClick={onPrev} className="p-1 hover:text-gold transition-colors"><ChevronLeft className="w-4 h-4" /></button>
         <div className="flex items-center gap-2">
           <h2 className="font-cormorant text-lg font-semibold text-ink">{MONTHS[month]} {year}</h2>
@@ -2763,7 +2763,7 @@ export default function Dashboard() {
         {/* Desktop nav lives in the sidebar; mobile uses the top + bottom bars */}
 
         {/* Main Content */}
-        <main id="vf-main" tabIndex={-1} className={`flex-1 ${tab === "enquiries" ? "overflow-hidden" : "overflow-auto pb-16 md:pb-0"}`}>
+        <main id="vf-main" tabIndex={-1} className={`flex-1 pb-mobile-nav ${tab === "enquiries" ? "overflow-hidden" : "overflow-auto"}`}>
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
           {tab === "overview" && (() => {
@@ -7269,13 +7269,13 @@ export default function Dashboard() {
                 </div>
                 {/* Template Emails */}
                 <div className="bg-white border border-gray-200 rounded">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div className="flex items-center justify-between flex-wrap gap-y-2 p-4 border-b border-gray-200">
                     <h2 className="font-semibold text-gray-800">Template Emails</h2>
                     <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
                   </div>
                   <div className="p-3 text-xs text-gray-400 border-b border-gray-100">Name</div>
                   {['Available - Pay Deposit','Available - Select Menu Items','Lead Follow Up','New Event Software Email','Not Available','Proposal Sent Follow Up'].map((name,i) => (
-                    <div key={i} className="flex items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50">
+                    <div key={i} className="flex items-center justify-between flex-wrap gap-y-2 p-3 border-b border-gray-50 hover:bg-gray-50">
                       <span className="text-sm text-gray-700">{name}</span>
                       <button aria-label="Delete" className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                     </div>
@@ -7308,7 +7308,7 @@ export default function Dashboard() {
                 </div>
                 {/* Event Types */}
                 <div className="bg-white border border-gray-200 rounded">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div className="flex items-center justify-between flex-wrap gap-y-2 p-4 border-b border-gray-200">
                     <h2 className="font-semibold text-gray-800">Event Types</h2>
                     <button className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
                   </div>
@@ -7931,7 +7931,7 @@ export default function Dashboard() {
 
                 {/* Sales Categories */}
                 <div className="bg-white border border-gray-200 rounded mb-6">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div className="flex items-center justify-between flex-wrap gap-y-2 p-4 border-b border-gray-200">
                     <h2 className="font-semibold text-gray-800">Sales Categories</h2>
                     <button onClick={() => setShowCategoryForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
                   </div>
@@ -7950,7 +7950,7 @@ export default function Dashboard() {
                       <p className="p-6 text-center text-sm text-gray-400">No sales categories yet. Click Add to create one.</p>
                     )}
                     {(salesCategoriesList ?? []).map((c: any) => (
-                      <div key={c.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                      <div key={c.id} className="flex items-center justify-between flex-wrap gap-y-2 px-4 py-3 hover:bg-gray-50">
                         <span className="text-sm text-gray-800">{c.name}</span>
                         <button aria-label="Delete category" onClick={() => deleteSalesCategory.mutate({ id: c.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                       </div>
@@ -7960,7 +7960,7 @@ export default function Dashboard() {
 
                 {/* Menu Items (grouped by package/section) */}
                 <div className="bg-white border border-gray-200 rounded">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div className="flex items-center justify-between flex-wrap gap-y-2 p-4 border-b border-gray-200">
                     <h2 className="font-semibold text-gray-800">Menu Items</h2>
                     <button onClick={() => { setShowMenuForm(true); setEditingPackageId(null); setMenuForm({ name: '', type: 'food', description: '', pricePerHead: '', customPriceLabel: '', chefNotes: '', pdfUrl: '', pdfName: '' }); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add</button>
                   </div>
@@ -8132,7 +8132,7 @@ export default function Dashboard() {
                   {/* Left: Category list */}
                   <div className="w-56 flex-shrink-0">
                     <div className="bg-white border border-gold/20 rounded">
-                      <div className="flex items-center justify-between px-3 py-2.5 border-b border-gold/10">
+                      <div className="flex items-center justify-between flex-wrap gap-y-2 px-3 py-2.5 border-b border-gold/10">
                         <span className="font-bebas tracking-widest text-xs text-ink/70">CATEGORIES</span>
                         <button aria-label="Add category" onClick={() => { setCatalogCategoryForm({ name: '', type: catalogActiveType, description: '' }); setShowCatalogCategoryForm(true); }}
                           className="text-forest hover:text-forest-dark"><Plus className="w-4 h-4" /></button>
@@ -8425,7 +8425,7 @@ export default function Dashboard() {
                           <div>
                             {/* Bulk action bar — appears whenever 1+ rows are selected. */}
                             {selectedCount > 0 && (
-                              <div className="flex items-center justify-between px-4 py-2.5 bg-forest/10 border-b border-forest/20">
+                              <div className="flex items-center justify-between flex-wrap gap-y-2 px-4 py-2.5 bg-forest/10 border-b border-forest/20">
                                 <span className="font-bebas tracking-widest text-xs text-forest">
                                   {selectedCount} SELECTED
                                 </span>
@@ -10124,7 +10124,7 @@ export default function Dashboard() {
       </Dialog>
 
       {/* ── MOBILE BOTTOM TAB BAR (hidden on md+) ─────────────────────── */}
-      <nav aria-label="Primary" className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
+      <nav aria-label="Primary" className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 box-content safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
         {(isStaff ? [
           { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
           { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },

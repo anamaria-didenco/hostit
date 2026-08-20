@@ -358,7 +358,7 @@ export default function LeadForm() {
 
                   {eventFields.some(f => f.id === 'eventDate') && (
                     <div>
-                      <div className="flex items-center justify-between px-3 py-2 rounded-t-md" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
+                      <div className="flex items-center justify-between flex-wrap gap-y-2 px-3 py-2 rounded-t-md" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
                         <span className="font-bold text-sm">{calYear}</span>
                         <span className="text-xs opacity-90">{fmtSelected}</span>
                       </div>

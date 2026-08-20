@@ -372,7 +372,7 @@ export default function DailyChecklists() {
                     </div>
                     {isExpanded && (
                       <div className="border-t border-[#c9a84c]/20">
-                        <div className="bg-[#2f5488]/8 border-b border-[#2f5488]/20 px-4 py-2 flex items-center justify-between gap-2">
+                        <div className="bg-[#2f5488]/8 border-b border-[#2f5488]/20 px-4 py-2 flex items-center justify-between flex-wrap gap-y-2 gap-2">
                           <span className="font-dm text-xs text-[#2f5488]">Live staff link:</span>
                           <div className="flex items-center gap-1 min-w-0">
                             <span className="font-dm text-xs text-[#2f5488] truncate">{getLiveLink(cl.token)}</span>
@@ -599,7 +599,7 @@ export default function DailyChecklists() {
               )}
             </div>
 
-            <div className="flex items-center justify-between px-5 py-4 border-t border-[#c9a84c]/30 bg-[#f9f5ef]">
+            <div className="flex items-center justify-between flex-wrap gap-y-2 px-5 py-4 border-t border-[#c9a84c]/30 bg-[#f9f5ef]">
               <button
                 onClick={() => setShowAiPaste(false)}
                 className="font-bebas tracking-widest text-sm text-[#8a7a60] hover:text-[#1a1209]"

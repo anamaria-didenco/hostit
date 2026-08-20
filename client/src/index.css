@@ -292,6 +292,35 @@
      fine and keeps using .bg-gold / .bg-amber. */
   .bg-gold-deep   { background-color: #8a5f18; }
 
+  /* ── iOS safe area ──────────────────────────────────────────────────────
+     `safe-area-inset-bottom` was used on the mobile tab bar but never defined,
+     so it did nothing: the bar sat under the home indicator and its labels were
+     partly obscured. These need viewport-fit=cover on the viewport meta to
+     resolve to anything but 0. */
+  .safe-area-inset-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+  /* Reserves the height of the fixed mobile tab bar (h-16) plus the home
+     indicator, so the last row of a list isn't permanently hidden behind it. */
+  .pb-mobile-nav { padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); }
+  @media (min-width: 768px) { .pb-mobile-nav { padding-bottom: 0; } }
+
+  /* ── iOS focus zoom ─────────────────────────────────────────────────────
+     Safari zooms the whole page in when a form control smaller than 16px takes
+     focus, and does not zoom back out — you end up panning a form sideways.
+     maximum-scale=1 used to suppress that, but it also disabled pinch-zoom for
+     everyone, so the fix is to make the controls big enough instead.
+
+     The ui/Input and ui/Textarea bases already do this (text-base, md:text-sm);
+     this catches the many call sites that override them with text-sm / text-xs,
+     and every raw input in the app. Phones only — desktop keeps its density. */
+  @media (max-width: 767px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+
   /* ── Editorial palette (border) ── */
   .border-sage-green { border-color: #2f5488; }
   .border-sage-dark  { border-color: #1f3a63; }

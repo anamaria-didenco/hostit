@@ -2429,7 +2429,7 @@ export default function RunsheetBuilder() {
                     <Printer className="w-4 h-4 text-forest" /> Print
                   </button>
                   {/* Print layout — 1 / 2 columns */}
-                  <div className="flex items-center justify-between px-4 py-2">
+                  <div className="flex items-center justify-between flex-wrap gap-y-2 px-4 py-2">
                     <span className="font-dm text-[13px] text-ink/70 flex items-center gap-2.5"><LayoutGrid className="w-4 h-4 text-forest" /> Layout</span>
                     <div className="inline-flex items-center bg-linen rounded-sm border border-gold/25 overflow-hidden">
                       <button
@@ -5785,7 +5785,7 @@ export default function RunsheetBuilder() {
           </div>
 
           {/* Footer actions */}
-          <div className="flex items-center justify-between gap-2 px-5 py-3 bg-white border-t border-gold/20 shrink-0">
+          <div className="flex items-center justify-between flex-wrap gap-y-2 gap-2 px-5 py-3 bg-white border-t border-gold/20 shrink-0">
             <button onClick={() => setBeoPreviewOpen(false)} className="font-bebas tracking-widest text-xs text-ink/70 hover:text-ink px-3 py-2 transition-colors">CLOSE</button>
             <div className="flex items-center gap-2">
               <button
@@ -6462,7 +6462,7 @@ export default function RunsheetBuilder() {
       {showChecklistPaste && (
         <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 no-print" onClick={() => setShowChecklistPaste(false)}>
           <div role="dialog" aria-modal="true" className="bg-linen w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
+            <div className="flex items-center justify-between flex-wrap gap-y-2 px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-gold" />
                 <h3 className="font-bebas tracking-widest text-sm">AI SMART PASTE — EVENT CHECKLIST</h3>
@@ -6600,7 +6600,7 @@ export default function RunsheetBuilder() {
         return (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print" onClick={() => !sendingStaffEmail && setEmailingLink(null)}>
             <div role="dialog" aria-modal="true" className="bg-white max-w-lg w-full max-h-[90vh] overflow-y-auto rounded-sm shadow-xl" onClick={e => e.stopPropagation()}>
-              <div className="px-5 py-4 border-b border-gold/20 flex items-center justify-between">
+              <div className="px-5 py-4 border-b border-gold/20 flex items-center justify-between flex-wrap gap-y-2">
                 <div>
                   <h2 className="font-bebas tracking-widest text-base text-forest">EMAIL STAFF BRIEFING</h2>
                   <p className="font-dm text-xs text-ink/70 mt-0.5">Sends the live runsheet link + BEO PDF.</p>

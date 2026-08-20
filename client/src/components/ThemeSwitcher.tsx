@@ -31,7 +31,7 @@ export function ThemeSwitcher() {
           {/* Panel */}
           <div className="relative z-10 w-full max-w-sm mx-4 mb-4 sm:mb-0 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <div className="flex items-center justify-between flex-wrap gap-y-2 px-5 py-4 border-b border-border">
               <h3 className="text-sm font-semibold text-foreground">Appearance</h3>
               <button
                 onClick={() => setOpen(false)}

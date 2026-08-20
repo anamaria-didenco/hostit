@@ -77,7 +77,7 @@ export default function Checklist() {
   return (
     <div className="min-h-screen bg-cream print:bg-white">
       {/* Nav */}
-      <nav className="bg-ink text-cream px-4 md:px-6 py-3 flex items-center justify-between gap-2 print:hidden">
+      <nav className="bg-ink text-cream px-4 md:px-6 py-3 flex items-center justify-between flex-wrap gap-y-2 gap-2 print:hidden">
         <div className="flex items-center gap-2 md:gap-4 min-w-0">
           <Link href="/dashboard">
             <button className="flex items-center gap-1.5 font-bebas text-xs tracking-widest text-cream/60 hover:text-cream min-h-[44px]">

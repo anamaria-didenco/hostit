@@ -546,7 +546,7 @@ export default function ShiftRunsheetLive() {
       </div>
 
       {/* Staff name footer */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg">
+      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg safe-area-inset-bottom">
         <div className="max-w-2xl mx-auto px-4 py-3">
           {editingName ? (
             <div className="flex items-center gap-2">

@@ -173,7 +173,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           )}
 
           {editingId !== null && (
-            <div className="border border-blue-300 bg-blue-50 text-blue-900 font-dm text-xs p-2.5 flex items-center justify-between gap-2">
+            <div className="border border-blue-300 bg-blue-50 text-blue-900 font-dm text-xs p-2.5 flex items-center justify-between flex-wrap gap-y-2 gap-2">
               <span>Editing an existing draft — sending will <b>replace</b> its contents in Xero.</span>
               <button onClick={() => setEditingId(null)}
                 className="font-bebas tracking-widest text-[10px] text-blue-900 hover:underline flex-shrink-0">

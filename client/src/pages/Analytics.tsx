@@ -102,7 +102,7 @@ export default function Analytics() {
   return (
     <div className="min-h-screen bg-cream">
       {/* Header */}
-      <div className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between">
+      <div className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between flex-wrap gap-y-2">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate("/dashboard")} className="text-cream/60 hover:text-cream transition-colors">
             <ArrowLeft className="w-5 h-5" />
