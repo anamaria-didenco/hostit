@@ -126,3 +126,59 @@ export function depositAppliedClause(v: string | null | undefined): string {
 export function depositComesOffDrinks(v: string | null | undefined): boolean {
   return (v ?? "drinks") === "drinks";
 }
+
+/**
+ * The status chip printed beside a billing step on the BEO.
+ *
+ * Two different fields were being shown next to each other: `foodStatus` /
+ * `drinksStatus` track whether the money has ARRIVED, while the billing terms
+ * describe how it is meant to arrive. Printing the raw status next to the terms
+ * sentence produced "TO INVOICE" beside "Bar bill is settled on the night" —
+ * two contradictory instructions on one line, and staff have to act on one of
+ * them. The chosen arrangement wins for anything not yet settled, so the chip
+ * and the sentence always say the same thing.
+ */
+export interface BillingStage {
+  label: string;
+  /** Nothing left to collect from the client on this stream — printed green. */
+  settled: boolean;
+}
+
+const FOOD_STAGE: Record<string, BillingStage> = {
+  invoiced_prior: { label: "Invoice before the event", settled: false },
+  on_night: { label: "Charge on the night", settled: false },
+  in_minimum: { label: "In the minimum spend", settled: true },
+  none: { label: "No food", settled: true },
+};
+
+const DRINKS_STAGE: Record<string, BillingStage> = {
+  invoiced_after: { label: "Invoice after the event", settled: false },
+  on_night: { label: "Collect on the night", settled: false },
+  prepaid_tab: { label: "Prepaid", settled: true },
+  cash_bar: { label: "Guests pay their own", settled: true },
+  tab_then_cash: { label: "Tab, then cash bar", settled: false },
+};
+
+/** Progress labels, used only where no arrangement has been chosen. */
+const STATUS_STAGE: Record<string, BillingStage> = {
+  to_invoice: { label: "To invoice", settled: false },
+  invoiced: { label: "Invoiced — awaiting payment", settled: false },
+  paid: { label: "Paid", settled: true },
+  on_night: { label: "Collect on the night", settled: false },
+};
+
+export function billingStageLabel(
+  stream: "food" | "drinks",
+  status: string | null | undefined,
+  terms: string | null | undefined,
+): BillingStage {
+  // Money in the bank beats every plan.
+  if (status === "paid") return STATUS_STAGE.paid;
+  const chosen = stream === "food" ? FOOD_STAGE[terms ?? ""] : DRINKS_STAGE[terms ?? ""];
+  // An arrangement with nothing to collect (cash bar, prepaid, in the minimum)
+  // must not be labelled "to invoice" just because no one ticked it off.
+  if (chosen?.settled) return chosen;
+  // An invoice that has actually gone out is real progress past the plan.
+  if (status === "invoiced") return STATUS_STAGE.invoiced;
+  return chosen ?? STATUS_STAGE[status ?? "to_invoice"] ?? STATUS_STAGE.to_invoice;
+}

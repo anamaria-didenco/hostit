@@ -1754,7 +1754,21 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.foodStatus !== undefined) updates.foodStatus = rest.foodStatus;
         if (rest.drinksStatus !== undefined) updates.drinksStatus = rest.drinksStatus;
         if (rest.billingFood !== undefined) updates.billingFood = rest.billingFood;
-        if (rest.billingDrinks !== undefined) updates.billingDrinks = rest.billingDrinks;
+        if (rest.billingDrinks !== undefined) {
+          updates.billingDrinks = rest.billingDrinks;
+          // Keep the Payments board from contradicting the arrangement. Picking
+          // "settled on the night" (or a cash bar) and leaving the stream on its
+          // untouched default printed "To invoice" beside "settled on the
+          // night" — two opposite instructions for the same money. Only the
+          // untouched default is moved: a status the operator has advanced to
+          // invoiced or paid is real progress and is left alone.
+          const neverInvoicedAhead = ['on_night', 'cash_bar', 'tab_then_cash'].includes(rest.billingDrinks ?? '');
+          if (neverInvoicedAhead && rest.drinksStatus === undefined) {
+            const [cur] = await db.select({ drinksStatus: bookings.drinksStatus })
+              .from(bookings).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+            if (!cur?.drinksStatus || cur.drinksStatus === 'to_invoice') updates.drinksStatus = 'on_night';
+          }
+        }
         if (rest.billingDepositApplied !== undefined) updates.billingDepositApplied = rest.billingDepositApplied;
         if (rest.billingNote !== undefined) updates.billingNote = rest.billingNote?.trim() || null;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
@@ -4285,7 +4299,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           targetXeroId = row.xeroInvoiceId;
         }
         if (!input.allowDuplicate && input.updateInvoiceId === undefined) {
-          const [dup] = await db.select({ id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber })
+          const [dup] = await db.select({ id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber, xeroInvoiceId: xeroInvoices.xeroInvoiceId, status: xeroInvoices.status })
             .from(xeroInvoices)
             .where(and(
               eq(xeroInvoices.bookingId, input.bookingId),
@@ -4295,7 +4309,24 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               // not block sending a replacement for the same stream.
               or(isNull(xeroInvoices.status), notInArray(xeroInvoices.status, ['VOIDED', 'DELETED'])),
             )).limit(1);
-          if (dup) throw new Error(`A ${input.stream} invoice${dup.invoiceNumber ? ` (${dup.invoiceNumber})` : ''} was already sent for this event. Void it in Xero first, or confirm sending another.`);
+          if (dup) {
+            // Our stored status can be stale: voiding in Xero doesn't call us
+            // back, so the row here still says DRAFT. Before refusing, ask Xero
+            // what the invoice ACTUALLY is right now — the operator who just
+            // voided it there must not be told to void it again.
+            let stillLive = true;
+            if (dup.xeroInvoiceId) {
+              const { getXeroInvoiceStatus, isGoneFromXero } = await import('./xero');
+              const live = await getXeroInvoiceStatus(ctx.user.id, dup.xeroInvoiceId).catch(() => null);
+              if (live && live !== dup.status) {
+                await db.update(xeroInvoices).set({ status: live }).where(eq(xeroInvoices.id, dup.id));
+              }
+              if (isGoneFromXero(live)) stillLive = false;
+            }
+            if (stillLive) {
+              throw new Error(`A ${input.stream} invoice${dup.invoiceNumber ? ` (${dup.invoiceNumber})` : ''} was already sent for this event. Void it in Xero first, or confirm sending another.`);
+            }
+          }
         }
         const { createXeroDraftInvoice } = await import('./xero');
         const clientName = `${booking.firstName ?? ''}${booking.lastName ? ' ' + booking.lastName : ''}`.trim() || 'Client';

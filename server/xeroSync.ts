@@ -12,7 +12,7 @@
 import { getDb } from "./db";
 import { bookings, payments, xeroInvoices } from "../drizzle/schema";
 import { eq, and, inArray } from "drizzle-orm";
-import { getXeroInvoiceStatuses, getXeroInvoicePayments } from "./xero";
+import { getXeroInvoiceStatuses, getXeroInvoicePayments, getXeroInvoiceStatus } from "./xero";
 
 export interface XeroSyncResult {
   statusChanges: number;
@@ -43,7 +43,17 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
   let detailBudget = 40;
 
   for (const r of rows) {
-    const s = r.xeroInvoiceId ? statuses[r.xeroInvoiceId] : undefined;
+    let s = r.xeroInvoiceId ? statuses[r.xeroInvoiceId] : undefined;
+    // Xero OMITS deleted and voided invoices from the batched IDs response, so
+    // an invoice voided in Xero simply vanishes from the answer and our row
+    // stays DRAFT forever — "check status" looked like it did nothing. A row
+    // Xero went quiet on gets asked about individually (GET by ID does return
+    // them), unless we already know it's gone.
+    if (!s && r.xeroInvoiceId && r.status !== "VOIDED" && r.status !== "DELETED" && detailBudget > 0) {
+      detailBudget--;
+      const solo = await getXeroInvoiceStatus(ownerId, r.xeroInvoiceId);
+      if (solo) s = { status: solo, amountDue: 0, amountPaid: 0, invoiceNumber: r.invoiceNumber ?? null };
+    }
     if (!s) continue;
 
     if (s.status !== r.status || (s.invoiceNumber && s.invoiceNumber !== r.invoiceNumber)) {
