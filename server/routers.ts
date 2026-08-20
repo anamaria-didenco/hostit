@@ -4299,7 +4299,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           targetXeroId = row.xeroInvoiceId;
         }
         if (!input.allowDuplicate && input.updateInvoiceId === undefined) {
-          const [dup] = await db.select({ id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber, xeroInvoiceId: xeroInvoices.xeroInvoiceId, status: xeroInvoices.status })
+          const dups = await db.select({ id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber, xeroInvoiceId: xeroInvoices.xeroInvoiceId, status: xeroInvoices.status })
             .from(xeroInvoices)
             .where(and(
               eq(xeroInvoices.bookingId, input.bookingId),
@@ -4308,20 +4308,32 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               // A voided or deleted invoice does not exist any more, so it must
               // not block sending a replacement for the same stream.
               or(isNull(xeroInvoices.status), notInArray(xeroInvoices.status, ['VOIDED', 'DELETED'])),
-            )).limit(1);
-          if (dup) {
-            // Our stored status can be stale: voiding in Xero doesn't call us
-            // back, so the row here still says DRAFT. Before refusing, ask Xero
-            // what the invoice ACTUALLY is right now — the operator who just
-            // voided it there must not be told to void it again.
+            ));
+          // Our stored statuses can be stale: acting inside Xero doesn't call
+          // us back, so a row here can still say DRAFT after the operator has
+          // deleted or voided it there. Before refusing, ask Xero what each
+          // candidate ACTUALLY is right now — the operator who just voided one
+          // must not be told to void it again. Every candidate is checked: the
+          // first might be gone while a second live draft still stands.
+          const { getXeroInvoiceFate, isGoneFromXero } = await import('./xero');
+          for (const dup of dups) {
             let stillLive = true;
             if (dup.xeroInvoiceId) {
-              const { getXeroInvoiceStatus, isGoneFromXero } = await import('./xero');
-              const live = await getXeroInvoiceStatus(ctx.user.id, dup.xeroInvoiceId).catch(() => null);
-              if (live && live !== dup.status) {
-                await db.update(xeroInvoices).set({ status: live }).where(eq(xeroInvoices.id, dup.id));
+              const fate = await getXeroInvoiceFate(ctx.user.id, dup.xeroInvoiceId).catch(() => ({ status: null as string | null, notFound: false }));
+              if (fate.notFound) {
+                // Xero reports it gone (404 on the lookup) — gone cannot be a
+                // duplicate. Record that so the row stops masquerading as a
+                // live DRAFT in the already-sent list too.
+                await db.update(xeroInvoices).set({ status: 'DELETED' }).where(eq(xeroInvoices.id, dup.id));
+                stillLive = false;
+              } else if (fate.status) {
+                if (fate.status !== dup.status) {
+                  await db.update(xeroInvoices).set({ status: fate.status }).where(eq(xeroInvoices.id, dup.id));
+                }
+                if (isGoneFromXero(fate.status)) stillLive = false;
               }
-              if (isGoneFromXero(live)) stillLive = false;
+              // A genuine lookup failure (network/auth) keeps the block — a
+              // failed call must never wave a real duplicate through.
             }
             if (stillLive) {
               throw new Error(`A ${input.stream} invoice${dup.invoiceNumber ? ` (${dup.invoiceNumber})` : ''} was already sent for this event. Void it in Xero first, or confirm sending another.`);
@@ -4384,17 +4396,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(xeroInvoices.id, input.id), eq(xeroInvoices.ownerId, ctx.user.id))).limit(1);
         if (!row) throw new Error('Invoice not found');
         if (row.xeroInvoiceId) {
-          const { deleteXeroDraftInvoice, getXeroInvoiceStatus, isGoneFromXero } = await import('./xero');
-          // An invoice already DELETED or VOIDED in Xero has nothing left to
-          // delete there. Refusing left the row stuck in VenueFlow: it could
-          // not be removed AND it blocked sending a replacement for the same
-          // stream. Drop our tracking row and leave Xero alone.
+          const { deleteXeroDraftInvoice, getXeroInvoiceFate, isGoneFromXero } = await import('./xero');
+          // An invoice already DELETED or VOIDED in Xero — or one Xero 404s,
+          // which is a draft deleted there — has nothing left to delete.
+          // Refusing left the row stuck in VenueFlow: it could not be removed
+          // AND it blocked sending a replacement for the same stream. Drop our
+          // tracking row and leave Xero alone.
           // Trust our own record when it already says gone: Xero cannot
           // un-delete or un-void an invoice, so there is nothing to re-check.
-          const status = isGoneFromXero(row.status)
-            ? row.status
-            : await getXeroInvoiceStatus(ctx.user.id, row.xeroInvoiceId);
-          if (!isGoneFromXero(status)) {
+          const fate = isGoneFromXero(row.status)
+            ? { status: row.status as string | null, notFound: false }
+            : await getXeroInvoiceFate(ctx.user.id, row.xeroInvoiceId);
+          if (!fate.notFound && !isGoneFromXero(fate.status)) {
             await deleteXeroDraftInvoice(ctx.user.id, row.xeroInvoiceId); // throws if approved
           }
         }

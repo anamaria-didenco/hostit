@@ -409,11 +409,32 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
 
 /** Current status of one invoice, or null if Xero doesn't know it. */
 export async function getXeroInvoiceStatus(ownerId: number, invoiceId: string): Promise<string | null> {
+  return (await getXeroInvoiceFate(ownerId, invoiceId)).status;
+}
+
+/**
+ * What became of one invoice, with "not found" as its own answer.
+ *
+ * Xero can 404 an invoice deleted from a draft — it is simply gone. Folding
+ * that into "unknown" made the duplicate guard block FOREVER on an invoice the
+ * operator had already deleted in Xero: the guard asked, got a 404, read it as
+ * "couldn't confirm", and refused. A 404 from Xero is a definitive answer (no
+ * such invoice), not a failed lookup; only a network/auth failure is unknown.
+ */
+export async function getXeroInvoiceFate(
+  ownerId: number,
+  invoiceId: string,
+): Promise<{ status: string | null; notFound: boolean }> {
   try {
     const json = await xeroApi(ownerId, "GET", `/Invoices/${encodeURIComponent(invoiceId)}`);
-    return json?.Invoices?.[0]?.Status ?? null;
-  } catch {
-    return null;
+    return { status: json?.Invoices?.[0]?.Status ?? null, notFound: false };
+  } catch (err: any) {
+    const msg = String(err?.message ?? "");
+    // Xero says "gone" two ways: 404 on a GET by ID, and 400 with "An existing
+    // Invoice with the specified Type and InvoiceID could not be found" when an
+    // update names it. Both are the invoice not existing, not a failed lookup.
+    if (/^Xero API 404\b/.test(msg) || /could not be found/i.test(msg)) return { status: null, notFound: true };
+    return { status: null, notFound: false };
   }
 }
 
@@ -440,10 +461,17 @@ export function assertEditable(status: string | null, action: "update" | "delete
 
 /** Delete a DRAFT invoice in Xero (Xero deletes by setting Status=DELETED). */
 export async function deleteXeroDraftInvoice(ownerId: number, invoiceId: string): Promise<void> {
-  assertEditable(await getXeroInvoiceStatus(ownerId, invoiceId), "delete");
-  await xeroApi(ownerId, "POST", "/Invoices", {
-    Invoices: [{ InvoiceID: invoiceId, Status: "DELETED" }],
-  });
+  const fate = await getXeroInvoiceFate(ownerId, invoiceId);
+  if (fate.notFound) return; // already gone in Xero — deleting it is done
+  assertEditable(fate.status, "delete");
+  try {
+    await xeroApi(ownerId, "POST", "/Invoices", {
+      Invoices: [{ InvoiceID: invoiceId, Status: "DELETED" }],
+    });
+  } catch (err: any) {
+    // "Could not be found" on the delete itself is the outcome we wanted.
+    if (!/could not be found/i.test(String(err?.message ?? ""))) throw err;
+  }
 }
 
 export interface XeroInvoicePayment {
