@@ -127,20 +127,27 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
       {/* Profitability band — revenue (client charges) − your expenses = profit */}
       {hasCharges && (
         <div className="grid grid-cols-3 mb-3 border border-forest/20 bg-forest-dark/5 rounded-sm overflow-hidden">
+          {/* Revenue and expenses are neutral facts, not warnings — only the
+              profit figure earns colour, and only when it's actually positive.
+              Red on "expenses" read as an error on every event that had costs. */}
           <div className="px-3 py-2 text-center">
             <div className="font-bebas text-[10px] tracking-widest text-ink/65">REVENUE</div>
-            <div className="font-cormorant text-base font-semibold text-forest">{money(revenueTotal)}</div>
-            <div className="font-dm text-[9px] text-ink/35">client charges</div>
+            <div className="font-cormorant text-base font-semibold text-ink">{money(revenueTotal)}</div>
+            <div className="font-dm text-[9px] text-ink/45">F&amp;B + cost lines + bar tab</div>
           </div>
           <div className="px-3 py-2 text-center border-l border-gold/20">
             <div className="font-bebas text-[10px] tracking-widest text-ink/65">EXPENSES</div>
-            <div className="font-cormorant text-base font-semibold text-rose-500">{money(expensesTotal)}</div>
-            <div className="font-dm text-[9px] text-ink/35">your costs</div>
+            <div className="font-cormorant text-base font-semibold text-ink">{money(expensesTotal)}</div>
+            <div className="font-dm text-[9px] text-ink/45">your costs</div>
           </div>
           <div className="px-3 py-2 text-center border-l border-gold/20">
             <div className="font-bebas text-[10px] tracking-widest text-ink/65">PROFIT</div>
-            <div className={`font-cormorant text-base font-semibold ${profit >= 0 ? "text-forest" : "text-rose-500"}`}>{money(profit)}</div>
-            <div className="font-dm text-[9px] text-ink/35">{revenueTotal > 0 ? `${margin.toFixed(0)}% margin` : ""}</div>
+            <div className={`font-cormorant text-base font-semibold ${profit > 0 ? "text-emerald-700" : profit < 0 ? "text-[#b3261e]" : "text-ink"}`}>{money(profit)}</div>
+            {/* Margin against zero expenses is just "100%" — noise until there
+                is something to measure the revenue against. */}
+            <div className="font-dm text-[9px] text-ink/45">
+              {expensesTotal > 0 && revenueTotal > 0 ? `${margin.toFixed(0)}% margin` : "add an expense for margin"}
+            </div>
           </div>
         </div>
       )}

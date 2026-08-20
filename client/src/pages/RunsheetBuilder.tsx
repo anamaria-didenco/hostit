@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -16,6 +16,7 @@ import {
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
   Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine, Package,
   Eye, EyeOff, DollarSign, Download, ClipboardList, Calendar, Pencil, Camera, Heart,
+  Loader2, Check, Highlighter, AlertTriangle, MoreHorizontal, Info,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -29,6 +30,7 @@ import { getLoginUrl } from "@/const";
 import EventSpendSection from "@/components/EventSpendSection";
 import { SectionHead } from "@/components/ui/section-head";
 import { StatusBadge } from "@/components/ui/badge";
+import { currency } from "@/lib/money";
 
 function SortableSection({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -179,6 +181,70 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
 
 // Snap a "HH:MM" time string to the nearest 15 minutes (e.g. "14:23" → "14:30").
 // Returns "" for empty input so the field can still be cleared.
+// One-tap covers presets for a food quantity. The whole point of RB-02 is that
+// "how many?" is answered by the guest count far more often than by anything
+// else, so the common answers are one tap and the odd number is still typeable.
+function CoversChips({ value, guests, onPick }: { value: number; guests: number; onPick: (q: number) => void }) {
+  if (!guests || guests < 2) return null;
+  const half = Math.ceil(guests / 2);
+  const chip = (label: string, qty: number | null) => {
+    const active = qty != null && Number(value) === qty;
+    return (
+      <button
+        key={label}
+        type="button"
+        onClick={() => qty != null && onPick(qty)}
+        aria-pressed={qty != null ? active : undefined}
+        disabled={qty == null}
+        className={`min-h-[44px] px-2.5 font-dm text-[11px] rounded-sm border transition-colors ${
+          qty == null
+            ? 'border-transparent text-ink/45 cursor-default'
+            : active
+              ? 'border-forest bg-forest/10 text-forest font-semibold'
+              : 'border-gold/30 text-ink/65 hover:border-forest/40 hover:text-forest'
+        }`}
+      >
+        {label}
+      </button>
+    );
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+      {chip(`×${guests} all guests`, guests)}
+      {chip(`×${half} half`, half)}
+      {chip('or type a custom number', null)}
+    </div>
+  );
+}
+
+// A column visibility toggle. Renders as a real switch so assistive tech reads
+// it as on/off rather than as a pressed button, and so "off" doesn't look like
+// the column was deleted. The visual track stays small; the hit area is 44px.
+function ColumnSwitch({ label, checked, onChange, hint }: { label: string; checked: boolean; onChange: () => void; hint: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      title={hint}
+      className={`inline-flex items-center gap-1.5 min-h-[44px] px-2 rounded-sm border transition-colors ${
+        checked
+          ? 'border-forest/40 bg-forest/5 text-forest'
+          : 'border-ink/15 text-ink/50 hover:border-ink/30'
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`w-6 h-3.5 rounded-full flex-none relative transition-colors ${checked ? 'bg-forest' : 'bg-ink/20'}`}
+      >
+        <span className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all ${checked ? 'left-3' : 'left-0.5'}`} />
+      </span>
+      <span className="font-dm text-[11px]">{label}</span>
+    </button>
+  );
+}
+
 function roundTimeToQuarter(value: string): string {
   if (!value) return "";
   const [hStr, mStr] = value.split(":");
@@ -282,6 +348,10 @@ type ParsedRunsheetData = {
   timelineItems?: any[];
 };
 
+// The independently-autosaving parts of the document. Every one of them has to
+// report clean before the header may claim the runsheet is saved.
+type SaveChannel = 'core' | 'doc' | 'food' | 'dietaries' | 'columns';
+
 export default function RunsheetBuilder() {
   const [location, navigate] = useLocation();
   const { user, loading: authLoading } = useAuth();
@@ -303,13 +373,39 @@ export default function RunsheetBuilder() {
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<Item[]>([]);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  // Which timeline row is currently having a note typed into it (so an empty
+  // row shows '+ Add note' rather than a permanent grey placeholder).
+  const [notingItem, setNotingItem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [sheetId, setSheetId] = useState<number | null>(runsheetId);
 
-  // ── Unsaved-changes tracking ──────────────────────────────────────────────
-  // Set to true when user edits anything; reset to false after save.
-  const [isDirty, setIsDirty] = useState(false);
+  // ── Save state ────────────────────────────────────────────────────────────
+  // One truthful indicator for the whole document. Every section autosaves on
+  // its own debounce, so "unsaved" has to mean "some section has an edit that
+  // hasn't landed on the server yet" — not "the header fields changed".
+  //
+  // Each channel is marked dirty the moment its watched state changes and is
+  // marked clean only when ITS OWN save resolves. That's the bit that makes the
+  // indicator trustworthy: the header can't flip to "All changes saved" because
+  // the food sheet finished while the notes debounce is still pending.
+  const [dirtyChannels, setDirtyChannels] = useState<Set<SaveChannel>>(new Set());
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const markDirty = useCallback((ch: SaveChannel) => {
+    setDirtyChannels(prev => (prev.has(ch) ? prev : new Set(prev).add(ch)));
+  }, []);
+  const markClean = useCallback((ch: SaveChannel) => {
+    setDirtyChannels(prev => {
+      if (!prev.has(ch)) return prev;
+      const next = new Set(prev);
+      next.delete(ch);
+      return next;
+    });
+    setLastSavedAt(new Date());
+  }, []);
+  const isDirty = dirtyChannels.size > 0;
   const isInitialLoadRef = useRef(true);
+  // Armed when server data lands, so the core autosave doesn't echo it back.
+  const skipNextCoreAutosaveRef = useRef(false);
 
   // ── "NOW" indicator for live service ──────────────────────────────────────
   // Updates every 30s. Lets the timeline highlight the currently-active item
@@ -395,7 +491,6 @@ export default function RunsheetBuilder() {
   // PRICE column). Defaults ON so priced drinks appear; persisted per runsheet.
   const [showDrinkPrices, setShowDrinkPrices] = useState(true);
   const [newRsCustomDrink, setNewRsCustomDrink] = useState({ name: "", description: "" });
-  const [drinksSaving, setDrinksSaving] = useState(false);
 
   // F&B
   const [fnbItems, setFnbItems] = useState<FnbItem[]>([]);
@@ -415,8 +510,23 @@ export default function RunsheetBuilder() {
   }, [fnbItems, costItems]);
   const fnbCostMirrorTotal = fnbCostMirror.reduce((s, it) => s + Number(it.qty || 0) * Number(it.unitPrice ?? 0), 0);
   const [expandedFnbIdx, setExpandedFnbIdx] = useState<number | null>(null);
+  // ── Covers ────────────────────────────────────────────────────────────────
+  // A dish on a 70-guest event is nearly always FOR 70 guests. Defaulting the
+  // quantity to 1 is what produced Grazing Table ×45 / fries ×20 on the live
+  // sheet and a BEO line with no count at all, so the guest count is the
+  // default and anything else is a deliberate override.
+  const guestCountNum = Number(guestCount) || 0;
+  const defaultCovers = guestCountNum > 0 ? guestCountNum : 1;
+  const halfCovers = guestCountNum > 0 ? Math.ceil(guestCountNum / 2) : 1;
+  // Food lines that still read as a single cover on a multi-guest event. Not a
+  // blocker — just something worth a second look before this prints.
+  const coversToCheck = React.useMemo(() => (
+    guestCountNum > 1
+      ? fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && (it.qty == null || Number(it.qty) <= 1))
+      : []
+  ), [fnbItems, guestCountNum]);
   const [newFnbItem, setNewFnbItem] = useState<Partial<FnbItem>>({
-    section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '',
+    section: 'foh', course: 'Canapes', dishName: '', serviceTime: '', dietary: '', staffAssigned: '',
   });
 
   // Venue setup
@@ -473,6 +583,9 @@ export default function RunsheetBuilder() {
 
   // Staff portal links
   const [creatingStaffLink, setCreatingStaffLink] = useState(false);
+  // Two-step delete for staff portal links — revoking one kicks the whole team
+  // out of the runsheet, so it shouldn't be a single mis-tap.
+  const [confirmDeleteLinkId, setConfirmDeleteLinkId] = useState<number | null>(null);
   const [newStaffLinkLabel, setNewStaffLinkLabel] = useState('Staff Link');
 
   // Print layout
@@ -569,7 +682,11 @@ export default function RunsheetBuilder() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   // Quick-jump rail replaces the six tabs: every section is always on the
   // page; the rail scrolls to it and highlights where you are.
+  // Rail order MUST match page order — the rail is pinned from the top of the
+  // document, so Event Details and Venue Setup are entries like anything else.
   const RUNSHEET_SECTIONS: { id: string; label: string; icon: React.ReactNode }[] = [
+    { id: 'details',   label: 'Event Details', icon: <ClipboardList className="w-4 h-4" /> },
+    { id: 'setup',     label: 'Venue Setup', icon: <Building2 className="w-4 h-4" /> },
     { id: 'timeline',  label: 'Run of Day', icon: <Clock className="w-4 h-4" /> },
     { id: 'fnb',       label: 'Food',       icon: <UtensilsCrossed className="w-4 h-4" /> },
     { id: 'drinks',    label: 'Drinks',     icon: <Wine className="w-4 h-4" /> },
@@ -839,21 +956,17 @@ export default function RunsheetBuilder() {
   const [checklistPhotoUploading, setChecklistPhotoUploading] = useState<string | null>(null);
 
   // ── Dirty-state tracking ──────────────────────────────────────────────
-  // Watches the main editable state. On the first render after data loads
-  // (which we detect via isInitialLoadRef), we skip setting dirty. After
-  // that, any change to any watched field flips isDirty → true.
+  // The 'core' channel — event identity + the timeline. Its autosave lives
+  // further down (it has to persist timeline rows one by one). Marking the
+  // channel dirty here rather than inside that effect means the indicator goes
+  // amber on the keystroke, not when the debounce eventually fires.
   useEffect(() => {
     if (isInitialLoadRef.current) {
       isInitialLoadRef.current = false;
       return;
     }
-    setIsDirty(true);
-  // Only the fields that require an explicit Save flip the button to
-  // "Save changes". Everything else (notes, dietaries, venue setup, footer,
-  // GST, payment notes, header fields, costs, drinks, linked docs) is
-  // debounce-autosaved above, so tracking them here just kept the button lit
-  // and nagged the beforeunload guard after the data was already persisted.
-  // A FAILED autosave re-flips isDirty via silentUpdateMutation.onError.
+    if (skipNextCoreAutosaveRef.current) return;
+    markDirty('core');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, title, eventDate, venueName]);
 
@@ -1195,7 +1308,7 @@ export default function RunsheetBuilder() {
       section: 'foh',
       course,
       dishName: name,
-      qty: newFnbItem.qty ?? 1,
+      qty: newFnbItem.qty ?? defaultCovers,
       dietary: newFnbItem.dietary,
       serviceTime: newFnbItem.serviceTime,
       staffAssigned: newFnbItem.staffAssigned,
@@ -1204,7 +1317,7 @@ export default function RunsheetBuilder() {
       ...(course === 'Drinks' && fnbCustomDrinkCat ? { drinkCategory: fnbCustomDrinkCat } : {}),
     };
     setFnbItems(prev => [...prev, item]);
-    setNewFnbItem({ section: 'foh', course: 'Canapes', dishName: '', qty: 1, serviceTime: '', dietary: '', staffAssigned: '' });
+    setNewFnbItem({ section: 'foh', course: 'Canapes', dishName: '', serviceTime: '', dietary: '', staffAssigned: '' });
     setFnbCustomName('');
     setFnbCustomDrinkCat('');
     if (fnbCustomMode) setFnbCustomMode(false);
@@ -1481,6 +1594,10 @@ export default function RunsheetBuilder() {
       setLinkedProposalId((existing as any).proposalId ?? undefined);
       setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
       setItems((existing.items ?? []).map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
+      // Suppress the one core autosave that would otherwise write freshly-loaded
+      // timeline rows straight back — a 30-row runsheet would fire 30 no-op
+      // updates on every load and every refetch.
+      skipNextCoreAutosaveRef.current = true;
       if ((existing as any).costItems) setCostItems((existing as any).costItems as CostItem[]);
       setGstInclusive((existing as any).gstInclusive ?? false);
       setPaymentNotes((existing as any).paymentNotes ?? "");
@@ -1664,10 +1781,10 @@ export default function RunsheetBuilder() {
     onSuccess: () => { utils.runsheets.get.invalidate({ id: sheetId! }); toast.success("Saved!"); },
     onError: () => toast.error("Failed to save"),
   });
-  // Autosave. If it fails (offline etc.) re-flag dirty + warn, so the change
-  // isn't silently lost with the button still reading "Saved".
+  // Autosave. On failure the calling channel stays dirty (we simply never mark
+  // it clean) so the change isn't silently lost behind a "saved" indicator.
   const silentUpdateMutation = trpc.runsheets.update.useMutation({
-    onError: () => { setIsDirty(true); toast.error("Auto-save failed — click Save changes"); },
+    onError: () => toast.error("Auto-save failed — click Save now"),
   });
   const addItemMutation = trpc.runsheets.addItem.useMutation({
     onSuccess: () => utils.runsheets.get.invalidate({ id: sheetId! }),
@@ -1686,10 +1803,11 @@ export default function RunsheetBuilder() {
   useEffect(() => {
     if (!fnbColsInitialized.current) { fnbColsInitialized.current = true; return; }
     if (!sheetId) return;
+    markDirty('columns');
     silentUpdateMutation.mutate({
       id: sheetId,
       fnbColumns: { dietary: showDietaryCol, serviceTime: showTimeCol, staff: showStaffCol, notes: showPrepPlatingCol, qty: showQtyCol, price: showPriceCol },
-    } as any);
+    } as any, { onSuccess: () => markClean('columns') });
   }, [showDietaryCol, showTimeCol, showStaffCol, showPrepPlatingCol, showQtyCol, showPriceCol]);
 
   // Auto-save dietaries (debounced) so they persist without requiring an explicit Save click.
@@ -1698,11 +1816,12 @@ export default function RunsheetBuilder() {
   useEffect(() => {
     if (!dietariesInitialized.current) { dietariesInitialized.current = true; return; }
     if (!sheetId) return;
+    markDirty('dietaries');
     const t = setTimeout(() => {
       silentUpdateMutation.mutate({
         id: sheetId,
         dietaries: dietaries,
-      } as any);
+      } as any, { onSuccess: () => markClean('dietaries') });
     }, 600);
     return () => clearTimeout(t);
   }, [dietaries, sheetId]);
@@ -1714,6 +1833,7 @@ export default function RunsheetBuilder() {
   useEffect(() => {
     if (!autosaveInitialized.current) { autosaveInitialized.current = true; return; }
     if (!sheetId) return;
+    markDirty('doc');
     const t = setTimeout(() => {
       silentUpdateMutation.mutate({
         id: sheetId,
@@ -1740,18 +1860,18 @@ export default function RunsheetBuilder() {
         proposalId: linkedProposalId,
         floorPlanId: linkedFloorPlanId ?? null,
         drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices, showDrinkPrices },
-      } as any);
+      } as any, { onSuccess: () => markClean('doc') });
     }, 1000);
     return () => clearTimeout(t);
   }, [sheetId, notes, footerText, kitchenNotes, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices, showDrinkPrices]);
 
-  // Auto-save FOOD items (debounced) — same convenience as drinks/notes, so the
-  // operator never has to click SAVE FOOD. Silent (no toast, no refetch) so it
+  // Auto-save FOOD items (debounced) — silent (no toast, no refetch) so it
   // doesn't interrupt typing. Gated on fnbReadyRef so we never persist an empty
   // list before the server data has loaded.
   useEffect(() => {
     if (!sheetId || !fnbReadyRef.current) return;
     if (skipNextFnbAutosaveRef.current) { skipNextFnbAutosaveRef.current = false; return; }
+    markDirty('food');
     const t = setTimeout(() => {
       silentFnbSaveMutation.mutate({
         runsheetId: sheetId,
@@ -1770,10 +1890,77 @@ export default function RunsheetBuilder() {
           sortOrder: i,
           unitPrice: item.unitPrice != null && (item.unitPrice as any) !== '' ? Number(item.unitPrice) : null,
         })),
-      });
+      }, { onSuccess: () => markClean('food'), onError: () => toast.error("Auto-save failed — click Save now") });
     }, 1200);
     return () => clearTimeout(t);
   }, [fnbItems, sheetId]);
+
+  // Auto-save the event identity + the run-of-day timeline ('core' channel).
+  // Timeline rows can't go in the field autosave above because each row is its
+  // own add/update call, so they get their own debounce here. Runs a little
+  // slower than the field autosave — it's a chattier write.
+  const coreAutosaveInitialized = React.useRef(false);
+  const coreSavingRef = React.useRef(false);
+  // Set when an edit arrives while a save is already in flight. Bumping the tick
+  // when that save finishes re-runs this effect with fresh state, so the edit is
+  // retried rather than silently dropped with the channel stuck on "Unsaved".
+  const coreRetryRef = React.useRef(false);
+  const [coreRetryTick, setCoreRetryTick] = useState(0);
+  useEffect(() => {
+    if (!coreAutosaveInitialized.current) { coreAutosaveInitialized.current = true; return; }
+    if (!sheetId) return;
+    if (skipNextCoreAutosaveRef.current) { skipNextCoreAutosaveRef.current = false; return; }
+    const t = setTimeout(() => { void persistCore(); }, 1400);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, title, eventDate, venueName, sheetId, coreRetryTick]);
+
+  // Persist the event identity + every timeline row. Guarded against overlap so
+  // a fast typist can't have two passes writing the same rows at once.
+  async function persistCore() {
+    if (!sheetId) return;
+    if (coreSavingRef.current) { coreRetryRef.current = true; return; }
+    coreSavingRef.current = true;
+    try {
+      await silentUpdateMutation.mutateAsync({
+        id: sheetId,
+        title,
+        eventDate: eventDate || null,
+        venueName: venueName || undefined,
+      } as any);
+      await persistTimelineItems(sheetId);
+      markClean('core');
+    } catch {
+      // Left dirty on purpose — the indicator keeps showing "Unsaved" and the
+      // Save now button stays available rather than losing the edit quietly.
+    } finally {
+      coreSavingRef.current = false;
+      if (coreRetryRef.current) { coreRetryRef.current = false; setCoreRetryTick(n => n + 1); }
+    }
+  }
+
+  // Write every timeline row: new rows are created, existing rows updated.
+  // Shared by the core autosave and the explicit "Save now" button so the two
+  // paths can never drift apart.
+  async function persistTimelineItems(id: number) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const payload = {
+        time: item.time,
+        duration: item.duration,
+        title: item.title,
+        description: item.description,
+        assignedTo: item.assignedTo,
+        category: item.category,
+        sortOrder: i,
+        bold: item.bold,
+        italic: item.italic,
+        highlight: item.highlight,
+      };
+      if (!item.id) await addItemMutation.mutateAsync({ runsheetId: id, ...payload });
+      else await updateItemMutation.mutateAsync({ id: item.id, ...payload });
+    }
+  }
 
   // Auto-create a staff portal link when the runsheet loads and none exist yet
   const staffLinkAutoCreated = React.useRef(false);
@@ -1857,42 +2044,12 @@ export default function RunsheetBuilder() {
           gstInclusive,
           paymentNotes: paymentNotes || null,
         } as any);
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          if (!item.id) {
-            await addItemMutation.mutateAsync({
-              runsheetId: sheetId,
-              time: item.time,
-              duration: item.duration,
-              title: item.title,
-              description: item.description,
-              assignedTo: item.assignedTo,
-              category: item.category,
-              sortOrder: i,
-              bold: item.bold,
-              italic: item.italic,
-              highlight: item.highlight,
-            });
-          } else {
-            await updateItemMutation.mutateAsync({
-              id: item.id,
-              time: item.time,
-              duration: item.duration,
-              title: item.title,
-              description: item.description,
-              assignedTo: item.assignedTo,
-              category: item.category,
-              sortOrder: i,
-              bold: item.bold,
-              italic: item.italic,
-              highlight: item.highlight,
-            });
-          }
-        }
+        await persistTimelineItems(sheetId);
         if (fnbItems.length > 0) await saveFnb();
       }
-      // Mark clean after successful save
-      setIsDirty(false);
+      // "Save now" writes the whole document, so every channel is clean.
+      setDirtyChannels(new Set());
+      setLastSavedAt(new Date());
     } finally {
       setSaving(false);
     }
@@ -2179,6 +2336,8 @@ export default function RunsheetBuilder() {
 
   // ── Section readiness (drives the DocBar progress + rail status dots) ──
   const sectionReady: Record<string, boolean> = {
+    details: !!eventDate && Number(guestCount) > 0,
+    setup: !!(venueSetup || setupSummary),
     timeline: items.length > 0,
     fnb: fnbItems.length > 0,
     drinks: (rsSelectedDrinks.length + rsCustomDrinks.length) > 0 || !!rsBarNotes,
@@ -2198,9 +2357,9 @@ export default function RunsheetBuilder() {
             else if (leadId) navigate("/dashboard");
             else navigate("/runsheet");
           }}
-          className="text-ink/60 hover:text-forest flex items-center gap-1.5 font-bebas tracking-widest text-xs"
+          className="text-ink/60 hover:text-forest flex items-center gap-1.5 font-dm text-xs min-h-[44px] pr-1"
         >
-          <ArrowLeft className="w-4 h-4" /> {bookingId ? 'EVENT' : 'BACK'}
+          <ArrowLeft className="w-4 h-4" aria-hidden /> {bookingId ? 'Event' : 'Back'}
         </button>
         <div className="h-4 w-px bg-gold/30" />
         <span className="font-bebas tracking-[0.2em] text-xs text-forest/70 flex-1 truncate">
@@ -2208,24 +2367,26 @@ export default function RunsheetBuilder() {
         </span>
         <div className="flex items-center gap-2">
           {/* ── Edit / Preview toggle ───────────────────────────────────── */}
-          <div className="hidden sm:inline-flex items-center gap-0.5 bg-linen border border-gold/30 rounded-sm p-0.5">
+          <div className="hidden sm:inline-flex items-center gap-0.5 bg-linen border border-gold/30 rounded-sm p-0.5" role="group" aria-label="View mode">
             <button
               onClick={() => setViewMode('edit')}
-              className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1 rounded-sm transition-colors ${
-                viewMode === 'edit' ? 'bg-forest text-cream shadow-sm' : 'text-ink/55 hover:text-forest'
+              aria-pressed={viewMode === 'edit'}
+              className={`font-dm text-xs flex items-center gap-1.5 px-3 min-h-[40px] rounded-sm transition-colors ${
+                viewMode === 'edit' ? 'bg-forest text-cream shadow-sm font-semibold' : 'text-ink/60 hover:text-forest'
               }`}
             >
-              <Pencil className="w-3.5 h-3.5" /> EDIT
+              <Pencil className="w-3.5 h-3.5" aria-hidden /> Edit
             </button>
             <button
               onClick={() => { if (effectiveBookingId) setViewMode('preview'); }}
               disabled={!effectiveBookingId}
+              aria-pressed={viewMode === 'preview'}
               title={effectiveBookingId ? 'Read-only runsheet staff & kitchen see' : 'Link this runsheet to an event to preview'}
-              className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1 rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                viewMode === 'preview' ? 'bg-forest text-cream shadow-sm' : 'text-ink/55 hover:text-forest'
+              className={`font-dm text-xs flex items-center gap-1.5 px-3 min-h-[40px] rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                viewMode === 'preview' ? 'bg-forest text-cream shadow-sm font-semibold' : 'text-ink/60 hover:text-forest'
               }`}
             >
-              <Eye className="w-3.5 h-3.5" /> PREVIEW
+              <Eye className="w-3.5 h-3.5" aria-hidden /> Preview
             </button>
           </div>
 
@@ -2233,12 +2394,14 @@ export default function RunsheetBuilder() {
           <div className="relative">
             <button
               onClick={() => setExportMenuOpen(v => !v)}
-              className={`font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-sm border transition-colors ${
+              aria-expanded={exportMenuOpen}
+              aria-haspopup="menu"
+              className={`font-dm text-xs flex items-center gap-1.5 px-3 min-h-[44px] rounded-sm border transition-colors ${
                 exportMenuOpen ? 'text-forest bg-linen border-gold/40' : 'text-ink/65 border-gold/30 hover:text-forest hover:bg-linen'
               }`}
               title="Print, export and share options"
             >
-              <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">EXPORT</span>
+              <Download className="w-3.5 h-3.5" aria-hidden /> <span className="hidden sm:inline">Export</span>
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${exportMenuOpen ? 'rotate-180' : ''}`} />
             </button>
             {exportMenuOpen && (
@@ -2355,32 +2518,45 @@ export default function RunsheetBuilder() {
                   setExtraEmails("");
                 }}
                 title="Email the runsheet link + BEO PDF to your staff"
-                className="no-print font-bebas tracking-widest text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-gold/30 text-ink/65 hover:text-forest hover:bg-linen transition-colors"
+                className="no-print font-dm text-xs flex items-center gap-1.5 px-3 min-h-[44px] rounded-sm border border-gold/30 text-ink/65 hover:text-forest hover:bg-linen transition-colors"
               >
-                <Mail className="w-3.5 h-3.5" /> <span className="hidden sm:inline">SEND TO STAFF</span>
+                <Mail className="w-3.5 h-3.5" aria-hidden /> <span className="hidden sm:inline">Send to staff</span>
               </button>
             );
           })()}
 
-          {/* ── Save state ──────────────────────────────────────────────── */}
-          {isDirty && !saving && (
-            <span className="no-print hidden sm:flex items-center gap-1.5 text-xs font-dm text-amber-700" title="You have unsaved changes">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              <span className="hidden md:inline">Unsaved</span>
+          {/* ── Save state — one indicator for the whole document ─────────
+              Clean: quiet confirmation text with the time, and NO button (there
+              is nothing to save). Dirty: a single "Save now" that writes every
+              section. Never both. State is carried by icon + words, not by hue
+              alone, so it still reads without colour perception. */}
+          {saving ? (
+            <span className="no-print flex items-center gap-1.5 text-xs font-dm text-ink/60" aria-live="polite">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
+              <span className="hidden sm:inline">Saving…</span>
+            </span>
+          ) : isDirty ? (
+            <Button
+              onClick={handleSave}
+              title="Save every section now"
+              className="font-dm text-xs font-semibold rounded-sm px-4 min-h-[44px] flex items-center gap-1.5 transition-colors bg-forest hover:bg-[#264469] text-cream shadow-sm"
+            >
+              <Save className="w-3.5 h-3.5" aria-hidden />
+              Save now
+            </Button>
+          ) : (
+            <span
+              className="no-print flex items-center gap-1.5 text-xs font-dm text-ink/55"
+              aria-live="polite"
+              title="Every section has been saved"
+            >
+              <Check className="w-3.5 h-3.5 text-forest" aria-hidden />
+              <span className="hidden sm:inline">
+                All changes saved
+                {lastSavedAt ? ` · ${lastSavedAt.toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}` : ''}
+              </span>
             </span>
           )}
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className={`font-bebas tracking-widest text-xs rounded-sm px-5 py-2 flex items-center gap-1.5 transition-colors disabled:opacity-60 ${
-              isDirty
-                ? 'bg-forest hover:bg-[#264469] text-cream shadow-sm'
-                : 'bg-linen hover:bg-gold/10 text-ink/55 border border-gold/30'
-            }`}
-          >
-            <Save className="w-3.5 h-3.5" />
-            {saving ? "SAVING..." : isDirty ? "SAVE CHANGES" : "SAVED"}
-          </Button>
         </div>
       </nav>
 
@@ -2408,19 +2584,22 @@ export default function RunsheetBuilder() {
           </span>
         )}
         <div className="flex-1 min-w-[12px]" />
-        {/* Section-ready progress */}
-        <div className="flex items-center gap-2">
-          <span className="font-dm text-[11px] font-semibold text-ink/70 whitespace-nowrap">{readyCount} of {RUNSHEET_SECTIONS.length} ready</span>
-          <span className="hidden sm:inline-flex items-center gap-1">
-            {RUNSHEET_SECTIONS.map(s => (
-              <span
-                key={s.id}
-                title={`${s.label}${sectionReady[s.id] ? ' — ready' : ''}`}
-                className={`w-1.5 h-1.5 rounded-full ${sectionReady[s.id] ? 'bg-[#2f5488]' : 'bg-gold/25'}`}
-              />
-            ))}
-          </span>
-        </div>
+        {/* Covers warning — surfaced up here so it's seen before Preview or
+            Export, not only when the Food section happens to be on screen. */}
+        {coversToCheck.length > 0 && (
+          <button
+            onClick={() => scrollToSection('fnb')}
+            className="no-print inline-flex items-center gap-1.5 rounded-sm border border-amber-300 bg-amber-50 px-2.5 min-h-[44px] font-dm text-[11px] text-amber-900 hover:bg-amber-100 transition-colors"
+            title={`${coversToCheck.length} food line${coversToCheck.length !== 1 ? 's are' : ' is'} still set to 1 cover — go to the Food section`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5 flex-none" aria-hidden />
+            <span className="hidden sm:inline">Check covers ({coversToCheck.length})</span>
+          </button>
+        )}
+        {/* Section-ready progress — quiet text only. The rail carries the same
+            fact with the detail of WHICH sections are outstanding, so repeating
+            it here as ambiguous dots was two meters for one number. */}
+        <span className="font-dm text-[11px] text-ink/55 whitespace-nowrap">{readyCount} of {RUNSHEET_SECTIONS.length} sections ready</span>
       </div>
 
       {/* ── Templates Panel ─────────────────────────────────────────────── */}
@@ -2578,8 +2757,83 @@ export default function RunsheetBuilder() {
           </div>
         </div>
 
+        {/* ── Section rail / quick-jump (replaces the six tabs) ──────────── */}
+        {/* Mobile: sticky horizontal quick-jump chips */}
+        <div className="md:hidden sticky top-[100px] z-30 -mx-6 px-4 py-2 bg-cream/95 backdrop-blur border-b border-gold/20 flex gap-2 overflow-x-auto no-print">
+          {RUNSHEET_SECTIONS.map(s => (
+            <button
+              key={s.id}
+              onClick={() => scrollToSection(s.id)}
+              className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full font-bebas tracking-widest text-[11px] transition-colors ${
+                activeSection === s.id ? 'bg-[#2f5488] text-white' : 'bg-forest/5 text-ink/55'
+              }`}
+            >
+              {s.icon} {s.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid md:grid-cols-[210px_minmax(0,1fr)] gap-6 lg:gap-8 items-start mt-2 print:block">
+          {/* Desktop section rail + setup nudge */}
+          <nav className="hidden md:block sticky top-[120px] self-start no-print space-y-4">
+            <div>
+              <div className="font-bebas tracking-[0.2em] text-[10px] text-forest/70 px-2 mb-2">SECTIONS</div>
+              <div className="flex flex-col gap-0.5">
+                {RUNSHEET_SECTIONS.map(s => {
+                  const on = activeSection === s.id;
+                  const ready = sectionReady[s.id];
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => scrollToSection(s.id)}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-sm text-left transition-colors ${
+                        on ? 'bg-forest/10 text-[#2f5488]' : 'text-ink/55 hover:text-ink hover:bg-forest/5'
+                      }`}
+                    >
+                      <span className={on ? 'text-[#2f5488]' : 'text-ink/65'}>{s.icon}</span>
+                      <span className={`flex-1 font-dm text-sm ${on ? 'font-semibold' : 'font-medium'}`}>{s.label}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-[#2f5488]' : 'bg-gold/30'}`} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Setup completeness nudge */}
+            <div className="bg-linen/70 border border-gold/20 rounded-md p-3.5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bebas tracking-[0.2em] text-[10px] text-forest/70">SETUP</span>
+                <span className="font-dm text-[11px] font-semibold text-ink/70">{readyCount}/{RUNSHEET_SECTIONS.length}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-gold/15 overflow-hidden">
+                <div className="h-full bg-[#2f5488] transition-all" style={{ width: `${(readyCount / RUNSHEET_SECTIONS.length) * 100}%` }} />
+              </div>
+              {readyCount < RUNSHEET_SECTIONS.length ? (
+                <div className="mt-3 flex flex-col gap-2">
+                  {RUNSHEET_SECTIONS.filter(s => !sectionReady[s.id]).slice(0, 3).map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => scrollToSection(s.id)}
+                      className="flex items-center gap-2 font-dm text-[11px] text-ink/55 hover:text-forest text-left"
+                    >
+                      <span className="w-3 h-3 rounded-full border-[1.5px] border-gold/50 flex-none" />
+                      Add {s.label.toLowerCase()}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 flex items-center gap-1.5 font-dm text-[11px] text-forest">
+                  <CheckSquare className="w-3.5 h-3.5" /> All sections ready
+                </div>
+              )}
+            </div>
+          </nav>
+
+          {/* Document column — every section in one scroll */}
+          <div className="min-w-0 space-y-6">
+
         {/* ── Event Details Card ──────────────────────────────────────────── */}
-        <div className="dante-card p-6 mb-6 print:shadow-none print:border-0 print:mb-2 print:p-0">
+        <section id="rb-details" className="scroll-mt-[120px]">
+        <div className="dante-card p-6 print:shadow-none print:border-0 print:mb-2 print:p-0">
           {/* Editorial event header — eyebrow + lifecycle status pill */}
           <div className="flex items-end justify-between gap-3 mb-2 no-print">
             <div className="font-sans text-[10px] font-extrabold uppercase tracking-[0.32em] text-primary">
@@ -2722,20 +2976,31 @@ export default function RunsheetBuilder() {
                 actualTotal,
               );
               const balance = totalRef > 0 ? Math.max(0, totalRef - (paid ? dep : 0)) : null;
-              const money = (n: number) => `$${Number(n).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
               return (
                 <div className={`mt-4 px-4 py-3 rounded border ${paid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-300'}`}>
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
                     <div>
                       <div className="font-bebas tracking-widest text-[10px] text-ink/65">DEPOSIT {paid ? '✓ PAID' : '— OUTSTANDING'}</div>
-                      <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{dep > 0 ? money(dep) : '—'}</div>
+                      <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{dep > 0 ? currency(dep) : '—'}</div>
                     </div>
-                    {balance != null && (
-                      <div>
-                        <div className="font-bebas tracking-widest text-[10px] text-ink/65">BALANCE TO COLLECT</div>
-                        <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{money(balance)}</div>
-                      </div>
-                    )}
+                    {balance != null && (() => {
+                      // Three different numbers can win the max() above, and the
+                      // balance means something different depending on which did.
+                      // Naming the basis is what stops this figure reading as a
+                      // contradiction of the Costs total further down the page.
+                      const basis = totalRef === actualTotal && actualTotal > 0
+                        ? 'itemised F&B + costs + bar tab'
+                        : totalRef === Number((booking as any).minimumSpend ?? 0)
+                          ? 'minimum spend'
+                          : 'booking total';
+                      return (
+                        <div>
+                          <div className="font-bebas tracking-widest text-[10px] text-ink/65">BALANCE TO COLLECT</div>
+                          <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{currency(balance)}</div>
+                          <div className="font-dm text-[10px] text-ink/45 mt-0.5">of {currency(totalRef)} — {basis}</div>
+                        </div>
+                      );
+                    })()}
                     <div className={`font-dm text-xs ${paid ? 'text-forest/80' : 'text-amber-700'}`}>
                       {paid ? 'Deposit already received — only collect the balance, don’t re-charge it.' : 'Deposit not yet received.'}
                     </div>
@@ -2746,6 +3011,8 @@ export default function RunsheetBuilder() {
           </div>
         </div>
 
+        </section>
+
         {/* ── Sortable Sections ────────────────────────────────────────────── */}
         <DndContext sensors={sectionSensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
           <SortableContext items={sectionOrder} strategy={verticalListSortingStrategy}>
@@ -2754,7 +3021,7 @@ export default function RunsheetBuilder() {
 
               if (sectionId === 'setup') return (
                 <SortableSection key="setup" id="setup">
-                  <div data-print-section="setup" className={`dante-card mb-4 print:shadow-none ${isHidden ? 'no-print' : ''}`}>
+                  <div id="rb-setup" data-print-section="setup" className={`dante-card mb-6 scroll-mt-[120px] print:shadow-none ${isHidden ? 'no-print' : ''}`}>
                     {/* Header */}
                     <div className="flex items-center no-print">
                       <button
@@ -2769,14 +3036,22 @@ export default function RunsheetBuilder() {
                       <div className="flex items-center gap-1 pr-3">
                         <button
                           onClick={() => toggleSectionHidden('setup')}
-                          className="p-1.5 text-ink/25 hover:text-ink/60 transition-colors"
-                          title={isHidden ? "Show section" : "Hide from runsheet"}
+                          className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/40 hover:text-ink/70 hover:bg-linen transition-colors"
+                          title={isHidden ? "Show Venue Setup on the runsheet" : "Hide Venue Setup from the runsheet"}
+                          aria-label={isHidden ? "Show Venue Setup on the runsheet" : "Hide Venue Setup from the runsheet"}
+                          aria-pressed={isHidden}
                         >
-                          {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          {isHidden ? <Eye className="w-4 h-4" aria-hidden /> : <EyeOff className="w-4 h-4" aria-hidden />}
                         </button>
                         {!isHidden && (
-                          <button aria-label="Toggle setup section" onClick={() => setSetupSectionOpen(v => !v)} className="p-1 text-ink/65">
-                            {setupSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          <button
+                            onClick={() => setSetupSectionOpen(v => !v)}
+                            className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/55 hover:text-ink hover:bg-linen transition-colors"
+                            title={setupSectionOpen ? "Collapse Venue Setup" : "Expand Venue Setup"}
+                            aria-label={setupSectionOpen ? "Collapse Venue Setup" : "Expand Venue Setup"}
+                            aria-expanded={setupSectionOpen}
+                          >
+                            {setupSectionOpen ? <ChevronUp className="w-4 h-4" aria-hidden /> : <ChevronDown className="w-4 h-4" aria-hidden />}
                           </button>
                         )}
                       </div>
@@ -2793,9 +3068,9 @@ export default function RunsheetBuilder() {
                           <span className="font-bebas tracking-widest text-[10px] text-ink/65">QUICK FILL TEMPLATES</span>
                           <button
                             onClick={openSetupManager}
-                            className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
+                            className="flex items-center gap-1.5 font-dm text-[11px] text-forest/70 hover:text-forest transition-colors min-h-[44px] px-1"
                           >
-                            <Settings2 className="w-3 h-3" /> CUSTOMISE
+                            <Settings2 className="w-3.5 h-3.5" aria-hidden /> Customise
                           </button>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -2803,7 +3078,7 @@ export default function RunsheetBuilder() {
                             <button
                               key={t.label}
                               onClick={() => setVenueSetup(t.value)}
-                              className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors"
+                              className="text-xs font-dm px-3 min-h-[44px] rounded-sm border border-forest/30 text-forest hover:bg-forest/5 transition-colors"
                             >
                               {t.label}
                             </button>
@@ -2880,9 +3155,9 @@ export default function RunsheetBuilder() {
                           <span className="font-bebas tracking-widest text-[10px] text-ink/65">QUICK ADD</span>
                           <button
                             onClick={openDietaryManager}
-                            className="flex items-center gap-1 text-[10px] font-bebas tracking-widest text-forest/60 hover:text-forest transition-colors"
+                            className="flex items-center gap-1.5 font-dm text-[11px] text-forest/70 hover:text-forest transition-colors min-h-[44px] px-1"
                           >
-                            <Settings2 className="w-3 h-3" /> CUSTOMISE OPTIONS
+                            <Settings2 className="w-3.5 h-3.5" aria-hidden /> Customise options
                           </button>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -3018,79 +3293,6 @@ export default function RunsheetBuilder() {
           </SortableContext>
         </DndContext>
 
-        {/* ── Section rail / quick-jump (replaces the six tabs) ──────────── */}
-        {/* Mobile: sticky horizontal quick-jump chips */}
-        <div className="md:hidden sticky top-[100px] z-30 -mx-6 px-4 py-2 bg-cream/95 backdrop-blur border-b border-gold/20 flex gap-2 overflow-x-auto no-print">
-          {RUNSHEET_SECTIONS.map(s => (
-            <button
-              key={s.id}
-              onClick={() => scrollToSection(s.id)}
-              className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full font-bebas tracking-widest text-[11px] transition-colors ${
-                activeSection === s.id ? 'bg-[#2f5488] text-white' : 'bg-forest/5 text-ink/55'
-              }`}
-            >
-              {s.icon} {s.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid md:grid-cols-[210px_minmax(0,1fr)] gap-6 lg:gap-8 items-start mt-2 print:block">
-          {/* Desktop section rail + setup nudge */}
-          <nav className="hidden md:block sticky top-[120px] self-start no-print space-y-4">
-            <div>
-              <div className="font-bebas tracking-[0.2em] text-[10px] text-forest/70 px-2 mb-2">SECTIONS</div>
-              <div className="flex flex-col gap-0.5">
-                {RUNSHEET_SECTIONS.map(s => {
-                  const on = activeSection === s.id;
-                  const ready = sectionReady[s.id];
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => scrollToSection(s.id)}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-sm text-left transition-colors ${
-                        on ? 'bg-forest/10 text-[#2f5488]' : 'text-ink/55 hover:text-ink hover:bg-forest/5'
-                      }`}
-                    >
-                      <span className={on ? 'text-[#2f5488]' : 'text-ink/65'}>{s.icon}</span>
-                      <span className={`flex-1 font-dm text-sm ${on ? 'font-semibold' : 'font-medium'}`}>{s.label}</span>
-                      <span className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-[#2f5488]' : 'bg-gold/30'}`} />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {/* Setup completeness nudge */}
-            <div className="bg-linen/70 border border-gold/20 rounded-md p-3.5">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bebas tracking-[0.2em] text-[10px] text-forest/70">SETUP</span>
-                <span className="font-dm text-[11px] font-semibold text-ink/70">{readyCount}/{RUNSHEET_SECTIONS.length}</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-gold/15 overflow-hidden">
-                <div className="h-full bg-[#2f5488] transition-all" style={{ width: `${(readyCount / RUNSHEET_SECTIONS.length) * 100}%` }} />
-              </div>
-              {readyCount < RUNSHEET_SECTIONS.length ? (
-                <div className="mt-3 flex flex-col gap-2">
-                  {RUNSHEET_SECTIONS.filter(s => !sectionReady[s.id]).slice(0, 3).map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => scrollToSection(s.id)}
-                      className="flex items-center gap-2 font-dm text-[11px] text-ink/55 hover:text-forest text-left"
-                    >
-                      <span className="w-3 h-3 rounded-full border-[1.5px] border-gold/50 flex-none" />
-                      Add {s.label.toLowerCase()}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-3 flex items-center gap-1.5 font-dm text-[11px] text-forest">
-                  <CheckSquare className="w-3.5 h-3.5" /> All sections ready
-                </div>
-              )}
-            </div>
-          </nav>
-
-          {/* Document column — every section in one scroll */}
-          <div className="min-w-0 space-y-6">
 
         {/* ── Dietary & allergies — surfaced for safety ───────────────────── */}
         {dietaries.length > 0 && (
@@ -3112,9 +3314,9 @@ export default function RunsheetBuilder() {
             </div>
             <button
               onClick={() => { setDietarySectionOpen(true); document.getElementById('rb-fnb')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
-              className="flex-none font-bebas tracking-widest text-[10px] text-[#c0392b] border border-[#eccfca] hover:bg-[#f7ddd8] rounded-sm px-2.5 py-1.5 transition-colors"
+              className="flex-none font-dm text-[11px] font-semibold text-[#a13226] border border-[#eccfca] hover:bg-[#f7ddd8] rounded-sm px-2.5 min-h-[44px] transition-colors"
             >
-              MANAGE
+              Manage
             </button>
           </div>
         )}
@@ -3139,15 +3341,15 @@ export default function RunsheetBuilder() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setShowPasteImport(true); setParsedData(null); setPasteText(''); }}
-                  className="font-bebas tracking-widest text-xs text-ink/70 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
+                  className="font-dm text-xs text-ink/70 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 hover:border-forest/40"
                 >
-                  <FileText className="w-3.5 h-3.5" /> IMPORT FROM TEXT
+                  <FileText className="w-3.5 h-3.5" aria-hidden /> Import from text
                 </button>
                 <button
                   onClick={addItem}
-                  className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 transition-colors border border-forest/30 px-3 py-1.5 hover:bg-forest/5"
+                  className="font-dm text-xs font-semibold text-forest hover:text-forest/80 flex items-center gap-1.5 transition-colors border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5"
                 >
-                  <Plus className="w-3.5 h-3.5" /> ADD ITEM
+                  <Plus className="w-3.5 h-3.5" aria-hidden /> Add item
                 </button>
               </div>
             </div>
@@ -3254,12 +3456,29 @@ export default function RunsheetBuilder() {
                             className={`w-full font-sans text-sm text-ink bg-transparent border-0 focus:outline-none no-print ${item.bold ? 'font-bold' : 'font-semibold'} ${item.italic ? 'italic' : ''}`}
                           />
                           <div className={`hidden print:block font-dm text-sm ${item.bold ? 'font-bold' : 'font-semibold'} ${item.italic ? 'italic' : ''}`}>{item.title || "—"}</div>
-                          <input
-                            value={item.description ?? ""}
-                            onChange={e => updateItemField(idx, "description", e.target.value)}
-                            placeholder="Notes / details..."
-                            className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none placeholder:text-ink/25 mt-0.5 no-print"
-                          />
+                          {/* The note field only takes up room when there IS a
+                              note. Empty rows used to carry a permanent grey
+                              "Notes / details…" line, which read as content and
+                              doubled the height of every row on the page. */}
+                          {(item.description || notingItem === key) ? (
+                            <input
+                              value={item.description ?? ""}
+                              onChange={e => updateItemField(idx, "description", e.target.value)}
+                              onBlur={() => setNotingItem(null)}
+                              autoFocus={notingItem === key && !item.description}
+                              placeholder="Notes / details…"
+                              aria-label={`Notes for ${item.title || 'this moment'}`}
+                              className="w-full font-dm text-xs text-ink/70 bg-transparent border-0 focus:outline-none placeholder:text-ink/25 mt-0.5 no-print"
+                            />
+                          ) : (
+                            <button
+                              onClick={() => setNotingItem(key)}
+                              className="no-print mt-0.5 font-dm text-[11px] text-ink/30 opacity-0 focus:opacity-100 group-hover:opacity-100 hover:text-forest transition-opacity"
+                              aria-label={`Add a note to ${item.title || 'this moment'}`}
+                            >
+                              + Add note
+                            </button>
+                          )}
                           {item.description && <div className="hidden print:block font-dm text-xs text-ink/70 mt-0.5 whitespace-normal">{item.description}</div>}
                         </div>
 
@@ -3282,39 +3501,45 @@ export default function RunsheetBuilder() {
                           <button
                             onClick={() => moveItem(idx, 'up')}
                             disabled={idx === 0}
-                            className="p-1 text-ink/65 hover:text-ink/60 disabled:opacity-20 transition-colors"
-                            title="Move up"
+                            className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/55 hover:text-ink hover:bg-linen disabled:opacity-20 transition-colors"
+                            title={`Move "${item.title || 'this moment'}" earlier`}
+                            aria-label={`Move "${item.title || 'this moment'}" earlier`}
                           >
-                            <MoveUp className="w-3.5 h-3.5" />
+                            <MoveUp className="w-4 h-4" aria-hidden />
                           </button>
                           <button
                             onClick={() => moveItem(idx, 'down')}
                             disabled={idx === items.length - 1}
-                            className="p-1 text-ink/65 hover:text-ink/60 disabled:opacity-20 transition-colors"
-                            title="Move down"
+                            className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/55 hover:text-ink hover:bg-linen disabled:opacity-20 transition-colors"
+                            title={`Move "${item.title || 'this moment'}" later`}
+                            aria-label={`Move "${item.title || 'this moment'}" later`}
                           >
-                            <MoveDown className="w-3.5 h-3.5" />
+                            <MoveDown className="w-4 h-4" aria-hidden />
                           </button>
                           <button
                             onClick={() => duplicateItem(idx)}
-                            className="p-1 text-ink/65 hover:text-ink/60 transition-colors"
-                            title="Duplicate"
+                            className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/55 hover:text-ink hover:bg-linen transition-colors"
+                            title={`Duplicate "${item.title || 'this moment'}"`}
+                            aria-label={`Duplicate "${item.title || 'this moment'}"`}
                           >
-                            <Copy className="w-3.5 h-3.5" />
+                            <Copy className="w-4 h-4" aria-hidden />
                           </button>
                           <button
                             onClick={() => setExpandedItem(isExpanded ? null : key)}
-                            aria-label="Toggle item details"
-                            className="p-1 text-ink/65 hover:text-ink/60 transition-colors"
+                            aria-label={isExpanded ? 'Hide details' : 'Show details'}
+                            aria-expanded={isExpanded}
+                            title={isExpanded ? 'Hide details' : 'Show details'}
+                            className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/55 hover:text-ink hover:bg-linen transition-colors"
                           >
-                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            {isExpanded ? <ChevronUp className="w-4 h-4" aria-hidden /> : <ChevronDown className="w-4 h-4" aria-hidden />}
                           </button>
                           <button
                             onClick={() => removeItem(idx)}
-                            aria-label="Remove item"
-                            className="p-1 text-ink/65 hover:text-red-500 transition-colors"
+                            aria-label={`Remove "${item.title || 'this moment'}"`}
+                            title={`Remove "${item.title || 'this moment'}"`}
+                            className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/45 hover:bg-[#b3261e]/10 hover:text-[#b3261e] transition-colors"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" aria-hidden />
                           </button>
                         </div>
                       </div>
@@ -3373,13 +3598,15 @@ export default function RunsheetBuilder() {
                             <span className="font-bebas tracking-widest text-[10px] text-ink/65">STYLE</span>
                             <button
                               onClick={() => updateItemField(idx, "bold", !item.bold)}
-                              className={`font-bold text-xs px-2 py-1 border rounded-sm transition-colors font-dm ${item.bold ? 'bg-ink text-white border-ink' : 'bg-white text-ink/70 border-gold/20 hover:border-ink/30'}`}
-                              title="Bold"
+                              aria-pressed={!!item.bold}
+                              className={`font-bold text-xs min-w-[44px] min-h-[44px] border rounded-sm transition-colors font-dm ${item.bold ? 'bg-ink text-white border-ink' : 'bg-white text-ink/70 border-gold/20 hover:border-ink/30'}`}
+                              title="Bold" aria-label="Bold"
                             >B</button>
                             <button
                               onClick={() => updateItemField(idx, "italic", !item.italic)}
-                              className={`italic text-xs px-2 py-1 border rounded-sm transition-colors font-dm ${item.italic ? 'bg-ink text-white border-ink' : 'bg-white text-ink/70 border-gold/20 hover:border-ink/30'}`}
-                              title="Italic"
+                              aria-pressed={!!item.italic}
+                              className={`italic text-xs min-w-[44px] min-h-[44px] border rounded-sm transition-colors font-dm ${item.italic ? 'bg-ink text-white border-ink' : 'bg-white text-ink/70 border-gold/20 hover:border-ink/30'}`}
+                              title="Italic" aria-label="Italic"
                             >I</button>
                             <span className="font-bebas tracking-widest text-[10px] text-ink/65 ml-2">HIGHLIGHT</span>
                             {[
@@ -3392,10 +3619,17 @@ export default function RunsheetBuilder() {
                               <button
                                 key={label}
                                 onClick={() => updateItemField(idx, "highlight", value || undefined)}
-                                title={label}
-                                className={`w-5 h-5 border-2 rounded-full transition-all ${(item.highlight ?? '') === value ? 'border-ink scale-110' : 'border-gold/20 hover:border-ink/40'}`}
-                                style={{ backgroundColor: value || '#ffffff' }}
-                              />
+                                title={`Highlight: ${label}`}
+                                aria-label={`Highlight: ${label}`}
+                                aria-pressed={(item.highlight ?? '') === value}
+                                className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-linen transition-colors"
+                              >
+                                <span
+                                  aria-hidden
+                                  className={`w-5 h-5 border-2 rounded-full transition-all block ${(item.highlight ?? '') === value ? 'border-ink scale-110' : 'border-gold/20'}`}
+                                  style={{ backgroundColor: value || '#ffffff' }}
+                                />
+                              </button>
                             ))}
                           </div>
                         </div>
@@ -3409,7 +3643,24 @@ export default function RunsheetBuilder() {
             {/* Footer / payment notes */}
             <div className="px-5 py-4 border-t border-gold/20">
               <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">FOOTER NOTE</label>
-              <p className="font-dm text-[10px] text-ink/35 mb-2">Shown at the bottom of the runsheet — use for payment info, terms, or any closing note.</p>
+              <p className="font-dm text-[10px] text-ink/35 mb-2">Shown at the bottom of the runsheet — a closing note or terms. Payment terms live in Payment Notes, so they don't need repeating here.</p>
+              {/* Read-only echo of the single source. Stops the same sentence
+                  being typed into two fields and drifting out of step. */}
+              {paymentNotes && (
+                <div className="mb-2 flex items-start gap-2 rounded-sm border border-gold/20 bg-linen/40 px-3 py-2">
+                  <Info className="w-3.5 h-3.5 text-ink/40 flex-none mt-0.5" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bebas tracking-widest text-[9px] text-ink/45 mb-0.5">PAYMENT NOTES — ALREADY ON THE RUNSHEET</div>
+                    <div className="font-dm text-xs text-ink/60 whitespace-pre-wrap">{paymentNotes}</div>
+                  </div>
+                  <button
+                    onClick={() => scrollToSection('costs')}
+                    className="flex-none font-dm text-[11px] text-forest hover:underline min-h-[44px] px-1"
+                  >
+                    Edit in Costs
+                  </button>
+                </div>
+              )}
               <RichTextarea
                 value={footerText}
                 onChange={setFooterText}
@@ -3427,71 +3678,60 @@ export default function RunsheetBuilder() {
         <div data-print-section="food">
           <div className="dante-card border-t-0 print:shadow-none">
             {/* F&B unified header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20 no-print">
-              <div className="flex items-center gap-2">
-                <UtensilsCrossed className="w-4 h-4 text-gold" />
-                <span className="font-bebas tracking-widest text-sm text-ink">FOOD</span>
-                <span className="text-xs text-ink/65 font-dm">({fnbItems.length} items)</span>
+            <div className="px-5 py-3 border-b border-gold/20 no-print space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <UtensilsCrossed className="w-4 h-4 text-gold" />
+                  <span className="font-bebas tracking-widest text-sm text-ink">FOOD</span>
+                  <span className="text-xs text-ink/65 font-dm">({fnbItems.length} items)</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      const name = prompt('New course name (e.g. "Petit Fours", "Coffee & Tea"):')?.trim();
+                      if (!name) return;
+                      setFnbItems(prev => [...prev, { section: 'foh', course: name, dishName: '', qty: defaultCovers, dietary: '', serviceTime: '', staffAssigned: '', prepNotes: '', platingNotes: '', drinkCategory: '' } as any]);
+                    }}
+                    className="font-dm text-xs text-ink/70 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 hover:border-forest/40"
+                    title="Add a new course (e.g. Petit Fours, Coffee)"
+                  >
+                    <Plus className="w-3.5 h-3.5" aria-hidden /> Add course
+                  </button>
+                  <button
+                    onClick={() => { setShowFnbPaste(true); setFnbPasteText(''); setFnbParsedItems([]); }}
+                    className="font-dm text-xs text-ink/70 hover:text-forest flex items-center gap-1.5 transition-colors border border-ink/20 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 hover:border-forest/40"
+                    title="Paste a menu and let AI split it into dishes"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" aria-hidden /> AI paste
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {/* Column visibility toggles */}
-                <button
-                  onClick={() => setShowQtyCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showQtyCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
-                  title="Toggle Quantity column"
-                >QTY</button>
-                <button
-                  onClick={() => setShowPriceCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPriceCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
-                  title="Show each item's price on the CUSTOMER Event Pack. Staff/kitchen copies always show prices."
-                >PRICE</button>
-                <button
-                  onClick={() => setShowDietaryCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDietaryCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
-                  title="Toggle Dietary column"
-                >DIETARY</button>
-                <button
-                  onClick={() => setShowTimeCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showTimeCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
-                  title="Toggle Time column"
-                >SERVICE TIME</button>
-                <button
-                  onClick={() => setShowStaffCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showStaffCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
-                  title="Toggle Staff column"
-                >STAFF</button>
-                <button
-                  onClick={() => setShowPrepPlatingCol(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showPrepPlatingCol ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
-                  title="Toggle Notes column"
-                >NOTES</button>
-                <div className="w-px h-4 bg-ink/10 mx-1" />
-                <button
-                  onClick={() => {
-                    const name = prompt('New course name (e.g. "Petit Fours", "Coffee & Tea"):')?.trim();
-                    if (!name) return;
-                    setFnbItems(prev => [...prev, { section: 'foh', course: name, dishName: '', qty: 1, dietary: '', serviceTime: '', staffAssigned: '', prepNotes: '', platingNotes: '', drinkCategory: '' } as any]);
-                  }}
-                  className="font-bebas tracking-widest text-xs text-ink/70 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
-                  title="Add a new course (e.g. Petit Fours, Coffee)"
-                >
-                  <Plus className="w-3.5 h-3.5" /> ADD COURSE
-                </button>
-                <button
-                  onClick={() => { setShowFnbPaste(true); setFnbPasteText(''); setFnbParsedItems([]); }}
-                  className="font-bebas tracking-widest text-xs text-ink/70 hover:text-forest flex items-center gap-1 transition-colors border border-ink/20 px-3 py-1.5 hover:bg-forest/5 hover:border-forest/40"
-                >
-                  <Sparkles className="w-3.5 h-3.5" /> AI PASTE
-                </button>
-                <Button
-                  onClick={() => saveFnb()}
-                  disabled={fnbSaving}
-                  className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs rounded-sm px-4 py-2 flex items-center gap-1.5"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {fnbSaving ? 'SAVING...' : 'SAVE FOOD'}
-                </Button>
-              </div>
+
+              {/* Column visibility — a labelled group of real switches. These
+                  choose what PRINTS, so "off" has to read as hidden, not as
+                  deleted (the old strikethrough read as "removed"). */}
+              <fieldset className="flex items-center gap-1.5 flex-wrap">
+                <legend className="sr-only">Show columns</legend>
+                <span aria-hidden className="font-bebas tracking-widest text-[10px] text-ink/65 mr-1">SHOW COLUMNS</span>
+                <ColumnSwitch label="Qty" checked={showQtyCol} onChange={() => setShowQtyCol(v => !v)} hint="Show the quantity / covers column" />
+                <ColumnSwitch label="Price" checked={showPriceCol} onChange={() => setShowPriceCol(v => !v)} hint="Show each item's price on the CUSTOMER event pack. Staff and kitchen copies always show prices." />
+                <ColumnSwitch label="Dietary" checked={showDietaryCol} onChange={() => setShowDietaryCol(v => !v)} hint="Show the dietary flags column" />
+                <ColumnSwitch label="Service time" checked={showTimeCol} onChange={() => setShowTimeCol(v => !v)} hint="Show the service time column" />
+                <ColumnSwitch label="Staff" checked={showStaffCol} onChange={() => setShowStaffCol(v => !v)} hint="Show the assigned staff column" />
+                <ColumnSwitch label="Notes" checked={showPrepPlatingCol} onChange={() => setShowPrepPlatingCol(v => !v)} hint="Show the prep and plating notes column" />
+              </fieldset>
+
+              {/* Covers sanity check — non-blocking. */}
+              {coversToCheck.length > 0 && (
+                <div className="flex items-start gap-2 rounded-sm border border-amber-300 bg-amber-50 px-3 py-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 flex-none mt-0.5" aria-hidden />
+                  <p className="font-dm text-[12px] text-amber-900 leading-relaxed">
+                    <b className="font-semibold">Check covers</b> — {coversToCheck.length} dish{coversToCheck.length !== 1 ? 'es are' : ' is'} still set to 1 on a {guestCountNum}-guest event
+                    {coversToCheck.length <= 4 ? `: ${coversToCheck.map(it => it.dishName || 'unnamed dish').join(', ')}` : ''}.
+                    {' '}Tap <span className="font-semibold">×{guestCountNum} all guests</span> on a dish if it's for the whole room.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Sub-tab nav: F&B Items vs Dietaries */}
@@ -3742,7 +3982,7 @@ export default function RunsheetBuilder() {
                       setFnbItems(prev => [...prev, ...all]);
                       toast.success(`${all.length} item${all.length !== 1 ? 's' : ''} pulled from proposal`);
                     }}
-                    className="font-bebas tracking-widest text-[10px] text-[#8b6914] hover:text-forest flex items-center gap-1 border border-gold/40 px-2 py-1 hover:bg-forest/5 hover:border-forest/30 transition-colors"
+                    className="font-dm text-[11px] text-[#7a5a12] hover:text-forest flex items-center gap-1.5 border border-gold/40 rounded-sm px-2.5 min-h-[44px] hover:bg-forest/5 hover:border-forest/30 transition-colors"
                   >
                     <RefreshCw className="w-3 h-3" /> PULL INTO F&B SHEET
                   </button>
@@ -3764,7 +4004,7 @@ export default function RunsheetBuilder() {
                                 {item.description}
                                 {item.qty > 1 ? <span className="text-ink/65 ml-1">× {item.qty}</span> : null}
                               </span>
-                              <span className="font-semibold text-ink ml-3">${Number(item.total ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-ink ml-3">{currency(Number(item.total ?? 0))}</span>
                             </div>
                           ))}
                         </div>
@@ -3785,7 +4025,7 @@ export default function RunsheetBuilder() {
                             {item.description && <span className="text-ink/65 ml-1">— {item.description}</span>}
                             {Number(item.qty) > 1 && <span className="text-ink/65 ml-1">× {item.qty}</span>}
                           </div>
-                          <span className="font-semibold text-ink ml-3">${(Number(item.qty) * Number(item.unitPrice)).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                          <span className="font-semibold text-ink ml-3">{currency((Number(item.qty) * Number(item.unitPrice)))}</span>
                         </div>
                       ))}
                     </div>
@@ -3844,27 +4084,28 @@ export default function RunsheetBuilder() {
             <div className="px-5 py-4 border-b border-gold/20 bg-linen/30 no-print">
               <div className="flex items-center justify-between mb-3">
                 <div className="font-bebas tracking-widest text-[10px] text-ink/65">ADD ITEM</div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button
                     onClick={() => { setFnbCustomMode(true); setFnbCustomName(''); }}
-                    className={`font-bebas tracking-widest text-[10px] flex items-center gap-1 border px-2.5 py-1 transition-colors ${
-                      fnbCustomMode ? 'bg-gold/20 border-gold text-ink' : 'border-gold/20 text-ink/70 hover:bg-linen'
+                    aria-pressed={fnbCustomMode}
+                    className={`font-dm text-[11px] flex items-center gap-1.5 border rounded-sm px-3 min-h-[44px] transition-colors ${
+                      fnbCustomMode ? 'bg-gold/20 border-gold text-ink font-semibold' : 'border-gold/20 text-ink/70 hover:bg-linen'
                     }`}
                   >
-                    <Plus className="w-3 h-3" /> CUSTOM ITEM
+                    <Plus className="w-3.5 h-3.5" aria-hidden /> Custom item
                   </button>
                   <button
                     onClick={() => { setShowCatalogSelector(true); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); setFnbCustomMode(false); }}
-                    className="font-bebas tracking-widest text-[10px] text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-2.5 py-1 hover:bg-forest/5 transition-colors"
+                    className="font-dm text-[11px] font-semibold text-forest hover:text-forest/80 flex items-center gap-1.5 border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 transition-colors"
                   >
-                    <UtensilsCrossed className="w-3 h-3" /> ADD FROM CATALOGUE
+                    <UtensilsCrossed className="w-3.5 h-3.5" aria-hidden /> Add from catalogue
                   </button>
                   <button
                     onClick={addNewCourse}
-                    className="font-bebas tracking-widest text-[10px] text-ink/60 hover:text-forest flex items-center gap-1 border border-gold/20 px-2.5 py-1 hover:bg-linen transition-colors"
+                    className="font-dm text-[11px] text-ink/60 hover:text-forest flex items-center gap-1.5 border border-gold/20 rounded-sm px-3 min-h-[44px] hover:bg-linen transition-colors"
                     title="Create a new course header for this runsheet"
                   >
-                    <Plus className="w-3 h-3" /> NEW COURSE
+                    <Plus className="w-3.5 h-3.5" aria-hidden /> New course
                   </button>
                 </div>
               </div>
@@ -3917,13 +4158,15 @@ export default function RunsheetBuilder() {
                       />
                     </div>
                     <div>
-                      <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">QTY / COVERS</label>
+                      <label htmlFor="rb-new-covers-custom" className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">QTY / COVERS</label>
                       <Input
+                        id="rb-new-covers-custom"
                         type="number" min={1}
-                        value={newFnbItem.qty ?? 1}
+                        value={newFnbItem.qty ?? defaultCovers}
                         onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
                         className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                       />
+                      <CoversChips value={newFnbItem.qty ?? defaultCovers} guests={guestCountNum} onPick={q => setNewFnbItem(p => ({ ...p, qty: q }))} />
                     </div>
                   </div>
                   <div className="flex gap-3 items-end">
@@ -3939,15 +4182,15 @@ export default function RunsheetBuilder() {
                     <Button
                       onClick={() => setFnbCustomMode(false)}
                       variant="outline"
-                      className="rounded-sm border-gold/20 font-bebas tracking-widest text-xs h-9 px-3"
+                      className="rounded-sm border-gold/20 font-dm text-xs min-h-[44px] px-3"
                     >
-                      CANCEL
+                      Cancel
                     </Button>
                     <Button
                       onClick={addFnbItem}
-                      className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm px-4 py-2 flex items-center gap-1.5 h-9"
+                      className="bg-forest hover:bg-forest/90 text-white font-dm text-xs font-semibold rounded-sm px-4 flex items-center gap-1.5 min-h-[44px]"
                     >
-                      <Plus className="w-3.5 h-3.5" /> ADD
+                      <Plus className="w-3.5 h-3.5" aria-hidden /> Add
                     </Button>
                   </div>
                 </div>
@@ -3965,17 +4208,19 @@ export default function RunsheetBuilder() {
                   </div>
                   {newFnbItem.course !== 'Drinks' && (
                   <div>
-                    <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">QTY / COVERS</label>
+                    <label htmlFor="rb-new-covers" className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">QTY / COVERS</label>
                     <Input
+                      id="rb-new-covers"
                       type="number" min={1}
-                      value={newFnbItem.qty ?? 1}
+                      value={newFnbItem.qty ?? defaultCovers}
                       onChange={e => setNewFnbItem(p => ({ ...p, qty: Number(e.target.value) }))}
                       className="rounded-sm border border-gold/20 focus-visible:ring-0 focus-visible:border-forest text-sm h-9"
                     />
+                    <CoversChips value={newFnbItem.qty ?? defaultCovers} guests={guestCountNum} onPick={q => setNewFnbItem(p => ({ ...p, qty: q }))} />
                   </div>
                   )}
                   <div className="flex items-end">
-                    <p className="font-dm text-xs text-ink/65 pb-2">Use ADD FROM CATALOGUE to add dishes, or CUSTOM ITEM for one-off items.</p>
+                    <p className="font-dm text-xs text-ink/65 pb-2">Use <b className="font-semibold">Add from catalogue</b> for saved dishes, or <b className="font-semibold">Custom item</b> for one-offs.</p>
                   </div>
                 </div>
               )}
@@ -3993,11 +4238,11 @@ export default function RunsheetBuilder() {
                     dish drops down to its detail fields) — a slim identity bar.
                     In print we keep the full column header so the runsheet still
                     prints as a structured table. */}
-                <div className="px-5 py-2 text-xs font-bebas tracking-widest text-white bg-gold flex items-center justify-between no-print">
+                <div className="px-5 py-2 text-xs font-bebas tracking-widest text-white bg-gold-deep flex items-center justify-between no-print">
                   <span>MENU</span>
                   <span className="opacity-70 font-dm text-[10px] tracking-normal">Tap a dish to expand its details</span>
                 </div>
-                <div className="hidden print:grid gap-2 px-5 py-1.5 text-xs font-bebas tracking-widest text-white bg-gold" style={{ gridTemplateColumns: fnbGridCols }}>
+                <div className="hidden print:grid gap-2 px-5 py-1.5 text-xs font-bebas tracking-widest text-white bg-gold-deep" style={{ gridTemplateColumns: fnbGridCols }}>
                   <div>COURSE</div>
                   <div>DISH</div>
                   {showQtyCol && <div>QTY</div>}
@@ -4144,7 +4389,7 @@ export default function RunsheetBuilder() {
                                 />
                                 {item.unitPrice != null && item.unitPrice !== '' && Number(item.qty) > 0 && (
                                   <div className="text-[10px] text-ink/65 font-dm mt-0.5">
-                                    {item.qty} × ${Number(item.unitPrice).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = <span className="text-forest font-semibold">${(Number(item.qty) * Number(item.unitPrice)).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    {item.qty} × {currency(Number(item.unitPrice))} = <span className="text-forest font-semibold">{currency((Number(item.qty) * Number(item.unitPrice)))}</span>
                                   </div>
                                 )}
                               </div>
@@ -4249,7 +4494,6 @@ export default function RunsheetBuilder() {
               const showBlock = booking?.minimumSpend || rsTabAmount || costItems.length > 0 || booking?.depositNzd
                 || fnbFoodTotal > 0 || fnbDrinkTotal > 0 || (paymentInstructions && paymentInstructions.trim().length > 0);
               if (!showBlock) return null;
-              const fmt = (n: number) => `$${n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
               return (
                 <div data-print-section="totals" className="px-5 py-4 border-t-2 border-forest/20 bg-linen/30 print:avoid-break">
                   <div className="font-bebas tracking-widest text-xs text-forest mb-3">RUNNING TOTALS</div>
@@ -4257,13 +4501,13 @@ export default function RunsheetBuilder() {
                     {booking?.minimumSpend != null && Number(booking.minimumSpend) > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/65">MINIMUM SPEND</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(Number(booking.minimumSpend))}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(Number(booking.minimumSpend))}</div>
                       </div>
                     )}
                     {fnbFoodTotal > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/65">FOOD ({fnbItems.filter(it => (it.course ?? '') !== 'Drinks' && Number(it.unitPrice ?? 0) > 0).length} items)</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(fnbFoodTotal)}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(fnbFoodTotal)}</div>
                       </div>
                     )}
                     {/* Drinks subtotal intentionally removed — beverages are not
@@ -4271,25 +4515,25 @@ export default function RunsheetBuilder() {
                     {costFood > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/65">EXTRA F&amp;B (COSTS TAB)</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(costFood)}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(costFood)}</div>
                       </div>
                     )}
                     {rsTabAmount && Number(rsTabAmount) > 0 && (
                       <div className="bg-white border border-gold/20 px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/65">BAR TAB</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(Number(rsTabAmount))}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(Number(rsTabAmount))}</div>
                       </div>
                     )}
                     {grandTotal > 0 && (
                       <div className="bg-forest text-cream border border-forest px-3 py-2">
                         <div className="font-bebas tracking-widest text-[10px] text-cream/70">RUNNING TOTAL</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{fmt(grandTotal)}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{currency(grandTotal)}</div>
                       </div>
                     )}
                     {booking?.depositNzd != null && Number(booking.depositNzd) > 0 && (
                       <div className={`border px-3 py-2 ${booking?.depositPaid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-200'}`}>
                         <div className="font-bebas tracking-widest text-[10px] text-ink/65">DEPOSIT {booking?.depositPaid ? '— PAID' : '— UNPAID'}</div>
-                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{fmt(Number(booking.depositNzd))}</div>
+                        <div className="font-serif text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] text-ink">{currency(Number(booking.depositNzd))}</div>
                       </div>
                     )}
                   </div>
@@ -4325,30 +4569,12 @@ export default function RunsheetBuilder() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowDrinkPrices(v => !v)}
-                  className={`font-bebas tracking-widest text-[10px] px-2 py-1 border transition-colors ${showDrinkPrices ? 'border-forest/40 text-forest bg-forest/5' : 'border-ink/20 text-ink/65 line-through'}`}
-                  title="Show each drink's price on the CUSTOMER Event Pack. Staff/kitchen copies always show prices."
-                >SHOW PRICES</button>
-              <button
-                onClick={async () => {
-                  if (!sheetId) { toast.error("Save the runsheet first"); return; }
-                  setDrinksSaving(true);
-                  try {
-                    await silentUpdateMutation.mutateAsync({
-                      id: sheetId,
-                      drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices, showDrinkPrices },
-                    } as any);
-                    toast.success("Drinks selection saved!");
-                  } catch { toast.error("Failed to save drinks"); }
-                  setDrinksSaving(false);
-                }}
-                disabled={drinksSaving}
-                className="bg-gold hover:bg-gold/90 text-ink font-bebas tracking-widest text-xs px-4 py-2 flex items-center gap-1.5 transition-colors"
-              >
-                <Save className="w-3.5 h-3.5" />
-                {drinksSaving ? 'SAVING...' : 'SAVE DRINKS'}
-              </button>
+                <ColumnSwitch
+                  label="Show prices"
+                  checked={showDrinkPrices}
+                  onChange={() => setShowDrinkPrices(v => !v)}
+                  hint="Show each drink's price on the CUSTOMER event pack. Staff and kitchen copies always show prices."
+                />
               </div>
             </div>
 
@@ -4391,14 +4617,14 @@ export default function RunsheetBuilder() {
                   <button
                     type="button"
                     onClick={() => { setCatalogSelectorType('drink'); setCatalogSelectorCategoryId(null); setCatalogSelectedItems(new Map()); setShowCatalogSelector(true); }}
-                    className="font-bebas tracking-widest text-[10px] bg-forest text-cream px-3 py-1.5 hover:bg-forest/90"
+                    className="font-dm text-[11px] font-semibold bg-forest text-cream rounded-sm px-3 min-h-[44px] hover:bg-forest/90"
                   >
-                    + PICK DRINKS
+                    + Pick drinks
                   </button>
                 </div>
                 {rsSelectedDrinks.length === 0 && rsCustomDrinks.length === 0 ? (
                   <div className="border border-dashed border-gold/30 px-3 py-4 text-center font-dm text-xs text-ink/70">
-                    No drinks selected yet. Click <span className="font-bebas tracking-widest text-forest">+ PICK DRINKS</span> to choose from your saved drinks menu.
+                    No drinks selected yet. Click <span className="font-dm font-semibold text-forest">+ Pick drinks</span> to choose from your saved drinks menu.
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
@@ -4408,23 +4634,28 @@ export default function RunsheetBuilder() {
                         <select
                           value={rsDrinkTypes[k] ?? ''}
                           onChange={e => setRsDrinkTypes(prev => ({ ...prev, [k]: e.target.value }))}
-                          className="border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white"
-                          title="Beverage type"
+                          className="border border-gold/20 rounded-sm px-1 py-1 text-[10px] font-dm focus:outline-none focus:border-forest bg-white min-h-[32px]"
+                          title={`Beverage type for ${k}`}
+                          aria-label={`Beverage type for ${k}`}
                         >
-                          <option value="">—</option>
+                          <option value="">Type…</option>
                           <option value="spark">Bubbles</option>
                           <option value="white">White</option>
                           <option value="red">Red</option>
                           <option value="beer">Beer</option>
                           <option value="other">Other</option>
                         </select>
-                        <span className="inline-flex items-center text-[10px] text-ink/70">$
-                          <input type="number" min={0} step={0.5} value={rsDrinkPrices[k] ?? ''}
-                            onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[k]; else n[k] = Number(e.target.value); return n; })}
-                            placeholder="—" title="Price per drink (till amount)"
-                            className="w-12 border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5" />
-                        </span>
-                        <button type="button" onClick={() => setRsSelectedDrinks(prev => prev.filter(x => x !== k))} className="text-ink/65 hover:text-red-600">×</button>
+                        {/* Only offered when prices are actually going to be
+                            shown — otherwise it's a field with no effect. */}
+                        {showDrinkPrices && (
+                          <span className="inline-flex items-center text-[10px] text-ink/70">$
+                            <input type="number" min={0} step={0.5} value={rsDrinkPrices[k] ?? ''}
+                              onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[k]; else n[k] = Number(e.target.value); return n; })}
+                              placeholder="—" title={`Price per ${k} (till amount)`} aria-label={`Price per ${k}`}
+                              className="w-12 border border-gold/20 rounded-sm px-1 py-1 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5 min-h-[32px]" />
+                          </span>
+                        )}
+                        <button type="button" onClick={() => setRsSelectedDrinks(prev => prev.filter(x => x !== k))} title={`Remove ${k}`} aria-label={`Remove ${k}`} className="w-8 h-8 -my-1 inline-flex items-center justify-center text-ink/55 hover:text-[#b3261e] rounded-sm">×</button>
                       </span>
                     ))}
                     {rsCustomDrinks.map((d, i) => (
@@ -4433,23 +4664,26 @@ export default function RunsheetBuilder() {
                         <select
                           value={rsDrinkTypes[d.name] ?? ''}
                           onChange={e => setRsDrinkTypes(prev => ({ ...prev, [d.name]: e.target.value }))}
-                          className="border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white"
-                          title="Beverage type"
+                          className="border border-gold/20 rounded-sm px-1 py-1 text-[10px] font-dm focus:outline-none focus:border-forest bg-white min-h-[32px]"
+                          title={`Beverage type for ${d.name}`}
+                          aria-label={`Beverage type for ${d.name}`}
                         >
-                          <option value="">—</option>
+                          <option value="">Type…</option>
                           <option value="spark">Bubbles</option>
                           <option value="white">White</option>
                           <option value="red">Red</option>
                           <option value="beer">Beer</option>
                           <option value="other">Other</option>
                         </select>
-                        <span className="inline-flex items-center text-[10px] text-ink/70">$
-                          <input type="number" min={0} step={0.5} value={rsDrinkPrices[d.name] ?? (d.price ?? '')}
-                            onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[d.name]; else n[d.name] = Number(e.target.value); return n; })}
-                            placeholder="—" title="Price per drink (till amount)"
-                            className="w-12 border border-gold/20 rounded-sm px-1 py-0.5 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5" />
-                        </span>
-                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/65 hover:text-red-600">×</button>
+                        {showDrinkPrices && (
+                          <span className="inline-flex items-center text-[10px] text-ink/70">$
+                            <input type="number" min={0} step={0.5} value={rsDrinkPrices[d.name] ?? (d.price ?? '')}
+                              onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[d.name]; else n[d.name] = Number(e.target.value); return n; })}
+                              placeholder="—" title={`Price per ${d.name} (till amount)`} aria-label={`Price per ${d.name}`}
+                              className="w-12 border border-gold/20 rounded-sm px-1 py-1 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5 min-h-[32px]" />
+                          </span>
+                        )}
+                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} title={`Remove ${d.name}`} aria-label={`Remove ${d.name}`} className="w-8 h-8 -my-1 inline-flex items-center justify-center text-ink/55 hover:text-[#b3261e] rounded-sm">×</button>
                       </span>
                     ))}
                   </div>
@@ -4490,15 +4724,13 @@ export default function RunsheetBuilder() {
                     + ADD
                   </button>
                 </div>
+                {/* Custom drinks are NOT listed again here — they already
+                    appear (with their type and price controls) in the selection
+                    above. Two rows for one drink was the duplication. */}
                 {rsCustomDrinks.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-3">
-                    {rsCustomDrinks.map((d, i) => (
-                      <span key={`cd${i}`} className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 text-xs px-2 py-1 font-dm border border-amber-200">
-                        {d.name}{d.description ? ` — ${d.description}` : ''}
-                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} className="text-ink/65 hover:text-red-600">×</button>
-                      </span>
-                    ))}
-                  </div>
+                  <p className="font-dm text-[11px] text-ink/50 mt-3">
+                    {rsCustomDrinks.length} custom drink{rsCustomDrinks.length !== 1 ? 's' : ''} added — {rsCustomDrinks.length !== 1 ? 'they appear' : 'it appears'} in the selection above.
+                  </p>
                 )}
               </div>
 
@@ -4803,7 +5035,7 @@ export default function RunsheetBuilder() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
                         <div className="font-bebas text-[10px] text-ink/65 tracking-widest">TOTAL</div>
-                        <div className="font-dm font-semibold">${Number(linkedProposal.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                        <div className="font-dm font-semibold">{currency(Number(linkedProposal.totalNzd ?? 0))}</div>
                       </div>
                       <div>
                         <div className="font-bebas text-[10px] text-ink/65 tracking-widest">GUESTS</div>
@@ -4828,7 +5060,7 @@ export default function RunsheetBuilder() {
                               {li.map((item: any, i: number) => (
                                 <div key={i} className="flex justify-between text-xs font-dm">
                                   <span className="text-ink/70">{item.description}{item.qty > 1 ? ` × ${item.qty}` : ""}</span>
-                                  <span className="font-medium">${Number(item.total).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                                  <span className="font-medium">{currency(Number(item.total))}</span>
                                 </div>
                               ))}
                             </div>
@@ -4957,21 +5189,25 @@ export default function RunsheetBuilder() {
                               </div>
                             )}
                           </div>
+                          {/* Every one of these is a 44px target with a real
+                              accessible name — they were unlabelled ~20px icons. */}
                           <button
                             onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied!'); }}
-                            className="p-1 hover:text-forest transition-colors text-ink/65"
-                            title="Copy link"
+                            className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-forest/5 hover:text-forest transition-colors text-ink/65"
+                            title={`Copy the ${link.label} link`}
+                            aria-label={`Copy the ${link.label} link`}
                           >
-                            <Clipboard className="w-3.5 h-3.5" />
+                            <Clipboard className="w-4 h-4" aria-hidden />
                           </button>
                           <a
                             href={url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1 hover:text-forest transition-colors text-ink/65"
-                            title="Open link"
+                            className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-forest/5 hover:text-forest transition-colors text-ink/65"
+                            title={`Open the ${link.label} link in a new tab`}
+                            aria-label={`Open the ${link.label} link in a new tab`}
                           >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-4 h-4" aria-hidden />
                           </a>
                           <button
                             onClick={() => {
@@ -4982,18 +5218,42 @@ export default function RunsheetBuilder() {
                               setSelectedStaffIds(new Set(all));
                               setExtraEmails("");
                             }}
-                            className="p-1 hover:text-forest transition-colors text-ink/65"
-                            title="Email staff briefing (runsheet link + PDF)"
+                            className="w-11 h-11 inline-flex items-center justify-center rounded-sm hover:bg-forest/5 hover:text-forest transition-colors text-ink/65"
+                            title="Email the staff briefing (runsheet link + PDF)"
+                            aria-label={`Email the ${link.label} briefing to staff`}
                           >
-                            <Mail className="w-3.5 h-3.5" />
+                            <Mail className="w-4 h-4" aria-hidden />
                           </button>
-                          <button
-                            onClick={() => deleteStaffLinkMutation.mutate({ id: link.id })}
-                            className="p-1 hover:text-red-500 transition-colors text-ink/65"
-                            title="Delete link"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {/* Delete is destructive and sat at the same size and
+                              weight as Copy. It's now behind a confirm step and
+                              set apart, so a mis-tap can't revoke a live link. */}
+                          <span className="w-px h-6 bg-gold/25 mx-1" aria-hidden />
+                          {confirmDeleteLinkId === link.id ? (
+                            <span className="inline-flex items-center gap-1">
+                              <button
+                                onClick={() => { deleteStaffLinkMutation.mutate({ id: link.id }); setConfirmDeleteLinkId(null); }}
+                                className="min-h-[44px] px-2.5 rounded-sm font-dm text-[11px] font-semibold bg-[#b3261e] text-white hover:bg-[#8f1e18] transition-colors"
+                                aria-label={`Confirm deleting the ${link.label} link`}
+                              >
+                                Delete link
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteLinkId(null)}
+                                className="min-h-[44px] px-2.5 rounded-sm font-dm text-[11px] text-ink/60 hover:text-ink transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteLinkId(link.id)}
+                              className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/45 hover:bg-[#b3261e]/10 hover:text-[#b3261e] transition-colors"
+                              title={`Delete the ${link.label} link`}
+                              aria-label={`Delete the ${link.label} link`}
+                            >
+                              <Trash2 className="w-4 h-4" aria-hidden />
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -5012,25 +5272,25 @@ export default function RunsheetBuilder() {
                       <Button
                         onClick={() => createStaffLinkMutation.mutate({ runsheetId: sheetId!, label: newStaffLinkLabel })}
                         disabled={createStaffLinkMutation.isPending}
-                        className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-sm px-4 h-8 flex items-center gap-1.5"
+                        className="bg-forest hover:bg-forest/90 text-white font-dm text-xs font-semibold rounded-sm px-4 min-h-[44px] flex items-center gap-1.5"
                       >
-                        <Share2 className="w-3 h-3" /> {createStaffLinkMutation.isPending ? 'CREATING...' : 'CREATE LINK'}
+                        <Share2 className="w-3.5 h-3.5" aria-hidden /> {createStaffLinkMutation.isPending ? 'Creating…' : 'Create link'}
                       </Button>
                       <Button
                         onClick={() => setCreatingStaffLink(false)}
                         variant="outline"
-                        className="font-bebas tracking-widest text-xs rounded-sm px-4 h-8"
+                        className="font-dm text-xs rounded-sm px-4 min-h-[44px]"
                       >
-                        CANCEL
+                        Cancel
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <button
                     onClick={() => setCreatingStaffLink(true)}
-                    className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-3 py-1.5 hover:bg-forest/5 transition-colors"
+                    className="font-dm text-xs font-semibold text-forest hover:text-forest/80 flex items-center gap-1.5 border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 transition-colors"
                   >
-                    <Plus className="w-3 h-3" /> NEW STAFF LINK
+                    <Plus className="w-3.5 h-3.5" aria-hidden /> New staff link
                   </button>
                 )}
               </div>
@@ -5215,9 +5475,9 @@ export default function RunsheetBuilder() {
                     });
                     toast.success(`${imported.length} item${imported.length !== 1 ? 's' : ''} imported from proposal`);
                   }}
-                  className="font-bebas tracking-widest text-[10px] text-[#8b6914] hover:text-forest flex items-center gap-1 border border-gold/40 px-2 py-1 hover:bg-forest/5 hover:border-forest/30 transition-colors"
+                  className="font-dm text-[11px] text-[#7a5a12] hover:text-forest flex items-center gap-1.5 border border-gold/40 rounded-sm px-2.5 min-h-[44px] hover:bg-forest/5 hover:border-forest/30 transition-colors"
                 >
-                  <Download className="w-3 h-3" /> IMPORT FROM PROPOSAL
+                  <Download className="w-3.5 h-3.5" aria-hidden /> Import from proposal
                 </button>
               )}
             </div>
@@ -5259,10 +5519,10 @@ export default function RunsheetBuilder() {
                       <td className="px-4 py-2 text-ink/70 font-dm text-xs">Food &amp; Beverage</td>
                       <td className="px-3 py-2 text-center text-ink/70 font-dm text-sm">{it.qty}</td>
                       <td className="px-4 py-2 text-right text-ink/70 font-dm text-sm">
-                        ${Number(it.unitPrice ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}
+                        {currency(Number(it.unitPrice ?? 0))}
                       </td>
                       <td className="px-4 py-2 text-right font-semibold text-ink">
-                        ${(Number(it.qty || 0) * Number(it.unitPrice ?? 0)).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}
+                        {currency((Number(it.qty || 0) * Number(it.unitPrice ?? 0)))}
                       </td>
                       <td className="px-2 py-2" />
                     </tr>
@@ -5308,15 +5568,16 @@ export default function RunsheetBuilder() {
                         </div>
                       </td>
                       <td className="px-4 py-2 text-right font-semibold text-ink">
-                        ${(ci.qty * ci.unitPrice).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}
+                        {currency((ci.qty * ci.unitPrice))}
                       </td>
                       <td className="px-2 py-2">
                         <button
                           onClick={() => setCostItems(prev => prev.filter((_, i) => i !== idx))}
-                          aria-label="Remove cost item"
-                          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1 text-ink/65 hover:text-red-500"
+                          aria-label={`Remove cost item${ci.label ? `: ${ci.label}` : ''}`}
+                          title={`Remove cost item${ci.label ? `: ${ci.label}` : ''}`}
+                          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity w-11 h-11 inline-flex items-center justify-center rounded-sm text-ink/45 hover:bg-[#b3261e]/10 hover:text-[#b3261e]"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" aria-hidden />
                         </button>
                       </td>
                     </tr>
@@ -5329,9 +5590,9 @@ export default function RunsheetBuilder() {
             <div className="px-4 py-3 border-t border-gold/20">
               <button
                 onClick={() => setCostItems(prev => [...prev, { _id: `new-${Date.now()}`, label: '', qty: 1, unitPrice: 0, category: 'Other' }])}
-                className="font-bebas tracking-widest text-xs text-forest hover:text-forest/80 flex items-center gap-1 border border-forest/30 px-3 py-1.5 hover:bg-forest/5 transition-colors"
+                className="font-dm text-xs font-semibold text-forest hover:text-forest/80 flex items-center gap-1.5 border border-forest/30 rounded-sm px-3 min-h-[44px] hover:bg-forest/5 transition-colors"
               >
-                <Plus className="w-3 h-3" /> ADD ITEM
+                <Plus className="w-3.5 h-3.5" aria-hidden /> Add item
               </button>
             </div>
 
@@ -5388,7 +5649,7 @@ export default function RunsheetBuilder() {
                     {Object.entries(byCategory).map(([cat, amt]) => (
                       <div key={cat} className="flex items-center gap-6 text-xs font-dm">
                         <span className="text-ink/60 w-36">{cat}</span>
-                        <span className="text-ink font-semibold">${(gstInclusive ? amt / 1.15 : amt).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}<span className="font-normal text-ink/65 text-[10px] ml-1">ex GST</span></span>
+                        <span className="text-ink font-semibold">{currency((gstInclusive ? amt / 1.15 : amt))}<span className="font-normal text-ink/65 text-[10px] ml-1">ex GST</span></span>
                       </div>
                     ))}
                   </div>
@@ -5396,22 +5657,22 @@ export default function RunsheetBuilder() {
                   <div className="min-w-[240px] space-y-1">
                     <div className="flex justify-between text-xs font-dm text-ink/70">
                       <span>Subtotal (excl. GST)</span>
-                      <span className="font-semibold">${subtotal.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                      <span className="font-semibold">{currency(subtotal)}</span>
                     </div>
                     <div className="flex justify-between text-xs font-dm text-ink/70">
                       <span>GST (15%)</span>
-                      <span>${gstAmt.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                      <span>{currency(gstAmt)}</span>
                     </div>
                     <div className="flex justify-between text-sm font-dm font-bold text-ink border-t border-gold/40 pt-1.5 mt-1.5">
                       <span>Total (incl. GST)</span>
-                      <span>${total.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</span>
+                      <span>{currency(total)}</span>
                     </div>
-                    {paymentNotes && (
-                      <div className="mt-3 pt-3 border-t border-gold/20">
-                        <div className="font-bebas text-[9px] tracking-widest text-ink/35 mb-1">PAYMENT NOTES</div>
-                        <div className="font-dm text-xs text-ink/60 whitespace-pre-wrap">{paymentNotes}</div>
-                      </div>
-                    )}
+                    {/* Says what this total IS, so a difference from the balance
+                        above or the revenue tile below reads as a different
+                        basis rather than as one of them being wrong. */}
+                    <div className="font-dm text-[10px] text-ink/45 pt-1">
+                      Priced F&amp;B + cost lines. Excludes the bar tab.
+                    </div>
                   </div>
                 </div>
               );
@@ -5947,7 +6208,9 @@ export default function RunsheetBuilder() {
                       const toggle = (item: any) => setCatalogSelectedItems(prev => {
                         const next = new Map(prev);
                         if (next.has(item.id)) next.delete(item.id);
-                        else next.set(item.id, { item, qty: 1, categoryName: catName });
+                        // Food from the catalogue is for the whole room by default;
+                        // drinks are counted per bottle/serve, so they stay at 1.
+                        else next.set(item.id, { item, qty: catalogSelectorType === 'food' ? defaultCovers : 1, categoryName: catName });
                         return next;
                       });
                       const setQty = (item: any, q: number) => setCatalogSelectedItems(prev => {
@@ -5959,7 +6222,7 @@ export default function RunsheetBuilder() {
                       return catalogItems.map((item: any) => {
                         const entry = catalogSelectedItems.get(item.id);
                         const isSelected = !!entry;
-                        const qty = entry?.qty ?? 1;
+                        const qty = entry?.qty ?? (catalogSelectorType === 'food' ? defaultCovers : 1);
                         return (
                         <div
                           key={item.id}
@@ -6031,7 +6294,7 @@ export default function RunsheetBuilder() {
                         const mult = e.item.pricingType === 'per_person' ? (g || e.qty) : e.qty;
                         return a + catalogPriceDollars(e.item) * mult;
                       }, 0);
-                      return `${catalogSelectedItems.size} item${catalogSelectedItems.size > 1 ? 's' : ''} · ${totalQty} qty${est > 0 ? ` · ~$${est.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} est.` : ''}`;
+                      return `${catalogSelectedItems.size} item${catalogSelectedItems.size > 1 ? 's' : ''} · ${totalQty} qty${est > 0 ? ` · ~${currency(est)} est.` : ''}`;
                     })()
                   : 'Select items to add across any category'}
               </span>

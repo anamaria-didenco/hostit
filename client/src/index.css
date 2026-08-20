@@ -287,6 +287,10 @@
   .bg-stormy-tint { background-color: #f4efe6; }
   .bg-tomato      { background-color: #c0392b; }
   .bg-amber       { background-color: #b07c25; }
+  /* Amber is ~3.6:1 against white — under AA 4.5:1 — so any surface that
+     carries WHITE text uses this darker step (~5.6:1) instead. Ink-on-amber is
+     fine and keeps using .bg-gold / .bg-amber. */
+  .bg-gold-deep   { background-color: #8a5f18; }
 
   /* ── Editorial palette (border) ── */
   .border-sage-green { border-color: #2f5488; }
