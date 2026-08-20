@@ -36,6 +36,7 @@ import XeroSettingsCard from "@/components/XeroSettingsCard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
+import { currency } from "@/lib/money";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 type FormFieldDef = {
@@ -8845,7 +8846,7 @@ export default function Dashboard() {
                     ) : (
                       <div className="font-dm text-sm text-ink">
                         {selectedBooking.minimumSpend != null && selectedBooking.minimumSpend !== ""
-                          ? `$${Number(selectedBooking.minimumSpend).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}`
+                          ? `${currency(Number(selectedBooking.minimumSpend))}`
                           : <span className="text-ink/55 italic">Not set</span>}
                       </div>
                     )}
@@ -8929,7 +8930,7 @@ export default function Dashboard() {
                             className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
                         </div>
                       ) : (
-                        <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                        <div className="font-cormorant text-xl font-semibold text-ink">{currency(Number(selectedBooking.totalNzd ?? 0))}</div>
                       )}
                     </div>
                     {/* DEPOSIT */}
@@ -8952,7 +8953,7 @@ export default function Dashboard() {
                             className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
                         </div>
                       ) : (
-                        <div className="font-cormorant text-xl font-semibold text-ink">${Number(selectedBooking.depositNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                        <div className="font-cormorant text-xl font-semibold text-ink">{currency(Number(selectedBooking.depositNzd ?? 0))}</div>
                       )}
                     </div>
                   </div>
@@ -9221,17 +9222,17 @@ export default function Dashboard() {
                   </div>
                   {drawerPaymentSummary && (
                     <div className="grid grid-cols-3 border-b border-gold/20 divide-x divide-gold/20">
-                      <div className="p-3 text-center">
+                      <div className="px-2 py-3 sm:p-3 text-center min-w-0">
                         <div className="font-bebas tracking-widest text-[10px] text-ink/70">TOTAL VALUE</div>
-                        <div className="font-cormorant text-lg font-semibold text-ink">${Number(drawerPaymentSummary.total ?? 0).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                        <div className="font-cormorant text-base sm:text-lg font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums] break-words">{currency(Number(drawerPaymentSummary.total ?? 0))}</div>
                       </div>
-                      <div className="p-3 text-center bg-green-50/60">
+                      <div className="px-2 py-3 sm:p-3 text-center bg-green-50/60 min-w-0">
                         <div className="font-bebas tracking-widest text-[10px] text-green-700">PAID</div>
-                        <div className="font-cormorant text-lg font-semibold text-green-700">${Number(drawerPaymentSummary.totalPaid).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                        <div className="font-cormorant text-base sm:text-lg font-semibold text-green-700 [font-variant-numeric:tabular-nums_lining-nums] break-words">{currency(Number(drawerPaymentSummary.totalPaid))}</div>
                       </div>
-                      <div className={`p-3 text-center ${drawerPaymentSummary.outstanding > 0 ? 'bg-red-50/60' : 'bg-green-50/60'}`}>
+                      <div className={`px-2 py-3 sm:p-3 text-center min-w-0 ${drawerPaymentSummary.outstanding > 0 ? 'bg-red-50/60' : 'bg-green-50/60'}`}>
                         <div className={`font-bebas tracking-widest text-[10px] ${drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>OUTSTANDING</div>
-                        <div className={`font-cormorant text-lg font-semibold ${drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>${Number(drawerPaymentSummary.outstanding).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                        <div className={`font-cormorant text-base sm:text-lg font-semibold [font-variant-numeric:tabular-nums_lining-nums] break-words ${drawerPaymentSummary.outstanding > 0 ? 'text-red-600' : 'text-green-700'}`}>{currency(Number(drawerPaymentSummary.outstanding))}</div>
                       </div>
                     </div>
                   )}
@@ -9247,7 +9248,7 @@ export default function Dashboard() {
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="text-right">
-                              <div className="font-cormorant font-semibold text-sm text-ink">${Number(p.amount).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+                              <div className="font-cormorant font-semibold text-sm text-ink">{currency(Number(p.amount))}</div>
                               <div className="font-dm text-[10px] text-ink/65">{new Date(p.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                             </div>
                             <button aria-label="Remove payment" onClick={() => { if (confirm('Remove this payment?')) deleteDrawerPaymentMutation.mutate({ id: p.id }); }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">

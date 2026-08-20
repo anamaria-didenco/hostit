@@ -4046,7 +4046,7 @@ export default function RunsheetBuilder() {
                     <div className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1.5">BAR & BEVERAGES</div>
                     <div className="text-xs font-dm text-ink/80 capitalize mb-1">
                       <span className="font-semibold">{proposalDrinks.barOption?.replace(/_/g, ' ')}</span>
-                      {proposalDrinks.tabAmount ? ` — Bar tab: $${Number(proposalDrinks.tabAmount).toLocaleString('en-NZ')}` : ''}
+                      {proposalDrinks.tabAmount ? ` — Bar tab: ${currency(Number(proposalDrinks.tabAmount))}` : ''}
                     </div>
                     {(proposalDrinks.selectedDrinks as string[])?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-1">
@@ -5081,7 +5081,7 @@ export default function RunsheetBuilder() {
                         <div className="font-bebas text-[10px] text-ink/65 tracking-widest mb-1">BAR</div>
                         <div className="text-xs font-dm capitalize text-ink/70">
                           {proposalDrinks.barOption?.replace(/_/g, " ")}
-                          {proposalDrinks.tabAmount ? ` — Tab: $${Number(proposalDrinks.tabAmount).toLocaleString("en-NZ")}` : ""}
+                          {proposalDrinks.tabAmount ? ` — Tab: ${currency(Number(proposalDrinks.tabAmount))}` : ""}
                         </div>
                         {(proposalDrinks.selectedDrinks as string[])?.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">

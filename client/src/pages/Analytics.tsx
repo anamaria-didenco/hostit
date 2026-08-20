@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { ArrowLeft, TrendingUp, Target, DollarSign, Users, Calendar, BarChart2, Radio } from "lucide-react";
 import { getLoginUrl } from "@/const";
+import { currencyWhole } from "@/lib/money";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -203,7 +204,7 @@ export default function Analytics() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm font-dm">
                 <span className="text-ink/60">
-                  ${currentMonthRevenue.toLocaleString("en-NZ")} of ${goalAmount.toLocaleString("en-NZ")}
+                  {currencyWhole(currentMonthRevenue)} of {currencyWhole(goalAmount)}
                 </span>
                 <span className={`font-semibold ${goalProgress >= 100 ? "text-green-700" : "text-ink"}`}>
                   {Math.round(goalProgress)}%
@@ -354,7 +355,7 @@ export default function Analytics() {
                       />
                     </div>
                     <div className="w-24 text-right font-dm text-sm font-semibold text-ink">
-                      ${Number(row.revenue).toLocaleString("en-NZ")}
+                      {currencyWhole(Number(row.revenue))}
                     </div>
                     <div className="w-10 text-right font-dm text-xs text-ink/70">{row.count}</div>
                   </div>

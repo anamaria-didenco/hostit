@@ -60,7 +60,9 @@ function formatBudget(raw: string | number | null | undefined): string {
   if (!raw) return "";
   const n = Number(raw);
   if (isNaN(n)) return String(raw);
-  return `$${n.toLocaleString("en-NZ")} NZD`;
+  // Bounded on purpose: a bare toLocaleString defaults to up to 3 decimals,
+  // so a budget of 5000.005 printed as "$5,000.005".
+  return `$${Math.round(n).toLocaleString("en-NZ")} NZD`;
 }
 
 /**

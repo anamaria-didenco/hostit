@@ -10,6 +10,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { COLOUR_THEMES } from "@/contexts/ThemeContext";
+import { currency, currencyWhole } from "@/lib/money";
 
 interface LineItem {
   description: string;
@@ -709,7 +710,7 @@ export default function ProposalBuilder() {
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-right" />
                   </div>
                   <div className="col-span-2 text-right font-dm text-sm font-semibold text-ink">
-                    ${item.total.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                    {currency(item.total)}
                   </div>
                   <div className="col-span-1 flex justify-center">
                     {lineItems.length > 1 && (
@@ -727,7 +728,7 @@ export default function ProposalBuilder() {
             <div className="border-t-2 border-dashed border-border pt-4 space-y-2">
               <div className="flex justify-between font-dm text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>${subtotal.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span>{currency(subtotal)}</span>
               </div>
               <div className="flex justify-between items-center font-dm text-sm">
                 <div className="flex items-center gap-2">
@@ -736,11 +737,11 @@ export default function ProposalBuilder() {
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-7 w-16 text-center" />
                   <span className="text-muted-foreground">%</span>
                 </div>
-                <span>${taxAmount.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span>{currency(taxAmount)}</span>
               </div>
               <div className="flex justify-between font-alfa text-lg text-ink border-t-2 border-border pt-2">
                 <span>TOTAL (NZD)</span>
-                <span className="text-primary">${total.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span className="text-primary">{currency(total)}</span>
               </div>
               <div className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
@@ -749,7 +750,7 @@ export default function ProposalBuilder() {
                     className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
                   <span className="text-sage-green text-xs">%</span>
                 </div>
-                <span className="font-alfa text-lg text-ink">${deposit.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span className="font-alfa text-lg text-ink">{currency(deposit)}</span>
               </div>
             </div>
           </div>
@@ -1089,7 +1090,7 @@ export default function ProposalBuilder() {
               <span className="font-bebas text-xs tracking-widest text-muted-foreground">PRICING &amp; MINIMUM SPEND</span>
               {Number(minimumSpend) > 0 && (
                 <span className="font-bebas text-xs tracking-widest bg-burgundy text-cream px-2 py-0.5">
-                  MIN ${parseFloat(minimumSpend).toLocaleString("en-NZ")}
+                  MIN {currencyWhole(parseFloat(minimumSpend))}
                 </span>
               )}
             </div>
@@ -1108,7 +1109,7 @@ export default function ProposalBuilder() {
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">FOOD TOTAL OVERRIDE (NZD)</label>
                     <Input
-                      type="number" min="0" placeholder={`Auto: $${_lineSubtotal().toLocaleString("en-NZ")}`}
+                      type="number" min="0" placeholder={`Auto: ${currency(_lineSubtotal())}`}
                       value={foodTotalOverride} onChange={e => setFoodTotalOverride(e.target.value)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
                     />
@@ -1134,24 +1135,24 @@ export default function ProposalBuilder() {
                     <div className="font-bebas text-xs tracking-widest text-sage-green mb-2">MINIMUM SPEND BREAKDOWN</div>
                     <div className="flex justify-between font-dm text-sm">
                       <span className="text-cream/60">Food &amp; Beverage</span>
-                      <span>${_foodBase().toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                      <span>{currency(_foodBase())}</span>
                     </div>
                     {hireItems.map((item, i) => (
                       <div key={i} className="flex justify-between font-dm text-sm">
                         <span className="text-cream/60">{item.name || `Hire Item ${i + 1}`}</span>
-                        <span>${(item.qty * item.unitPrice).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                        <span>{currency((item.qty * item.unitPrice))}</span>
                       </div>
                     ))}
                     {autoBarTab && autoBarTabAmount > 0 && (
                       <div className="flex justify-between font-dm text-sm text-sage-green">
                         <span>Bar Tab (auto remainder)</span>
-                        <span>${autoBarTabAmount.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                        <span>{currency(autoBarTabAmount)}</span>
                       </div>
                     )}
                     <div className="border-t border-cream/20 pt-2 flex justify-between font-bebas text-sm">
                       <span>TOTAL vs MINIMUM SPEND</span>
                       <span className={(_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount) >= parseFloat(minimumSpend) ? "text-forest" : "text-red-400"}>
-                        ${(_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })} / ${parseFloat(minimumSpend).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                        {currency((_foodBase() + hireItems.reduce((s, i) => s + i.qty * i.unitPrice, 0) + autoBarTabAmount))} / {currency(parseFloat(minimumSpend))}
                       </span>
                     </div>
                   </div>
@@ -1352,11 +1353,11 @@ export default function ProposalBuilder() {
               <div className="border-t border-cream/20 pt-2 mt-2">
                 <div className="flex justify-between font-alfa text-xl">
                   <span className="text-cream/60 text-sm">TOTAL</span>
-                  <span className="text-sage-green">${total.toLocaleString("en-NZ", { minimumFractionDigits: 0 })}</span>
+                  <span className="text-sage-green">{currencyWhole(total)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-cream/50 mt-1">
                   <span>Deposit ({depositPercent}%)</span>
-                  <span>${deposit.toLocaleString("en-NZ", { minimumFractionDigits: 0 })}</span>
+                  <span>{currencyWhole(deposit)}</span>
                 </div>
               </div>
             </div>

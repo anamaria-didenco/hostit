@@ -18,6 +18,7 @@ import { COLOR_PRESETS, parseCustomStatuses } from "@/components/StatusManager";
 import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput, combineLocalDateTime } from "@/lib/dateTime";
 import EventSpendSection from "@/components/EventSpendSection";
 import { beoUrl } from "@/lib/beoUrl";
+import { currency } from "@/lib/money";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
@@ -371,25 +372,25 @@ export default function EventDetail() {
               <div className="text-center p-3 bg-cream border border-gold/20">
                 <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">TOTAL</div>
                 <div className="font-cormorant text-2xl font-semibold text-ink">
-                  ${Number(booking.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                  {currency(Number(booking.totalNzd ?? 0))}
                 </div>
               </div>
               <div className="text-center p-3 bg-cream border border-gold/20">
                 <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">DEPOSIT</div>
                 <div className="font-cormorant text-2xl font-semibold text-ink">
-                  ${Number(booking.depositNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                  {currency(Number(booking.depositNzd ?? 0))}
                 </div>
               </div>
               <div className="text-center p-3 bg-cream border border-gold/20">
                 <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">PAID</div>
                 <div className="font-cormorant text-2xl font-semibold text-forest">
-                  ${totalPaid.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                  {currency(totalPaid)}
                 </div>
               </div>
               <div className={`text-center p-3 border ${outstanding > 0 ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
                 <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">OUTSTANDING</div>
                 <div className={`font-cormorant text-2xl font-semibold ${outstanding > 0 ? 'text-red-600' : 'text-forest'}`}>
-                  ${outstanding.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                  {currency(outstanding)}
                 </div>
               </div>
             </div>
@@ -427,11 +428,11 @@ export default function EventDetail() {
                     </div>
                     {p.type === 'refund' ? (
                       <div className="font-cormorant text-lg font-semibold text-red-500">
-                        −${Number(p.amount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                        −{currency(Number(p.amount))}
                       </div>
                     ) : (
                       <div className="font-cormorant text-lg font-semibold text-forest">
-                        +${Number(p.amount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                        +{currency(Number(p.amount))}
                       </div>
                     )}
                   </div>
@@ -570,7 +571,7 @@ export default function EventDetail() {
               <div className="border-t border-gold/20 pt-2 flex justify-between">
                 <span className="font-bebas text-xs tracking-widest text-gold">TOTAL</span>
                 <span className="font-cormorant text-lg font-semibold text-gold">
-                  ${Number(booking.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                  {currency(Number(booking.totalNzd ?? 0))}
                 </span>
               </div>
             </div>
@@ -833,7 +834,7 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
         {[{ label: 'EST. INCOME', val: totalEstIncome, color: 'text-green-600' }, { label: 'ACT. INCOME', val: totalActIncome, color: 'text-green-700' }, { label: 'EST. EXPENSE', val: totalEstExpense, color: 'text-red-500' }, { label: 'ACT. EXPENSE', val: totalActExpense, color: 'text-red-600' }].map(s => (
           <div key={s.label} className="dante-card p-3 text-center">
             <div className="font-bebas text-xs tracking-widest text-ink/65 mb-1">{s.label}</div>
-            <div className={`font-cormorant text-xl font-semibold ${s.color}`}>${s.val.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}</div>
+            <div className={`font-cormorant text-xl font-semibold ${s.color}`}>{currency(s.val)}</div>
           </div>
         ))}
       </div>

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { CheckCircle, XCircle, Calendar, Users, MapPin, Clock } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { currency } from "@/lib/money";
 
 interface LineItem {
   description: string;
@@ -346,11 +347,11 @@ export default function ProposalView() {
                     <div>
                       <div className="font-playfair font-medium text-sm" style={{ color: T.ink }}>{item.description}</div>
                       {item.qty > 1 && (
-                        <div className="font-inter text-xs" style={{ color: T.stone }}>{item.qty} × ${Number(item.unitPrice).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                        <div className="font-inter text-xs" style={{ color: T.stone }}>{item.qty} × {currency(Number(item.unitPrice))}</div>
                       )}
                     </div>
                     <div className="font-inter text-sm font-semibold" style={{ color: T.ink }}>
-                      ${Number(item.total).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                      {currency(Number(item.total))}
                     </div>
                   </div>
                 ))}
@@ -359,18 +360,18 @@ export default function ProposalView() {
                 {proposal.subtotalNzd && (
                   <div className="flex justify-between font-inter text-sm" style={{ color: T.stone }}>
                     <span>Subtotal</span>
-                    <span>${Number(proposal.subtotalNzd).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                    <span>{currency(Number(proposal.subtotalNzd))}</span>
                   </div>
                 )}
                 {proposal.taxNzd && (
                   <div className="flex justify-between font-inter text-sm" style={{ color: T.stone }}>
                     <span>GST ({Number(proposal.taxPercent ?? 15)}%)</span>
-                    <span>${Number(proposal.taxNzd).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                    <span>{currency(Number(proposal.taxNzd))}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-playfair text-2xl font-bold pt-3" style={{ color: T.ink, borderTop: `2px solid ${T.border}` }}>
                   <span>Total (NZD)</span>
-                  <span style={{ color: T.accent }}>${Number(proposal.totalNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                  <span style={{ color: T.accent }}>{currency(Number(proposal.totalNzd ?? 0))}</span>
                 </div>
                 {proposal.depositNzd && (
                   <div className="p-3 flex justify-between items-center mt-2 rounded-sm" style={{ backgroundColor: T.header + '14', border: `1px solid ${T.header}30` }}>
@@ -378,7 +379,7 @@ export default function ProposalView() {
                       <div className="font-bebas text-xs tracking-widest" style={{ color: T.header }}>DEPOSIT TO SECURE BOOKING</div>
                       <div className="font-inter text-xs" style={{ color: T.stone }}>{Number(proposal.depositPercent ?? 25)}% of total</div>
                     </div>
-                    <div className="font-playfair text-xl font-bold" style={{ color: T.ink }}>${Number(proposal.depositNzd).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</div>
+                    <div className="font-playfair text-xl font-bold" style={{ color: T.ink }}>{currency(Number(proposal.depositNzd))}</div>
                   </div>
                 )}
               </div>
@@ -400,7 +401,7 @@ export default function ProposalView() {
                 </div>
                 {drinksData.tabAmount && (
                   <div className="font-inter text-sm mt-0.5" style={{ color: T.accent }}>
-                    Bar Tab Amount: ${Number(drinksData.tabAmount).toLocaleString("en-NZ", { minimumFractionDigits: 2 })} NZD
+                    Bar Tab Amount: {currency(Number(drinksData.tabAmount))} NZD
                   </div>
                 )}
               </div>
@@ -493,7 +494,7 @@ export default function ProposalView() {
           <div className="p-6 mb-8 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
             <h3 className="font-playfair text-xl font-bold mb-2" style={{ color: T.ink }}>Ready to Book?</h3>
             <p className="font-inter text-sm mb-5" style={{ color: T.stone }}>
-              Accept this proposal to confirm your booking. A deposit of ${Number(proposal.depositNzd ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })} NZD will be required to secure your date.
+              Accept this proposal to confirm your booking. A deposit of {currency(Number(proposal.depositNzd ?? 0))} NZD will be required to secure your date.
             </p>
             <div className="flex gap-3">
               <Button onClick={() => setShowAccept(true)}

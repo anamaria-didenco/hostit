@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Download, AlertCircle, Banknote } from "lucide-react";
+import { currency } from "@/lib/money";
 
 /**
  * Cross-event log of money actually received, for month-end reconciliation.
@@ -11,8 +12,7 @@ import { Download, AlertCircle, Banknote } from "lucide-react";
  * bank — as distinct from the Payments board, which tracks workflow state.
  */
 
-const fmtNZD = (n: number) =>
-  n.toLocaleString("en-NZ", { style: "currency", currency: "NZD", minimumFractionDigits: 2 });
+const fmtNZD = (n: number) => currency(n);
 const fmtDay = (iso: string | Date | null) =>
   iso ? new Date(iso).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—";
 const iso = (d: Date) => d.toISOString().slice(0, 10);
