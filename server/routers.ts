@@ -3989,16 +3989,87 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       const { xeroConnections } = await import('../drizzle/schema');
       const { eq } = await import('drizzle-orm');
       const configured = Boolean(ENV.xeroClientId && ENV.xeroClientSecret);
+      // One consistent shape for every branch — the UI reads these fields
+      // unconditionally.
+      const base = {
+        configured,
+        connected: false,
+        needsOrgChoice: false,
+        tenantMissing: false,
+        organisations: [] as Array<{ tenantId: string; tenantName: string }>,
+        tenantId: null as string | null,
+        tenantName: null as string | null,
+        salesAccountCode: null as string | null,
+        salesAccountCodeFood: null as string | null,
+        salesAccountCodeDrinks: null as string | null,
+        lineAmountsInclusive: false,
+        salesTaxType: null as string | null,
+      };
       const db = await getDb();
-      if (!db) return { configured, connected: false as const };
+      if (!db) return base;
       const [conn] = await db.select({
+        tenantId: xeroConnections.tenantId,
         tenantName: xeroConnections.tenantName,
         salesAccountCode: xeroConnections.salesAccountCode,
+        salesAccountCodeFood: xeroConnections.salesAccountCodeFood,
+        salesAccountCodeDrinks: xeroConnections.salesAccountCodeDrinks,
+        salesTaxType: xeroConnections.salesTaxType,
         lineAmountsInclusive: xeroConnections.lineAmountsInclusive,
-        updatedAt: xeroConnections.updatedAt,
       }).from(xeroConnections).where(eq(xeroConnections.ownerId, ctx.user.id)).limit(1);
-      if (!conn) return { configured, connected: false as const };
-      return { configured, connected: true as const, ...conn };
+      if (!conn) return base;
+      // Resolve the org name LIVE. A cached name can drift out of sync with the
+      // tenant actually invoiced, which is how "Bar Franco" was displayed while
+      // pushes went to the demo company.
+      let organisations: Array<{ tenantId: string; tenantName: string }> = [];
+      let liveName: string | null = null;
+      let tenantMissing = false;
+      try {
+        const { listXeroOrganisations } = await import('./xero');
+        organisations = await listXeroOrganisations(ctx.user.id);
+        const match = organisations.find(o => o.tenantId === conn.tenantId);
+        liveName = match?.tenantName ?? null;
+        tenantMissing = Boolean(conn.tenantId) && !match;
+      } catch { /* offline/expired — fall back to the stored name below */ }
+      return {
+        ...base,
+        ...conn,
+        connected: Boolean(conn.tenantId),
+        needsOrgChoice: !conn.tenantId,
+        tenantMissing,
+        organisations,
+        tenantName: liveName ?? conn.tenantName,
+      };
+    }),
+    organisations: protectedProcedure.query(async ({ ctx }) => {
+      const { listXeroOrganisations } = await import('./xero');
+      try { return await listXeroOrganisations(ctx.user.id); } catch { return []; }
+    }),
+    selectOrganisation: protectedProcedure
+      .input(z.object({ tenantId: z.string().min(1).max(64) }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.isTeamMember) throw new Error('Only the venue owner can change the Xero organisation');
+        const { listXeroOrganisations } = await import('./xero');
+        const orgs = await listXeroOrganisations(ctx.user.id);
+        const pick = orgs.find(o => o.tenantId === input.tenantId);
+        if (!pick) throw new Error('That organisation is no longer authorised — reconnect Xero.');
+        const { getDb } = await import('./db');
+        const { xeroConnections } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        // Tax type is org-specific — clear the cache so it is re-read.
+        await db.update(xeroConnections)
+          .set({ tenantId: pick.tenantId, tenantName: pick.tenantName, salesTaxType: null, updatedAt: new Date() })
+          .where(eq(xeroConnections.ownerId, ctx.user.id));
+        return { success: true, tenantName: pick.tenantName };
+      }),
+    /** Revenue accounts from the connected org's real chart of accounts, so the
+     *  sales code is chosen rather than guessed. */
+    accounts: protectedProcedure.query(async ({ ctx }) => {
+      try {
+        const { listXeroRevenueAccounts } = await import('./xero');
+        return await listXeroRevenueAccounts(ctx.user.id);
+      } catch { return []; }
     }),
     disconnect: protectedProcedure.mutation(async ({ ctx }) => {
       if (ctx.isTeamMember) throw new Error('Only the venue owner can disconnect Xero');
@@ -4051,6 +4122,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           unitAmount: z.number().min(-100000).max(1000000),
         })).min(1).max(100),
         dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        // GST treatment for THIS invoice. Bar Franco's real practice is mixed
+        // (per-head menus exclusive, grazing/bar gross), and Xero's
+        // LineAmountTypes is invoice-level, so this is the right granularity.
+        inclusive: z.boolean().optional(),
         // Set true to knowingly create a second invoice for the same stream.
         allowDuplicate: z.boolean().optional(),
       }))
@@ -4080,9 +4155,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const evDate = booking.eventDate
           ? new Date(booking.eventDate as any).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
           : '';
+        // Per-stream revenue account, falling back to the venue default.
+        const { getDb: _g } = await import('./db');
+        const { xeroConnections } = await import('../drizzle/schema');
+        const [xc] = await db.select().from(xeroConnections).where(eq(xeroConnections.ownerId, ctx.user.id)).limit(1);
+        const streamAccount = input.stream === 'food'
+          ? (xc as any)?.salesAccountCodeFood
+          : (xc as any)?.salesAccountCodeDrinks;
         const result = await createXeroDraftInvoice(ctx.user.id, {
           contactName: clientName,
           contactEmail: booking.email ?? undefined,
+          inclusive: input.inclusive,
+          accountCode: streamAccount || undefined,
           reference: `${input.stream === 'food' ? 'Food' : 'Drinks'} — ${clientName}${evDate ? ` · ${evDate}` : ''} (VenueFlow #${booking.id})`,
           dueDate: input.dueDate,
           lines: input.lines,
@@ -4096,7 +4180,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           status: result.status,
           total: String(result.total),
         });
-        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, xeroUrl: result.xeroUrl };
+        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, tenantName: result.tenantName };
       }),
     // Pull current statuses from Xero for a booking's invoices; when one is
     // PAID, tick the matching food/drinks stream on the Payments board too.

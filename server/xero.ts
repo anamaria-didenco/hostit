@@ -82,6 +82,19 @@ async function tokenRequest(params: Record<string, string>): Promise<any> {
   return res.json();
 }
 
+/** The orgs this owner's Xero login currently authorises, read LIVE from Xero.
+ *  Never cache the list: a connection can be revoked in Xero at any time, and a
+ *  stale name is exactly how invoices end up in the wrong books. */
+export async function listXeroOrganisations(ownerId: number): Promise<Array<{ tenantId: string; tenantName: string }>> {
+  const { accessToken } = await getXeroAccess(ownerId, { requireTenant: false });
+  const res = await fetch(XERO_CONNECTIONS_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) throw new Error(`Xero connections lookup failed (${res.status})`);
+  const json = await res.json();
+  return (Array.isArray(json) ? json : [])
+    .filter((c: any) => c?.tenantId)
+    .map((c: any) => ({ tenantId: c.tenantId, tenantName: c.tenantName ?? "(unnamed organisation)" }));
+}
+
 /** GET /api/xero/connect — must be the venue OWNER (not a team-link session). */
 export async function handleXeroConnect(req: Request, res: Response) {
   try {
@@ -125,20 +138,32 @@ export async function handleXeroCallback(req: Request, res: Response) {
       redirect_uri: redirectUri(),
     });
 
-    // Which Xero organisation did the user consent for?
+    // Which Xero organisation(s) did the user consent for? Xero does NOT
+    // guarantee the ordering of this array, so taking [0] silently picks an
+    // arbitrary org — that is how a test push landed in the demo company while
+    // the UI said "Bar Franco". When more than one org is authorised we store
+    // the tokens with NO tenant and make the user choose explicitly.
     const connRes = await fetch(XERO_CONNECTIONS_URL, {
       headers: { Authorization: `Bearer ${tok.access_token}` },
     });
     const conns = connRes.ok ? await connRes.json() : [];
-    const tenant = Array.isArray(conns) && conns.length > 0 ? conns[0] : null;
-    if (!tenant?.tenantId) return back(false, "Xero returned no organisation for this login.");
+    const orgs = (Array.isArray(conns) ? conns : []).filter((c: any) => c?.tenantId);
+    if (orgs.length === 0) return back(false, "Xero returned no organisation for this login.");
 
     const db = await getDb();
     if (!db) return back(false, "Database unavailable.");
+    // Keep a previous explicit choice if it is still authorised; otherwise only
+    // auto-select when there is exactly one org to choose from.
+    const [prior] = await db.select({ tenantId: xeroConnections.tenantId }).from(xeroConnections)
+      .where(eq(xeroConnections.ownerId, ownerId)).limit(1);
+    const priorStillValid = prior?.tenantId && orgs.some((o: any) => o.tenantId === prior.tenantId)
+      ? orgs.find((o: any) => o.tenantId === prior.tenantId)
+      : null;
+    const tenant = priorStillValid ?? (orgs.length === 1 ? orgs[0] : null);
     const row = {
       ownerId,
-      tenantId: tenant.tenantId,
-      tenantName: tenant.tenantName ?? null,
+      tenantId: tenant?.tenantId ?? null,
+      tenantName: tenant?.tenantName ?? null,
       accessToken: tok.access_token,
       refreshToken: tok.refresh_token,
       expiresAt: new Date(Date.now() + (Number(tok.expires_in ?? 1800) - 60) * 1000),
@@ -150,6 +175,10 @@ export async function handleXeroCallback(req: Request, res: Response) {
       await db.update(xeroConnections).set(row).where(eq(xeroConnections.ownerId, ownerId));
     } else {
       await db.insert(xeroConnections).values(row);
+    }
+    if (!tenant) {
+      console.log(`[Xero] owner ${ownerId} authorised ${orgs.length} organisations — awaiting explicit choice`);
+      return res.redirect("/dashboard?tab=settings&sub=integrations&xero=choose");
     }
     console.log(`[Xero] owner ${ownerId} connected to "${tenant.tenantName}" (${tenant.tenantId})`);
     back(true);
@@ -165,24 +194,29 @@ export async function handleXeroCallback(req: Request, res: Response) {
 // instance, so an in-process promise lock per owner is sufficient.
 const refreshLocks = new Map<number, Promise<{ accessToken: string; tenantId: string; conn: any }>>();
 
+type AccessOpts = { requireTenant?: boolean };
+
 /** Returns a valid access token + tenant for the owner, refreshing (and
  *  persisting the rotated refresh token) when expired. Throws if not connected. */
-export async function getXeroAccess(ownerId: number): Promise<{ accessToken: string; tenantId: string; conn: any }> {
+export async function getXeroAccess(ownerId: number, opts: AccessOpts = {}): Promise<{ accessToken: string; tenantId: string; conn: any }> {
   const inFlight = refreshLocks.get(ownerId);
   if (inFlight) return inFlight;
-  const p = getXeroAccessUncached(ownerId).finally(() => refreshLocks.delete(ownerId));
+  const p = getXeroAccessUncached(ownerId, opts).finally(() => refreshLocks.delete(ownerId));
   refreshLocks.set(ownerId, p);
   return p;
 }
 
-async function getXeroAccessUncached(ownerId: number): Promise<{ accessToken: string; tenantId: string; conn: any }> {
+async function getXeroAccessUncached(ownerId: number, opts: AccessOpts = {}): Promise<{ accessToken: string; tenantId: string; conn: any }> {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const [conn] = await db.select().from(xeroConnections).where(eq(xeroConnections.ownerId, ownerId)).limit(1);
-  if (!conn?.refreshToken || !conn.tenantId) throw new Error("Xero is not connected");
+  if (!conn?.refreshToken) throw new Error("Xero is not connected");
+  if (opts.requireTenant !== false && !conn.tenantId) {
+    throw new Error("No Xero organisation selected — choose one in Settings → Integrations.");
+  }
 
   const stillValid = conn.accessToken && conn.expiresAt && new Date(conn.expiresAt).getTime() > Date.now() + 30_000;
-  if (stillValid) return { accessToken: conn.accessToken!, tenantId: conn.tenantId, conn };
+  if (stillValid) return { accessToken: conn.accessToken!, tenantId: conn.tenantId ?? "", conn };
 
   // Refresh (Xero rotates the refresh token on every use — must persist it).
   // A refresh token is valid 60 days unused; past that Xero returns
@@ -202,7 +236,7 @@ async function getXeroAccessUncached(ownerId: number): Promise<{ accessToken: st
     expiresAt: new Date(Date.now() + (Number(tok.expires_in ?? 1800) - 60) * 1000),
     updatedAt: new Date(),
   }).where(eq(xeroConnections.ownerId, ownerId));
-  return { accessToken: tok.access_token, tenantId: conn.tenantId, conn };
+  return { accessToken: tok.access_token, tenantId: conn.tenantId ?? "", conn };
 }
 
 async function xeroApi(ownerId: number, method: "GET" | "POST" | "PUT", path: string, body?: any): Promise<any> {
@@ -274,6 +308,15 @@ export interface XeroLine {
   unitAmount: number; // negative allowed (deposit deduction line)
 }
 
+/** Revenue accounts from the org's real chart of accounts, for the settings
+ *  picker. Guessing "200" is only right for Xero's stock NZ chart. */
+export async function listXeroRevenueAccounts(ownerId: number): Promise<Array<{ code: string; name: string }>> {
+  const json = await xeroApi(ownerId, "GET", `/Accounts?where=${encodeURIComponent('Type=="REVENUE"')}`);
+  return (json?.Accounts ?? [])
+    .filter((a: any) => a?.Code && a?.Status === "ACTIVE")
+    .map((a: any) => ({ code: String(a.Code), name: String(a.Name ?? a.Code) }));
+}
+
 /** Create a DRAFT ACCREC invoice in the owner's Xero org. Returns id/number/total. */
 export async function createXeroDraftInvoice(ownerId: number, opts: {
   contactName: string;
@@ -281,9 +324,23 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
   reference: string;
   dueDate?: string;      // YYYY-MM-DD
   lines: XeroLine[];
-}): Promise<{ invoiceId: string; invoiceNumber: string | null; total: number; status: string; xeroUrl: string }> {
+  /** Override the venue default for THIS invoice. Xero's LineAmountTypes is an
+   *  invoice-level field, so this is the finest granularity Xero supports. */
+  inclusive?: boolean;
+  /** Revenue account for these lines (per-stream override). */
+  accountCode?: string;
+}): Promise<{ invoiceId: string; invoiceNumber: string | null; total: number; status: string; tenantName: string }> {
   const { conn } = await getXeroAccess(ownerId);
-  const accountCode = conn.salesAccountCode || "200";
+  // Fail loudly rather than letting a push fall through to whatever org Xero
+  // happens to return first — the exact failure that put a test invoice in the
+  // demo company while the UI read "Bar Franco".
+  const orgs = await listXeroOrganisations(ownerId);
+  const target = orgs.find(o => o.tenantId === conn.tenantId);
+  if (!target) {
+    throw new Error("The connected Xero organisation is no longer authorised — reconnect it in Settings → Integrations.");
+  }
+  const accountCode = opts.accountCode?.trim() || conn.salesAccountCode || "200";
+  const inclusive = opts.inclusive ?? Boolean(conn.lineAmountsInclusive);
   const taxType = await resolveSalesTaxType(ownerId);
   const contactId = await findContactIdByEmail(ownerId, opts.contactEmail);
   const buildPayload = (contactName: string) => ({
@@ -300,7 +357,7 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
       // wrong numbers straight into a live GST return. The operator approves in
       // Xero. Any auto-approve must be an explicit opt-in, never the default.
       Status: "DRAFT",
-      LineAmountTypes: conn.lineAmountsInclusive ? "Inclusive" : "Exclusive",
+      LineAmountTypes: inclusive ? "Inclusive" : "Exclusive",
       LineItems: opts.lines.map(l => ({
         Description: l.description,
         Quantity: money2(l.quantity),
@@ -331,9 +388,15 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
     invoiceNumber: inv.InvoiceNumber ?? null,
     total: Number(inv.Total ?? 0),
     status: inv.Status ?? "DRAFT",
-    // Deep link straight to the draft in Xero so the operator can review and
-    // approve it without hunting for it.
-    xeroUrl: `https://go.xero.com/app/${conn.tenantId}/invoicing/edit/${inv.InvoiceID}`,
+    // Which org this actually landed in — surfaced in the UI so a wrong target
+    // is visible immediately instead of being discovered in the accounts later.
+    tenantName: target.tenantName,
+    // NOTE: no deep link. Xero's web app addresses orgs by a short code
+    // (e.g. !nxgXD) which is NOT the API tenantId and is not returned by
+    // /connections, so a constructed link 404s — and worse, a link built with
+    // the wrong org masked the fact that the invoice went to the wrong books.
+    // The invoice number plus the org name is honest and useful; a broken link
+    // is not. Restore a link only against a verified URL format.
   };
 }
 
