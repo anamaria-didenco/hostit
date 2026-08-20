@@ -423,7 +423,7 @@ export default function ProposalBuilder() {
   return (
     <div className="min-h-screen bg-parchment font-dm">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 h-14 flex items-center px-6 sticky top-0 z-40 shadow-sm">
+      <div className="bg-white border-b border-gray-200 min-h-14 flex items-center gap-y-1 px-4 sm:px-6 sticky top-0 z-40 shadow-sm overflow-x-auto">
         <Link href="/dashboard">
           <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-800 font-inter text-xs gap-1 mr-4">
             <ChevronLeft className="w-4 h-4" /> Dashboard
@@ -481,8 +481,8 @@ export default function ProposalBuilder() {
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">PROPOSAL DETAILS</h2>
             <div className="space-y-3">
               <div>
-                <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
-                <Input value={title} onChange={e => setTitle(e.target.value)}
+                <label htmlFor="pb-title" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
+                <Input id="pb-title" value={title} onChange={e => setTitle(e.target.value)}
                   className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm" />
               </div>
               <div>
@@ -499,8 +499,8 @@ export default function ProposalBuilder() {
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">EVENT DETAILS</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT DATE</label>
-                <Input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}
+                <label htmlFor="pb-event-date" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT DATE</label>
+                <Input id="pb-event-date" type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}
                   className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
               </div>
               <div>
@@ -702,11 +702,11 @@ export default function ProposalBuilder() {
                       placeholder="Item description" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9" />
                   </div>
                   <div className="col-span-2">
-                    <Input type="number" value={item.qty} onChange={e => updateLineItem(i, "qty", parseFloat(e.target.value) || 0)}
+                    <Input aria-label={`Quantity for ${item.description || `line item ${i + 1}`}`} type="number" value={item.qty} onChange={e => updateLineItem(i, "qty", parseFloat(e.target.value) || 0)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-center" />
                   </div>
                   <div className="col-span-2">
-                    <Input type="number" value={item.unitPrice} onChange={e => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
+                    <Input aria-label={`Unit price for ${item.description || `line item ${i + 1}`}`} type="number" value={item.unitPrice} onChange={e => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-right" />
                   </div>
                   <div className="col-span-2 text-right font-dm text-sm font-semibold text-ink">
@@ -714,9 +714,12 @@ export default function ProposalBuilder() {
                   </div>
                   <div className="col-span-1 flex justify-center">
                     {lineItems.length > 1 && (
-                      <button onClick={() => setLineItems(prev => prev.filter((_, idx) => idx !== i))}
-                        className="text-muted-foreground/40 hover:text-primary transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button
+                        onClick={() => setLineItems(prev => prev.filter((_, idx) => idx !== i))}
+                        aria-label={`Remove line item${item.description ? `: ${item.description}` : ` ${i + 1}`}`}
+                        title="Remove line item"
+                        className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
+                        <Trash2 className="w-4 h-4" aria-hidden />
                       </button>
                     )}
                   </div>
@@ -733,7 +736,7 @@ export default function ProposalBuilder() {
               <div className="flex justify-between items-center font-dm text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">GST</span>
-                  <Input type="number" value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
+                  <Input aria-label="GST percentage" type="number" value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-7 w-16 text-center" />
                   <span className="text-muted-foreground">%</span>
                 </div>
@@ -746,7 +749,7 @@ export default function ProposalBuilder() {
               <div className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
-                  <Input type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
+                  <Input aria-label="Deposit percentage" type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
                     className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
                   <span className="text-sage-green text-xs">%</span>
                 </div>
@@ -1132,7 +1135,7 @@ export default function ProposalBuilder() {
                 {/* Min Spend Breakdown */}
                 {Number(minimumSpend) > 0 && (
                   <div className="bg-ink text-cream p-4 space-y-2">
-                    <div className="font-bebas text-xs tracking-widest text-sage-green mb-2">MINIMUM SPEND BREAKDOWN</div>
+                    <div className="font-bebas text-xs tracking-widest text-[#c9a84c] mb-2">MINIMUM SPEND BREAKDOWN</div>
                     <div className="flex justify-between font-dm text-sm">
                       <span className="text-cream/60">Food &amp; Beverage</span>
                       <span>{currency(_foodBase())}</span>
@@ -1325,14 +1328,14 @@ export default function ProposalBuilder() {
           {/* Expiry */}
           <div className="bg-cream-card border border-border p-4 shadow-sm">
             <h3 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL EXPIRY</h3>
-            <Input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
+            <Input aria-label="Proposal expiry date" type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
               className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm" />
             <p className="font-dm text-xs text-muted-foreground mt-2">Client must respond before this date</p>
           </div>
 
           {/* Summary */}
           <div className="bg-ink text-cream p-5 shadow-sm">
-            <div className="font-bebas text-xs tracking-widest text-sage-green mb-3">PROPOSAL SUMMARY</div>
+            <div className="font-bebas text-xs tracking-widest text-[#c9a84c] mb-3">PROPOSAL SUMMARY</div>
             <div className="space-y-2 font-dm text-sm">
               <div className="flex justify-between">
                 <span className="text-cream/60">For</span>
@@ -1353,7 +1356,7 @@ export default function ProposalBuilder() {
               <div className="border-t border-cream/20 pt-2 mt-2">
                 <div className="flex justify-between font-alfa text-xl">
                   <span className="text-cream/60 text-sm">TOTAL</span>
-                  <span className="text-sage-green">{currencyWhole(total)}</span>
+                  <span className="text-[#c9a84c]">{currencyWhole(total)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-cream/50 mt-1">
                   <span>Deposit ({depositPercent}%)</span>

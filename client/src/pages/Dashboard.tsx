@@ -2722,7 +2722,7 @@ export default function Dashboard() {
             const active = tab === item.id;
             return (
               <button key={item.id} onClick={() => setTab(item.id as any)} aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors ${active ? "font-bold text-white" : "font-medium text-[#9fb0cc] hover:text-white hover:bg-white/[0.08]"}`}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors ${active ? "font-bold text-white" : "font-medium text-[#bcc8db] hover:text-white hover:bg-white/[0.08]"}`}
                 style={active ? { background: "rgba(255,255,255,0.14)" } : undefined}>
                 <span className="grid place-items-center" aria-hidden="true" style={{ opacity: active ? 1 : 0.85 }}>{item.icon}</span>
                 <span className="flex-1 text-left">{item.label}</span>
@@ -2740,7 +2740,7 @@ export default function Dashboard() {
               aria-label={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
               className="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
               title={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}>
-              <Bell className="w-4 h-4" aria-hidden="true" style={{ color: unreadCount > 0 ? '#ffffff' : '#9fb0cc' }} />
+              <Bell className="w-4 h-4" aria-hidden="true" style={{ color: unreadCount > 0 ? '#ffffff' : '#bcc8db' }} />
               {unreadCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none" style={{ background: '#c0392b' }}>{unreadCount > 99 ? '99+' : unreadCount}</span>
               )}
@@ -2753,7 +2753,7 @@ export default function Dashboard() {
             </span>
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-semibold text-white truncate">{user?.name ?? "User"}</div>
-              <div className="text-[11.5px] truncate" style={{ color: '#9fb0cc' }}>{venueSettings?.name ?? "Your Venue"}</div>
+              <div className="text-[11.5px] truncate" style={{ color: '#bcc8db' }}>{venueSettings?.name ?? "Your Venue"}</div>
             </div>
           </div>
         </div>
@@ -2843,7 +2843,7 @@ export default function Dashboard() {
                         <div className="mb-2 md:mb-3">{s.icon}</div>
                         <div className="font-serif text-2xl md:text-4xl font-semibold text-foreground mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{s.value}</div>
                         <div className="font-sans text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
-                        <div className="font-sans text-[10px] md:text-xs text-muted-foreground/70 mt-0.5 leading-tight">{s.sub}</div>
+                        <div className="font-sans text-[10px] md:text-xs text-muted-foreground mt-0.5 leading-tight">{s.sub}</div>
                       </button>
                     );
                   })}
@@ -2958,7 +2958,7 @@ export default function Dashboard() {
               {/* ── EVENTS SUB-SIDEBAR ─────────────────────────────────────── */}
               <aside className="hidden md:flex flex-col w-48 flex-shrink-0 bg-forest-dark text-cream border-r border-forest overflow-y-auto">
                 <div className="px-4 py-3 border-b border-cream/15">
-                  <div className="font-bebas tracking-widest text-xs text-gold">EVENTS</div>
+                  <div className="font-bebas tracking-widest text-xs text-[#c49d5c]">EVENTS</div>
                 </div>
                 {([
                   { key: 'calendar', label: 'Calendar', icon: <Calendar className="w-3.5 h-3.5" />, onClick: () => setTab('calendar' as any) },
@@ -3110,7 +3110,7 @@ export default function Dashboard() {
                       )}
                     </div>
                     <Select value={leadDateFilter} onValueChange={(v: any) => { setLeadDateFilter(v); if (v !== "custom") { setCustomDateFrom(""); setCustomDateTo(""); } }}>
-                      <SelectTrigger className={`h-8 w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadDateFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
+                      <SelectTrigger aria-label="Filter events by date" title="Filter events by date" className={`h-8 w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadDateFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -3132,7 +3132,7 @@ export default function Dashboard() {
                       </>
                     )}
                     <Select value={leadSortBy} onValueChange={(v: any) => setLeadSortBy(v)}>
-                      <SelectTrigger className="h-8 w-36 text-xs font-inter rounded-lg border border-gray-200 bg-white">
+                      <SelectTrigger aria-label="Sort events" title="Sort events" className="h-8 w-36 text-xs font-inter rounded-lg border border-gray-200 bg-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -3400,7 +3400,7 @@ export default function Dashboard() {
                                       {overdue ? (
                                         <span className="text-[11px] font-semibold" style={{ color: '#c0392b' }}>Follow-up overdue</span>
                                       ) : (
-                                        <span className="text-[11px]" style={{ color: '#a39684' }}>{fmtAgo(lead.createdAt)}</span>
+                                        <span className="text-[11px]" style={{ color: '#7e7466' }}>{fmtAgo(lead.createdAt)}</span>
                                       )}
                                     </div>
                                   </button>
@@ -3408,12 +3408,12 @@ export default function Dashboard() {
                               })}
                               {stageLeads.length === 0 && (
                                 <div className="rounded-lg border border-dashed border-[#e6dccb] p-5 text-center">
-                                  <p className="font-sans text-[12px]" style={{ color: '#a39684' }}>No leads</p>
+                                  <p className="font-sans text-[12px]" style={{ color: '#7e7466' }}>No leads</p>
                                 </div>
                               )}
                               <button
                                 onClick={() => setShowAddLead(true)}
-                                className="w-full py-2 rounded-lg border border-dashed border-[#e6dccb] text-[12px] text-[#a39684] hover:border-sage-green hover:text-sage-green transition-colors flex items-center justify-center gap-1">
+                                className="w-full py-2 rounded-lg border border-dashed border-[#e6dccb] text-[12px] text-[#7e7466] hover:border-sage-green hover:text-sage-green transition-colors flex items-center justify-center gap-1">
                                 <Plus className="w-3 h-3" /> Add
                               </button>
                             </div>
@@ -5162,8 +5162,8 @@ export default function Dashboard() {
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE DETAILS</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="md:col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-500">*</span></label>
-                        <Input value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
+                        <label htmlFor="vs-venue-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-500">*</span></label>
+                        <Input id="vs-venue-name" value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="md:col-span-2">
@@ -5227,8 +5227,8 @@ export default function Dashboard() {
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">EVENT SETTINGS</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TIME ZONE</label>
-                        <select value={settingsForm.timezone} onChange={e => setSettingsForm((f: any) => ({ ...f, timezone: e.target.value }))}
+                        <label htmlFor="vs-timezone" className="font-bebas text-xs tracking-widest text-sage block mb-1">TIME ZONE</label>
+                        <select id="vs-timezone" value={settingsForm.timezone} onChange={e => setSettingsForm((f: any) => ({ ...f, timezone: e.target.value }))}
                           className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
                           {["Pacific/Auckland","Pacific/Chatham","Australia/Sydney","Australia/Melbourne","Australia/Brisbane","UTC"].map(tz => (
                             <option key={tz} value={tz}>{tz.replace("_"," ")}</option>
@@ -5236,25 +5236,25 @@ export default function Dashboard() {
                         </select>
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">CURRENCY</label>
-                        <select value={settingsForm.currency ?? "NZD"} onChange={e => setSettingsForm((f: any) => ({ ...f, currency: e.target.value }))}
+                        <label htmlFor="vs-currency" className="font-bebas text-xs tracking-widest text-sage block mb-1">CURRENCY</label>
+                        <select id="vs-currency" value={settingsForm.currency ?? "NZD"} onChange={e => setSettingsForm((f: any) => ({ ...f, currency: e.target.value }))}
                           className="w-full border border-gold/30 px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-gold">
                           {["NZD","AUD","USD","GBP","EUR"].map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME START</label>
-                        <Input type="time" value={settingsForm.eventTimeStart} onChange={e => setSettingsForm((f: any) => ({ ...f, eventTimeStart: e.target.value }))}
+                        <label htmlFor="vs-event-start" className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME START</label>
+                        <Input id="vs-event-start" type="time" value={settingsForm.eventTimeStart} onChange={e => setSettingsForm((f: any) => ({ ...f, eventTimeStart: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME END</label>
-                        <Input type="time" value={settingsForm.eventTimeEnd} onChange={e => setSettingsForm((f: any) => ({ ...f, eventTimeEnd: e.target.value }))}
+                        <label htmlFor="vs-event-end" className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME END</label>
+                        <Input id="vs-event-end" type="time" value={settingsForm.eventTimeEnd} onChange={e => setSettingsForm((f: any) => ({ ...f, eventTimeEnd: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MINIMUM GROUP SIZE</label>
-                        <Input type="number" min={0} value={settingsForm.minGroupSize} onChange={e => setSettingsForm((f: any) => ({ ...f, minGroupSize: parseInt(e.target.value) || 0 }))}
+                        <label htmlFor="vs-min-group" className="font-bebas text-xs tracking-widest text-sage block mb-1">MINIMUM GROUP SIZE</label>
+                        <Input id="vs-min-group" type="number" min={0} value={settingsForm.minGroupSize} onChange={e => setSettingsForm((f: any) => ({ ...f, minGroupSize: parseInt(e.target.value) || 0 }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       {/* pt-6 only makes sense next to a field that has a label

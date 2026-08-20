@@ -571,7 +571,7 @@
   --sidebar-border:             rgba(255,255,255,0.12);
   --sidebar-ring:               #6b98e7;
 }
-.vf-blue-sidebar .nav-item { color: #9fb0cc; }
+.vf-blue-sidebar .nav-item { color: #bcc8db; }
 .vf-blue-sidebar .nav-item:hover { color: #ffffff; background-color: rgba(255,255,255,0.08); }
 .vf-blue-sidebar .nav-item.active { color: #ffffff; background-color: rgba(255,255,255,0.14); }
 

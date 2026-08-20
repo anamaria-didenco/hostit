@@ -262,7 +262,7 @@ export default function ExpressBook() {
                 if (!guestCount || Number(guestCount) < 1) { toast.error("Enter guest count"); return; }
                 setStep(1);
               }}
-              className="bg-burgundy hover:bg-burgundy/90 text-cream rounded-none font-bebas tracking-widest px-8"
+              className="bg-burgundy hover:bg-burgundy/90 text-cream rounded-none font-bebas tracking-widest px-4 sm:px-8 max-w-full"
             >
               NEXT: CHOOSE SPACE →
             </Button>
@@ -367,7 +367,7 @@ export default function ExpressBook() {
               </Button>
               <Button
                 onClick={() => setStep(2)}
-                className="bg-burgundy hover:bg-burgundy/90 text-cream rounded-none font-bebas tracking-widest px-8"
+                className="bg-burgundy hover:bg-burgundy/90 text-cream rounded-none font-bebas tracking-widest px-4 sm:px-8 max-w-full"
               >
                 NEXT: YOUR DETAILS →
               </Button>
@@ -465,7 +465,7 @@ export default function ExpressBook() {
                   if (!email.trim()) { toast.error("Enter your email"); return; }
                   setStep(3);
                 }}
-                className="bg-burgundy hover:bg-burgundy/90 text-cream rounded-none font-bebas tracking-widest px-8"
+                className="bg-burgundy hover:bg-burgundy/90 text-cream rounded-none font-bebas tracking-widest px-4 sm:px-8 max-w-full"
               >
                 REVIEW & CONFIRM →
               </Button>

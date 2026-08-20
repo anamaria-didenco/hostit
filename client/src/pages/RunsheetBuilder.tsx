@@ -2251,7 +2251,7 @@ export default function RunsheetBuilder() {
             <button aria-label="Back to dashboard" onClick={() => navigate("/dashboard")} className="text-white/50 hover:text-white transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <span className="font-bebas tracking-widest text-gold text-sm">RUNSHEET BUILDER</span>
+            <span className="font-bebas tracking-widest text-white text-sm">RUNSHEET BUILDER</span>
           </div>
           <button
             onClick={() => navigate("/runsheet?new=1")}

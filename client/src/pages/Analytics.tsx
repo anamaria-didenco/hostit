@@ -28,7 +28,7 @@ function StatCard({ icon, label, value, sub, color = "text-burgundy" }: {
     <div className="bg-white border border-border p-5">
       <div className="flex items-center gap-3 mb-2">
         <div className={color}>{icon}</div>
-        <span className="font-bebas tracking-widest text-xs text-ink/70">{label}</span>
+        <span className="font-bebas tracking-widest text-xs text-ink/70 min-w-0 break-words">{label}</span>
       </div>
       <div className={`font-cormorant text-3xl font-semibold ${color}`}>{value}</div>
       {sub && <div className="text-xs font-dm text-ink/65 mt-1">{sub}</div>}
@@ -104,8 +104,13 @@ export default function Analytics() {
       {/* Header */}
       <div className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between flex-wrap gap-y-2">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/dashboard")} className="text-cream/60 hover:text-cream transition-colors">
-            <ArrowLeft className="w-5 h-5" />
+          <button
+            onClick={() => navigate("/dashboard")}
+            aria-label="Back to dashboard"
+            title="Back to dashboard"
+            className="w-11 h-11 -ml-2 inline-flex items-center justify-center rounded-sm text-cream/60 hover:text-cream hover:bg-white/10 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" aria-hidden />
           </button>
           <span className="font-bebas tracking-widest text-amber text-sm">ANALYTICS</span>
         </div>
@@ -128,7 +133,7 @@ export default function Analytics() {
 
       <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 md:py-8 space-y-4 md:space-y-6">
         {/* KPI cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <StatCard
             icon={<DollarSign className="w-5 h-5" />}
             label="TOTAL REVENUE"
