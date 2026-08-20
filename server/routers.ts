@@ -3874,6 +3874,62 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const status = netPaid <= 0 ? 'unpaid' : outstanding <= 0 ? 'paid_in_full' : netPaid >= Number(booking.depositNzd ?? 0) ? 'deposit_paid' : 'partial';
         return { totalPaid: netPaid, outstanding, status, total };
       }),
+    /** Every payment received across all events, for month-end reconciliation.
+     *  Joined to its booking so the log reads as "who paid, for which event".
+     *  Date range is on paidAt (when the money landed), not when it was keyed
+     *  in — that's the figure that has to agree with the bank. */
+    received: protectedProcedure
+      .input(z.object({
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      }).optional())
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { payments, bookings } = await import('../drizzle/schema');
+        const { eq, and, gte, lte, desc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        const clauses: any[] = [eq(payments.ownerId, ctx.user.id)];
+        // Local-midnight bounds so a NZ date range means the NZ day, and `to`
+        // is inclusive of the whole day.
+        if (input?.from) clauses.push(gte(payments.paidAt, new Date(`${input.from}T00:00:00`)));
+        if (input?.to) clauses.push(lte(payments.paidAt, new Date(`${input.to}T23:59:59.999`)));
+        const rows = await db.select({
+          id: payments.id,
+          bookingId: payments.bookingId,
+          amount: payments.amount,
+          type: payments.type,
+          method: payments.method,
+          paidAt: payments.paidAt,
+          notes: payments.notes,
+          source: payments.source,
+          firstName: bookings.firstName,
+          lastName: bookings.lastName,
+          eventDate: bookings.eventDate,
+          eventType: bookings.eventType,
+        })
+          .from(payments)
+          .leftJoin(bookings, eq(bookings.id, payments.bookingId))
+          .where(and(...clauses))
+          .orderBy(desc(payments.paidAt));
+        return rows.map(r => ({
+          id: r.id,
+          bookingId: r.bookingId,
+          // Refunds are stored as positive amounts with type 'refund'; signing
+          // them here means the log's total is genuinely "net money received".
+          amount: (r.type === 'refund' ? -1 : 1) * Number(r.amount ?? 0),
+          isRefund: r.type === 'refund',
+          type: r.type,
+          method: r.method,
+          paidAt: r.paidAt,
+          notes: r.notes,
+          source: r.source ?? 'manual',
+          client: `${r.firstName ?? ''}${r.lastName ? ' ' + r.lastName : ''}`.trim() || 'Client',
+          eventDate: r.eventDate,
+          eventType: r.eventType,
+        }));
+      }),
+
     // Cross-event payments board — one row per (non-cancelled) booking with the
     // paid/outstanding numbers already computed, plus an inferred workflow
     // "stage" so the team can see at a glance who to invoice, who's paid, who's
