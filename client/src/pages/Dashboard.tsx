@@ -8649,13 +8649,13 @@ export default function Dashboard() {
               </button>
             </div>
             {/* Body */}
-            <div className="p-4 md:p-5 space-y-5 flex-1">
+            <div className="p-4 md:p-5 space-y-3.5 flex-1">
               {/* Status + Type */}
               {(() => {
                 const stage = pipelineStages.find(s => s.key === selectedBooking.status);
                 const swatch = stage?.swatch ?? '#888';
                 return (
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
                     <span className="font-bebas text-xs tracking-widest px-2 py-1 border"
                       style={{ color: swatch, backgroundColor: swatch + '18', borderColor: swatch + '55' }}>
                       {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status)
@@ -8667,8 +8667,8 @@ export default function Dashboard() {
                 );
               })()}
               {/* Quick Status Changer — works for both leads and bookings */}
-              <div>
-                <div className="font-bebas text-xs tracking-widest text-ink/70 mb-1.5">CHANGE STATUS</div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="drawer-status" className="font-bebas text-[10px] tracking-widest text-ink/70 flex-shrink-0">STATUS</label>
                 <Select
                   value={selectedBooking.status ?? ''}
                   onValueChange={(newStatus) => {
@@ -8697,7 +8697,7 @@ export default function Dashboard() {
                     }
                   }}
                 >
-                  <SelectTrigger className="h-8 text-xs rounded-sm border-gold/30">
+                  <SelectTrigger id="drawer-status" className="h-8 text-xs rounded-sm border-gold/30 flex-1">
                     <SelectValue placeholder="Set status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -8718,8 +8718,11 @@ export default function Dashboard() {
               </div>
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
-                  Cancel/Esc/blur reverts. */}
-              <div className="space-y-3">
+                  Cancel/Esc/blur reverts.
+                  Laid out two-up: as a single full-width stack every field cost
+                  a whole row, so the panel needed scrolling before you reached
+                  anything useful. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 border border-gold/20 bg-cream/60 rounded-md p-3">
                 {/* DATE */}
                 <div className="flex items-start gap-3">
                   <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
@@ -8850,7 +8853,7 @@ export default function Dashboard() {
                     Tentative/Confirmed" path is blocked with no way to fix
                     it from the side drawer. leads.update accepts spaceName,
                     so saveDrawerField handles both paths automatically. */}
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 sm:col-span-2">
                   <MapPin className={`w-4 h-4 mt-0.5 flex-shrink-0 ${!selectedBooking.spaceName?.trim() ? 'text-amber-600' : 'text-gold'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="font-bebas text-xs tracking-widest text-ink/70 mb-1">SPACE {!selectedBooking.spaceName?.trim() && <span className="text-amber-600 normal-case">— required to confirm</span>}</div>
@@ -8869,7 +8872,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {/* EMAIL */}
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 sm:col-span-2">
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
