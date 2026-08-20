@@ -39,6 +39,12 @@ import {
   staffPortalLinks,
 } from "../drizzle/schema";
 import { eq, and, inArray } from "drizzle-orm";
+import {
+  foodBillingSentence,
+  drinksBillingSentence,
+  depositAppliedClause,
+  depositComesOffDrinks,
+} from "@shared/billingTerms";
 
 const VENUE_AREA_LABELS: Record<string, string> = {
   bar: "Bar",
@@ -1353,6 +1359,12 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       const foodState = ((booking as any).foodStatus as string) || "to_invoice";
       const drinksState = ((booking as any).drinksStatus as string | null)
         ?? ((barOpt === "cash_bar" || barOpt === "bar_tab_then_cash") ? "on_night" : "to_invoice");
+      // Billing TERMS (how it's charged) — chosen per event, distinct from the
+      // statuses above (whether the money has arrived).
+      const termsFood = (booking as any).billingFood as string | null;
+      const termsDrinks = (booking as any).billingDrinks as string | null;
+      const termsDeposit = (booking as any).billingDepositApplied as string | null;
+      const termsNote = ((booking as any).billingNote as string | null) ?? "";
       const stateLabel: Record<string, string> = {
         to_invoice: "To invoice", invoiced: "Invoiced &mdash; awaiting payment",
         paid: "Paid", on_night: "Settled on the night",
@@ -1367,22 +1379,26 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       const steps: string[] = [];
       let n = 0;
       if (depositRequired && depAmt > 0) {
-        steps.push(step(++n, "Deposit", `${fmtCurrency(depAmt)} to secure the date &mdash; deducted off the final drinks bill.`,
+        steps.push(step(++n, "Deposit", `${fmtCurrency(depAmt)} to secure the date &mdash; ${escHtml(depositAppliedClause(termsDeposit))}.`,
           pill(booking.depositPaid ? "Received" : "Outstanding", Boolean(booking.depositPaid))));
       }
-      steps.push(step(++n, "Food", "Invoiced and paid before the event. Do not charge food on the night.",
+      steps.push(step(++n, "Food", escHtml(foodBillingSentence(termsFood)),
         pill(stateLabel[foodState] ?? foodState, foodState === "paid")));
       const barBits = [
         barTagLabel ? escHtml(barTagLabel) : "",
         barTabVal ? `tab limit ${fmtCurrency(barTabVal)}` : "",
       ].filter(Boolean).join(" &middot; ");
-      const drinksBody = (drinksState === "on_night"
-        ? "Bar bill is settled on the night."
-        : "Bar bill is invoiced after the event.")
-        + (depAmt > 0 && depositRequired ? ` The ${fmtCurrency(depAmt)} deposit comes off this total.` : "")
+      const drinksBody = escHtml(drinksBillingSentence(termsDrinks, { barOption: barOpt, drinksStatus: drinksState }))
+        + (depAmt > 0 && depositRequired && depositComesOffDrinks(termsDeposit)
+            ? ` The ${fmtCurrency(depAmt)} deposit comes off this total.` : "")
         + (barBits ? `<div style="margin-top:2px"><b style="color:var(--amber);font-weight:700">Bar &mdash;</b> ${barBits}</div>` : "")
         + (barNotesText.trim() ? `<div style="margin-top:2px">${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : "");
       steps.push(step(++n, "Drinks / bar", drinksBody, pill(stateLabel[drinksState] ?? drinksState, drinksState === "paid")));
+      // The custom line goes above the free-text payment notes: it's a chosen
+      // term for THIS event, not a general note.
+      if (termsNote.trim()) {
+        steps.push(step(++n, "Also for this event", escHtml(termsNote).replace(/\n/g, "<br>"), ""));
+      }
       if (!hideSet.has("payment") && paymentNotesTxt.trim()) {
         steps.push(step(++n, "Notes for this event", escHtml(paymentNotesTxt).replace(/\n/g, "<br>"), ""));
       }
