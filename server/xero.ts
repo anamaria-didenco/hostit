@@ -440,15 +440,50 @@ export async function deleteXeroDraftInvoice(ownerId: number, invoiceId: string)
   });
 }
 
+export interface XeroInvoicePayment {
+  paymentId: string;
+  date: string;      // YYYY-MM-DD
+  amount: number;
+  reference?: string;
+}
+
+/** The payments Xero has applied to an invoice. Populated once the invoice is
+ *  reconciled against a bank transaction — this is what "reconciled in Xero"
+ *  actually produces, and what we mirror into VenueFlow's ledger.
+ *  Note: the batch GET /Invoices?IDs= response is summarised and omits the
+ *  Payments array, so a paid invoice must be fetched individually. */
+export async function getXeroInvoicePayments(ownerId: number, invoiceId: string): Promise<XeroInvoicePayment[]> {
+  const json = await xeroApi(ownerId, "GET", `/Invoices/${encodeURIComponent(invoiceId)}`);
+  const inv = json?.Invoices?.[0];
+  return (inv?.Payments ?? [])
+    .filter((p: any) => p?.PaymentID)
+    .map((p: any) => ({
+      paymentId: p.PaymentID,
+      // Xero dates come back as /Date(1234567890000+0000)/ or ISO.
+      date: parseXeroDate(p.Date),
+      amount: Number(p.Amount ?? 0),
+      reference: p.Reference ?? undefined,
+    }));
+}
+
+/** Xero returns dates either as ISO or its legacy /Date(ms+offset)/ form. */
+export function parseXeroDate(raw: any): string {
+  const s = String(raw ?? "");
+  const legacy = s.match(/\/Date\((-?\d+)/);
+  const d = legacy ? new Date(Number(legacy[1])) : new Date(s);
+  return isNaN(d.getTime()) ? new Date().toISOString().slice(0, 10) : d.toISOString().slice(0, 10);
+}
+
 /** Fetch current status of specific invoices (for paid-state sync). */
-export async function getXeroInvoiceStatuses(ownerId: number, invoiceIds: string[]): Promise<Record<string, { status: string; amountDue: number; invoiceNumber: string | null }>> {
+export async function getXeroInvoiceStatuses(ownerId: number, invoiceIds: string[]): Promise<Record<string, { status: string; amountDue: number; amountPaid: number; invoiceNumber: string | null }>> {
   if (invoiceIds.length === 0) return {};
   const json = await xeroApi(ownerId, "GET", `/Invoices?IDs=${invoiceIds.join(",")}`);
-  const out: Record<string, { status: string; amountDue: number; invoiceNumber: string | null }> = {};
+  const out: Record<string, { status: string; amountDue: number; amountPaid: number; invoiceNumber: string | null }> = {};
   for (const inv of json?.Invoices ?? []) {
     out[inv.InvoiceID] = {
       status: inv.Status ?? "UNKNOWN",
       amountDue: Number(inv.AmountDue ?? 0),
+      amountPaid: Number(inv.AmountPaid ?? 0),
       invoiceNumber: inv.InvoiceNumber ?? null,
     };
   }

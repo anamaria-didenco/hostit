@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import XeroPushModal from "@/components/XeroPushModal";
 import {
   DollarSign, FileText, Clock, CheckCircle2, Moon, Search,
-  CalendarDays, Users, AlertCircle, ExternalLink,
+  CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw,
 } from "lucide-react";
 
 // ─── Types mirror the server payments.overview shape ────────────────────────
@@ -64,6 +64,29 @@ export default function PaymentsBoard() {
   const [xeroFor, setXeroFor] = useState<Row | null>(null);
 
   const { data, isLoading, isError, refetch } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
+  const { data: xeroStatus } = trpc.xero.status.useQuery();
+
+  // Pull anything reconciled in Xero into VenueFlow. Runs quietly when the
+  // board opens (the server throttles to once a minute per venue) and can be
+  // forced from the button; imported payments land in each event's history.
+  const syncXero = trpc.xero.syncAll.useMutation({
+    onSuccess: (r) => {
+      if (r.skipped) return;
+      if (r.paymentsImported > 0) {
+        toast.success(`Imported ${r.paymentsImported} payment${r.paymentsImported === 1 ? "" : "s"} from Xero (${fmtNZD(r.amountImported)})`);
+      } else if (r.statusChanges > 0) {
+        toast.success(`Updated ${r.statusChanges} invoice status${r.statusChanges === 1 ? "" : "es"} from Xero`);
+      }
+      if (r.paymentsImported > 0 || r.statusChanges > 0) utils.payments.overview.invalidate();
+    },
+    onError: () => { /* quiet on the automatic pass; the button reports below */ },
+  });
+  const autoSynced = useRef(false);
+  useEffect(() => {
+    if (autoSynced.current || !xeroStatus?.connected) return;
+    autoSynced.current = true;
+    syncXero.mutate({});
+  }, [xeroStatus?.connected]);
 
   const update = trpc.bookings.update.useMutation({
     onSuccess: (_d, vars: any) => {
@@ -131,6 +154,17 @@ export default function PaymentsBoard() {
             Deposit, food and drinks tracked per event — so the team always knows who to invoice, who's paid, and who's settling on the night.
           </p>
         </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+        {xeroStatus?.connected && (
+          <button
+            onClick={() => syncXero.mutate({ force: true })}
+            disabled={syncXero.isPending}
+            title="Check Xero for invoices that have been reconciled and bring those payments in"
+            className="font-bebas tracking-widest text-[11px] text-blue-800 border border-blue-800/30 rounded-md px-3 py-2 hover:bg-blue-800/5 transition-colors flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${syncXero.isPending ? "animate-spin" : ""}`} />
+            {syncXero.isPending ? "SYNCING…" : "SYNC XERO"}
+          </button>
+        )}
         <div className="relative w-full sm:w-64">
           <Search className="w-4 h-4 text-sage absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
@@ -140,6 +174,7 @@ export default function PaymentsBoard() {
             placeholder="Search client, type, space…"
             className="w-full pl-9 pr-3 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
           />
+        </div>
         </div>
       </div>
 
@@ -310,6 +345,15 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
         {!row.hasPrice && (
           <span className="font-dm text-[10px] text-amber-700 flex items-center gap-0.5" title="No total set on this event">
             <AlertCircle className="w-3 h-3" /> no total
+          </span>
+        )}
+        {/* Money actually recorded against this event — including anything
+            imported from Xero — so the ledger is visible without drilling in. */}
+        {(row.paidToDate > 0 || (row.outstanding ?? 0) > 0) && (
+          <span className="font-dm text-[11px] whitespace-nowrap" title="Recorded in this event's payment history">
+            {row.paidToDate > 0 && <span className="text-green-700 font-semibold">{fmtNZD(row.paidToDate)} paid</span>}
+            {row.paidToDate > 0 && (row.outstanding ?? 0) > 0 && <span className="text-sage"> · </span>}
+            {(row.outstanding ?? 0) > 0 && <span className="text-ink/70">{fmtNZD(row.outstanding ?? 0)} left</span>}
           </span>
         )}
       </div>
