@@ -178,8 +178,8 @@ function groupByCourse(items: any[]) {
 // course headings inside the text we split it into proper course columns +
 // individual dishes so the BEO menu matches the rest of the document.
 const MENU_COURSE_MAP: { kw: string; label: string }[] = [
-  { kw: "canap[eé]s?|antipasti?|antipasto|to start|nibbles?", label: "Canapés" },
-  { kw: "entr[eé]es?|primi|primo|first courses?|starters?", label: "Entrée" },
+  { kw: "canap[eé]s?|to start|nibbles?", label: "Canapés" },
+  { kw: "entr[eé]es?|antipasti?|antipasto|primi|primo|first courses?|starters?", label: "Entrée" },
   { kw: "mains?|main courses?|secondi|secondo", label: "Main" },
   { kw: "sides?|contorni?|contorno", label: "Sides" },
   { kw: "desserts?|dolci?|dolce|sweets?|puddings?", label: "Dessert" },
@@ -261,6 +261,44 @@ function detectEmbeddedMenu(foodItems: any[]): ParsedCourse[] | null {
  * we only include menus the kitchen is actually cooking from, not every
  * menu the venue has on file.
  */
+/**
+ * The menu packages this booking's food actually comes from, matched the same
+ * way the PDF-append does (dish name → menu_items.name → package). Returns the
+ * package's own wording — the name, the short description and the full chef
+ * menu text — so the BEO can print the menu rather than only attaching a PDF
+ * of it. Without this, "SHARED FRANCO" and what's on it lived in Settings and
+ * never reached the kitchen.
+ */
+async function findLinkedMenuPackages(opts: {
+  db: any; userId: number; fnbList: any[];
+}): Promise<Array<{ name: string; description: string | null; chefNotes: string | null; customPriceLabel: string | null; pricePerHead: string | null }>> {
+  const { db, userId, fnbList } = opts;
+  try {
+    const dishNames = Array.from(new Set(
+      fnbList.map(i => String(i.dishName || "").trim().toLowerCase()).filter(Boolean)
+    ));
+    if (dishNames.length === 0) return [];
+    const allItems = await db.select({ name: menuItems.name, packageId: menuItems.packageId })
+      .from(menuItems).where(eq(menuItems.ownerId, userId));
+    const packageIds = new Set<number>();
+    for (const mi of allItems) {
+      if (dishNames.includes(String(mi.name || "").trim().toLowerCase())) packageIds.add(mi.packageId);
+    }
+    if (packageIds.size === 0) return [];
+    const pkgs = await db.select().from(menuPackages)
+      .where(and(eq(menuPackages.ownerId, userId), inArray(menuPackages.id, Array.from(packageIds))));
+    return pkgs
+      .filter((p: any) => (p.description && p.description.trim()) || (p.chefNotes && p.chefNotes.trim()))
+      .map((p: any) => ({
+        name: p.name, description: p.description, chefNotes: p.chefNotes,
+        customPriceLabel: p.customPriceLabel, pricePerHead: p.pricePerHead,
+      }));
+  } catch (err: any) {
+    console.warn("[BEO] linked menu lookup failed:", err?.message ?? err);
+    return [];
+  }
+}
+
 async function appendLinkedMenuPdfs(opts: {
   beoPdfBytes: Uint8Array;
   db: any;
@@ -495,6 +533,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       i => !(((i.course ?? "") === "Drinks") &&
              SERVICE_TIMING_DRINK_NAMES.has(String((i as any).dishName ?? "").trim().toLowerCase()))
     );
+
+    // Menu packages this food comes from — their own wording is printed below
+    // so the kitchen reads the actual menu, not just the dish list.
+    const linkedMenus = await findLinkedMenuPackages({ db, userId, fnbList });
 
     // Linked proposal
     let proposal: any = null;
@@ -826,6 +868,39 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       </div>`).join("")}
     </div>
   </div>` : "");
+
+    // ── Linked menu(s): "SHARED FRANCO" + what's actually on it ───────────
+    // The chef menu text is free-form paste; run it through the same course
+    // parser the pasted-menu path uses so it prints as a menu with course
+    // headings rather than a wall of text. Falls back to preserved line
+    // breaks when it isn't structured enough to parse.
+    const linkedMenuSection = linkedMenus.length === 0 ? "" : linkedMenus.map(pkg => {
+      const body = (pkg.chefNotes ?? "").trim();
+      // Normalise course headings to the standard names (Entrée / Main /
+      // Sides / Dessert) so every menu prints consistently, whatever the
+      // kitchen typed. Unstructured text falls through to preserved lines.
+      const parsed = body && countMenuHeadings(body) >= 2 ? parseMenuBlob(body) : [];
+      const priceBit = pkg.customPriceLabel?.trim()
+        ? escHtml(pkg.customPriceLabel.trim())
+        : (Number(pkg.pricePerHead ?? 0) > 0 ? `${fmtCurrency(Number(pkg.pricePerHead))} pp` : "");
+      const head = `
+      <div class="sec-head">
+        <span class="sec-title">${escHtml(pkg.name)}</span>
+        <span class="sec-line"></span>
+        ${(priceBit && !isPublic) ? `<span class="sec-meta">${priceBit}</span>` : ""}
+      </div>`;
+      const desc = pkg.description?.trim()
+        ? `<div style="font-family:var(--serif);font-style:italic;font-size:12.5px;color:var(--gray);margin:2px 0 6px;line-height:1.45">${escHtml(pkg.description.trim()).replace(/\n/g, "<br>")}</div>`
+        : "";
+      const bodyHtml = parsed.length >= 2
+        ? `<div class="menu-grid">${parsed.map(c => `
+          <div class="course">
+            <div class="course-title">${escHtml(c.label)}${c.note ? ` <span class="course-note">&middot; ${escHtml(c.note)}</span>` : ""}</div>
+            ${c.dishes.map(d => `<div class="dish"><span class="em">&mdash;</span><span class="body"><span class="dname">${escHtml(d.name)}</span>${d.det ? `<span class="det"> ${escHtml(d.det)}</span>` : ""}</span></div>`).join("")}
+          </div>`).join("")}</div>`
+        : (body ? `<div style="font-size:12.5px;color:var(--ink);line-height:1.5;white-space:pre-wrap">${escHtml(body)}</div>` : "");
+      return `<div class="section" style="break-inside:avoid;page-break-inside:avoid">${head}${desc}${bodyHtml}</div>`;
+    }).join("");
 
     // ── Run of night (page 2) — time gutter + dot-and-rail timeline ───────
     // Flag (red dot) the arrival & dinner moments, matching the reference.
@@ -1353,13 +1428,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
 
     // ── Assemble pages; collapse empties; number "Page N of N" dynamically ──
     const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
+    const p2Menu = show('food', linkedMenuSection);
     const kitchenNoteSection = kitchenNotesText.trim()
       ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Kitchen Notes")}<div style="font-size:11.5px;color:var(--ink2);line-height:1.5">${escHtml(kitchenNotesText).replace(/\n/g, "<br>")}</div></div>`
       : "";
     // DF-5: exactly one signature strip in the document — the formal Client
     // Acceptance block on the Event Summary page. No page-1 sign-off strip.
     const page1Content = `${p1Head}${p1Band}${clientDetailsSection}${setupNoteSection}${eventNotesSection}${show('timeline', runOfDaySection)}`;
-    const page2Content = (p2Food.trim() || p2Diet.trim() || p2Bev.trim() || kitchenNoteSection.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${kitchenNoteSection}${p2Diet}${p2Bev}` : "";
+    const page2Content = (p2Food.trim() || p2Menu.trim() || p2Diet.trim() || p2Bev.trim() || kitchenNoteSection.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${p2Menu}${kitchenNoteSection}${p2Diet}${p2Bev}` : "";
     // One continuous flow: sections condense onto as few physical A4 pages as
     // the content needs (no reserved page per section). Empty sections still
     // collapse. Page numbering is applied by the running PDF footer below; the
