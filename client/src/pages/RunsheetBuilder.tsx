@@ -31,6 +31,7 @@ import EventSpendSection from "@/components/EventSpendSection";
 import { SectionHead } from "@/components/ui/section-head";
 import { StatusBadge } from "@/components/ui/badge";
 import { currency } from "@/lib/money";
+import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import {
   FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS,
   foodBillingSentence, drinksBillingSentence, depositAppliedClause,
@@ -475,6 +476,9 @@ export default function RunsheetBuilder() {
   const [costItems, setCostItems] = useState<CostItem[]>([]);
   const [gstInclusive, setGstInclusive] = useState(false);
   const [paymentNotes, setPaymentNotes] = useState("");
+  // Per-event override for the BEO's Billing Instructions paragraph. Empty
+  // means "use the venue default", which is the common case.
+  const [paymentInstructions, setPaymentInstructions] = useState("");
 
   // Drinks (runsheet-level selection)
   const [rsBarOption, setRsBarOption] = useState<"bar_tab" | "cash_bar" | "bar_tab_then_cash" | "unlimited">("cash_bar");
@@ -698,7 +702,8 @@ export default function RunsheetBuilder() {
     { id: 'drinks',    label: 'Drinks',     icon: <Wine className="w-4 h-4" /> },
     { id: 'checklist', label: 'Checklist',  icon: <CheckSquare className="w-4 h-4" /> },
     { id: 'tableplan', label: 'Table Plan', icon: <LayoutGrid className="w-4 h-4" /> },
-    { id: 'costs',     label: 'Costs',      icon: <DollarSign className="w-4 h-4" /> },
+    { id: 'billing',   label: 'Billing',    icon: <DollarSign className="w-4 h-4" /> },
+    { id: 'costs',     label: 'Costs',      icon: <ClipboardList className="w-4 h-4" /> },
   ];
   const [activeSection, setActiveSection] = useState<string>('timeline');
   const scrollToSection = (id: string) => {
@@ -902,6 +907,7 @@ export default function RunsheetBuilder() {
         name: d.name,
         count: d.count ?? 1,
         notes: d.notes ?? '',
+        names: (d as any).names ?? undefined,
       }));
       setDietaries(prev => {
         const existing = new Set(prev.map(d => d.name.toLowerCase()));
@@ -1048,6 +1054,8 @@ export default function RunsheetBuilder() {
   // Venue settings for customisable dietaries and setup templates
   const { data: venueSettings, refetch: refetchVenueSettings } = trpc.venue.getOwn.useQuery();
   const venuePrimaryColor = (venueSettings as any)?.primaryColor ?? "#1a3a2a";
+  const venueDefaultPaymentInstructions: string = ((venueSettings as any)?.paymentInstructions ?? "").toString();
+  const paymentInstructionsOverridden = paymentInstructions.trim().length > 0;
   const updateVenueMutation = trpc.venue.update.useMutation({
     onSuccess: () => { toast.success('Options saved'); refetchVenueSettings(); },
     onError: () => toast.error('Failed to save options'),
@@ -1626,6 +1634,7 @@ export default function RunsheetBuilder() {
       if ((existing as any).costItems) setCostItems((existing as any).costItems as CostItem[]);
       setGstInclusive((existing as any).gstInclusive ?? false);
       setPaymentNotes((existing as any).paymentNotes ?? "");
+      setPaymentInstructions((existing as any).paymentInstructions ?? "");
       const cols = (existing as any).fnbColumns;
       if (cols) {
         if (cols.dietary !== undefined) setShowDietaryCol(cols.dietary);
@@ -1878,6 +1887,7 @@ export default function RunsheetBuilder() {
         footerText: footerText || null,
         kitchenNotes: kitchenNotes || null,
         paymentNotes: paymentNotes || null,
+        paymentInstructions: paymentInstructions || null,
         spaceName: spaceName || null,
         venueArea: venueArea || null,
         eventStartTime: eventStartTime || null,
@@ -1897,7 +1907,7 @@ export default function RunsheetBuilder() {
       } as any, { onSuccess: () => markClean('doc') });
     }, 1000);
     return () => clearTimeout(t);
-  }, [sheetId, notes, footerText, kitchenNotes, paymentNotes, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices, showDrinkPrices]);
+  }, [sheetId, notes, footerText, kitchenNotes, paymentNotes, paymentInstructions, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices, showDrinkPrices]);
 
   // Auto-save FOOD items (debounced) — silent (no toast, no refetch) so it
   // doesn't interrupt typing. Gated on fnbReadyRef so we never persist an empty
@@ -2036,6 +2046,7 @@ export default function RunsheetBuilder() {
           kitchenNotes: kitchenNotes || null,
           gstInclusive,
           paymentNotes: paymentNotes || null,
+          paymentInstructions: paymentInstructions || null,
           drinksData: (rsBarOption || rsBarNotes || rsSelectedDrinks.length || rsCustomDrinks.length)
             ? { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices, showDrinkPrices }
             : undefined,
@@ -2077,6 +2088,7 @@ export default function RunsheetBuilder() {
           drinksData: { barOption: rsBarOption, tabAmount: rsTabAmount ? parseFloat(rsTabAmount) : undefined, selectedDrinks: rsSelectedDrinks, customDrinks: rsCustomDrinks, barNotes: rsBarNotes || undefined, drinkTypes: rsDrinkTypes, drinkPrices: rsDrinkPrices, showDrinkPrices },
           gstInclusive,
           paymentNotes: paymentNotes || null,
+          paymentInstructions: paymentInstructions || null,
         } as any);
         await persistTimelineItems(sheetId);
         if (fnbItems.length > 0) await saveFnb();
@@ -2147,6 +2159,25 @@ export default function RunsheetBuilder() {
       notes: newDietary.notes.trim() || undefined,
     }]);
     setNewDietary({ name: "", count: "1", notes: "" });
+  }
+
+  // How many rows would merge, and how many look like the guest name and the
+  // requirement were typed into each other's field. Drives the tidy-up prompt.
+  const dietaryTidy = React.useMemo(() => {
+    const swapped = dietaries.filter(looksSwapped).length;
+    const merged = groupDietaries(dietaries.map(d => ({ ...d })));
+    return { swapped, duplicates: dietaries.length - merged.length };
+  }, [dietaries]);
+
+  // Fix the two things that stop dietaries grouping: rows entered the wrong way
+  // round, then rows that share a requirement. Applied to stored data on
+  // request — never silently, because a guest really can be called "Olive".
+  function tidyDietaries() {
+    setDietaries(prev => {
+      const unswapped = prev.map(d => (looksSwapped(d) ? unswap(d) : d));
+      return groupDietaries(unswapped);
+    });
+    toast.success("Dietaries tidied — same requirement now shares one line");
   }
 
   function removeDietary(idx: number) {
@@ -2377,6 +2408,7 @@ export default function RunsheetBuilder() {
     drinks: (rsSelectedDrinks.length + rsCustomDrinks.length) > 0 || !!rsBarNotes,
     checklist: checklistItems.length > 0 && checkedCount === checklistItems.length,
     tableplan: !!linkedFloorPlanId,
+    billing: !!(billingBooking as any)?.billingFood || !!(billingBooking as any)?.billingDrinks || !!paymentNotes.trim(),
     costs: costItems.length > 0,
   };
   const readyCount = RUNSHEET_SECTIONS.filter(s => sectionReady[s.id]).length;
@@ -2891,8 +2923,8 @@ export default function RunsheetBuilder() {
             {/* Event details grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DATE</label>
-                <Input
+                <label htmlFor="rb-event-date" className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">DATE</label>
+                <Input id="rb-event-date"
                   type="date"
                   value={eventDate}
                   onChange={e => setEventDate(e.target.value)}
@@ -2930,8 +2962,8 @@ export default function RunsheetBuilder() {
             {/* Event time row — venue/space lives in the grid above; this is times only */}
             <div className="grid grid-cols-2 gap-4 mb-4 pt-3 border-t border-gold/20">
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">START TIME</label>
-                <Input
+                <label htmlFor="rb-start-time" className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">START TIME</label>
+                <Input id="rb-start-time"
                   type="time"
                   step={900}
                   value={eventStartTime}
@@ -2941,8 +2973,8 @@ export default function RunsheetBuilder() {
                 <div className="hidden print:block font-serif text-sm font-semibold [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{eventStartTime || "—"}</div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">END TIME</label>
-                <Input
+                <label htmlFor="rb-end-time" className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">END TIME</label>
+                <Input id="rb-end-time"
                   type="time"
                   step={900}
                   value={eventEndTime}
@@ -3214,6 +3246,30 @@ export default function RunsheetBuilder() {
                             </button>
                           ))}
                         </div>
+                        {(dietaryTidy.swapped > 0 || dietaryTidy.duplicates > 0) && (
+                          <div className="flex items-start gap-2.5 rounded-sm border border-amber-300 bg-amber-50 px-3 py-2.5 mb-2">
+                            <AlertTriangle className="w-4 h-4 text-amber-700 flex-none mt-0.5" aria-hidden />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-dm text-[12px] text-amber-900 leading-relaxed">
+                                <b className="font-semibold">These won&rsquo;t group on the BEO.</b>{' '}
+                                {dietaryTidy.swapped > 0 && (
+                                  <>{dietaryTidy.swapped} row{dietaryTidy.swapped !== 1 ? 's have' : ' has'} the guest&rsquo;s name where the requirement should be
+                                  {dietaryTidy.duplicates > 0 ? ', and ' : '. '}</>
+                                )}
+                                {dietaryTidy.duplicates > 0 && (
+                                  <>{dietaryTidy.duplicates} row{dietaryTidy.duplicates !== 1 ? 's repeat' : ' repeats'} a requirement already listed. </>
+                                )}
+                                The kitchen sees one line per guest instead of a count.
+                              </p>
+                            </div>
+                            <button
+                              onClick={tidyDietaries}
+                              className="flex-none font-dm text-[11px] font-semibold text-amber-900 border border-amber-400 hover:bg-amber-100 rounded-sm px-2.5 min-h-[44px] transition-colors"
+                            >
+                              Tidy them up
+                            </button>
+                          </div>
+                        )}
                         {dietaries.length > 0 && (
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {dietaries.map((d, idx) => (
@@ -4233,8 +4289,8 @@ export default function RunsheetBuilder() {
                 /* Shared time/qty fields always shown for post-catalogue add */
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   <div className="min-w-0">
-                    <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">SERVICE TIME</label>
-                    <Input
+                    <label htmlFor="rb-fnb-service-time" className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">SERVICE TIME</label>
+                    <Input id="rb-fnb-service-time"
                       type="time"
                       value={newFnbItem.serviceTime ?? ''}
                       onChange={e => setNewFnbItem(p => ({ ...p, serviceTime: e.target.value }))}
@@ -4525,9 +4581,10 @@ export default function RunsheetBuilder() {
               // Beverages are billed on consumption / bar tab, so the drinks
               // selection is deliberately NOT totalled or rolled into the total.
               const grandTotal = fnbFoodTotal + costFood + (rsTabAmount ? Number(rsTabAmount) : 0);
-              const paymentInstructions = (venueSettings as any)?.paymentInstructions as string | null;
+              // Same resolution as the BEO: the per-event override wins.
+              const effectivePaymentInstructions = paymentInstructions.trim() || venueDefaultPaymentInstructions;
               const showBlock = booking?.minimumSpend || rsTabAmount || costItems.length > 0 || booking?.depositNzd
-                || fnbFoodTotal > 0 || fnbDrinkTotal > 0 || (paymentInstructions && paymentInstructions.trim().length > 0);
+                || fnbFoodTotal > 0 || fnbDrinkTotal > 0 || effectivePaymentInstructions.trim().length > 0;
               if (!showBlock) return null;
               return (
                 <div data-print-section="totals" className="px-5 py-4 border-t-2 border-forest/20 bg-linen/30 print:avoid-break">
@@ -4572,10 +4629,10 @@ export default function RunsheetBuilder() {
                       </div>
                     )}
                   </div>
-                  {paymentInstructions && paymentInstructions.trim().length > 0 && (
+                  {effectivePaymentInstructions.trim().length > 0 && (
                     <div data-print-section="payment" className="mt-3 bg-white border border-gold/30 px-4 py-3">
                       <div className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1">PAYMENT INSTRUCTIONS</div>
-                      <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{paymentInstructions}</div>
+                      <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{effectivePaymentInstructions}</div>
                     </div>
                   )}
                 </div>
@@ -4800,7 +4857,7 @@ export default function RunsheetBuilder() {
                 )}
                 <button
                   onClick={() => { setShowChecklistPaste(true); setChecklistParsed(null); setChecklistPasteText(""); }}
-                  className="font-bebas tracking-widest text-xs text-gold hover:text-forest flex items-center gap-1.5 transition-colors border border-gold/40 px-3 py-1.5 hover:bg-gold/5"
+                  className="font-dm text-xs text-[#7a5a12] hover:text-forest flex items-center gap-1.5 transition-colors border border-gold/40 rounded-sm px-3 min-h-[44px] hover:bg-gold/5"
                   title="Paste a to-do list and AI will turn it into checklist items"
                 >
                   <Sparkles className="w-3.5 h-3.5" /> AI PASTE
@@ -4949,8 +5006,8 @@ export default function RunsheetBuilder() {
             </div>
             {/* Floor plan selector */}
             <div className="px-5 py-4 border-b border-gold/20">
-              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-2">LINK A FLOOR PLAN</label>
-              <select
+              <label htmlFor="rb-floor-plan" className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-2">LINK A FLOOR PLAN</label>
+              <select id="rb-floor-plan"
                 value={linkedFloorPlanId ?? ""}
                 onChange={e => setLinkedFloorPlanId(e.target.value ? Number(e.target.value) : undefined)}
                 className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white"
@@ -5466,6 +5523,159 @@ export default function RunsheetBuilder() {
           </div>
         )}
 
+        {/* ── BILLING SECTION ─────────────────────────────────────────────
+            Everything that prints in the BEO's billing area, in one place.
+            It used to be scattered: the terms and payment notes were buried at
+            the bottom of Costs, the deposit and minimum spend live on the event,
+            and the Billing Instructions paragraph was a VENUE-WIDE setting with
+            no per-event override at all — so seeing something wrong on the
+            printed sheet gave you no way to work out where to change it. */}
+        <section id="rb-billing" className="scroll-mt-[120px]">
+          <div className="dante-card border-t-0 no-print">
+            <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap px-4 sm:px-5 py-3 border-b border-gold/20">
+              <div className="flex items-center gap-2 min-w-0">
+                <DollarSign className="w-4 h-4 text-gold flex-none" />
+                <span className="font-bebas tracking-widest text-sm text-ink">BILLING</span>
+              </div>
+              <span className="font-dm text-[11px] text-ink/45">Everything here prints on the BEO</span>
+            </div>
+            <div className="px-4 sm:px-5 py-4 space-y-4">
+            {/* How this event is billed — drives the BEO block of the same
+                name. Previously that block was hardcoded prose that could
+                contradict the notes right beside it. */}
+            {effectiveBookingId && (
+              <div className="border border-gold/25 rounded-md bg-white/70 p-3.5 space-y-3">
+                <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                  <span className="font-bebas tracking-widest text-[10px] text-ink/65">HOW THIS EVENT IS BILLED</span>
+                  <span className="font-dm text-[10px] text-ink/45">Prints on the BEO for your floor staff</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="min-w-0">
+                    <label htmlFor="rb-billing-food" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">FOOD</label>
+                    <select
+                      id="rb-billing-food"
+                      value={(billingBooking as any)?.billingFood ?? 'invoiced_prior'}
+                      onChange={e => setBillingTerm({ billingFood: e.target.value })}
+                      className="w-full border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                    >
+                      {FOOD_BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="min-w-0">
+                    <label htmlFor="rb-billing-drinks" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">DRINKS / BAR</label>
+                    <select
+                      id="rb-billing-drinks"
+                      value={(billingBooking as any)?.billingDrinks ?? 'invoiced_after'}
+                      onChange={e => setBillingTerm({ billingDrinks: e.target.value })}
+                      className="w-full border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                    >
+                      {DRINKS_BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="min-w-0 sm:col-span-2">
+                    <label htmlFor="rb-billing-deposit" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">DEPOSIT</label>
+                    <select
+                      id="rb-billing-deposit"
+                      value={(billingBooking as any)?.billingDepositApplied ?? 'drinks'}
+                      onChange={e => setBillingTerm({ billingDepositApplied: e.target.value })}
+                      className="w-full border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                    >
+                      {DEPOSIT_APPLIED_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {/* Live preview of the exact sentences the BEO will print, so
+                    there's no guessing what a selection actually says. */}
+                <div className="rounded-sm border border-gold/20 bg-linen/50 px-3 py-2 space-y-1">
+                  <div className="font-bebas tracking-widest text-[9px] text-ink/45">THE BEO WILL SAY</div>
+                  <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
+                    <b className="font-semibold">Food —</b> {foodBillingSentence((billingBooking as any)?.billingFood ?? 'invoiced_prior')}
+                  </p>
+                  <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
+                    <b className="font-semibold">Drinks —</b> {drinksBillingSentence((billingBooking as any)?.billingDrinks ?? 'invoiced_after', { barOption: rsBarOption, drinksStatus: null })}
+                  </p>
+                  <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
+                    <b className="font-semibold">Deposit —</b> {depositAppliedClause((billingBooking as any)?.billingDepositApplied ?? 'drinks')}.
+                  </p>
+                </div>
+                <div>
+                  <label htmlFor="rb-billing-note" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">ANYTHING ELSE FOR THIS EVENT (OPTIONAL)</label>
+                  <input
+                    id="rb-billing-note"
+                    defaultValue={(billingBooking as any)?.billingNote ?? ''}
+                    key={`bn-${(billingBooking as any)?.id ?? 'x'}-${(billingBooking as any)?.billingNote ?? ''}`}
+                    onBlur={e => {
+                      const v = e.target.value;
+                      if (v !== (((billingBooking as any)?.billingNote) ?? '')) setBillingTerm({ billingNote: v });
+                    }}
+                    placeholder="e.g. Cake charged separately · AV hire invoiced with the food"
+                    className="w-full border border-gold/25 rounded-sm px-3 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                  />
+                </div>
+              </div>
+            )}
+            {/* Payment notes */}
+            <div>
+              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">PAYMENT NOTES</label>
+              <textarea
+                value={paymentNotes}
+                onChange={e => setPaymentNotes(e.target.value)}
+                placeholder="e.g. Final payment of $2,400 due on the day. Deposit of $800 received 12 Apr. Balance outstanding. Payment by bank transfer to 12-3456-7890123-00."
+                className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-none"
+                rows={3}
+              />
+            </div>
+              {/* Billing Instructions — per-event, falling back to the venue
+                  default so the common case needs no typing. */}
+              <div>
+                <div className="flex items-baseline justify-between gap-2 flex-wrap mb-1">
+                  <label htmlFor="rb-payment-instructions" className="font-bebas tracking-widest text-[10px] text-ink/65">BILLING INSTRUCTIONS</label>
+                  {!paymentInstructionsOverridden && venueDefaultPaymentInstructions.trim() && (
+                    <span className="font-dm text-[10px] text-ink/45">Using your venue default</span>
+                  )}
+                  {paymentInstructionsOverridden && (
+                    <button
+                      onClick={() => setPaymentInstructions("")}
+                      className="font-dm text-[11px] text-forest hover:underline min-h-[44px] px-1"
+                    >
+                      Reset to venue default
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  id="rb-payment-instructions"
+                  value={paymentInstructions}
+                  onChange={e => setPaymentInstructions(e.target.value)}
+                  placeholder={venueDefaultPaymentInstructions || "How the client pays — bank details, reference, when the balance is due."}
+                  className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-none"
+                  rows={3}
+                />
+                <p className="font-dm text-[10px] text-ink/45 mt-1">
+                  Leave blank to use the venue default from Settings. Anything typed here applies to this event only.
+                </p>
+              </div>
+
+              {/* Deposit and minimum spend live on the EVENT, not the runsheet —
+                  say so and link there, rather than showing a control that
+                  writes somewhere the operator doesn't expect. */}
+              {effectiveBookingId && (
+                <div className="flex items-start gap-2 rounded-sm border border-gold/20 bg-linen/50 px-3 py-2">
+                  <Info className="w-3.5 h-3.5 text-ink/40 flex-none mt-0.5" aria-hidden />
+                  <div className="min-w-0 flex-1 font-dm text-[11px] text-ink/60 leading-relaxed">
+                    <b className="font-semibold">Deposit and minimum spend</b> also print here, and are set on the event itself.
+                  </div>
+                  <a
+                    href={`/event/${effectiveBookingId}`}
+                    className="flex-none font-dm text-[11px] text-forest hover:underline min-h-[44px] px-1 inline-flex items-center"
+                  >
+                    Open event
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* ── COSTS SECTION ───────────────────────────────────────────────── */}
         <section id="rb-costs" className="scroll-mt-[120px]">
           <div className="dante-card border-t-0 no-print">
@@ -5647,92 +5857,6 @@ export default function RunsheetBuilder() {
                   >GST INCLUSIVE</button>
                 </div>
                 <span className="font-dm text-[10px] text-ink/35">{gstInclusive ? 'Prices already include 15% GST' : 'GST (15%) will be added on top'}</span>
-              </div>
-              {/* How this event is billed — drives the BEO block of the same
-                  name. Previously that block was hardcoded prose that could
-                  contradict the notes right beside it. */}
-              {effectiveBookingId && (
-                <div className="border border-gold/25 rounded-md bg-white/70 p-3.5 space-y-3">
-                  <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                    <span className="font-bebas tracking-widest text-[10px] text-ink/65">HOW THIS EVENT IS BILLED</span>
-                    <span className="font-dm text-[10px] text-ink/45">Prints on the BEO for your floor staff</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="min-w-0">
-                      <label htmlFor="rb-billing-food" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">FOOD</label>
-                      <select
-                        id="rb-billing-food"
-                        value={(billingBooking as any)?.billingFood ?? 'invoiced_prior'}
-                        onChange={e => setBillingTerm({ billingFood: e.target.value })}
-                        className="w-full border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
-                      >
-                        {FOOD_BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </div>
-                    <div className="min-w-0">
-                      <label htmlFor="rb-billing-drinks" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">DRINKS / BAR</label>
-                      <select
-                        id="rb-billing-drinks"
-                        value={(billingBooking as any)?.billingDrinks ?? 'invoiced_after'}
-                        onChange={e => setBillingTerm({ billingDrinks: e.target.value })}
-                        className="w-full border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
-                      >
-                        {DRINKS_BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </div>
-                    <div className="min-w-0 sm:col-span-2">
-                      <label htmlFor="rb-billing-deposit" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">DEPOSIT</label>
-                      <select
-                        id="rb-billing-deposit"
-                        value={(billingBooking as any)?.billingDepositApplied ?? 'drinks'}
-                        onChange={e => setBillingTerm({ billingDepositApplied: e.target.value })}
-                        className="w-full border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
-                      >
-                        {DEPOSIT_APPLIED_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  {/* Live preview of the exact sentences the BEO will print, so
-                      there's no guessing what a selection actually says. */}
-                  <div className="rounded-sm border border-gold/20 bg-linen/50 px-3 py-2 space-y-1">
-                    <div className="font-bebas tracking-widest text-[9px] text-ink/45">THE BEO WILL SAY</div>
-                    <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
-                      <b className="font-semibold">Food —</b> {foodBillingSentence((billingBooking as any)?.billingFood ?? 'invoiced_prior')}
-                    </p>
-                    <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
-                      <b className="font-semibold">Drinks —</b> {drinksBillingSentence((billingBooking as any)?.billingDrinks ?? 'invoiced_after', { barOption: rsBarOption, drinksStatus: null })}
-                    </p>
-                    <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
-                      <b className="font-semibold">Deposit —</b> {depositAppliedClause((billingBooking as any)?.billingDepositApplied ?? 'drinks')}.
-                    </p>
-                  </div>
-                  <div>
-                    <label htmlFor="rb-billing-note" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">ANYTHING ELSE FOR THIS EVENT (OPTIONAL)</label>
-                    <input
-                      id="rb-billing-note"
-                      defaultValue={(billingBooking as any)?.billingNote ?? ''}
-                      key={`bn-${(billingBooking as any)?.id ?? 'x'}-${(billingBooking as any)?.billingNote ?? ''}`}
-                      onBlur={e => {
-                        const v = e.target.value;
-                        if (v !== (((billingBooking as any)?.billingNote) ?? '')) setBillingTerm({ billingNote: v });
-                      }}
-                      placeholder="e.g. Cake charged separately · AV hire invoiced with the food"
-                      className="w-full border border-gold/25 rounded-sm px-3 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Payment notes */}
-              <div>
-                <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">PAYMENT NOTES</label>
-                <textarea
-                  value={paymentNotes}
-                  onChange={e => setPaymentNotes(e.target.value)}
-                  placeholder="e.g. Final payment of $2,400 due on the day. Deposit of $800 received 12 Apr. Balance outstanding. Payment by bank transfer to 12-3456-7890123-00."
-                  className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-none"
-                  rows={3}
-                />
               </div>
             </div>
 

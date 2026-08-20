@@ -426,6 +426,12 @@ export const runsheets = pgTable("runsheets", {
   drinksData: json("drinksData").$type<{ barOption: string; tabAmount?: number; selectedDrinks: string[]; customDrinks: { name: string; description?: string; price?: number }[]; barNotes?: string; drinkTypes?: Record<string, string>; drinkPrices?: Record<string, number>; showDrinkPrices?: boolean }>(),
   gstInclusive: boolean("gstInclusive").default(false),
   paymentNotes: text("paymentNotes"),
+  // Per-event override for the "Billing Instructions" paragraph on the BEO.
+  // That text was venue-wide (venue_settings.paymentInstructions) with no way
+  // to vary it for one event, so an event with different payment arrangements
+  // printed the house default and there was nowhere to correct it.
+  // Null = fall back to the venue default.
+  paymentInstructions: text("paymentInstructions"),
   venueArea: varchar("venueArea", { length: 50 }),
   eventStartTime: varchar("eventStartTime", { length: 10 }),
   eventEndTime: varchar("eventEndTime", { length: 10 }),
