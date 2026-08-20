@@ -329,6 +329,9 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
   inclusive?: boolean;
   /** Revenue account for these lines (per-stream override). */
   accountCode?: string;
+  /** When set, UPDATE this existing draft instead of creating a new invoice —
+   *  Xero's POST /Invoices is upsert-by-InvoiceID, so it is one code path. */
+  invoiceId?: string;
 }): Promise<{ invoiceId: string; invoiceNumber: string | null; total: number; status: string; tenantName: string }> {
   const { conn } = await getXeroAccess(ownerId);
   // Fail loudly rather than letting a push fall through to whatever org Xero
@@ -339,12 +342,16 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
   if (!target) {
     throw new Error("The connected Xero organisation is no longer authorised — reconnect it in Settings → Integrations.");
   }
+  if (opts.invoiceId) {
+    assertEditable(await getXeroInvoiceStatus(ownerId, opts.invoiceId), "update");
+  }
   const accountCode = opts.accountCode?.trim() || conn.salesAccountCode || "200";
   const inclusive = opts.inclusive ?? Boolean(conn.lineAmountsInclusive);
   const taxType = await resolveSalesTaxType(ownerId);
   const contactId = await findContactIdByEmail(ownerId, opts.contactEmail);
   const buildPayload = (contactName: string) => ({
     Invoices: [{
+      ...(opts.invoiceId ? { InvoiceID: opts.invoiceId } : {}),
       Type: "ACCREC",
       // Reuse the matched contact when we have one; otherwise create by name.
       Contact: contactId
@@ -398,6 +405,39 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
     // The invoice number plus the org name is honest and useful; a broken link
     // is not. Restore a link only against a verified URL format.
   };
+}
+
+/** Current status of one invoice, or null if Xero doesn't know it. */
+export async function getXeroInvoiceStatus(ownerId: number, invoiceId: string): Promise<string | null> {
+  try {
+    const json = await xeroApi(ownerId, "GET", `/Invoices/${encodeURIComponent(invoiceId)}`);
+    return json?.Invoices?.[0]?.Status ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Statuses still safe to change from VenueFlow. Anything approved
+ *  (AUTHORISED/PAID) affects the GST return and must be handled in Xero. */
+const EDITABLE_STATUSES = new Set(["DRAFT", "SUBMITTED"]);
+
+export function assertEditable(status: string | null, action: "update" | "delete"): void {
+  if (status === null) return; // unknown to Xero — let the call itself fail
+  if (EDITABLE_STATUSES.has(status)) return;
+  if (status === "DELETED" || status === "VOIDED") {
+    throw new Error(`That invoice is already ${status.toLowerCase()} in Xero.`);
+  }
+  throw new Error(
+    `This invoice is ${status} in Xero, so VenueFlow won't ${action} it — approving or paying it affects your GST return. Void or credit it in Xero instead.`
+  );
+}
+
+/** Delete a DRAFT invoice in Xero (Xero deletes by setting Status=DELETED). */
+export async function deleteXeroDraftInvoice(ownerId: number, invoiceId: string): Promise<void> {
+  assertEditable(await getXeroInvoiceStatus(ownerId, invoiceId), "delete");
+  await xeroApi(ownerId, "POST", "/Invoices", {
+    Invoices: [{ InvoiceID: invoiceId, Status: "DELETED" }],
+  });
 }
 
 /** Fetch current status of specific invoices (for paid-state sync). */

@@ -58,7 +58,9 @@ export default function PaymentsBoard() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<"action" | "upcoming" | "all">("action");
+  // Default to Upcoming: the day-to-day question is "what's coming up and where
+  // is its money at", not "what's overdue".
+  const [filter, setFilter] = useState<"action" | "upcoming" | "all">("upcoming");
   const [xeroFor, setXeroFor] = useState<Row | null>(null);
 
   const { data, isLoading, isError, refetch } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
