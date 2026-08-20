@@ -86,6 +86,7 @@ export const appRouter = router({
     me: publicProcedure.query(opts => ({
       user: opts.ctx.user,
       isTeamMember: opts.ctx.isTeamMember,
+      isStaff: opts.ctx.isStaff,
     })),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -7196,6 +7197,7 @@ Return ONLY valid JSON.`;
           email: usersTable.email,
           lastSignedIn: usersTable.lastSignedIn,
           createdAt: usersTable.createdAt,
+          isStaff: usersTable.isStaff,
         }).from(usersTable).where(eq(usersTable.workspaceOwnerId, ctx.user.id));
         return rows;
       }),
@@ -7204,6 +7206,8 @@ Return ONLY valid JSON.`;
         email: z.string().email().max(320),
         name: z.string().min(1).max(120),
         password: z.string().min(8).max(200),
+        // Restricted staff login: upcoming events + runsheets, nothing else.
+        isStaff: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only.' });
@@ -7225,9 +7229,13 @@ Return ONLY valid JSON.`;
           name: input.name.trim(),
           email: normalizedEmail,
           loginMethod: 'local',
-          role: 'admin', // shared workspace = same powers as the owner
+          // A staff login must NOT be 'admin' — that role gates the account
+          // management procedures, and a staff member who could mint logins
+          // could hand themselves full access.
+          role: input.isStaff ? 'user' : 'admin',
           passwordHash,
           workspaceOwnerId: ctx.user.id,
+          isStaff: input.isStaff === true,
         }).returning({ id: usersTable.id, email: usersTable.email, name: usersTable.name });
         return created;
       }),

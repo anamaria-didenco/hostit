@@ -20,7 +20,7 @@ export function useAuth(options?: UseAuthOptions) {
 
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
-      utils.auth.me.setData(undefined, { user: null, isTeamMember: false });
+      utils.auth.me.setData(undefined, { user: null, isTeamMember: false, isStaff: false });
     },
   });
 
@@ -36,7 +36,7 @@ export function useAuth(options?: UseAuthOptions) {
       }
       throw error;
     } finally {
-      utils.auth.me.setData(undefined, { user: null, isTeamMember: false });
+      utils.auth.me.setData(undefined, { user: null, isTeamMember: false, isStaff: false });
       await utils.auth.me.invalidate();
     }
   }, [logoutMutation, utils]);
@@ -45,6 +45,7 @@ export function useAuth(options?: UseAuthOptions) {
     const data = meQuery.data;
     const user = data?.user ?? null;
     const isTeamMember = data?.isTeamMember ?? false;
+    const isStaff = data?.isStaff ?? false;
     try {
       localStorage.setItem(
         "manus-runtime-user-info",
@@ -57,6 +58,7 @@ export function useAuth(options?: UseAuthOptions) {
     return {
       user,
       isTeamMember,
+      isStaff,
       loading: meQuery.isLoading || logoutMutation.isPending,
       error: meQuery.error ?? logoutMutation.error ?? null,
       isAuthenticated: Boolean(user),

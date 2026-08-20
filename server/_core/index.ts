@@ -269,7 +269,17 @@ async function startServer() {
         }
         // Stamp last login on the credential row (helps the admin see who's active).
         await db.update(usersTable).set({ lastSignedIn: new Date() }).where(eq(usersTable.id, credUser.id));
-        const token = await sdk.createSessionToken(sessionUser.openId, { name: sessionUser.name ?? "Admin" });
+        // A staff login runs inside the owner's workspace but is flagged so the
+        // server can restrict it — the flag rides in the signed session, not in
+        // anything the browser can change.
+        const token = credUser.isStaff
+          ? await sdk.signSession({
+              openId: sessionUser.openId,
+              appId: ENV.appId,
+              name: credUser.name ?? "Staff",
+              isStaff: true,
+            })
+          : await sdk.createSessionToken(sessionUser.openId, { name: sessionUser.name ?? "Admin" });
         const cookieOptions = getSessionCookieOptions(req);
         res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
         res.json({ success: true });

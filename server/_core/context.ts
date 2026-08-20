@@ -9,6 +9,7 @@ export type TrpcContext = {
   res: CreateExpressContextOptions["res"];
   user: User | null;
   isTeamMember: boolean;
+  isStaff: boolean;
 };
 
 export async function createContext(
@@ -16,12 +17,14 @@ export async function createContext(
 ): Promise<TrpcContext> {
   let user: User | null = null;
   let isTeamMember = false;
+  let isStaff = false;
 
   try {
     user = await sdk.authenticateRequest(opts.req);
     const cookies = parseCookies(opts.req.headers.cookie ?? "");
     const sessionInfo = await sdk.verifySession(cookies[COOKIE_NAME]);
     isTeamMember = sessionInfo?.isTeamMember === true;
+    isStaff = sessionInfo?.isStaff === true;
   } catch (error) {
     user = null;
   }
@@ -31,5 +34,6 @@ export async function createContext(
     res: opts.res,
     user,
     isTeamMember,
+    isStaff,
   };
 }

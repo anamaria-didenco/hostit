@@ -18,13 +18,15 @@ export function AccountLoginsSection() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Staff logins are the safe default to hand out: events + runsheets only.
+  const [isStaff, setIsStaff] = useState(true);
   const [resetForId, setResetForId] = useState<number | null>(null);
   const [resetPassword, setResetPassword] = useState("");
 
   const createLogin = trpc.accountLogins.create.useMutation({
     onSuccess: () => {
       toast.success("Login created");
-      setName(""); setEmail(""); setPassword(""); setShowForm(false);
+      setName(""); setEmail(""); setPassword(""); setIsStaff(true); setShowForm(false);
       utils.accountLogins.list.invalidate();
     },
     onError: (e) => toast.error(e.message ?? "Failed to create login"),
@@ -52,7 +54,7 @@ export function AccountLoginsSection() {
         <div>
           <h2 className="font-bebas tracking-widest text-base text-ink">ACCOUNT LOGINS</h2>
           <p className="font-dm text-xs text-ink/70 mt-1">
-            Email + password logins that share your workspace. They see and edit the same bookings, leads, and settings as you.
+            Email + password logins for your team. <b>Staff</b> logins see upcoming events and runsheets only — no money, settings or deleting. <b>Full access</b> logins can do everything you can.
           </p>
         </div>
         <button
@@ -97,9 +99,27 @@ export function AccountLoginsSection() {
             />
             <p className="font-dm text-[11px] text-ink/65 mt-1">Share this with them privately. You can change it later.</p>
           </div>
+          <div>
+            <span className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">ACCESS LEVEL</span>
+            <div className="flex gap-1.5" role="radiogroup" aria-label="Access level">
+              <button type="button" role="radio" aria-checked={isStaff} onClick={() => setIsStaff(true)}
+                className={`font-bebas tracking-widest text-[11px] px-3 py-2 border transition-colors ${isStaff ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:bg-gold/10'}`}>
+                STAFF · EVENTS &amp; RUNSHEETS
+              </button>
+              <button type="button" role="radio" aria-checked={!isStaff} onClick={() => setIsStaff(false)}
+                className={`font-bebas tracking-widest text-[11px] px-3 py-2 border transition-colors ${!isStaff ? 'bg-forest text-cream border-forest' : 'border-gold/30 text-ink/70 hover:bg-gold/10'}`}>
+                FULL ACCESS
+              </button>
+            </div>
+            <p className="font-dm text-[11px] text-ink/65 mt-1">
+              {isStaff
+                ? "Can see the calendar, upcoming events and runsheets. Cannot see payments, reports or settings, and cannot delete anything."
+                : "Can do everything you can, including money and settings. Only for people you'd trust with your own login."}
+            </p>
+          </div>
           <div className="pt-1">
             <button
-              onClick={() => createLogin.mutate({ name: name.trim(), email: email.trim(), password })}
+              onClick={() => createLogin.mutate({ name: name.trim(), email: email.trim(), password, isStaff })}
               disabled={!canCreate || createLogin.isPending}
               className="btn-forest text-cream font-bebas tracking-widest text-xs px-5 py-2 disabled:opacity-50"
             >
@@ -121,7 +141,13 @@ export function AccountLoginsSection() {
             <div key={login.id} className="p-4">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="font-dm text-sm font-semibold text-ink truncate">{login.name ?? '(no name)'}</div>
+                  <div className="font-dm text-sm font-semibold text-ink truncate flex items-center gap-2">
+                    {login.name ?? '(no name)'}
+                    <span className={`font-bebas tracking-widest text-[9px] px-1.5 py-0.5 rounded ${
+                      (login as any).isStaff ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
+                      {(login as any).isStaff ? 'STAFF' : 'FULL ACCESS'}
+                    </span>
+                  </div>
                   <div className="font-dm text-xs text-ink/70 truncate">{login.email}</div>
                   {login.lastSignedIn && (
                     <div className="font-dm text-[11px] text-ink/65 mt-0.5">

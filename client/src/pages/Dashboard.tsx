@@ -802,7 +802,7 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
 }
 
 export default function Dashboard() {
-  const { user, isAuthenticated, loading, isTeamMember } = useAuth();
+  const { user, isAuthenticated, loading, isTeamMember, isStaff } = useAuth();
   const [, setLocation] = useLocation();
   type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"payments"|"expressbook";
   type SettingsSubTab = "venue"|"brand-pack"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
@@ -814,8 +814,15 @@ export default function Dashboard() {
   const _rawTab = _qp.get('tab');
   const _rawSub = _qp.get('sub');
   const _initTab: DashTab = isDashTab(_rawTab) ? _rawTab : "overview";
+  // (staff are redirected off restricted tabs by the effect below)
   const _initSubTab: SettingsSubTab = isSettingsSubTab(_rawSub) ? _rawSub : "venue";
   const [tab, setTab] = useState<DashTab>(_initTab);
+  // A staff login can only use the calendar and tasks; anything else (including
+  // a bookmarked ?tab=payments URL) lands on the calendar. The server refuses
+  // the underlying data either way — this keeps the UI honest.
+  useEffect(() => {
+    if (isStaff && tab !== "calendar" && tab !== "tasks") setTab("calendar");
+  }, [isStaff, tab]);
   const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>(_initSubTab);
   const [venueSettingsSection, setVenueSettingsSection] = useState<"details"|"profile"|"spaces">("details");
   const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("catalogue");
@@ -2695,7 +2702,14 @@ export default function Dashboard() {
         </div>
         {/* Nav */}
         <nav aria-label="Main" className="flex-1 p-3 flex flex-col gap-0.5 overflow-y-auto">
-          {[
+          {(isStaff
+            ? [
+                // Staff login: upcoming events + runsheets only. The server
+                // blocks the rest regardless, this just avoids dead ends.
+                { id: "calendar", label: "Calendar", icon: <Calendar className="w-[17px] h-[17px]" /> },
+                { id: "tasks",    label: "Tasks",    icon: <CheckSquare className="w-[17px] h-[17px]" /> },
+              ]
+            : [
             { id: "overview",  label: "Dashboard", icon: <LayoutDashboard className="w-[17px] h-[17px]" /> },
             { id: "enquiries", label: "Enquiries", icon: <Mail className="w-[17px] h-[17px]" /> },
             { id: "calendar",  label: "Calendar",  icon: <Calendar className="w-[17px] h-[17px]" /> },
@@ -2703,7 +2717,7 @@ export default function Dashboard() {
             { id: "tasks",     label: "Tasks",     icon: <CheckSquare className="w-[17px] h-[17px]" /> },
             { id: "reports",   label: "Reports",   icon: <BarChart2 className="w-[17px] h-[17px]" /> },
             { id: "settings",  label: "Settings",  icon: <Settings className="w-[17px] h-[17px]" /> },
-          ].map(item => {
+          ]).map(item => {
             const active = tab === item.id;
             return (
               <button key={item.id} onClick={() => setTab(item.id as any)} aria-current={active ? "page" : undefined}
@@ -8885,7 +8899,7 @@ export default function Dashboard() {
               </div>
               {/* Financials — bookings only. Total/Deposit are click-to-edit;
                   the deposit-paid badge toggles on click. */}
-              {!selectedBooking._isLead && (
+              {!selectedBooking._isLead && !isStaff && (
                 <div className="bg-forest-dark/5 border border-gold/20 p-4">
                   <div className="font-bebas text-xs tracking-widest text-ink/70 mb-3">FINANCIALS</div>
                   <div className="grid grid-cols-2 gap-3">
@@ -9118,12 +9132,13 @@ export default function Dashboard() {
                       </button>
 
                       {/* Money */}
-                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">MONEY</div>
+                      <div className={`col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1 ${isStaff ? "hidden" : ""}`}>MONEY</div>
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}?tab=budget`); }}
-                        className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        className={`flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs ${isStaff ? "hidden" : ""}`}>
                         <TrendingUp className="w-3 h-3" /> SPEND
                       </button>
                       <button onClick={() => setDrawerPaymentsOpen(v => !v)}
+                        hidden={isStaff}
                         className={`flex items-center gap-2 px-3 py-2 rounded-sm transition-colors font-bebas tracking-widest text-xs ${drawerPaymentsOpen ? 'border border-forest text-forest bg-forest/10' : 'border border-forest/30 text-forest hover:bg-forest/10'}`}>
                         <DollarSign className="w-3 h-3" /> PAYMENTS {drawerPaymentsOpen ? '▲' : '▼'}
                       </button>
@@ -9172,8 +9187,8 @@ export default function Dashboard() {
                         </>
                       )}
 
-                      {/* Delete — low-emphasis text link */}
-                      <div className="col-span-2 pt-2 text-center">
+                      {/* Delete — low-emphasis text link. Never for staff. */}
+                      <div className={`col-span-2 pt-2 text-center ${isStaff ? "hidden" : ""}`}>
                         <button
                           onClick={() => {
                             if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
@@ -10103,7 +10118,10 @@ export default function Dashboard() {
 
       {/* ── MOBILE BOTTOM TAB BAR (hidden on md+) ─────────────────────── */}
       <nav aria-label="Primary" className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex items-stretch h-16 safe-area-inset-bottom" style={{ boxShadow: '0 -1px 0 oklch(0.850 0.025 68)' }}>
-        {[
+        {(isStaff ? [
+          { id: "calendar", label: "Calendar", icon: <Calendar className="w-5 h-5" /> },
+          { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
+        ] : [
           { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
           { id: "enquiries", label: "Events", icon: <MessageSquare className="w-5 h-5" /> },
           // Daily Checklists is a separate route, not a tab — rendered as an
@@ -10111,7 +10129,7 @@ export default function Dashboard() {
           { id: "checklists", label: "Checklists", icon: <CheckSquare className="w-5 h-5" />, href: "/daily-checklists" },
           { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
           { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
-        ].map(item => {
+        ]).map(item => {
           const baseClass = `flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
             tab === item.id ? "text-sage-dark" : "text-gray-400"
           }`;

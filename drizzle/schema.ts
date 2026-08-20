@@ -37,6 +37,10 @@ export const users = pgTable("users", {
   // when they sign in, the session is issued for the workspaceOwner so all
   // data scoping (which uses ctx.user.id) keeps working transparently.
   workspaceOwnerId: integer("workspaceOwnerId"),
+  // Restricted login: sees upcoming events and runsheets, but no financials,
+  // payments, settings or destructive actions. Enforced server-side in
+  // _core/trpc.ts, not just hidden in the UI.
+  isStaff: boolean("isStaff").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
