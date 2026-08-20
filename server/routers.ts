@@ -4299,7 +4299,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           targetXeroId = row.xeroInvoiceId;
         }
         if (!input.allowDuplicate && input.updateInvoiceId === undefined) {
-          const [dup] = await db.select({ id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber })
+          const [dup] = await db.select({ id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber, xeroInvoiceId: xeroInvoices.xeroInvoiceId, status: xeroInvoices.status })
             .from(xeroInvoices)
             .where(and(
               eq(xeroInvoices.bookingId, input.bookingId),
@@ -4309,7 +4309,24 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               // not block sending a replacement for the same stream.
               or(isNull(xeroInvoices.status), notInArray(xeroInvoices.status, ['VOIDED', 'DELETED'])),
             )).limit(1);
-          if (dup) throw new Error(`A ${input.stream} invoice${dup.invoiceNumber ? ` (${dup.invoiceNumber})` : ''} was already sent for this event. Void it in Xero first, or confirm sending another.`);
+          if (dup) {
+            // Our stored status can be stale: voiding in Xero doesn't call us
+            // back, so the row here still says DRAFT. Before refusing, ask Xero
+            // what the invoice ACTUALLY is right now — the operator who just
+            // voided it there must not be told to void it again.
+            let stillLive = true;
+            if (dup.xeroInvoiceId) {
+              const { getXeroInvoiceStatus, isGoneFromXero } = await import('./xero');
+              const live = await getXeroInvoiceStatus(ctx.user.id, dup.xeroInvoiceId).catch(() => null);
+              if (live && live !== dup.status) {
+                await db.update(xeroInvoices).set({ status: live }).where(eq(xeroInvoices.id, dup.id));
+              }
+              if (isGoneFromXero(live)) stillLive = false;
+            }
+            if (stillLive) {
+              throw new Error(`A ${input.stream} invoice${dup.invoiceNumber ? ` (${dup.invoiceNumber})` : ''} was already sent for this event. Void it in Xero first, or confirm sending another.`);
+            }
+          }
         }
         const { createXeroDraftInvoice } = await import('./xero');
         const clientName = `${booking.firstName ?? ''}${booking.lastName ? ' ' + booking.lastName : ''}`.trim() || 'Client';
