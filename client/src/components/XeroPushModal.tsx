@@ -137,6 +137,10 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
 
   useEffect(() => { if (!open) setEditingId(null); }, [open]);
 
+  // The duplicate guard's message ends "…or confirm sending another", but no
+  // confirm existed — the error was a dead end. When the guard refuses, offer
+  // the confirm it promised and retry with allowDuplicate.
+  const lastSendRef = useRef<any>(null);
   const push = trpc.xero.pushInvoice.useMutation({
     onSuccess: (r) => {
       toast.success(
@@ -146,7 +150,18 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
       onClose();
     },
-    onError: (e) => toast.error(e.message || "Failed to send to Xero"),
+    onError: (e) => {
+      const msg = e.message || "Failed to send to Xero";
+      if (/already sent for this event/i.test(msg) && lastSendRef.current && !lastSendRef.current.allowDuplicate) {
+        if (confirm(`${msg}\n\nSend another ${lastSendRef.current.stream} invoice anyway?`)) {
+          const again = { ...lastSendRef.current, allowDuplicate: true };
+          lastSendRef.current = again;
+          push.mutate(again);
+          return;
+        }
+      }
+      toast.error(msg);
+    },
   });
   const del = trpc.xero.deleteInvoice.useMutation({
     onSuccess: () => {
@@ -185,14 +200,16 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       .map(l => ({ description: l.description.trim(), quantity: Number(l.quantity), unitAmount: Number(l.unitAmount) }))
       .filter(l => l.description && !isNaN(l.quantity) && l.quantity > 0 && !isNaN(l.unitAmount) && l.unitAmount !== 0);
     if (parsed.length === 0) { toast.error("Add at least one line with an amount"); return; }
-    push.mutate({
+    const payload = {
       bookingId: booking.bookingId,
       stream,
       lines: parsed,
       dueDate: dueDate || undefined,
       inclusive,
       updateInvoiceId: editingId ?? undefined,
-    });
+    };
+    lastSendRef.current = payload;
+    push.mutate(payload);
   };
 
   return (
