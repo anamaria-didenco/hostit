@@ -37,6 +37,7 @@ import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import { currency } from "@/lib/money";
+import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 type FormFieldDef = {
@@ -9035,6 +9036,56 @@ export default function Dashboard() {
                   )}
                 </div>
               )}
+              {/* ── How this event is billed ─────────────────────────────
+                  These are TERMS (how it's charged), not progress. They print
+                  on the BEO for floor staff, so they're editable from the event
+                  itself and not only from inside the runsheet. */}
+              {/* Shown to EVERYONE including staff logins — floor staff need to
+                  know whether to charge food on the night, which is the whole
+                  point of the block. Staff see it read-only: their mutations are
+                  refused server-side, so an editable control would just fail. */}
+              {!selectedBooking._isLead && (
+                <div>
+                  <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">HOW THIS EVENT IS BILLED</div>
+                  <div className="space-y-2">
+                    {([
+                      { key: 'billingFood', label: 'Food', opts: FOOD_BILLING_OPTIONS, fallback: 'invoiced_prior' },
+                      { key: 'billingDrinks', label: 'Drinks / bar', opts: DRINKS_BILLING_OPTIONS, fallback: 'invoiced_after' },
+                      { key: 'billingDepositApplied', label: 'Deposit', opts: DEPOSIT_APPLIED_OPTIONS, fallback: 'drinks' },
+                    ] as const).map(row => {
+                      const current = (selectedBooking as any)[row.key] ?? row.fallback;
+                      const chosen = row.opts.find(o => o.value === current) ?? row.opts[0];
+                      return (
+                        <div key={row.key} className="flex items-center gap-3">
+                          <label htmlFor={isStaff ? undefined : `drawer-${row.key}`} className="font-dm text-xs text-ink/60 w-24 flex-none">{row.label}</label>
+                          {isStaff ? (
+                            <span className="flex-1 min-w-0 font-dm text-sm text-ink">{chosen.label}</span>
+                          ) : (
+                            <select
+                              id={`drawer-${row.key}`}
+                              value={current}
+                              onChange={e => {
+                                const v = e.target.value;
+                                setSelectedBooking((prev: any) => prev ? { ...prev, [row.key]: v } : prev);
+                                rescheduleBooking.mutate({ id: selectedBooking.id, [row.key]: v } as any);
+                              }}
+                              className="flex-1 min-w-0 border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                            >
+                              {row.opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <p className="font-dm text-[11px] text-ink/45 leading-relaxed pt-0.5">
+                      {isStaff
+                        ? 'This is how the event is charged — it also prints on the BEO.'
+                        : 'Prints on the BEO under \u201cHow this event is billed\u201d.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Quick Actions */}
               <div>
                 <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">QUICK ACTIONS</div>

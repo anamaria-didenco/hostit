@@ -39,6 +39,7 @@ import {
   staffPortalLinks,
 } from "../drizzle/schema";
 import { eq, and, inArray } from "drizzle-orm";
+import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import {
   foodBillingSentence,
   drinksBillingSentence,
@@ -630,7 +631,20 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const spaceName = (runsheet as any)?.spaceName ?? booking.spaceName ?? "";
     const guestCount = booking.guestCount ?? runsheet?.guestCount ?? "";
     const eventType = booking.eventType ?? (runsheet as any)?.eventType ?? "";
-    const dietaries: { name: string; count: number; notes?: string }[] = (runsheet as any)?.dietaries ?? [];
+    // Normalise, then group, before rendering.
+    //
+    // Un-swap first: rows are routinely entered with the GUEST in the
+    // requirement field and the requirement in the notes ("Anne Douglas — no
+    // fish"). Grouping such rows does nothing, because every guest name is
+    // different — which is exactly why the kitchen was reading twelve ×1 lines
+    // instead of a tally. Doing it here means the printed sheet is right even
+    // when the stored data hasn't been tidied.
+    //
+    // Then group: rows sharing a requirement collapse into one line with a real
+    // count and the guests named underneath. Exact matches only — see
+    // shared/dietaries.ts for why nothing fuzzy is permitted.
+    const dietaries: { name: string; count: number; notes?: string; names?: string[] }[] =
+      groupDietaries((((runsheet as any)?.dietaries ?? []) as any[]).map(d => (looksSwapped(d) ? unswap(d) : d)));
     // venueSetup / footerNote are rich HTML injected verbatim into the PDF
     // (which renders in --no-sandbox Puppeteer) and, for the event-pack, into
     // the browser. Sanitise so operator/guest input can't run script / SSRF.
@@ -1189,7 +1203,11 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const todayPrinted = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" });
     const footerBiz = [escHtml(venueName), escHtml(eventType || clientName), escHtml(eventDate)].filter(Boolean).join(" &middot; ");
     const clientOrg = escHtml((booking as any).company ?? (booking as any).organisation ?? (booking as any).organisationName ?? "");
-    const paymentInstr = ((venue as any)?.paymentInstructions ?? "").toString();
+    // Per-event override wins; the venue default is the fallback. Trimmed
+    // before the check so a field cleared to whitespace falls back rather than
+    // printing an empty Billing Instructions block.
+    const runsheetPayInstr = ((runsheet as any)?.paymentInstructions ?? "").toString().trim();
+    const paymentInstr = runsheetPayInstr || ((venue as any)?.paymentInstructions ?? "").toString();
     // Per-event payment notes from the runsheet Costs tab (e.g. "balance due on
     // the day"). Internal only — surfaced in the billing steps below.
     const paymentNotesTxt = ((runsheet as any)?.paymentNotes ?? "").toString();

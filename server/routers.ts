@@ -3484,6 +3484,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         kitchenNotes: z.string().optional().nullable(),
         gstInclusive: z.boolean().optional(),
         paymentNotes: z.string().optional().nullable(),
+        paymentInstructions: z.string().optional().nullable(),
         costItems: z.array(z.object({ _id: z.string(), label: z.string(), qty: z.number(), unitPrice: z.number(), category: z.string().optional() })).optional(),
         drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string(), z.string()).optional(), drinkPrices: z.record(z.string(), z.number()).optional(), showDrinkPrices: z.boolean().optional() }).nullable().optional(),
         items: z.array(z.object({
@@ -3530,6 +3531,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           kitchenNotes: input.kitchenNotes ?? null,
           gstInclusive: input.gstInclusive ?? false,
           paymentNotes: input.paymentNotes ?? null,
+          paymentInstructions: input.paymentInstructions ?? null,
           costItems: input.costItems ?? null,
           drinksData: input.drinksData ?? null,
           proposalId: input.proposalId ?? null,
@@ -3584,6 +3586,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         drinksData: z.object({ barOption: z.string(), tabAmount: z.number().optional(), selectedDrinks: z.array(z.string()), customDrinks: z.array(z.object({ name: z.string(), description: z.string().optional(), price: z.number().optional() })), barNotes: z.string().optional(), drinkTypes: z.record(z.string(), z.string()).optional(), drinkPrices: z.record(z.string(), z.number()).optional(), showDrinkPrices: z.boolean().optional() }).nullable().optional(),
         gstInclusive: z.boolean().optional(),
         paymentNotes: z.string().optional().nullable(),
+        paymentInstructions: z.string().optional().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -3615,6 +3618,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.drinksData !== undefined) updateData.drinksData = fields.drinksData;
         if (fields.gstInclusive !== undefined) updateData.gstInclusive = fields.gstInclusive;
         if (fields.paymentNotes !== undefined) updateData.paymentNotes = fields.paymentNotes;
+        if (fields.paymentInstructions !== undefined) updateData.paymentInstructions = fields.paymentInstructions;
         updateData.updatedAt = new Date();
         await db.update(runsheets).set(updateData)
           .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)));
@@ -5314,7 +5318,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
 
 Return a JSON object with any of these sections that have data in the text:
 - "eventDetails": an object with any of: eventDate (ISO date YYYY-MM-DD), guestCount (integer), eventType (string e.g. "Wedding", "Corporate"), contactName (string), contactEmail (string), contactPhone (string), spaceName (string), venueSetup (string describing room/table layout)
-- "dietaries": array of { name (string e.g. "Vegetarian"), count (integer, default 1), notes (string, optional) }
+- "dietaries": array of { name (string), count (integer), notes (string, optional), names (array of strings, optional) }\n  - "name" is the REQUIREMENT ITSELF, never a person: "Vegetarian", "Gluten free", "No seafood", "Allergic to nuts"\n  - "names" holds the GUESTS who have it: ["Anne Douglas", "Chris Boggs"]. Put a person's name here and nowhere else.\n  - GROUP guests who share a requirement into ONE entry, with count = how many guests are named.\n    So "Anne - gluten free / Tom - gluten free" is ONE entry {name:"Gluten free", count:2, names:["Anne","Tom"]}, not two.\n  - Do NOT merge requirements that are merely similar. "No pork" and "No pork or beef" stay separate entries.
 - "fnbItems": array of { course (one of: Canapes, Entree, Main, Dessert, Cheese, Late Night Snack, Breakfast, Morning Tea, Lunch, Afternoon Tea, Drinks, Other), dishName (string), qty (integer), serviceTime (HH:MM 24h, optional), dietary (string, optional) }
 - "timelineItems": array of { time (HH:MM 24h format), duration (integer minutes), title (string), description (string, optional), category (one of: setup, guest, food, beverage, speech, entertainment, packdown, other) }
 
@@ -5328,7 +5332,7 @@ Text to parse:
 ${input.text}
 
 Return ONLY valid JSON. Example structure:
-{"eventDetails":{"eventDate":"2026-06-15","guestCount":80,"eventType":"Wedding","contactName":"Jane Smith"},"dietaries":[{"name":"Vegetarian","count":5,"notes":"2 also vegan"}],"fnbItems":[{"course":"Canapes","dishName":"Smoked salmon blini","qty":80,"serviceTime":"17:00"}],"timelineItems":[{"time":"16:00","duration":60,"title":"Venue setup","category":"setup"}]}`;
+{"eventDetails":{"eventDate":"2026-06-15","guestCount":80,"eventType":"Wedding","contactName":"Jane Smith"},"dietaries":[{"name":"Vegetarian","count":2,"names":["Jane Smith","Tom Ellis"],"notes":"one also vegan"},{"name":"Allergic to shellfish","count":1,"names":["Anne Douglas"]}],"fnbItems":[{"course":"Canapes","dishName":"Smoked salmon blini","qty":80,"serviceTime":"17:00"}],"timelineItems":[{"time":"16:00","duration":60,"title":"Venue setup","category":"setup"}]}`;
         const response = await invokeLLM({
           messages: [
             { role: 'system', content: 'You are a helpful assistant that outputs valid JSON only.' },
