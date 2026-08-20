@@ -295,7 +295,7 @@ export default function DailyChecklists() {
               <div className="bg-white border border-[#c9a84c]/30 rounded mb-6 p-5 shadow-sm">
                 <h2 className="font-bebas text-lg tracking-wider text-[#1a1209] mb-4">Create New Checklist</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="font-bebas text-xs tracking-widest text-[#8a7a60] block mb-1">CHECKLIST NAME</label>
                     <input autoFocus value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
                       onKeyDown={e => e.key === 'Enter' && createMut.mutate(createForm)}
@@ -314,7 +314,7 @@ export default function DailyChecklists() {
                     <input type="date" value={createForm.assignedDate} onChange={e => setCreateForm(f => ({ ...f, assignedDate: e.target.value }))}
                       className="w-full border border-[#c9a84c]/30 rounded px-3 py-2 font-dm text-sm focus:outline-none focus:border-[#2f5488] bg-white" />
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="font-bebas text-xs tracking-widest text-[#8a7a60] block mb-1">DESCRIPTION (optional)</label>
                     <input value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))}
                       placeholder="Brief description..."

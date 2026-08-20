@@ -16,7 +16,7 @@ import {
   MoveUp, MoveDown, Copy, AlertCircle, Settings2, X,
   Sparkles, LayoutGrid, Users, Share2, ExternalLink, Key, Clipboard, RefreshCw, Wine, Package,
   Eye, EyeOff, DollarSign, Download, ClipboardList, Calendar, Pencil, Camera, Heart,
-  Loader2, Check, Highlighter, AlertTriangle, MoreHorizontal, Info,
+  Loader2, Check, AlertTriangle, Info,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -179,8 +179,6 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
-// Snap a "HH:MM" time string to the nearest 15 minutes (e.g. "14:23" → "14:30").
-// Returns "" for empty input so the field can still be cleared.
 // One-tap covers presets for a food quantity. The whole point of RB-02 is that
 // "how many?" is answered by the guest count far more often than by anything
 // else, so the common answers are one tap and the odd number is still typeable.
@@ -245,6 +243,8 @@ function ColumnSwitch({ label, checked, onChange, hint }: { label: string; check
   );
 }
 
+// Snap a "HH:MM" time string to the nearest 15 minutes (e.g. "14:23" → "14:30").
+// Returns "" for empty input so the field can still be cleared.
 function roundTimeToQuarter(value: string): string {
   if (!value) return "";
   const [hStr, mStr] = value.split(":");
@@ -404,8 +404,10 @@ export default function RunsheetBuilder() {
   }, []);
   const isDirty = dirtyChannels.size > 0;
   const isInitialLoadRef = useRef(true);
-  // Armed when server data lands, so the core autosave doesn't echo it back.
-  const skipNextCoreAutosaveRef = useRef(false);
+  // True while server data is being poured into local state — see the load
+  // effect. Every autosave channel checks it before claiming a change is the
+  // operator's rather than the server's own data coming back.
+  const hydratingRef = useRef(false);
 
   // ── "NOW" indicator for live service ──────────────────────────────────────
   // Updates every 30s. Lets the timeline highlight the currently-active item
@@ -965,7 +967,7 @@ export default function RunsheetBuilder() {
       isInitialLoadRef.current = false;
       return;
     }
-    if (skipNextCoreAutosaveRef.current) return;
+    if (hydratingRef.current) return;
     markDirty('core');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, title, eventDate, venueName]);
@@ -1594,10 +1596,6 @@ export default function RunsheetBuilder() {
       setLinkedProposalId((existing as any).proposalId ?? undefined);
       setLinkedFloorPlanId((existing as any).floorPlanId ?? undefined);
       setItems((existing.items ?? []).map((item: any, i: number) => ({ ...item, _tempId: String(i) })));
-      // Suppress the one core autosave that would otherwise write freshly-loaded
-      // timeline rows straight back — a 30-row runsheet would fire 30 no-op
-      // updates on every load and every refetch.
-      skipNextCoreAutosaveRef.current = true;
       if ((existing as any).costItems) setCostItems((existing as any).costItems as CostItem[]);
       setGstInclusive((existing as any).gstInclusive ?? false);
       setPaymentNotes((existing as any).paymentNotes ?? "");
@@ -1624,6 +1622,15 @@ export default function RunsheetBuilder() {
         if (dd.drinkPrices) setRsDrinkPrices(dd.drinkPrices);
         if (dd.showDrinkPrices !== undefined) setShowDrinkPrices(dd.showDrinkPrices);
       }
+      // Everything above is SERVER data being poured into local state. The
+      // autosave effects can't tell that apart from a user edit, so without
+      // this they'd all mark themselves dirty and write the data straight back
+      // — the header would flash "Save now" on every page load and every
+      // refetch. Cleared on a macrotask, which runs after React has flushed
+      // this commit's effects, so it's cleared whether or not each effect
+      // actually re-ran (some don't, if their values happen to be unchanged).
+      hydratingRef.current = true;
+      setTimeout(() => { hydratingRef.current = false; }, 0);
     }
   }, [existing]);
 
@@ -1802,7 +1809,7 @@ export default function RunsheetBuilder() {
   const fnbColsInitialized = React.useRef(false);
   useEffect(() => {
     if (!fnbColsInitialized.current) { fnbColsInitialized.current = true; return; }
-    if (!sheetId) return;
+    if (!sheetId || hydratingRef.current) return;
     markDirty('columns');
     silentUpdateMutation.mutate({
       id: sheetId,
@@ -1815,7 +1822,7 @@ export default function RunsheetBuilder() {
   const dietariesInitialized = React.useRef(false);
   useEffect(() => {
     if (!dietariesInitialized.current) { dietariesInitialized.current = true; return; }
-    if (!sheetId) return;
+    if (!sheetId || hydratingRef.current) return;
     markDirty('dietaries');
     const t = setTimeout(() => {
       silentUpdateMutation.mutate({
@@ -1832,7 +1839,7 @@ export default function RunsheetBuilder() {
   const autosaveInitialized = React.useRef(false);
   useEffect(() => {
     if (!autosaveInitialized.current) { autosaveInitialized.current = true; return; }
-    if (!sheetId) return;
+    if (!sheetId || hydratingRef.current) return;
     markDirty('doc');
     const t = setTimeout(() => {
       silentUpdateMutation.mutate({
@@ -1909,7 +1916,7 @@ export default function RunsheetBuilder() {
   useEffect(() => {
     if (!coreAutosaveInitialized.current) { coreAutosaveInitialized.current = true; return; }
     if (!sheetId) return;
-    if (skipNextCoreAutosaveRef.current) { skipNextCoreAutosaveRef.current = false; return; }
+    if (hydratingRef.current) return;
     const t = setTimeout(() => { void persistCore(); }, 1400);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2362,9 +2369,10 @@ export default function RunsheetBuilder() {
           <ArrowLeft className="w-4 h-4" aria-hidden /> {bookingId ? 'Event' : 'Back'}
         </button>
         <div className="h-4 w-px bg-gold/30" />
-        <span className="font-bebas tracking-[0.2em] text-xs text-forest/70 flex-1 truncate">
+        <span className="hidden md:block font-bebas tracking-[0.2em] text-xs text-forest/70 flex-1 truncate">
           RUNSHEET BUILDER
         </span>
+        <span className="md:hidden flex-1" />
         <div className="flex items-center gap-2">
           {/* ── Edit / Preview toggle ───────────────────────────────────── */}
           <div className="hidden sm:inline-flex items-center gap-0.5 bg-linen border border-gold/30 rounded-sm p-0.5" role="group" aria-label="View mode">
@@ -2740,7 +2748,7 @@ export default function RunsheetBuilder() {
           />
         </div>
       ) : (
-      <div className={`max-w-6xl mx-auto px-6 py-8 print:px-0 print:py-4 space-y-0 ${printColumns === 2 ? 'print-cols-2' : ''}`}>
+      <div className={`max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 print:px-0 print:py-4 space-y-0 ${printColumns === 2 ? 'print-cols-2' : ''}`}>
 
         {/* ── Print Header ────────────────────────────────────────────────── */}
         <div className="hidden print:block mb-6 pb-4 border-b-2 border-ink">
@@ -2759,7 +2767,7 @@ export default function RunsheetBuilder() {
 
         {/* ── Section rail / quick-jump (replaces the six tabs) ──────────── */}
         {/* Mobile: sticky horizontal quick-jump chips */}
-        <div className="md:hidden sticky top-[100px] z-30 -mx-6 px-4 py-2 bg-cream/95 backdrop-blur border-b border-gold/20 flex gap-2 overflow-x-auto no-print">
+        <div className="md:hidden sticky top-[100px] z-30 -mx-4 sm:-mx-6 px-4 py-2 bg-cream/95 backdrop-blur border-b border-gold/20 flex gap-2 overflow-x-auto no-print">
           {RUNSHEET_SECTIONS.map(s => (
             <button
               key={s.id}
@@ -3678,7 +3686,7 @@ export default function RunsheetBuilder() {
         <div data-print-section="food">
           <div className="dante-card border-t-0 print:shadow-none">
             {/* F&B unified header */}
-            <div className="px-5 py-3 border-b border-gold/20 no-print space-y-3">
+            <div className="px-4 sm:px-5 py-3 border-b border-gold/20 no-print space-y-3">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                   <UtensilsCrossed className="w-4 h-4 text-gold" />
@@ -4074,9 +4082,9 @@ export default function RunsheetBuilder() {
 
             {/* No proposal linked notice */}
             {!linkedProposalId && (
-              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/70 flex items-center gap-2">
-                <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                Use the <strong className="text-forest/70">LINKED PROPOSAL</strong> section below to connect a proposal and auto-import F&amp;B selections.
+              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/70 flex items-start gap-2">
+                <LinkIcon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" aria-hidden />
+                <span className="min-w-0">Use the <strong className="text-forest/70">Linked Proposal</strong> section below to connect a proposal and auto-import F&amp;B selections.</span>
               </div>
             )}
 
@@ -4196,8 +4204,8 @@ export default function RunsheetBuilder() {
                 </div>
               ) : (
                 /* Shared time/qty fields always shown for post-catalogue add */
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="min-w-0">
                     <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">SERVICE TIME</label>
                     <Input
                       type="time"
@@ -4207,7 +4215,7 @@ export default function RunsheetBuilder() {
                     />
                   </div>
                   {newFnbItem.course !== 'Drinks' && (
-                  <div>
+                  <div className="min-w-0">
                     <label htmlFor="rb-new-covers" className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">QTY / COVERS</label>
                     <Input
                       id="rb-new-covers"
@@ -4558,9 +4566,9 @@ export default function RunsheetBuilder() {
         <section id="rb-drinks" className="scroll-mt-[120px]">
           <div data-print-section="drinks" className="dante-card border-t-0">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
-              <div className="flex items-center gap-2">
-                <Wine className="w-4 h-4 text-gold" />
+            <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap px-4 sm:px-5 py-3 border-b border-gold/20">
+              <div className="flex items-center gap-2 min-w-0">
+                <Wine className="w-4 h-4 text-gold flex-none" />
                 <span className="font-bebas tracking-widest text-sm text-ink">DRINKS SELECTION</span>
                 {rsSelectedDrinks.length + rsCustomDrinks.length > 0 && (
                   <span className="bg-forest text-white font-bebas text-xs px-2 py-0.5 tracking-widest">
@@ -4582,7 +4590,7 @@ export default function RunsheetBuilder() {
               {/* Bar Arrangement */}
               <div>
                 <div className="font-bebas tracking-widest text-xs text-ink/65 mb-3">BAR ARRANGEMENT</div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {BAR_OPTIONS.map(opt => (
                     <button
                       key={opt.key}
@@ -4612,7 +4620,7 @@ export default function RunsheetBuilder() {
 
               {/* Pick from saved drinks menu */}
               <div className="border-t border-gold/20 pt-5">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap mb-3">
                   <div className="font-bebas tracking-widest text-xs text-ink/65">DRINKS SELECTION (FROM MENU)</div>
                   <button
                     type="button"
@@ -4629,8 +4637,8 @@ export default function RunsheetBuilder() {
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {rsSelectedDrinks.map(k => (
-                      <span key={k} className="inline-flex items-center gap-1.5 bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
-                        {k}
+                      <span key={k} className="inline-flex flex-wrap items-center gap-1.5 max-w-full bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
+                        <span className="min-w-0 break-words">{k}</span>
                         <select
                           value={rsDrinkTypes[k] ?? ''}
                           onChange={e => setRsDrinkTypes(prev => ({ ...prev, [k]: e.target.value }))}
@@ -4659,8 +4667,8 @@ export default function RunsheetBuilder() {
                       </span>
                     ))}
                     {rsCustomDrinks.map((d, i) => (
-                      <span key={`c${i}`} className="inline-flex items-center gap-1.5 bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
-                        {d.name}
+                      <span key={`c${i}`} className="inline-flex flex-wrap items-center gap-1.5 max-w-full bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
+                        <span className="min-w-0 break-words">{d.name}</span>
                         <select
                           value={rsDrinkTypes[d.name] ?? ''}
                           onChange={e => setRsDrinkTypes(prev => ({ ...prev, [d.name]: e.target.value }))}
@@ -4694,20 +4702,20 @@ export default function RunsheetBuilder() {
               <div className="border-t border-gold/20 pt-5">
                 <div className="font-bebas tracking-widest text-xs text-ink/65 mb-2">ADD A CUSTOM DRINK</div>
                 <div className="font-dm text-[11px] text-ink/65 mb-3">Anything not in your saved menu — bespoke cocktails, client-requested wines, signature drinks, etc.</div>
-                <div className="grid grid-cols-12 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                   <input
                     type="text"
                     value={newRsCustomDrink.name}
                     onChange={e => setNewRsCustomDrink((p: any) => ({ ...p, name: e.target.value }))}
                     placeholder="Drink name (e.g. Signature Espresso Martini)"
-                    className="col-span-5 border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                    className="sm:col-span-5 min-w-0 border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-11"
                   />
                   <input
                     type="text"
                     value={newRsCustomDrink.description}
                     onChange={e => setNewRsCustomDrink((p: any) => ({ ...p, description: e.target.value }))}
                     placeholder="Description (optional)"
-                    className="col-span-5 border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-9"
+                    className="sm:col-span-5 min-w-0 border border-gold/30 px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white h-11"
                   />
                   <button
                     type="button"
@@ -4719,9 +4727,9 @@ export default function RunsheetBuilder() {
                       }]);
                       setNewRsCustomDrink({ name: "", description: "" });
                     }}
-                    className="col-span-2 bg-forest text-cream font-bebas tracking-widest text-xs hover:bg-forest/90 h-9"
+                    className="sm:col-span-2 bg-forest text-cream font-dm text-xs font-semibold hover:bg-forest/90 h-11 rounded-sm"
                   >
-                    + ADD
+                    + Add
                   </button>
                 </div>
                 {/* Custom drinks are NOT listed again here — they already
