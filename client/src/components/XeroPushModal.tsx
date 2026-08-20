@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
@@ -19,9 +19,21 @@ interface Props {
   initialStream?: "food" | "drinks";
 }
 
-interface Line { description: string; quantity: string; unitAmount: string; }
+interface Line {
+  description: string;
+  quantity: string;
+  unitAmount: string;
+  /** The auto-added "less deposit received" row, recomputed when the GST
+   *  treatment flips. Everything else is whatever the operator typed. */
+  kind?: "deposit";
+}
 
 const fmtNZD = (n: number) => currency(n);
+
+/** Deleted or voided in Xero: the invoice no longer exists there, so the only
+ *  thing left to do is stop tracking it here. It is NOT "locked" — locked means
+ *  approved or paid, where changing it would move the GST return. */
+const isGone = (status: string | null | undefined) => status === "DELETED" || status === "VOIDED";
 
 /**
  * Review-and-send modal for pushing an event's Food or Drinks invoice to Xero
@@ -50,33 +62,78 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     { enabled: open && !!booking }
   );
   const { data: xeroStatus } = trpc.xero.status.useQuery(undefined, { enabled: open });
+  // The lines this event's BEO already works out. Opening on a blank amount
+  // meant retyping figures off the document just sent to the client, which is
+  // how an invoice and a BEO end up disagreeing.
+  const { data: suggested, isFetching: loadingSuggested } = trpc.xero.suggestedLines.useQuery(
+    { bookingId: booking?.bookingId ?? 0, stream },
+    { enabled: open && !!booking }
+  );
   useEffect(() => {
     if (open && xeroStatus?.connected) setInclusive(Boolean(xeroStatus.lineAmountsInclusive));
   }, [open, xeroStatus?.connected, xeroStatus?.lineAmountsInclusive]);
+  // When the BEO has priced lines, its GST treatment governs — sending gross
+  // figures as exclusive would put another 15% on top of amounts that already
+  // include it.
+  useEffect(() => {
+    if (open && suggested && suggested.lines.length > 0) setInclusive(Boolean(suggested.gstInclusive));
+  }, [open, suggested?.source, suggested?.gstInclusive]);
 
-  // Seed the editable lines whenever the modal opens or the stream flips.
+  const inclusiveRef = useRef(inclusive);
+  useEffect(() => { inclusiveRef.current = inclusive; }, [inclusive]);
+
+  /** The deposit deduction, converted for the current GST treatment.
+   *  The deposit shown everywhere in the app is a GROSS figure. On an exclusive
+   *  invoice it must be entered net or Xero adds 15% on top and the client is
+   *  over-credited. Convert, don't hand over a raw number and hope. */
+  const depositLine = (incl: boolean): Line => {
+    const gross = booking!.depositNzd > 0 ? booking!.depositNzd : 575;
+    const amt = incl ? gross : Math.round((gross / 1.15) * 100) / 100;
+    return {
+      description: `Less deposit received (${fmtNZD(gross)} incl. GST)`,
+      quantity: "1",
+      unitAmount: String(-amt),
+      kind: "deposit",
+    };
+  };
+
+  // Seed the editable lines whenever the modal opens, the stream flips, or the
+  // BEO figures arrive.
   useEffect(() => {
     if (!open || !booking) return;
     const ev = booking.eventDate
       ? new Date(booking.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
       : "";
     const label = `${stream === "food" ? "Food" : "Drinks"} — ${booking.name}${ev ? ` · ${ev}` : ""}`;
-    const seeded: Line[] = [{ description: label, quantity: "1", unitAmount: "" }];
-    if (stream === "drinks" && booking.depositPaid) {
-      // The deposit shown everywhere in the app ($575) is a GROSS figure. On an
-      // exclusive invoice it must be entered net ($500) or Xero adds 15% on top
-      // and the client is over-credited/charged. Convert, don't hand over a raw
-      // number and hope the treatment matches.
-      const grossDeposit = booking.depositNzd > 0 ? booking.depositNzd : 575;
-      const amt = inclusive ? grossDeposit : Math.round((grossDeposit / 1.15) * 100) / 100;
-      seeded.push({
-        description: `Less deposit received (${fmtNZD(grossDeposit)} incl. GST)`,
-        quantity: "1",
-        unitAmount: String(-amt),
-      });
-    }
+    const fromBeo = (suggested?.lines ?? []).map(l => ({
+      description: l.description,
+      quantity: String(l.quantity),
+      unitAmount: String(l.unitAmount),
+    }));
+    const seeded: Line[] = fromBeo.length > 0
+      ? fromBeo
+      : [{ description: label, quantity: "1", unitAmount: "" }];
+    // Which invoice carries the deposit follows the event's billing terms —
+    // putting it on both the food and the drinks invoice credits it twice.
+    // Falls back to drinks, which is what this modal always did.
+    const onThisStream = suggested ? suggested.depositOnThisStream : stream === "drinks";
+    if (onThisStream && booking.depositPaid) seeded.push(depositLine(inclusiveRef.current));
     setLines(seeded);
-  }, [open, stream, booking?.bookingId, inclusive]);
+    // `inclusive` is deliberately NOT a dependency: flipping the GST toggle used
+    // to re-seed and wipe every amount the operator had typed. The toggle now
+    // only recomputes the deposit row, below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, stream, booking?.bookingId, suggested]);
+
+  // Keep the deposit row correct when the GST treatment changes, without
+  // touching anything the operator typed.
+  useEffect(() => {
+    if (!open || !booking) return;
+    setLines(prev => prev.some(l => l.kind === "deposit")
+      ? prev.map(l => (l.kind === "deposit" ? depositLine(inclusive) : l))
+      : prev);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inclusive]);
 
   useEffect(() => { if (!open) setEditingId(null); }, [open]);
 
@@ -93,7 +150,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   });
   const del = trpc.xero.deleteInvoice.useMutation({
     onSuccess: () => {
-      toast.success("Draft deleted in Xero");
+      toast.success("Invoice removed");
       setEditingId(null);
       utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
     },
@@ -210,11 +267,17 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                   <span>{inv.invoiceNumber ?? "(no number yet)"}</span>
                   <span className="ml-auto">{inv.total != null ? fmtNZD(Number(inv.total)) : ""}</span>
                   <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded ${
-                    inv.status === "PAID" ? "bg-green-100 text-green-700" : inv.status === "AUTHORISED" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
+                    isGone(inv.status) ? "bg-ink/10 text-ink/50 line-through"
+                      : inv.status === "PAID" ? "bg-green-100 text-green-700"
+                      : inv.status === "AUTHORISED" ? "bg-blue-100 text-blue-700"
+                      : "bg-amber-100 text-amber-700"}`}>
                     {inv.status ?? "DRAFT"}
                   </span>
-                  {/* Only drafts can be changed from here — an approved or paid
-                      invoice affects the GST return and must be handled in Xero. */}
+                  {/* Three cases, and only the last one is genuinely locked:
+                      a draft can be changed here; an invoice already deleted or
+                      voided in Xero no longer exists, so all that is left is to
+                      stop tracking it; an approved or paid one affects the GST
+                      return and must be handled in Xero. */}
                   {(!inv.status || inv.status === "DRAFT" || inv.status === "SUBMITTED") ? (
                     <>
                       <button onClick={() => { setStream(inv.stream); setEditingId(inv.id); }}
@@ -226,6 +289,12 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                         className="font-bebas tracking-widest text-[10px] text-red-700 hover:underline disabled:opacity-50"
                         title="Delete this draft in Xero">DELETE</button>
                     </>
+                  ) : isGone(inv.status) ? (
+                    <button
+                      onClick={() => { if (confirm(`Remove ${inv.invoiceNumber ?? "this invoice"} from VenueFlow? It is already ${String(inv.status).toLowerCase()} in Xero — nothing there changes.`)) del.mutate({ id: inv.id }); }}
+                      disabled={del.isPending}
+                      className="font-bebas tracking-widest text-[10px] text-red-700 hover:underline disabled:opacity-50"
+                      title={`Already ${String(inv.status).toLowerCase()} in Xero — remove it from this list`}>REMOVE</button>
                   ) : (
                     <span className="font-dm text-[10px] text-ink/50" title="Approved in Xero — void or credit it there">locked</span>
                   )}
@@ -236,7 +305,25 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
 
           {/* Line editor */}
           <div>
-            <div className="font-bebas tracking-widest text-[10px] text-ink/70 mb-1.5">INVOICE LINES (NZD)</div>
+            <div className="flex items-baseline justify-between gap-2 mb-1.5 flex-wrap">
+              <span className="font-bebas tracking-widest text-[10px] text-ink/70">INVOICE LINES (NZD)</span>
+              {/* Where the numbers came from. An amount that arrived from the
+                  BEO and one typed by hand look identical otherwise, and the
+                  operator needs to know which they are checking. */}
+              {loadingSuggested ? (
+                <span className="font-dm text-[10px] text-ink/50">Reading the BEO…</span>
+              ) : suggested?.source === "beo" ? (
+                <span className="font-dm text-[10px] text-ink/60">
+                  Pulled from this event&rsquo;s BEO {suggested.gstInclusive ? "· amounts include GST" : "· amounts exclude GST"} — edit anything before sending
+                </span>
+              ) : (
+                <span className="font-dm text-[10px] text-ink/50">
+                  {stream === "food"
+                    ? "Nothing priced on the BEO yet — enter the amount"
+                    : "Bar bills on consumption — enter what the bar rang up"}
+                </span>
+              )}
+            </div>
             <div className="space-y-1.5">
               {lines.map((l, i) => (
                 <div key={i} className="flex gap-1.5 items-center">

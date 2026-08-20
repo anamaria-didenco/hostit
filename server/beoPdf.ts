@@ -46,6 +46,7 @@ import {
   depositAppliedClause,
   depositComesOffDrinks,
 } from "@shared/billingTerms";
+import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost } from "@shared/eventBilling";
 
 const VENUE_AREA_LABELS: Record<string, string> = {
   bar: "Bar",
@@ -1095,21 +1096,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // the Costs line is the authoritative charge — drop the matching F&B food
     // line so it isn't counted/listed twice on the client's bill. Match on the
     // item name, normalised (trim + lowercase + collapse whitespace).
-    const normBillName = (s: any) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-    const costLabelSet = new Set(costList.map(ci => normBillName(ci.label)).filter(Boolean));
-    const fnbFoodLines: any[] = (Array.isArray(fnbList) ? fnbList : [])
-      .filter((i: any) => i.section === "foh" && (i.course ?? "") !== "Drinks" && Number(i.unitPrice ?? 0) > 0
-        && !costLabelSet.has(normBillName(i.dishName)));
+    const fnbFoodLines: any[] = pickFnbFoodLines(fnbList as any, costList as any);
     const fnbFoodTotal = fnbFoodLines.reduce((s, i: any) => s + Number(i.qty ?? 0) * Number(i.unitPrice ?? 0), 0);
     // The client BEO bills only Food & Beverage cost lines (matching the
     // runsheet's on-screen Running Total). Other cost lines (AV, hire, styling)
     // are the operator's own costs — kept on the Costs tab for profitability but
     // not auto-added to the client's bill; operators add anything else manually.
-    const isFbCost = (ci: any) => {
-      const c = String(ci.category ?? "").toLowerCase();
-      return c.includes("food") || c.includes("beverage");
-    };
-    const billCostList = costList.filter(isFbCost);
+    const billCostList = costList.filter(isFoodBeverageCost);
     const costItemsTotal = billCostList.reduce((s, ci) => s + lineAmt(ci), 0);
     const minSpendAmt = Number((booking as any).minimumSpend ?? quoteSettingsRow?.minimumSpend ?? 0);
     // The entered total is priced food (from the F&B sheet) PLUS every itemised

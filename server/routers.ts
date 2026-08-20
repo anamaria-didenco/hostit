@@ -4182,6 +4182,70 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(xeroInvoices.bookingId, input.bookingId), eq(xeroInvoices.ownerId, ctx.user.id)))
           .orderBy(desc(xeroInvoices.createdAt));
       }),
+    /**
+     * The invoice lines this event's BEO already works out, so the Xero draft
+     * opens with the real figures instead of a blank amount the operator has to
+     * retype from the document they just sent the client.
+     *
+     * Same computation as the BEO's cost summary (shared/eventBilling), so the
+     * invoice and the BEO cannot quietly disagree.
+     */
+    suggestedLines: protectedProcedure
+      .input(z.object({ bookingId: z.number(), stream: z.enum(['food', 'drinks']) }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings, runsheets, fnbItems } = await import('../drizzle/schema');
+        const { eq, and, isNull, desc } = await import('drizzle-orm');
+        const empty = { lines: [] as Array<{ description: string; quantity: number; unitAmount: number }>, gstInclusive: false, depositOnThisStream: false, source: 'none' as const };
+        const db = await getDb();
+        if (!db) return empty;
+        const [booking] = await db.select().from(bookings)
+          .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+        if (!booking) return empty;
+
+        // Same runsheet lookup as the BEO: by bookingId, then by leadId for
+        // sheets created through the event drawer (bookingId stays NULL there).
+        let [runsheet] = await db.select().from(runsheets)
+          .where(and(eq(runsheets.bookingId, input.bookingId), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+        if (!runsheet && booking.leadId) {
+          const [byLead] = await db.select().from(runsheets)
+            .where(and(eq(runsheets.leadId, booking.leadId), eq(runsheets.ownerId, ctx.user.id), isNull(runsheets.bookingId)))
+            .orderBy(desc(runsheets.updatedAt)).limit(1);
+          runsheet = byLead;
+        }
+        if (!runsheet) return empty;
+
+        const fnbList = await db.select().from(fnbItems)
+          .where(and(eq(fnbItems.runsheetId, runsheet.id), eq(fnbItems.ownerId, ctx.user.id)));
+        const costItems: any[] = Array.isArray((runsheet as any).costItems) ? (runsheet as any).costItems : [];
+        const { eventFoodBillingLines, eventDrinksBillingLines } = await import('@shared/eventBilling');
+        const { depositComesOffDrinks } = await import('@shared/billingTerms');
+
+        const lines = input.stream === 'food'
+          ? eventFoodBillingLines(fnbList as any, costItems)
+          : eventDrinksBillingLines({
+              barOption: (runsheet as any).drinksData?.barOption ?? null,
+              tabAmount: (runsheet as any).drinksData?.tabAmount ?? null,
+            });
+
+        // Which invoice the deposit is deducted from, per the event's billing
+        // terms — putting it on both would credit the client twice.
+        const applied = (booking as any).billingDepositApplied as string | null;
+        const depositOnThisStream = applied === 'none'
+          ? false
+          : input.stream === 'drinks'
+            ? depositComesOffDrinks(applied)
+            : applied === 'food' || applied === 'total';
+
+        return {
+          lines,
+          // The runsheet declares whether those amounts already carry GST; the
+          // modal must match it or Xero adds 15% to a gross figure.
+          gstInclusive: Boolean((runsheet as any).gstInclusive),
+          depositOnThisStream,
+          source: lines.length > 0 ? ('beo' as const) : ('none' as const),
+        };
+      }),
     pushInvoice: protectedProcedure
       .input(z.object({
         bookingId: z.number(),
@@ -4206,7 +4270,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (ctx.isTeamMember) throw new Error('Only the venue owner can send invoices to Xero');
         const { getDb } = await import('./db');
         const { bookings, xeroInvoices } = await import('../drizzle/schema');
-        const { eq, and, ne } = await import('drizzle-orm');
+        const { eq, and, or, isNull, notInArray } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const [booking] = await db.select().from(bookings)
@@ -4227,7 +4291,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               eq(xeroInvoices.bookingId, input.bookingId),
               eq(xeroInvoices.ownerId, ctx.user.id),
               eq(xeroInvoices.stream, input.stream),
-              ne(xeroInvoices.status, 'VOIDED'),
+              // A voided or deleted invoice does not exist any more, so it must
+              // not block sending a replacement for the same stream.
+              or(isNull(xeroInvoices.status), notInArray(xeroInvoices.status, ['VOIDED', 'DELETED'])),
             )).limit(1);
           if (dup) throw new Error(`A ${input.stream} invoice${dup.invoiceNumber ? ` (${dup.invoiceNumber})` : ''} was already sent for this event. Void it in Xero first, or confirm sending another.`);
         }
@@ -4287,8 +4353,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(xeroInvoices.id, input.id), eq(xeroInvoices.ownerId, ctx.user.id))).limit(1);
         if (!row) throw new Error('Invoice not found');
         if (row.xeroInvoiceId) {
-          const { deleteXeroDraftInvoice } = await import('./xero');
-          await deleteXeroDraftInvoice(ctx.user.id, row.xeroInvoiceId); // throws if approved
+          const { deleteXeroDraftInvoice, getXeroInvoiceStatus, isGoneFromXero } = await import('./xero');
+          // An invoice already DELETED or VOIDED in Xero has nothing left to
+          // delete there. Refusing left the row stuck in VenueFlow: it could
+          // not be removed AND it blocked sending a replacement for the same
+          // stream. Drop our tracking row and leave Xero alone.
+          // Trust our own record when it already says gone: Xero cannot
+          // un-delete or un-void an invoice, so there is nothing to re-check.
+          const status = isGoneFromXero(row.status)
+            ? row.status
+            : await getXeroInvoiceStatus(ctx.user.id, row.xeroInvoiceId);
+          if (!isGoneFromXero(status)) {
+            await deleteXeroDraftInvoice(ctx.user.id, row.xeroInvoiceId); // throws if approved
+          }
         }
         await db.delete(xeroInvoices)
           .where(and(eq(xeroInvoices.id, input.id), eq(xeroInvoices.ownerId, ctx.user.id)));
