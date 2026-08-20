@@ -378,6 +378,13 @@
       "when": 1779801200000,
       "tag": "0053_staff_logins",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1779801300000,
+      "tag": "0054_schema_drift_repair",
+      "breakpoints": true
     }
   ]
 }

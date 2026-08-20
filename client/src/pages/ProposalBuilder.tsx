@@ -423,12 +423,12 @@ export default function ProposalBuilder() {
   return (
     <div className="min-h-screen bg-parchment font-dm">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 h-14 flex items-center px-6 sticky top-0 z-40 shadow-sm">
-        <Link href="/dashboard">
-          <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-800 font-inter text-xs gap-1 mr-4">
-            <ChevronLeft className="w-4 h-4" /> Dashboard
-          </Button>
-        </Link>
+      <div className="bg-white border-b border-gray-200 min-h-14 flex items-center gap-y-1 px-4 sm:px-6 sticky top-0 z-40 shadow-sm overflow-x-auto">
+        <Button asChild variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900 font-inter text-xs gap-1 mr-4 min-h-[44px]">
+          <Link href="/dashboard">
+            <ChevronLeft className="w-4 h-4" aria-hidden /> Dashboard
+          </Link>
+        </Button>
         <div className="flex items-center mr-3">
           <span className="font-bold text-gray-900 text-base tracking-tight">VenueFlowHQ</span>
         </div>
@@ -481,13 +481,13 @@ export default function ProposalBuilder() {
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">PROPOSAL DETAILS</h2>
             <div className="space-y-3">
               <div>
-                <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
-                <Input value={title} onChange={e => setTitle(e.target.value)}
+                <label htmlFor="pb-title" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">PROPOSAL TITLE</label>
+                <Input id="pb-title" value={title} onChange={e => setTitle(e.target.value)}
                   className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary font-dm" />
               </div>
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
-                <Textarea value={introMessage} onChange={e => setIntroMessage(e.target.value)}
+                <Textarea aria-label="Intro message shown to the client" value={introMessage} onChange={e => setIntroMessage(e.target.value)}
                   placeholder="Thank you for your enquiry! We'd love to host your event at our venue. Please find our proposal below..."
                   rows={3} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm" />
               </div>
@@ -499,8 +499,8 @@ export default function ProposalBuilder() {
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-4">EVENT DETAILS</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT DATE</label>
-                <Input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}
+                <label htmlFor="pb-event-date" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT DATE</label>
+                <Input id="pb-event-date" type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}
                   className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
               </div>
               <div>
@@ -523,7 +523,7 @@ export default function ProposalBuilder() {
                   </Select>
                 ) : (
                   <div className="border border-dashed border-border bg-muted/30 px-3 py-2 text-xs font-dm text-muted-foreground">
-                    No spaces saved yet — add them in <a href="/dashboard?tab=settings&sub=venue" className="text-primary hover:underline">Settings → Venue → Spaces</a>.
+                    No spaces saved yet — add them in <a href="/dashboard?tab=settings&sub=venue" className="text-primary underline underline-offset-2">Settings → Venue → Spaces</a>.
                   </div>
                 )}
               </div>
@@ -552,7 +552,7 @@ export default function ProposalBuilder() {
                   <div className="text-center py-6 border-2 border-dashed border-border">
                     <ChefHat className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                     <p className="font-dm text-sm text-muted-foreground">No menu packages yet.</p>
-                    <p className="font-dm text-xs text-muted-foreground/60 mt-1">Add Food or Beverage packages in Dashboard → Menu.</p>
+                    <p className="font-dm text-xs text-muted-foreground mt-1">Add Food or Beverage packages in Dashboard → Menu.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -702,11 +702,11 @@ export default function ProposalBuilder() {
                       placeholder="Item description" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9" />
                   </div>
                   <div className="col-span-2">
-                    <Input type="number" value={item.qty} onChange={e => updateLineItem(i, "qty", parseFloat(e.target.value) || 0)}
+                    <Input aria-label={`Quantity for ${item.description || `line item ${i + 1}`}`} type="number" value={item.qty} onChange={e => updateLineItem(i, "qty", parseFloat(e.target.value) || 0)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-center" />
                   </div>
                   <div className="col-span-2">
-                    <Input type="number" value={item.unitPrice} onChange={e => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
+                    <Input aria-label={`Unit price for ${item.description || `line item ${i + 1}`}`} type="number" value={item.unitPrice} onChange={e => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-9 text-right" />
                   </div>
                   <div className="col-span-2 text-right font-dm text-sm font-semibold text-ink">
@@ -714,9 +714,12 @@ export default function ProposalBuilder() {
                   </div>
                   <div className="col-span-1 flex justify-center">
                     {lineItems.length > 1 && (
-                      <button onClick={() => setLineItems(prev => prev.filter((_, idx) => idx !== i))}
-                        className="text-muted-foreground/40 hover:text-primary transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button
+                        onClick={() => setLineItems(prev => prev.filter((_, idx) => idx !== i))}
+                        aria-label={`Remove line item${item.description ? `: ${item.description}` : ` ${i + 1}`}`}
+                        title="Remove line item"
+                        className="w-11 h-11 inline-flex items-center justify-center rounded-sm text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
+                        <Trash2 className="w-4 h-4" aria-hidden />
                       </button>
                     )}
                   </div>
@@ -733,7 +736,7 @@ export default function ProposalBuilder() {
               <div className="flex justify-between items-center font-dm text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">GST</span>
-                  <Input type="number" value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
+                  <Input aria-label="GST percentage" type="number" value={taxPercent} onChange={e => setTaxPercent(parseFloat(e.target.value) || 0)}
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm h-7 w-16 text-center" />
                   <span className="text-muted-foreground">%</span>
                 </div>
@@ -746,7 +749,7 @@ export default function ProposalBuilder() {
               <div className="flex justify-between items-center font-dm text-sm bg-sage-tint border border-sage-green/30 p-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bebas text-xs tracking-widest text-sage-green">DEPOSIT REQUIRED</span>
-                  <Input type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
+                  <Input aria-label="Deposit percentage" type="number" value={depositPercent} onChange={e => setDepositPercent(parseFloat(e.target.value) || 0)}
                     className="rounded-none border-2 border-sage-green/40 focus-visible:ring-0 focus-visible:border-sage-green text-sm h-7 w-16 text-center bg-transparent" />
                   <span className="text-sage-green text-xs">%</span>
                 </div>
@@ -1132,7 +1135,7 @@ export default function ProposalBuilder() {
                 {/* Min Spend Breakdown */}
                 {Number(minimumSpend) > 0 && (
                   <div className="bg-ink text-cream p-4 space-y-2">
-                    <div className="font-bebas text-xs tracking-widest text-sage-green mb-2">MINIMUM SPEND BREAKDOWN</div>
+                    <div className="font-bebas text-xs tracking-widest text-[#c9a84c] mb-2">MINIMUM SPEND BREAKDOWN</div>
                     <div className="flex justify-between font-dm text-sm">
                       <span className="text-cream/60">Food &amp; Beverage</span>
                       <span>{currency(_foodBase())}</span>
@@ -1200,8 +1203,8 @@ export default function ProposalBuilder() {
 
                 {/* Quote Notes */}
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">QUOTE NOTES (shown to client)</label>
-                  <Textarea value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)}
+                  <label htmlFor="pb-quote-notes" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">QUOTE NOTES (shown to client)</label>
+                  <Textarea id="pb-quote-notes" value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)}
                     placeholder="Any additional notes about this quote..." rows={2}
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy resize-none text-sm font-dm" />
                 </div>
@@ -1214,7 +1217,7 @@ export default function ProposalBuilder() {
           {/* Terms */}
           <div className="bg-cream-card border border-border p-5 shadow-sm">
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">TERMS & CONDITIONS</h2>
-            <Textarea value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)}
+            <Textarea aria-label="Terms and conditions" value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)}
               rows={5} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
           </div>
 
@@ -1222,6 +1225,7 @@ export default function ProposalBuilder() {
           <div className="bg-cream-card border border-dashed border-border p-5">
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">INTERNAL NOTES <span className="font-dm text-xs text-muted-foreground normal-case">(not shown to client)</span></h2>
             <Textarea value={internalNotes} onChange={e => setInternalNotes(e.target.value)}
+              aria-label="Internal notes (not shown to the client)"
               placeholder="Notes for your team only..." rows={2}
               className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
           </div>
@@ -1325,14 +1329,14 @@ export default function ProposalBuilder() {
           {/* Expiry */}
           <div className="bg-cream-card border border-border p-4 shadow-sm">
             <h3 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL EXPIRY</h3>
-            <Input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
+            <Input aria-label="Proposal expiry date" type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)}
               className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm" />
             <p className="font-dm text-xs text-muted-foreground mt-2">Client must respond before this date</p>
           </div>
 
           {/* Summary */}
           <div className="bg-ink text-cream p-5 shadow-sm">
-            <div className="font-bebas text-xs tracking-widest text-sage-green mb-3">PROPOSAL SUMMARY</div>
+            <div className="font-bebas text-xs tracking-widest text-[#c9a84c] mb-3">PROPOSAL SUMMARY</div>
             <div className="space-y-2 font-dm text-sm">
               <div className="flex justify-between">
                 <span className="text-cream/60">For</span>
@@ -1353,7 +1357,7 @@ export default function ProposalBuilder() {
               <div className="border-t border-cream/20 pt-2 mt-2">
                 <div className="flex justify-between font-alfa text-xl">
                   <span className="text-cream/60 text-sm">TOTAL</span>
-                  <span className="text-sage-green">{currencyWhole(total)}</span>
+                  <span className="text-[#c9a84c]">{currencyWhole(total)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-cream/50 mt-1">
                   <span>Deposit ({depositPercent}%)</span>
@@ -1397,11 +1401,11 @@ export default function ProposalBuilder() {
                   </Button>
                 </div>
               )}
-              <Link href="/dashboard">
-                <Button variant="outline" className="w-full border-2 border-border font-bebas tracking-widest rounded-none text-xs">
+              <Button asChild variant="outline" className="w-full border-2 border-border font-bebas tracking-widest rounded-none text-xs">
+                <Link href="/dashboard">
                   BACK TO DASHBOARD
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           )}
 

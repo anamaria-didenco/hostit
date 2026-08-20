@@ -37,7 +37,7 @@ function Eyebrow({ children, light = false }: { children: React.ReactNode; light
       style={{
         fontSize: 10,
         letterSpacing: "0.32em",
-        color: light ? "#a9c8f2" : "#2f5488",
+        color: light ? "#abc9f2" : "#2f5488",
       }}
     >
       {children}
@@ -108,7 +108,7 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
                 <Input type="text" value={venueName} onChange={e => setVenueName(e.target.value)} placeholder="The Grand Room, Auckland" />
               </div>
               <div>
-                <label className={fieldLabel}>Anything else? <span className="text-[#a39684] normal-case font-normal tracking-normal">(optional)</span></label>
+                <label className={fieldLabel}>Anything else? <span className="text-[#7e7466] normal-case font-normal tracking-normal">(optional)</span></label>
                 <textarea
                   value={message}
                   onChange={e => setMessage(e.target.value)}
@@ -149,7 +149,7 @@ export default function Home() {
 
       {/* ── Nav ──────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b border-border" style={{ background: "rgba(255,253,249,0.9)", backdropFilter: "blur(8px)" }}>
-        <div className="max-w-6xl mx-auto px-6 h-[66px] flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-[66px] flex items-center justify-between gap-2">
           <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
 
           <nav className="hidden md:flex items-center gap-7">
@@ -163,16 +163,22 @@ export default function Home() {
 
           <div className="flex items-center gap-2.5">
             {isLoading ? null : user ? (
-              <Link href="/dashboard">
-                <Button>Go to Dashboard <ArrowRight className="w-3.5 h-3.5" /></Button>
-              </Link>
+              <Button asChild className="whitespace-nowrap">
+                <Link href="/dashboard">
+                  <span className="sm:hidden">Dashboard</span>
+                  <span className="hidden sm:inline">Go to Dashboard</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </Button>
             ) : (
               <>
                 <a href={getLoginUrl()}>
                   <Button variant="paper">Sign in</Button>
                 </a>
-                <Button onClick={() => setShowWaitlist(true)}>
-                  Join waitlist <ArrowRight className="w-3.5 h-3.5" />
+                <Button onClick={() => setShowWaitlist(true)} className="whitespace-nowrap">
+                  <span className="sm:hidden">Waitlist</span>
+                  <span className="hidden sm:inline">Join waitlist</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
               </>
             )}
@@ -185,7 +191,7 @@ export default function Home() {
         <div className="max-w-[780px] mx-auto text-center">
           <Eyebrow>New Zealand's Venue Management Platform</Eyebrow>
           <h1 className="font-serif text-foreground mx-auto"
-            style={{ fontSize: 60, fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.04, margin: "24px 0 0" }}>
+            style={{ fontSize: "clamp(38px, 11vw, 60px)", fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.04, margin: "24px 0 0" }}>
             Run your venue.<br />
             <span style={{ fontStyle: "italic", fontWeight: 500, color: "#2f5488" }}>Not spreadsheets.</span>
           </h1>
@@ -196,9 +202,9 @@ export default function Home() {
 
           {isLoading ? null : user ? (
             <div className="flex items-center justify-center">
-              <Link href="/dashboard">
-                <Button size="lg">Go to Dashboard <ArrowRight className="w-[18px] h-[18px]" /></Button>
-              </Link>
+              <Button asChild size="lg">
+                <Link href="/dashboard">Go to Dashboard <ArrowRight className="w-[18px] h-[18px]" /></Link>
+              </Button>
             </div>
           ) : (
             <>
@@ -210,7 +216,7 @@ export default function Home() {
                   <Button size="lg" variant="outline">Watch a demo</Button>
                 </a>
               </div>
-              <div className="inline-flex items-center justify-center gap-2 mt-7 text-[12.5px] text-[#a39684]">
+              <div className="inline-flex items-center justify-center gap-2 mt-7 text-[12.5px] text-[#7e7466]">
                 <span className="text-primary inline-flex"><Check className="w-[15px] h-[15px]" /></span>
                 Limited spots · NZ venues only
               </div>
@@ -238,7 +244,7 @@ export default function Home() {
                   </div>
                   <div>
                     <div className="flex items-baseline gap-2">
-                      <span className="font-serif text-[13px] text-[#a39684]">{f.n}</span>
+                      <span className="font-serif text-[13px] text-[#7e7466]">{f.n}</span>
                       <h3 className="font-serif text-foreground" style={{ fontSize: 21, fontWeight: 600 }}>{f.title}</h3>
                     </div>
                     <p className="text-muted-foreground mt-1.5" style={{ fontSize: 14, lineHeight: 1.6 }}>{f.desc}</p>
@@ -253,17 +259,17 @@ export default function Home() {
       {/* ── Proof band (deep blue) ───────────────────────────────────────── */}
       <section className="px-6" style={{ background: "#2f5488", padding: "68px 24px" }}>
         <div className="max-w-[880px] mx-auto flex flex-wrap items-center gap-11">
-          <div className="flex-1 min-w-[300px]">
+          <div className="flex-1 min-w-0 sm:min-w-[300px]">
             <Eyebrow light>From the floor</Eyebrow>
             <p className="font-serif text-white" style={{ fontSize: 25, fontWeight: 500, fontStyle: "italic", lineHeight: 1.4, margin: "14px 0 18px" }}>
               "Finally a platform built for NZ venues. The enquiry-to-BEO flow is seamless and our chefs actually read the runsheets now."
             </p>
             <p className="text-white font-bold text-sm">James T.</p>
-            <p className="text-[13px]" style={{ color: "#a9c8f2" }}>Venue Director · Wellington</p>
+            <p className="text-[13px]" style={{ color: "#abc9f2" }}>Venue Director · Wellington</p>
           </div>
           <div className="text-center px-7" style={{ borderLeft: "1px solid rgba(255,255,255,0.18)", padding: "4px 28px" }}>
             <p className="font-serif text-white" style={{ fontSize: 52, fontWeight: 600, lineHeight: 1 }}>30<span style={{ fontSize: 22 }}>min</span></p>
-            <p className="mt-2 font-sans font-bold uppercase" style={{ fontSize: 12, color: "#a9c8f2", letterSpacing: "0.06em" }}>Average setup</p>
+            <p className="mt-2 font-sans font-bold uppercase" style={{ fontSize: 12, color: "#abc9f2", letterSpacing: "0.06em" }}>Average setup</p>
           </div>
         </div>
       </section>
@@ -313,7 +319,7 @@ export default function Home() {
       <footer className="bg-background border-t border-border" style={{ padding: "34px 24px" }}>
         <div className="max-w-[1000px] mx-auto flex flex-wrap items-center justify-between gap-5">
           <img src="/logo-full.png" alt="VenueFlow" className="h-[22px] w-auto" />
-          <p className="text-[12.5px] text-[#a39684]">© {new Date().getFullYear()} VenueFlowHQ · New Zealand's Venue Management Platform</p>
+          <p className="text-[12.5px] text-[#7e7466]">© {new Date().getFullYear()} VenueFlowHQ · New Zealand's Venue Management Platform</p>
           <div className="flex gap-[22px]">
             {["Privacy", "Terms", "Contact"].map(item => (
               <a key={item} href="#" className="text-[12.5px] text-muted-foreground hover:text-foreground transition-colors">{item}</a>

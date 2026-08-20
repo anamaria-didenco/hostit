@@ -39,10 +39,26 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  // SameSite=Lax, not None.
+  //
+  // A `SameSite=None` cookie without `Secure` is REJECTED outright by every
+  // current browser, so on any plain-HTTP origin (local development) login
+  // appeared to succeed — the POST returned 200 and the app navigated to the
+  // dashboard — while no session cookie was ever stored. Every authenticated
+  // page then bounced straight back to /login.
+  //
+  // `None` also means the session cookie rides along on requests initiated by
+  // ANY other site, which is the precondition for CSRF. Nothing here needs it:
+  // the only route we allow to be framed cross-site is the public /enquire
+  // form, and that talks exclusively to public procedures. Everything
+  // authenticated is X-Frame-Options: SAMEORIGIN.
+  //
+  // Lax still accompanies top-level navigations, so magic links, staff links
+  // and OAuth returns are unaffected.
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
+    sameSite: "lax",
     secure: isSecureRequest(req),
   };
 }

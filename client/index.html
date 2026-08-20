@@ -3,7 +3,11 @@
 
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <!-- maximum-scale=1 blocked pinch-zoom entirely, which fails WCAG 1.4.4 and
+         is the single worst accessibility defect on a phone. viewport-fit=cover
+         is what makes env(safe-area-inset-*) resolve to anything but 0, which the
+         mobile tab bar depends on to clear the home indicator. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>VenueFlowHQ — Event Management for NZ Venues</title>
     <meta name="description" content="VenueFlowHQ is the event enquiry and proposal platform built for New Zealand restaurants, bars, and function venues." />
     <link rel="canonical" href="https://venueflowhq.com/" />

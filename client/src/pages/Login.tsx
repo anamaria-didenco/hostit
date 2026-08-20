@@ -52,7 +52,7 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="bg-[#fffdf9] rounded-lg border-[1.5px] border-[#e6dccb] p-6 space-y-4">
           <div>
             <label htmlFor="email" className="block font-sans text-[9px] font-extrabold uppercase tracking-[0.16em] text-[#6a6256] mb-1.5">
-              Email <span className="text-[#a39684] font-medium normal-case tracking-normal">(leave blank for owner)</span>
+              Email <span className="text-[#7e7466] font-medium normal-case tracking-normal">(leave blank for owner)</span>
             </label>
             <input
               id="email"
@@ -61,7 +61,7 @@ export default function Login() {
               onChange={e => setEmail(e.target.value)}
               placeholder="you@venue.co.nz"
               autoComplete="username"
-              className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#a39684] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
+              className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#7e7466] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
             />
           </div>
           <div>
@@ -77,7 +77,7 @@ export default function Login() {
               required
               autoFocus
               autoComplete="current-password"
-              className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#a39684] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
+              className="w-full px-3 py-2.5 rounded-[4px] border-[1.5px] border-[#e6dccb] text-sm text-[#211d18] placeholder-[#7e7466] focus:outline-none focus:ring-[3px] focus:ring-[#2f5488]/20 focus:border-[#2f5488] transition"
             />
           </div>
 

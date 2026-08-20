@@ -358,7 +358,7 @@ export default function LeadForm() {
 
                   {eventFields.some(f => f.id === 'eventDate') && (
                     <div>
-                      <div className="flex items-center justify-between px-3 py-2 rounded-t-md" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
+                      <div className="flex items-center justify-between flex-wrap gap-y-2 px-3 py-2 rounded-t-md" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
                         <span className="font-bold text-sm">{calYear}</span>
                         <span className="text-xs opacity-90">{fmtSelected}</span>
                       </div>
@@ -521,8 +521,8 @@ export default function LeadForm() {
             <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
           </div>
           <div className="text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: textOnPrimary }}>{venueName}</div>
-          <h1 className="text-xl italic mb-3" style={{ color: `${textOnPrimary}cc` }}>{formTitle}</h1>
-          <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}99` }}>{formSubtitle}</p>
+          <h1 className="text-xl italic mb-3" style={{ color: textOnPrimary }}>{formTitle}</h1>
+          <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}e6` }}>{formSubtitle}</p>
           {(venue?.city || venue?.phone || venue?.email) && (
             <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
               {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
@@ -654,10 +654,10 @@ export default function LeadForm() {
       </div>
 
       <div className="py-6 text-center mt-4 bg-gray-800 border-t border-gray-700">
-        <div className="font-bold text-xs tracking-widest text-gray-500">POWERED BY VenueFlowHQ · EVENT CRM FOR NEW ZEALAND VENUES</div>
+        <div className="font-bold text-xs tracking-widest text-gray-400">POWERED BY VenueFlowHQ · EVENT CRM FOR NEW ZEALAND VENUES</div>
         <div className="mt-2">
           <Link href="/dashboard">
-            <span className="text-xs cursor-pointer transition-colors text-gray-600 hover:text-gray-600">Venue owner? Sign in →</span>
+            <span className="text-xs cursor-pointer underline underline-offset-2 transition-colors text-gray-300 hover:text-white">Venue owner? Sign in →</span>
           </Link>
         </div>
       </div>

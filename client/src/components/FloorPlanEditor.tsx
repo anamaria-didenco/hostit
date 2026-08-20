@@ -594,7 +594,7 @@ export default function FloorPlanEditor({
   const tableCount = canvasData.elements.filter(el => el.type.includes("table")).length;
 
   return (
-    <div className="flex h-full" style={{ minHeight: 0 }}>
+    <div className="flex h-full overflow-x-auto" style={{ minHeight: 0 }}>
 
       {/* ── Left palette ────────────────────────────────────────────────── */}
       {!readOnly && (
@@ -817,6 +817,8 @@ export default function FloorPlanEditor({
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-white flex-shrink-0 flex-wrap gap-y-1">
             {/* Plan name */}
             <input
+              aria-label="Floor plan name"
+              title="Floor plan name"
               value={planName}
               onChange={e => setPlanName(e.target.value)}
               className="font-cormorant text-base font-semibold text-ink border-b border-transparent hover:border-gold focus:border-gold outline-none bg-transparent w-40"
@@ -1083,14 +1085,14 @@ export default function FloorPlanEditor({
                 <p className="font-bebas tracking-widest text-[10px] text-sage mb-2">CANVAS SIZE</p>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">WIDTH</label>
-                    <input type="number" value={canvasData.width}
+                    <label htmlFor="fp-canvas-width" className="font-bebas text-[10px] tracking-widest text-sage block mb-1">WIDTH</label>
+                    <input id="fp-canvas-width" type="number" value={canvasData.width}
                       onChange={e => setCanvasData(prev => ({ ...prev, width: parseInt(e.target.value) || 900 }))}
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                   <div>
-                    <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">HEIGHT</label>
-                    <input type="number" value={canvasData.height}
+                    <label htmlFor="fp-canvas-height" className="font-bebas text-[10px] tracking-widest text-sage block mb-1">HEIGHT</label>
+                    <input id="fp-canvas-height" type="number" value={canvasData.height}
                       onChange={e => setCanvasData(prev => ({ ...prev, height: parseInt(e.target.value) || 600 }))}
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
