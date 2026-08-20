@@ -34,8 +34,18 @@ import { currency } from "@/lib/money";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import {
   FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS,
-  foodBillingSentence, drinksBillingSentence, depositAppliedClause,
+  foodBillingSentence, drinksBillingSentence, depositAppliedClause, billingStageLabel,
 } from "@shared/billingTerms";
+
+/** The status chip a BEO billing step prints, shown while you pick the terms. */
+function StageChip({ stage }: { stage: { label: string; settled: boolean } }) {
+  return (
+    <span className={`ml-1.5 align-middle font-bebas tracking-widest text-[9px] px-1.5 py-0.5 rounded ${
+      stage.settled ? "bg-forest/10 text-forest" : "bg-gold/15 text-gold-deep"}`}>
+      {stage.label}
+    </span>
+  );
+}
 
 function SortableSection({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -5571,6 +5581,13 @@ export default function RunsheetBuilder() {
                     >
                       {DRINKS_BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
+                    {/* Say it rather than doing it silently: these arrangements
+                        are never invoiced ahead, so the Payments board stops
+                        listing the event as one to invoice. */}
+                    {['on_night', 'cash_bar', 'tab_then_cash'].includes((billingBooking as any)?.billingDrinks ?? 'invoiced_after')
+                      && ((billingBooking as any)?.drinksStatus ?? 'to_invoice') === 'on_night' && (
+                      <p className="font-dm text-[10px] text-ink/45 mt-1">Payments board shows drinks as &ldquo;On the night&rdquo;.</p>
+                    )}
                   </div>
                   <div className="min-w-0 sm:col-span-2">
                     <label htmlFor="rb-billing-deposit" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">DEPOSIT</label>
@@ -5586,13 +5603,22 @@ export default function RunsheetBuilder() {
                 </div>
                 {/* Live preview of the exact sentences the BEO will print, so
                     there's no guessing what a selection actually says. */}
-                <div className="rounded-sm border border-gold/20 bg-linen/50 px-3 py-2 space-y-1">
+                <div className="rounded-sm border border-gold/20 bg-linen/50 px-3 py-2 space-y-1.5">
                   <div className="font-bebas tracking-widest text-[9px] text-ink/45">THE BEO WILL SAY</div>
+                  {/* The chip as well as the sentence. Staff read the chip
+                      first, and it used to come from the Payments board status
+                      — so a bar settled on the night printed "TO INVOICE"
+                      beside "settled on the night". Showing it here means the
+                      contradiction can't be picked without being seen. */}
                   <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
-                    <b className="font-semibold">Food —</b> {foodBillingSentence((billingBooking as any)?.billingFood ?? 'invoiced_prior')}
+                    <b className="font-semibold">Food</b>
+                    <StageChip stage={billingStageLabel('food', (billingBooking as any)?.foodStatus, (billingBooking as any)?.billingFood ?? 'invoiced_prior')} />
+                    <br />{foodBillingSentence((billingBooking as any)?.billingFood ?? 'invoiced_prior')}
                   </p>
                   <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
-                    <b className="font-semibold">Drinks —</b> {drinksBillingSentence((billingBooking as any)?.billingDrinks ?? 'invoiced_after', { barOption: rsBarOption, drinksStatus: null })}
+                    <b className="font-semibold">Drinks</b>
+                    <StageChip stage={billingStageLabel('drinks', (billingBooking as any)?.drinksStatus, (billingBooking as any)?.billingDrinks ?? 'invoiced_after')} />
+                    <br />{drinksBillingSentence((billingBooking as any)?.billingDrinks ?? 'invoiced_after', { barOption: rsBarOption, drinksStatus: null })}
                   </p>
                   <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
                     <b className="font-semibold">Deposit —</b> {depositAppliedClause((billingBooking as any)?.billingDepositApplied ?? 'drinks')}.
@@ -5614,13 +5640,19 @@ export default function RunsheetBuilder() {
                 </div>
               </div>
             )}
-            {/* Payment notes */}
+            {/* Two free-text boxes whose difference used to be guesswork, so the
+                same sentence got typed into both and printed twice on the BEO.
+                Each is now named after the place it prints. */}
             <div>
-              <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">PAYMENT NOTES</label>
+              <div className="flex items-baseline justify-between gap-2 flex-wrap mb-1">
+                <label htmlFor="rb-payment-notes" className="font-bebas tracking-widest text-[10px] text-ink/65">NOTES FOR THIS EVENT</label>
+                <span className="font-dm text-[10px] text-ink/45">Prints as the last billing step, for your staff</span>
+              </div>
               <textarea
+                id="rb-payment-notes"
                 value={paymentNotes}
                 onChange={e => setPaymentNotes(e.target.value)}
-                placeholder="e.g. Final payment of $2,400 due on the day. Deposit of $800 received 12 Apr. Balance outstanding. Payment by bank transfer to 12-3456-7890123-00."
+                placeholder="e.g. Cake is being brought in — no cakeage. Balance settles at the bar."
                 className="w-full border border-gold/20 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white resize-none"
                 rows={3}
               />
@@ -5629,7 +5661,7 @@ export default function RunsheetBuilder() {
                   default so the common case needs no typing. */}
               <div>
                 <div className="flex items-baseline justify-between gap-2 flex-wrap mb-1">
-                  <label htmlFor="rb-payment-instructions" className="font-bebas tracking-widest text-[10px] text-ink/65">BILLING INSTRUCTIONS</label>
+                  <label htmlFor="rb-payment-instructions" className="font-bebas tracking-widest text-[10px] text-ink/65">HOW THE CLIENT PAYS</label>
                   {!paymentInstructionsOverridden && venueDefaultPaymentInstructions.trim() && (
                     <span className="font-dm text-[10px] text-ink/45">Using your venue default</span>
                   )}
@@ -5651,7 +5683,7 @@ export default function RunsheetBuilder() {
                   rows={3}
                 />
                 <p className="font-dm text-[10px] text-ink/45 mt-1">
-                  Leave blank to use the venue default from Settings. Anything typed here applies to this event only.
+                  Bank details and reference &mdash; prints under &ldquo;How to pay&rdquo; on the BEO. Leave blank to use the venue default from Settings; anything typed here applies to this event only.
                 </p>
               </div>
 

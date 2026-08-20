@@ -7,6 +7,7 @@ import {
   drinksBillingSentence,
   depositAppliedClause,
   depositComesOffDrinks,
+  billingStageLabel,
 } from "@shared/billingTerms";
 
 /**
@@ -72,5 +73,49 @@ describe("billing terms — wording follows the selection", () => {
     expect(foodBillingSentence("something_else")).toBe(FOOD_BILLING_OPTIONS[0].sentence);
     expect(drinksBillingSentence("something_else", {})).toMatch(/invoiced after the event/i);
     expect(depositAppliedClause("something_else")).toMatch(/drinks bill/i);
+  });
+});
+
+describe("the chip beside a billing step", () => {
+  it("never contradicts the sentence next to it", () => {
+    // The reported bug: drinks were set to "settled on the night" but the chip
+    // read TO INVOICE, because the chip came from the payment-progress field
+    // and the sentence from the terms. Two opposite instructions, one line.
+    const stage = billingStageLabel("drinks", "to_invoice", "on_night");
+    expect(stage.label).toMatch(/on the night/i);
+    expect(stage.label).not.toMatch(/invoice/i);
+  });
+
+  it("lets money in the bank beat every plan", () => {
+    expect(billingStageLabel("food", "paid", "on_night").label).toBe("Paid");
+    expect(billingStageLabel("drinks", "paid", "cash_bar").settled).toBe(true);
+  });
+
+  it("does not chase money on an arrangement with nothing to collect", () => {
+    for (const [stream, terms] of [["drinks", "cash_bar"], ["drinks", "prepaid_tab"], ["food", "in_minimum"], ["food", "none"]] as const) {
+      const stage = billingStageLabel(stream, "to_invoice", terms);
+      expect(stage.settled).toBe(true);
+      expect(stage.label).not.toMatch(/to invoice/i);
+    }
+  });
+
+  it("keeps an invoice that has actually gone out", () => {
+    expect(billingStageLabel("food", "invoiced", "invoiced_prior").label).toMatch(/awaiting payment/i);
+    // ...but not over an arrangement that bills nothing.
+    expect(billingStageLabel("drinks", "invoiced", "cash_bar").label).toMatch(/guests pay/i);
+  });
+
+  it("falls back to the progress label on events with no terms chosen", () => {
+    expect(billingStageLabel("drinks", "to_invoice", null).label).toBe("To invoice");
+    expect(billingStageLabel("drinks", "on_night", null).label).toMatch(/on the night/i);
+    expect(billingStageLabel("food", null, null).label).toBe("To invoice");
+    expect(billingStageLabel("food", "something_new", "something_new").label).toBe("To invoice");
+  });
+
+  it("gives every arrangement its own wording", () => {
+    const drinks = DRINKS_BILLING_OPTIONS.map(o => billingStageLabel("drinks", "to_invoice", o.value).label);
+    expect(new Set(drinks).size).toBe(DRINKS_BILLING_OPTIONS.length);
+    const food = FOOD_BILLING_OPTIONS.map(o => billingStageLabel("food", "to_invoice", o.value).label);
+    expect(new Set(food).size).toBe(FOOD_BILLING_OPTIONS.length);
   });
 });

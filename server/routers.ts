@@ -1754,7 +1754,21 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.foodStatus !== undefined) updates.foodStatus = rest.foodStatus;
         if (rest.drinksStatus !== undefined) updates.drinksStatus = rest.drinksStatus;
         if (rest.billingFood !== undefined) updates.billingFood = rest.billingFood;
-        if (rest.billingDrinks !== undefined) updates.billingDrinks = rest.billingDrinks;
+        if (rest.billingDrinks !== undefined) {
+          updates.billingDrinks = rest.billingDrinks;
+          // Keep the Payments board from contradicting the arrangement. Picking
+          // "settled on the night" (or a cash bar) and leaving the stream on its
+          // untouched default printed "To invoice" beside "settled on the
+          // night" — two opposite instructions for the same money. Only the
+          // untouched default is moved: a status the operator has advanced to
+          // invoiced or paid is real progress and is left alone.
+          const neverInvoicedAhead = ['on_night', 'cash_bar', 'tab_then_cash'].includes(rest.billingDrinks ?? '');
+          if (neverInvoicedAhead && rest.drinksStatus === undefined) {
+            const [cur] = await db.select({ drinksStatus: bookings.drinksStatus })
+              .from(bookings).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+            if (!cur?.drinksStatus || cur.drinksStatus === 'to_invoice') updates.drinksStatus = 'on_night';
+          }
+        }
         if (rest.billingDepositApplied !== undefined) updates.billingDepositApplied = rest.billingDepositApplied;
         if (rest.billingNote !== undefined) updates.billingNote = rest.billingNote?.trim() || null;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));

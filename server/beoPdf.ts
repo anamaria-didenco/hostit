@@ -45,6 +45,7 @@ import {
   drinksBillingSentence,
   depositAppliedClause,
   depositComesOffDrinks,
+  billingStageLabel,
 } from "@shared/billingTerms";
 import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost } from "@shared/eventBilling";
 
@@ -1364,26 +1365,25 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // three money streams (deposit / food / drinks + bar) are spelled out as
     // numbered steps with their live status, instead of leaving people to infer
     // it from the numbers table below.
-    const billHowTo = (() => {
+    const depositRequired = (booking as any).depositRequired !== false;
+    // Billing TERMS (how it's charged) — chosen per event, distinct from the
+    // food/drinks statuses (whether the money has arrived).
+    const termsFood = (booking as any).billingFood as string | null;
+    const termsDrinks = (booking as any).billingDrinks as string | null;
+    const termsDeposit = (booking as any).billingDepositApplied as string | null;
+    const termsNote = ((booking as any).billingNote as string | null) ?? "";
+    // Which numbered step the drinks landed on, so the money band can point at
+    // it rather than saying "above" and leaving staff to hunt.
+    let drinksStepNo = 0;
+    const billStepsBand = (() => {
       if (isPublic || noFinancials) return "";
-      const depositRequired = (booking as any).depositRequired !== false;
       const foodState = ((booking as any).foodStatus as string) || "to_invoice";
       const drinksState = ((booking as any).drinksStatus as string | null)
         ?? ((barOpt === "cash_bar" || barOpt === "bar_tab_then_cash") ? "on_night" : "to_invoice");
-      // Billing TERMS (how it's charged) — chosen per event, distinct from the
-      // statuses above (whether the money has arrived).
-      const termsFood = (booking as any).billingFood as string | null;
-      const termsDrinks = (booking as any).billingDrinks as string | null;
-      const termsDeposit = (booking as any).billingDepositApplied as string | null;
-      const termsNote = ((booking as any).billingNote as string | null) ?? "";
-      const stateLabel: Record<string, string> = {
-        to_invoice: "To invoice", invoiced: "Invoiced &mdash; awaiting payment",
-        paid: "Paid", on_night: "Settled on the night",
-      };
       const pill = (txt: string, good: boolean) =>
         `<span style="background:${good ? "var(--brand-tint)" : "var(--amber-tint)"};color:${good ? "var(--green)" : "var(--amber)"};font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:6px;white-space:nowrap">${txt}</span>`;
       const step = (n: number, title: string, body: string, pillHtml: string) =>
-        `<div style="display:flex;gap:9px;padding:9px 14px;border-top:1px solid var(--hair);align-items:flex-start">`
+        `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:9px;padding:9px 14px;border-top:1px solid var(--hair);align-items:flex-start">`
         + `<span style="font-family:var(--serif);font-size:13px;font-weight:600;color:var(--green);flex:none;line-height:1.3">${n}</span>`
         + `<span style="flex:1;min-width:0"><span style="font-size:11.5px;font-weight:700;color:var(--ink)">${title}</span>${pillHtml}`
         + `<div style="font-size:11px;color:var(--gray);line-height:1.45;margin-top:2px">${body}</div></span></div>`;
@@ -1393,8 +1393,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         steps.push(step(++n, "Deposit", `${fmtCurrency(depAmt)} to secure the date &mdash; ${escHtml(depositAppliedClause(termsDeposit))}.`,
           pill(booking.depositPaid ? "Received" : "Outstanding", Boolean(booking.depositPaid))));
       }
+      const foodStage = billingStageLabel("food", foodState, termsFood);
       steps.push(step(++n, "Food", escHtml(foodBillingSentence(termsFood)),
-        pill(stateLabel[foodState] ?? foodState, foodState === "paid")));
+        pill(escHtml(foodStage.label), foodStage.settled)));
       const barBits = [
         barTagLabel ? escHtml(barTagLabel) : "",
         barTabVal ? `tab limit ${fmtCurrency(barTabVal)}` : "",
@@ -1404,7 +1405,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
             ? ` The ${fmtCurrency(depAmt)} deposit comes off this total.` : "")
         + (barBits ? `<div style="margin-top:2px"><b style="color:var(--amber);font-weight:700">Bar &mdash;</b> ${barBits}</div>` : "")
         + (barNotesText.trim() ? `<div style="margin-top:2px">${escHtml(barNotesText).replace(/\n/g, "<br>")}</div>` : "");
-      steps.push(step(++n, "Drinks / bar", drinksBody, pill(stateLabel[drinksState] ?? drinksState, drinksState === "paid")));
+      const drinksStage = billingStageLabel("drinks", drinksState, termsDrinks);
+      drinksStepNo = ++n;
+      steps.push(step(drinksStepNo, "Drinks / bar", drinksBody, pill(escHtml(drinksStage.label), drinksStage.settled)));
       // The custom line goes above the free-text payment notes: it's a chosen
       // term for THIS event, not a general note.
       if (termsNote.trim()) {
@@ -1413,21 +1416,21 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       if (!hideSet.has("payment") && paymentNotesTxt.trim()) {
         steps.push(step(++n, "Notes for this event", escHtml(paymentNotesTxt).replace(/\n/g, "<br>"), ""));
       }
-      return `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px">${secLabel("How This Event Is Billed")}`
-        + `<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden;background:var(--cream)">${steps.join("")}</div></div>`;
+      return steps.join("");
     })();
 
-    const billingInstrBlk = (!isPublic && !noFinancials && (minSpendAmt > 0 || depAmt > 0 || paymentInstr.trim())) ? `${secLabel("Billing Instructions")}
-      <div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">
-        ${minSpendAmt > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 15px;background:var(--green);color:var(--on-green)"><span style="font-size:11.5px;font-weight:700">Minimum spend</span><span style="font-family:var(--serif);font-size:17px;font-weight:600">${fmtCurrency(minSpendAmt)}</span></div>` : ""}
-        ${depAmt > 0 ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink2)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:3px">Deposit</div><b style="font-weight:700">${fmtCurrency(depAmt)}</b> <span style="background:${booking.depositPaid ? "var(--brand-tint)" : "color-mix(in srgb,var(--red) 12%,#fff)"};color:${booking.depositPaid ? "var(--green)" : "var(--red)"};font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:4px">${booking.depositPaid ? "Paid" : "Due"}</span></div>` : ""}
-        ${(!hideSet.has('payment') && paymentInstr.trim()) ? `<div style="padding:11px 15px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink2);line-height:1.45">${escHtml(paymentInstr).replace(/\n/g, "<br>")}</div>` : ""}
-      </div>` : "";
-    // DF-5: no standalone "External Hire & Suppliers" page. Onsite contact is
-    // already in the info band; the Set-up note moves to page 1 (setupSection);
-    // billing instructions move onto the Event Summary page (billingInstrSection
-    // below). So there is no page-3 section.
-    const billingInstrSection = billingInstrBlk.trim() ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px">${billingInstrBlk}</div>` : "";
+    // ── The three billing blocks are now one card ────────────────────────
+    // "How this event is billed", "Billing instructions" and "Daily billing
+    // summary" were three separate headings telling one story, and they
+    // repeated themselves: the deposit appeared as a numbered step AND again as
+    // its own row, and the payment note printed once in the steps and again as
+    // the closing NOTE. Staff had to read four blocks and reconcile them.
+    // One card now runs: what happens → what it comes to → how to pay.
+    const bandLabel = (txt: string, meta?: string) =>
+      `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:9px;background:var(--fill);padding:7px 14px;border-top:1.5px solid var(--line2);font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>${txt}</span>${meta ? `<span style="letter-spacing:.04em;font-weight:600;text-transform:none;color:var(--gray)">${meta}</span>` : ""}</div>`;
+    const howToPayBand = (!isPublic && !noFinancials && !hideSet.has('payment') && paymentInstr.trim())
+      ? bandLabel("How to pay") + `<div style="break-inside:avoid;page-break-inside:avoid;padding:11px 15px;font-size:11.5px;color:var(--ink2);line-height:1.45">${escHtml(paymentInstr).replace(/\n/g, "<br>")}</div>`
+      : "";
 
     // ── PAGE 4 — summary stat cards, itemised billing, acceptance ──
     const statCard = (label: string, big: string, sub: string) => `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:5px 9px"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink);margin-top:2px;line-height:1.1">${big}</div>${sub ? `<div style="font-size:11.5px;color:var(--gray);margin-top:3px">${sub}</div>` : ""}</div>`;
@@ -1445,13 +1448,62 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const billingTotalRows = enteredTotal > 0
       ? `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--gray)"><span style="text-align:right">Subtotal (excl. GST)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(subtotalExGst)}</span></div><div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;font-size:11px;color:var(--gray)"><span style="text-align:right">GST (15%)</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${fmtCurrency(gstAmt)}</span></div><div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Total (incl. GST)</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(totalInclGst)}</span></div>`
       : `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:13px 16px;border-top:1.5px solid var(--green);background:var(--green);color:var(--on-green);align-items:center"><span style="font-size:11.5px;font-weight:700">Day Estimated Total</span><span style="text-align:right;font-family:var(--serif);font-size:20px;font-weight:600">${fmtCurrency(itemisedTotal > 0 ? itemisedTotal : enteredTotal)}</span></div>`;
-    const billingTable = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || billCostList.length > 0 || minSpendAmt > 0)) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px">${secLabel("Daily Billing Summary", { metaRight: escHtml(eventDate) })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden"><div class="bill-row bill-head" style="display:grid;grid-template-columns:1fr 90px 60px 110px;background:var(--fill);padding:7px 14px;font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>${foodBillRows}${costBillRows}${billingTotalRows}</div></div>` : "";
-    const closingNote = (!hideSet.has('footer') && footerNote.trim()) ? `<div style="margin-top:5px">${secLabel("Note")}<div style="font-size:11.5px;line-height:1.5;color:#332e26">${footerNote.replace(/\n/g, "<br>")}</div></div>` : "";
+    // The deposit is only deducted here when it actually comes off THIS bill.
+    // Applied to the drinks bill (the default) it must not be subtracted from a
+    // food total, or the balance staff read would be $575 short.
+    const depositOffThisBill = depAmt > 0 && Boolean(booking.depositPaid)
+      && (termsDeposit === "food" || termsDeposit === "total");
+    const summaryRow = (label: string, value: string, opts?: { strong?: boolean }) =>
+      `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:6px 16px;border-top:1px solid var(--hair);font-size:11px;color:${opts?.strong ? "var(--ink2)" : "var(--gray)"}"><span style="text-align:right;${opts?.strong ? "font-weight:700" : ""}">${label}</span><span style="text-align:right;font-family:var(--serif);font-weight:600;color:var(--ink)">${value}</span></div>`;
+    const minSpendRow = minSpendAmt > 0 ? summaryRow("Minimum spend", fmtCurrency(minSpendAmt), { strong: true }) : "";
+    // A deposit that isn't a numbered step (not required, but paid anyway)
+    // would otherwise vanish with the old Billing Instructions block.
+    const strayDepositRow = (!(depositRequired && depAmt > 0) && depAmt > 0)
+      ? summaryRow(`Deposit &middot; ${booking.depositPaid ? "paid" : "due"}`, fmtCurrency(depAmt)) : "";
+    const balanceRows = depositOffThisBill && totalInclGst > 0
+      ? summaryRow("Less deposit received", `&minus;${fmtCurrency(depAmt)}`)
+        + `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:9px 16px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink)"><span style="text-align:right;font-weight:700">Balance to collect</span><span style="text-align:right;font-family:var(--serif);font-size:15px;font-weight:600">${fmtCurrency(Math.max(0, totalInclGst - depAmt))}</span></div>`
+      : "";
+    const moneyBand = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || billCostList.length > 0 || minSpendAmt > 0 || depAmt > 0))
+      ? bandLabel("What it comes to", escHtml(eventDate))
+        // Column headings only when there are lines under them; an empty
+        // Item/Price/Qty header over a bare total reads as missing data.
+        + ((foodBillRows || costBillRows)
+            ? `<div class="bill-row bill-head" style="display:grid;grid-template-columns:1fr 90px 60px 110px;padding:5px 14px;border-top:1px solid var(--hair);font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>`
+            : "")
+        + foodBillRows + costBillRows + minSpendRow + strayDepositRow + billingTotalRows + balanceRows
+        // The bar is not in this table. Without saying so, a total sitting under
+        // a bar tab of $1,980 reads as the whole event, and someone collects the
+        // wrong amount on the night.
+        + ((barOpt || barTabVal) && termsDrinks !== "none"
+            ? `<div style="break-inside:avoid;page-break-inside:avoid;padding:7px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--gray);text-align:right">Drinks are billed separately &mdash; see step ${drinksStepNo} above.</div>`
+            : "")
+      : "";
+
+    // The closing NOTE and the "Notes for this event" billing step are separate
+    // fields that operators fill with the same sentence, so the BEO printed
+    // "All food invoiced prior / Drinks settled at the end of the night" twice,
+    // a few centimetres apart. Print it once, in the billing card where it has
+    // context.
+    const plainKey = (t: string) => t.replace(/<[^>]*>/g, " ").replace(/&[a-z]+;/gi, " ")
+      .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const footerKey = plainKey(footerNote);
+    const notesKey = plainKey(paymentNotesTxt);
+    const noteAlreadyInBilling = Boolean(billStepsBand) && footerKey.length > 0 && notesKey.length > 0
+      && (notesKey.includes(footerKey) || footerKey.includes(notesKey));
+    const closingNote = (!hideSet.has('footer') && footerNote.trim() && !noteAlreadyInBilling) ? `<div style="margin-top:5px">${secLabel("Note")}<div style="font-size:11.5px;line-height:1.5;color:#332e26">${footerNote.replace(/\n/g, "<br>")}</div></div>` : "";
     const acceptanceBlk = `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:10px;padding-top:16px;border-top:1px solid var(--line)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:4px">Client Acceptance</div><div style="font-size:11.5px;color:var(--gray);margin-bottom:20px;line-height:1.5;max-width:80%">By signing below the client confirms the details, catering, beverages and estimated charges set out in this event order are correct.</div>${sigStrip(false)}</div>`;
     // Condense: the Event Summary stat cards duplicated the page-1 info band
     // (date / service / space / attendees), so they're dropped to save a block.
-    const page4Inner = `${billHowTo}${billingInstrSection}${billingTable}${closingNote}${acceptanceBlk}`;
-    const page4Content = (statCards.length > 0 || billingTable.trim() || billHowTo.trim()) ? `${pageHeadR("Event Summary", escHtml(eventDate))}${page4Inner}` : "";
+    const billingCard = [billStepsBand, moneyBand, howToPayBand].filter(Boolean).join("");
+    // No break-inside:avoid on the card itself — it is long enough to need a
+    // page break, and forcing it whole pushed it onto a page of its own. The
+    // rows inside each hold together.
+    const billingSection = billingCard.trim()
+      ? `<div style="margin-top:9px">${secLabel("How This Event Is Billed")}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden;background:var(--cream)">${billingCard}</div></div>`
+      : "";
+    const page4Inner = `${billingSection}${closingNote}${acceptanceBlk}`;
+    const page4Content = (statCards.length > 0 || billingCard.trim()) ? `${pageHeadR("Event Summary", escHtml(eventDate))}${page4Inner}` : "";
 
     // ── Assemble pages; collapse empties; number "Page N of N" dynamically ──
     const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
