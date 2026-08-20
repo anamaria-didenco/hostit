@@ -421,6 +421,12 @@ export async function getXeroInvoiceStatus(ownerId: number, invoiceId: string): 
  *  (AUTHORISED/PAID) affects the GST return and must be handled in Xero. */
 const EDITABLE_STATUSES = new Set(["DRAFT", "SUBMITTED"]);
 
+/** Statuses meaning the invoice no longer exists in Xero in any live form.
+ *  Nothing to delete, nothing to update — and nothing to block a replacement. */
+export function isGoneFromXero(status: string | null): boolean {
+  return status === "DELETED" || status === "VOIDED";
+}
+
 export function assertEditable(status: string | null, action: "update" | "delete"): void {
   if (status === null) return; // unknown to Xero — let the call itself fail
   if (EDITABLE_STATUSES.has(status)) return;
