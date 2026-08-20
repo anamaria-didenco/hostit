@@ -39,6 +39,9 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // applies LineAmountTypes per invoice, so this is the finest granularity
   // Xero can express. Defaults to the venue setting.
   const [inclusive, setInclusive] = useState(false);
+  // When set, the modal is EDITING that already-sent draft rather than creating
+  // a new one (Xero upserts by InvoiceID, so it's the same send path).
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   useEscapeKey(open, onClose);
 
@@ -75,16 +78,26 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     setLines(seeded);
   }, [open, stream, booking?.bookingId, inclusive]);
 
+  useEffect(() => { if (!open) setEditingId(null); }, [open]);
+
   const push = trpc.xero.pushInvoice.useMutation({
     onSuccess: (r) => {
       toast.success(
-        `Draft ${r.invoiceNumber ?? ""} for ${fmtNZD(r.total)} created in ${r.tenantName} — approve it in Xero.`.replace("  ", " "),
+        `Draft ${r.invoiceNumber ?? ""} for ${fmtNZD(r.total)} ${r.updated ? "updated" : "created"} in ${r.tenantName} — approve it in Xero.`.replace("  ", " "),
         { duration: 8000 }
       );
       utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
       onClose();
     },
     onError: (e) => toast.error(e.message || "Failed to send to Xero"),
+  });
+  const del = trpc.xero.deleteInvoice.useMutation({
+    onSuccess: () => {
+      toast.success("Draft deleted in Xero");
+      setEditingId(null);
+      utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
+    },
+    onError: (e) => toast.error(e.message || "Could not delete that invoice"),
   });
   const sync = trpc.xero.syncStatuses.useMutation({
     onSuccess: (r) => {
@@ -121,6 +134,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       lines: parsed,
       dueDate: dueDate || undefined,
       inclusive,
+      updateInvoiceId: editingId ?? undefined,
     });
   };
 
@@ -158,6 +172,16 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
             </div>
           )}
 
+          {editingId !== null && (
+            <div className="border border-blue-300 bg-blue-50 text-blue-900 font-dm text-xs p-2.5 flex items-center justify-between gap-2">
+              <span>Editing an existing draft — sending will <b>replace</b> its contents in Xero.</span>
+              <button onClick={() => setEditingId(null)}
+                className="font-bebas tracking-widest text-[10px] text-blue-900 hover:underline flex-shrink-0">
+                CREATE NEW INSTEAD
+              </button>
+            </div>
+          )}
+
           {/* Stream toggle */}
           <div className="flex gap-1.5" role="radiogroup" aria-label="Invoice type">
             {(["food", "drinks"] as const).map(s => (
@@ -189,6 +213,22 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                     inv.status === "PAID" ? "bg-green-100 text-green-700" : inv.status === "AUTHORISED" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
                     {inv.status ?? "DRAFT"}
                   </span>
+                  {/* Only drafts can be changed from here — an approved or paid
+                      invoice affects the GST return and must be handled in Xero. */}
+                  {(!inv.status || inv.status === "DRAFT" || inv.status === "SUBMITTED") ? (
+                    <>
+                      <button onClick={() => { setStream(inv.stream); setEditingId(inv.id); }}
+                        className="font-bebas tracking-widest text-[10px] text-forest hover:underline"
+                        title="Load this draft's details below and update it in Xero">EDIT</button>
+                      <button
+                        onClick={() => { if (confirm(`Delete draft ${inv.invoiceNumber ?? ""} in Xero? This cannot be undone.`)) del.mutate({ id: inv.id }); }}
+                        disabled={del.isPending}
+                        className="font-bebas tracking-widest text-[10px] text-red-700 hover:underline disabled:opacity-50"
+                        title="Delete this draft in Xero">DELETE</button>
+                    </>
+                  ) : (
+                    <span className="font-dm text-[10px] text-ink/50" title="Approved in Xero — void or credit it there">locked</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -265,7 +305,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
             </button>
             <button onClick={send} disabled={push.isPending || !xeroStatus?.connected || xeroStatus?.tenantMissing}
               className="font-bebas tracking-widest text-xs px-5 py-2 bg-forest text-cream hover:opacity-90 disabled:opacity-50">
-              {push.isPending ? "SENDING…" : "SEND DRAFT TO XERO"}
+              {push.isPending ? "SENDING…" : editingId !== null ? "UPDATE DRAFT IN XERO" : "SEND DRAFT TO XERO"}
             </button>
           </div>
         </div>

@@ -4128,6 +4128,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         inclusive: z.boolean().optional(),
         // Set true to knowingly create a second invoice for the same stream.
         allowDuplicate: z.boolean().optional(),
+        // Our xero_invoices row id to UPDATE rather than creating a new draft.
+        updateInvoiceId: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.isTeamMember) throw new Error('Only the venue owner can send invoices to Xero');
@@ -4139,7 +4141,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const [booking] = await db.select().from(bookings)
           .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
         if (!booking) throw new Error('Booking not found');
-        if (!input.allowDuplicate) {
+        // Updating an existing draft: resolve it first and skip the dup guard.
+        let targetXeroId: string | undefined;
+        if (input.updateInvoiceId !== undefined) {
+          const [row] = await db.select().from(xeroInvoices)
+            .where(and(eq(xeroInvoices.id, input.updateInvoiceId), eq(xeroInvoices.ownerId, ctx.user.id))).limit(1);
+          if (!row?.xeroInvoiceId) throw new Error('That invoice is no longer tracked by VenueFlow.');
+          targetXeroId = row.xeroInvoiceId;
+        }
+        if (!input.allowDuplicate && input.updateInvoiceId === undefined) {
           const [dup] = await db.select({ id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber })
             .from(xeroInvoices)
             .where(and(
@@ -4167,20 +4177,51 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           contactEmail: booking.email ?? undefined,
           inclusive: input.inclusive,
           accountCode: streamAccount || undefined,
+          invoiceId: targetXeroId,
           reference: `${input.stream === 'food' ? 'Food' : 'Drinks'} — ${clientName}${evDate ? ` · ${evDate}` : ''} (VenueFlow #${booking.id})`,
           dueDate: input.dueDate,
           lines: input.lines,
         });
-        await db.insert(xeroInvoices).values({
-          ownerId: ctx.user.id,
-          bookingId: input.bookingId,
-          stream: input.stream,
-          xeroInvoiceId: result.invoiceId,
-          invoiceNumber: result.invoiceNumber,
-          status: result.status,
-          total: String(result.total),
-        });
-        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, tenantName: result.tenantName };
+        if (input.updateInvoiceId !== undefined) {
+          await db.update(xeroInvoices).set({
+            invoiceNumber: result.invoiceNumber,
+            status: result.status,
+            total: String(result.total),
+          }).where(and(eq(xeroInvoices.id, input.updateInvoiceId), eq(xeroInvoices.ownerId, ctx.user.id)));
+        } else {
+          await db.insert(xeroInvoices).values({
+            ownerId: ctx.user.id,
+            bookingId: input.bookingId,
+            stream: input.stream,
+            xeroInvoiceId: result.invoiceId,
+            invoiceNumber: result.invoiceNumber,
+            status: result.status,
+            total: String(result.total),
+          });
+        }
+        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, tenantName: result.tenantName, updated: input.updateInvoiceId !== undefined };
+      }),
+    /** Delete a DRAFT invoice in Xero and drop it from our ledger. Approved or
+     *  paid invoices are refused — those must be voided/credited in Xero. */
+    deleteInvoice: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.isTeamMember) throw new Error('Only the venue owner can delete Xero invoices');
+        const { getDb } = await import('./db');
+        const { xeroInvoices } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(xeroInvoices)
+          .where(and(eq(xeroInvoices.id, input.id), eq(xeroInvoices.ownerId, ctx.user.id))).limit(1);
+        if (!row) throw new Error('Invoice not found');
+        if (row.xeroInvoiceId) {
+          const { deleteXeroDraftInvoice } = await import('./xero');
+          await deleteXeroDraftInvoice(ctx.user.id, row.xeroInvoiceId); // throws if approved
+        }
+        await db.delete(xeroInvoices)
+          .where(and(eq(xeroInvoices.id, input.id), eq(xeroInvoices.ownerId, ctx.user.id)));
+        return { success: true };
       }),
     // Pull current statuses from Xero for a booking's invoices; when one is
     // PAID, tick the matching food/drinks stream on the Payments board too.
