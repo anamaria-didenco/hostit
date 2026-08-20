@@ -34,6 +34,11 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   const [stream, setStream] = useState<"food" | "drinks">(initialStream ?? "food");
   const [lines, setLines] = useState<Line[]>([]);
   const [dueDate, setDueDate] = useState("");
+  // GST treatment for THIS invoice. Real-world practice is mixed (per-head
+  // menus quoted excl., grazing tables and bar tabs quoted gross), and Xero
+  // applies LineAmountTypes per invoice, so this is the finest granularity
+  // Xero can express. Defaults to the venue setting.
+  const [inclusive, setInclusive] = useState(false);
 
   useEscapeKey(open, onClose);
 
@@ -42,6 +47,9 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     { enabled: open && !!booking }
   );
   const { data: xeroStatus } = trpc.xero.status.useQuery(undefined, { enabled: open });
+  useEffect(() => {
+    if (open && xeroStatus?.connected) setInclusive(Boolean(xeroStatus.lineAmountsInclusive));
+  }, [open, xeroStatus?.connected, xeroStatus?.lineAmountsInclusive]);
 
   // Seed the editable lines whenever the modal opens or the stream flips.
   useEffect(() => {
@@ -52,18 +60,27 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     const label = `${stream === "food" ? "Food" : "Drinks"} — ${booking.name}${ev ? ` · ${ev}` : ""}`;
     const seeded: Line[] = [{ description: label, quantity: "1", unitAmount: "" }];
     if (stream === "drinks" && booking.depositPaid) {
-      const dep = booking.depositNzd > 0 ? booking.depositNzd : 575;
-      seeded.push({ description: "Less deposit received", quantity: "1", unitAmount: String(-dep) });
+      // The deposit shown everywhere in the app ($575) is a GROSS figure. On an
+      // exclusive invoice it must be entered net ($500) or Xero adds 15% on top
+      // and the client is over-credited/charged. Convert, don't hand over a raw
+      // number and hope the treatment matches.
+      const grossDeposit = booking.depositNzd > 0 ? booking.depositNzd : 575;
+      const amt = inclusive ? grossDeposit : Math.round((grossDeposit / 1.15) * 100) / 100;
+      seeded.push({
+        description: `Less deposit received (${fmtNZD(grossDeposit)} incl. GST)`,
+        quantity: "1",
+        unitAmount: String(-amt),
+      });
     }
     setLines(seeded);
-  }, [open, stream, booking?.bookingId]);
+  }, [open, stream, booking?.bookingId, inclusive]);
 
   const push = trpc.xero.pushInvoice.useMutation({
     onSuccess: (r) => {
-      toast.success(`Draft sent to Xero${r.invoiceNumber ? ` — ${r.invoiceNumber}` : ""} (${fmtNZD(r.total)})`, {
-        action: r.xeroUrl ? { label: "Open in Xero", onClick: () => window.open(r.xeroUrl, "_blank", "noopener") } : undefined,
-        duration: 8000,
-      });
+      toast.success(
+        `Draft ${r.invoiceNumber ?? ""} for ${fmtNZD(r.total)} created in ${r.tenantName} — approve it in Xero.`.replace("  ", " "),
+        { duration: 8000 }
+      );
       utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
       onClose();
     },
@@ -78,10 +95,18 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     onError: (e) => toast.error(e.message || "Failed to check Xero"),
   });
 
-  const total = useMemo(
-    () => lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitAmount) || 0), 0),
-    [lines]
-  );
+  // Show BOTH figures so a wrong GST treatment is visible before sending
+  // rather than discovered on the client's invoice.
+  const { subtotal, gst, total } = useMemo(() => {
+    const sum = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitAmount) || 0), 0);
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    if (inclusive) {
+      const sub = r2(sum / 1.15);
+      return { subtotal: sub, gst: r2(sum - sub), total: r2(sum) };
+    }
+    const g = r2(sum * 0.15);
+    return { subtotal: r2(sum), gst: g, total: r2(sum + g) };
+  }, [lines, inclusive]);
 
   if (!open || !booking) return null;
 
@@ -95,6 +120,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       stream,
       lines: parsed,
       dueDate: dueDate || undefined,
+      inclusive,
     });
   };
 
@@ -117,7 +143,18 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
         <div className="p-5 space-y-4">
           {!xeroStatus?.connected && (
             <div className="border border-amber-300 bg-amber-50 text-amber-800 font-dm text-xs p-3">
-              Xero isn't connected yet — connect it in Settings → Integrations first.
+              {xeroStatus?.needsOrgChoice
+                ? "More than one Xero organisation is authorised — pick which one to invoice in Settings → Integrations."
+                : "Xero isn't connected yet — connect it in Settings → Integrations first."}
+            </div>
+          )}
+          {xeroStatus?.connected && (
+            <div className="border border-gold/30 bg-linen/50 font-dm text-xs p-2.5 flex items-center gap-2">
+              <span className="text-ink/70">Invoicing into</span>
+              <b className="text-ink">{xeroStatus.tenantName}</b>
+              {xeroStatus.tenantMissing && (
+                <span className="text-red-700 font-semibold">· no longer authorised — reconnect</span>
+              )}
             </div>
           )}
 
@@ -185,16 +222,34 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
             </button>
           </div>
 
-          {/* Due date + total */}
+          {/* Due date + GST treatment */}
           <div className="flex items-end justify-between gap-3 flex-wrap">
             <div>
               <label htmlFor="xero-due" className="font-bebas tracking-widest text-[10px] text-ink/70 block mb-1">DUE DATE (OPTIONAL)</label>
               <input id="xero-due" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
                 className="border border-gold/30 px-3 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
             </div>
-            <div className="text-right">
-              <div className="font-bebas tracking-widest text-[10px] text-ink/70">TOTAL{xeroStatus?.connected ? (xeroStatus.lineAmountsInclusive ? " · INCL. GST" : " · EXCL. GST") : ""}</div>
-              <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(total)}</div>
+            <div>
+              <span className="font-bebas tracking-widest text-[10px] text-ink/70 block mb-1">AMOUNTS ENTERED ABOVE ARE</span>
+              <div className="flex gap-1.5" role="radiogroup" aria-label="GST treatment">
+                {([[false, "EXCL. GST"], [true, "INCL. GST"]] as const).map(([v, lbl]) => (
+                  <button key={lbl} role="radio" aria-checked={inclusive === v} onClick={() => setInclusive(v)}
+                    className={`font-bebas tracking-widest text-[11px] px-3 py-2 border transition-colors ${
+                      inclusive === v ? "bg-forest text-cream border-forest" : "border-gold/30 text-ink/70 hover:bg-gold/10"}`}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Breakdown — both figures, so a wrong treatment is caught here */}
+          <div className="border border-gold/25 bg-linen/40 px-3 py-2.5 font-dm text-sm">
+            <div className="flex justify-between text-ink/70"><span>Subtotal (excl. GST)</span><span>{fmtNZD(subtotal)}</span></div>
+            <div className="flex justify-between text-ink/70 mt-0.5"><span>GST (15%)</span><span>{fmtNZD(gst)}</span></div>
+            <div className="flex justify-between items-baseline mt-1.5 pt-1.5 border-t border-gold/25">
+              <span className="font-bebas tracking-widest text-xs text-ink">TOTAL THE CLIENT PAYS</span>
+              <span className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(total)}</span>
             </div>
           </div>
 
@@ -208,7 +263,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
               className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink/70 hover:bg-gold/10">
               CANCEL
             </button>
-            <button onClick={send} disabled={push.isPending || !xeroStatus?.connected}
+            <button onClick={send} disabled={push.isPending || !xeroStatus?.connected || xeroStatus?.tenantMissing}
               className="font-bebas tracking-widest text-xs px-5 py-2 bg-forest text-cream hover:opacity-90 disabled:opacity-50">
               {push.isPending ? "SENDING…" : "SEND DRAFT TO XERO"}
             </button>

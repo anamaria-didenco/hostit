@@ -357,6 +357,13 @@
       "when": 1779800900000,
       "tag": "0050_xero_tax_type",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1779801000000,
+      "tag": "0051_xero_stream_accounts",
+      "breakpoints": true
     }
   ]
 }

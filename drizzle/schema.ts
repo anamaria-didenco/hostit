@@ -613,6 +613,10 @@ export const xeroConnections = pgTable("xero_connections", {
   // first use. Never hardcode: OUTPUT is the legacy 12.5% rate and picking it
   // silently produces wrong GST. Null until resolved.
   salesTaxType: varchar("salesTaxType", { length: 20 }),
+  // Optional per-stream revenue codes — venues often track food and beverage
+  // against different accounts. Fall back to salesAccountCode when unset.
+  salesAccountCodeFood: varchar("salesAccountCodeFood", { length: 20 }),
+  salesAccountCodeDrinks: varchar("salesAccountCodeDrinks", { length: 20 }),
   lineAmountsInclusive: boolean("lineAmountsInclusive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
