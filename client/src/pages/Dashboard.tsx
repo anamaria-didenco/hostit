@@ -5160,22 +5160,22 @@ export default function Dashboard() {
                   <div className="dante-card p-4 md:p-6">
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE DETAILS</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="col-span-2">
+                      <div className="md:col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">VENUE NAME <span className="text-red-500">*</span></label>
                         <Input value={settingsForm.name} onChange={e => setSettingsForm((f: any) => ({ ...f, name: e.target.value }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
-                      <div className="col-span-2">
+                      <div className="md:col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">INTERNAL NAME <span className="text-ink/65 font-dm normal-case text-xs">(e.g. Westside or location)</span></label>
                         <Input value={settingsForm.internalName} onChange={e => setSettingsForm((f: any) => ({ ...f, internalName: e.target.value }))}
                           placeholder="Westside" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
-                      <div className="col-span-2">
+                      <div className="md:col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">WEBSITE</label>
                         <Input value={settingsForm.website} onChange={e => setSettingsForm((f: any) => ({ ...f, website: e.target.value }))}
                           placeholder="https://yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
-                      <div className="col-span-2">
+                      <div className="md:col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
                         <Input type="text" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
                           placeholder="events@yourvenue.co.nz, manager@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
@@ -5188,12 +5188,12 @@ export default function Dashboard() {
                   <div className="dante-card p-4 md:p-6">
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE ADDRESS</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="col-span-2">
+                      <div className="md:col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 1</label>
                         <Input value={settingsForm.addressLine1} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine1: e.target.value }))}
                           placeholder="166 Cashel Street" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
-                      <div className="col-span-2">
+                      <div className="md:col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 2</label>
                         <Input value={settingsForm.addressLine2} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine2: e.target.value }))}
                           placeholder="Christchurch Central City" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
@@ -5256,13 +5256,16 @@ export default function Dashboard() {
                         <Input type="number" min={0} value={settingsForm.minGroupSize} onChange={e => setSettingsForm((f: any) => ({ ...f, minGroupSize: parseInt(e.target.value) || 0 }))}
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
-                      <div className="flex items-center gap-3 pt-6">
+                      {/* pt-6 only makes sense next to a field that has a label
+                          above it — in the single-column phone layout it was
+                          just a gap. */}
+                      <div className="flex items-start gap-3 md:pt-6">
                         <input type="checkbox" id="autoCancelTentative" checked={settingsForm.autoCancelTentative === 1}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, autoCancelTentative: e.target.checked ? 1 : 0 }))}
-                          className="w-4 h-4 accent-forest" />
+                          className="w-5 h-5 mt-0.5 flex-none accent-forest" />
                         <label htmlFor="autoCancelTentative" className="font-dm text-sm text-ink">Automatically cancel tentative events after their event date</label>
                       </div>
-                      <div className="col-span-2">
+                      <div className="md:col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PAYMENT INSTRUCTIONS</label>
                         <Textarea
                           value={settingsForm.paymentInstructions ?? ""}
@@ -5272,7 +5275,7 @@ export default function Dashboard() {
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                         <p className="font-dm text-xs text-sage/60 mt-1">Shown under running totals on every runsheet, the live staff link, and the BEO PDF.</p>
                       </div>
-                      <div className="col-span-2 border-t border-gold/20 pt-4 mt-2">
+                      <div className="md:col-span-2 border-t border-gold/20 pt-4 mt-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — SUBJECT</label>
                         <Input
                           value={settingsForm.staffBriefingSubject ?? ""}
@@ -5280,7 +5283,7 @@ export default function Dashboard() {
                           placeholder="Staff Briefing — {eventTitle}"
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold text-sm" />
                       </div>
-                      <div className="col-span-2">
+                      <div className="md:col-span-2">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — BODY</label>
                         <Textarea
                           value={settingsForm.staffBriefingBody ?? ""}

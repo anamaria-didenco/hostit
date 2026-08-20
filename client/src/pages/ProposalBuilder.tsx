@@ -507,7 +507,7 @@ export default function ProposalBuilder() {
                 <Input type="number" value={guestCount} onChange={e => setGuestCount(e.target.value)}
                   placeholder="50" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT SPACE</label>
                 {spaces && spaces.length > 0 ? (
                   <Select value={spaceName} onValueChange={setSpaceName}>
