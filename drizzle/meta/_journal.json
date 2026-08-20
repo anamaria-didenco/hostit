@@ -385,6 +385,13 @@
       "when": 1779801300000,
       "tag": "0054_schema_drift_repair",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1779801400000,
+      "tag": "0055_billing_terms",
+      "breakpoints": true
     }
   ]
 }

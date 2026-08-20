@@ -1695,6 +1695,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // Payments board — food/drinks workflow stream statuses.
         foodStatus: z.enum(['to_invoice', 'invoiced', 'paid']).optional(),
         drinksStatus: z.enum(['on_night', 'to_invoice', 'invoiced', 'paid']).nullable().optional(),
+        // Billing TERMS — how the event is charged, printed on the BEO.
+        // Separate from the statuses above, which track whether it's been paid.
+        billingFood: z.enum(['invoiced_prior', 'on_night', 'in_minimum', 'none']).nullable().optional(),
+        billingDrinks: z.enum(['invoiced_after', 'on_night', 'prepaid_tab', 'cash_bar', 'tab_then_cash']).nullable().optional(),
+        billingDepositApplied: z.enum(['drinks', 'food', 'total', 'none']).nullable().optional(),
+        billingNote: z.string().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -1747,6 +1753,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.notes !== undefined) updates.notes = rest.notes;
         if (rest.foodStatus !== undefined) updates.foodStatus = rest.foodStatus;
         if (rest.drinksStatus !== undefined) updates.drinksStatus = rest.drinksStatus;
+        if (rest.billingFood !== undefined) updates.billingFood = rest.billingFood;
+        if (rest.billingDrinks !== undefined) updates.billingDrinks = rest.billingDrinks;
+        if (rest.billingDepositApplied !== undefined) updates.billingDepositApplied = rest.billingDepositApplied;
+        if (rest.billingNote !== undefined) updates.billingNote = rest.billingNote?.trim() || null;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
         // Cascade key shared fields back to the parent lead so the Events
         // table (which reads from leads.list) stays in sync with the

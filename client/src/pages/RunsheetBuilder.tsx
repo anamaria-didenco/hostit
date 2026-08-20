@@ -31,6 +31,10 @@ import EventSpendSection from "@/components/EventSpendSection";
 import { SectionHead } from "@/components/ui/section-head";
 import { StatusBadge } from "@/components/ui/badge";
 import { currency } from "@/lib/money";
+import {
+  FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS,
+  foodBillingSentence, drinksBillingSentence, depositAppliedClause,
+} from "@shared/billingTerms";
 
 function SortableSection({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -1407,6 +1411,29 @@ export default function RunsheetBuilder() {
 
   // Effective booking ID — from URL param, or from the loaded runsheet record
   const effectiveBookingId: number | undefined = bookingId ?? (existing as any)?.bookingId ?? undefined;
+
+  // ── How this event is billed ──────────────────────────────────────────────
+  // These are TERMS (how the event is charged), stored on the booking and
+  // printed on the BEO for floor staff. They are deliberately separate from the
+  // Payments board statuses, which track whether the money has arrived — the
+  // two were conflated, so marking drinks "Invoiced" made the BEO stop saying
+  // the bar was meant to be settled on the night.
+  const { data: billingBooking } = trpc.bookings.getById.useQuery(
+    { id: effectiveBookingId! },
+    { enabled: !!effectiveBookingId },
+  );
+  const utilsBilling = trpc.useUtils();
+  const updateBillingTerms = trpc.bookings.update.useMutation({
+    onSuccess: () => {
+      utilsBilling.bookings.getById.invalidate({ id: effectiveBookingId! });
+      setPreviewNonce(n => n + 1); // BEO preview reflects the change immediately
+    },
+    onError: () => toast.error("Couldn't save the billing terms"),
+  });
+  const setBillingTerm = (patch: Record<string, unknown>) => {
+    if (!effectiveBookingId) return;
+    updateBillingTerms.mutate({ id: effectiveBookingId, ...patch } as any);
+  };
   // Floor plans
   const { data: floorPlansList } = trpc.floorPlans.list.useQuery(
     {},
@@ -5621,6 +5648,81 @@ export default function RunsheetBuilder() {
                 </div>
                 <span className="font-dm text-[10px] text-ink/35">{gstInclusive ? 'Prices already include 15% GST' : 'GST (15%) will be added on top'}</span>
               </div>
+              {/* How this event is billed — drives the BEO block of the same
+                  name. Previously that block was hardcoded prose that could
+                  contradict the notes right beside it. */}
+              {effectiveBookingId && (
+                <div className="border border-gold/25 rounded-md bg-white/70 p-3.5 space-y-3">
+                  <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                    <span className="font-bebas tracking-widest text-[10px] text-ink/65">HOW THIS EVENT IS BILLED</span>
+                    <span className="font-dm text-[10px] text-ink/45">Prints on the BEO for your floor staff</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="min-w-0">
+                      <label htmlFor="rb-billing-food" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">FOOD</label>
+                      <select
+                        id="rb-billing-food"
+                        value={(billingBooking as any)?.billingFood ?? 'invoiced_prior'}
+                        onChange={e => setBillingTerm({ billingFood: e.target.value })}
+                        className="w-full border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                      >
+                        {FOOD_BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="min-w-0">
+                      <label htmlFor="rb-billing-drinks" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">DRINKS / BAR</label>
+                      <select
+                        id="rb-billing-drinks"
+                        value={(billingBooking as any)?.billingDrinks ?? 'invoiced_after'}
+                        onChange={e => setBillingTerm({ billingDrinks: e.target.value })}
+                        className="w-full border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                      >
+                        {DRINKS_BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="min-w-0 sm:col-span-2">
+                      <label htmlFor="rb-billing-deposit" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">DEPOSIT</label>
+                      <select
+                        id="rb-billing-deposit"
+                        value={(billingBooking as any)?.billingDepositApplied ?? 'drinks'}
+                        onChange={e => setBillingTerm({ billingDepositApplied: e.target.value })}
+                        className="w-full border border-gold/25 rounded-sm px-2 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                      >
+                        {DEPOSIT_APPLIED_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  {/* Live preview of the exact sentences the BEO will print, so
+                      there's no guessing what a selection actually says. */}
+                  <div className="rounded-sm border border-gold/20 bg-linen/50 px-3 py-2 space-y-1">
+                    <div className="font-bebas tracking-widest text-[9px] text-ink/45">THE BEO WILL SAY</div>
+                    <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
+                      <b className="font-semibold">Food —</b> {foodBillingSentence((billingBooking as any)?.billingFood ?? 'invoiced_prior')}
+                    </p>
+                    <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
+                      <b className="font-semibold">Drinks —</b> {drinksBillingSentence((billingBooking as any)?.billingDrinks ?? 'invoiced_after', { barOption: rsBarOption, drinksStatus: null })}
+                    </p>
+                    <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
+                      <b className="font-semibold">Deposit —</b> {depositAppliedClause((billingBooking as any)?.billingDepositApplied ?? 'drinks')}.
+                    </p>
+                  </div>
+                  <div>
+                    <label htmlFor="rb-billing-note" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">ANYTHING ELSE FOR THIS EVENT (OPTIONAL)</label>
+                    <input
+                      id="rb-billing-note"
+                      defaultValue={(billingBooking as any)?.billingNote ?? ''}
+                      key={`bn-${(billingBooking as any)?.id ?? 'x'}-${(billingBooking as any)?.billingNote ?? ''}`}
+                      onBlur={e => {
+                        const v = e.target.value;
+                        if (v !== (((billingBooking as any)?.billingNote) ?? '')) setBillingTerm({ billingNote: v });
+                      }}
+                      placeholder="e.g. Cake charged separately · AV hire invoiced with the food"
+                      className="w-full border border-gold/25 rounded-sm px-3 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Payment notes */}
               <div>
                 <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">PAYMENT NOTES</label>
