@@ -4223,6 +4223,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .where(and(eq(xeroInvoices.id, input.id), eq(xeroInvoices.ownerId, ctx.user.id)));
         return { success: true };
       }),
+    /** Sync every tracked invoice for this owner — used by the Payments board so
+     *  reconciling in Xero shows up in VenueFlow without hunting event by
+     *  event. Throttled per owner to stay well inside Xero's 60 calls/minute. */
+    syncAll: protectedProcedure
+      .input(z.object({ force: z.boolean().optional() }).optional())
+      .mutation(async ({ input, ctx }) => {
+        const g: any = globalThis as any;
+        if (!g.__xeroSyncAt) g.__xeroSyncAt = new Map<number, number>();
+        const last: number | undefined = g.__xeroSyncAt.get(ctx.user.id);
+        if (!input?.force && last && Date.now() - last < 60_000) {
+          return { skipped: true as const, statusChanges: 0, paymentsImported: 0 };
+        }
+        g.__xeroSyncAt.set(ctx.user.id, Date.now());
+        const { syncXeroInvoicesForOwner } = await import('./xeroSync');
+        return { skipped: false as const, ...(await syncXeroInvoicesForOwner(ctx.user.id)) };
+      }),
     // Pull current statuses from Xero for a booking's invoices; when one is
     // PAID, tick the matching food/drinks stream on the Payments board too.
     syncStatuses: protectedProcedure
@@ -4233,26 +4249,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const rows = await db.select().from(xeroInvoices)
-          .where(and(eq(xeroInvoices.bookingId, input.bookingId), eq(xeroInvoices.ownerId, ctx.user.id)));
-        const ids = rows.map(r => r.xeroInvoiceId).filter((v): v is string => !!v);
-        if (ids.length === 0) return { updated: 0 };
-        const { getXeroInvoiceStatuses } = await import('./xero');
-        const statuses = await getXeroInvoiceStatuses(ctx.user.id, ids);
-        let updated = 0;
-        for (const r of rows) {
-          const s = r.xeroInvoiceId ? statuses[r.xeroInvoiceId] : undefined;
-          if (!s || s.status === r.status) continue;
-          await db.update(xeroInvoices).set({ status: s.status, invoiceNumber: s.invoiceNumber ?? r.invoiceNumber })
-            .where(eq(xeroInvoices.id, r.id));
-          updated++;
-          if (s.status === 'PAID') {
-            const streamUpdate = r.stream === 'food' ? { foodStatus: 'paid' } : { drinksStatus: 'paid' };
-            await db.update(bookings).set(streamUpdate as any)
-              .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
-          }
-        }
-        return { updated };
+        const { syncXeroInvoicesForOwner } = await import('./xeroSync');
+        const res = await syncXeroInvoicesForOwner(ctx.user.id, input.bookingId);
+        return { updated: res.statusChanges, ...res };
       }),
   }),
 

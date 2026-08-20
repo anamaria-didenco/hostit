@@ -589,6 +589,11 @@ export const payments = pgTable("payments", {
   method: paymentMethodEnum("method").default("bank_transfer").notNull(),
   paidAt: timestamp("paidAt").notNull(),
   notes: text("notes"),
+  // Provenance. 'manual' = keyed in by the team; 'xero' = imported when the
+  // invoice was reconciled in Xero. xeroPaymentId is Xero's own payment GUID
+  // and is what keeps repeat syncs idempotent.
+  source: varchar("source", { length: 20 }).default("manual").notNull(),
+  xeroPaymentId: varchar("xeroPaymentId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type Payment = typeof payments.$inferSelect;
