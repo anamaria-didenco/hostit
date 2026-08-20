@@ -62,6 +62,49 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     { enabled: open && !!booking }
   );
   const { data: xeroStatus } = trpc.xero.status.useQuery(undefined, { enabled: open });
+  // Who the invoice is addressed to. The Xero contact is built server-side
+  // from the booking's name and email, so if either is wrong the fix used to
+  // mean leaving this modal, finding the event, editing, and coming back.
+  // Editable here; saved to the booking before the draft is sent.
+  const { data: bookingRow } = trpc.bookings.getById.useQuery(
+    { id: booking?.bookingId ?? 0 },
+    { enabled: open && !!booking }
+  );
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  useEffect(() => {
+    if (!open || !bookingRow) return;
+    setContactName(`${(bookingRow as any).firstName ?? ""}${(bookingRow as any).lastName ? " " + (bookingRow as any).lastName : ""}`.trim());
+    setContactEmail(((bookingRow as any).email ?? "").toString());
+  }, [open, (bookingRow as any)?.id]);
+  const contactDirty = !!bookingRow && (
+    contactName.trim() !== `${(bookingRow as any).firstName ?? ""}${(bookingRow as any).lastName ? " " + (bookingRow as any).lastName : ""}`.trim()
+    || contactEmail.trim() !== ((bookingRow as any).email ?? "").toString().trim()
+  );
+  const saveContact = trpc.bookings.update.useMutation({
+    onSuccess: () => {
+      utils.bookings.getById.invalidate({ id: booking!.bookingId });
+      utils.payments.overview.invalidate();
+      utils.bookings.list.invalidate();
+    },
+    onError: (e) => toast.error(e.message || "Couldn't save the client details"),
+  });
+  // Persist on blur as well as on send: edits made here shouldn't evaporate
+  // when the modal closes without sending.
+  const saveContactIfDirty = () => {
+    if (contactDirty && contactName.trim()) saveContact.mutate(contactPayload() as any);
+  };
+  const contactPayload = () => {
+    // Last word is the surname; everything before it the first name. A single
+    // word becomes the first name with the surname cleared.
+    const parts = contactName.trim().split(/\s+/).filter(Boolean);
+    return {
+      id: booking!.bookingId,
+      firstName: parts.slice(0, -1).join(" ") || parts[0] || "",
+      lastName: parts.length > 1 ? parts[parts.length - 1] : "",
+      email: contactEmail.trim(),
+    };
+  };
   // The lines this event's BEO already works out. Opening on a blank amount
   // meant retyping figures off the document just sent to the client, which is
   // how an invoice and a BEO end up disagreeing.
@@ -209,7 +252,13 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       updateInvoiceId: editingId ?? undefined,
     };
     lastSendRef.current = payload;
-    push.mutate(payload);
+    // The server builds the Xero contact from the BOOKING, so an edited name
+    // or email must land there before the push or Xero gets the old details.
+    if (contactDirty) {
+      saveContact.mutate(contactPayload() as any, { onSuccess: () => push.mutate(payload) });
+    } else {
+      push.mutate(payload);
+    }
   };
 
   return (
@@ -221,7 +270,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
         <div className="bg-forest-dark px-5 py-3.5 flex items-center justify-between">
           <div>
             <div className="font-bebas tracking-widest text-xs text-gold">SEND TO XERO · DRAFT</div>
-            <div className="font-cormorant text-cream font-semibold text-lg leading-tight">{booking.name}</div>
+            <div className="font-cormorant text-cream font-semibold text-lg leading-tight">{contactName.trim() || booking.name}</div>
           </div>
           <button onClick={onClose} aria-label="Close" className="text-cream/80 hover:text-cream p-1">
             <X className="w-5 h-5" />
@@ -245,6 +294,31 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
               )}
             </div>
           )}
+
+          {/* Who the invoice goes to — the Xero contact's name and email. */}
+          <div className="border border-gold/20 bg-linen/50 p-3 space-y-2">
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
+              <span className="font-bebas tracking-widest text-[10px] text-ink/70">INVOICE TO</span>
+              <span className="font-dm text-[10px] text-ink/45">Changes save to the event</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="min-w-0">
+                <label htmlFor="xero-contact-name" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">CLIENT / EVENT NAME</label>
+                <input id="xero-contact-name" value={contactName} onChange={e => setContactName(e.target.value)}
+                  onBlur={saveContactIfDirty} placeholder="Client name"
+                  className="w-full border border-gold/30 px-2.5 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
+              </div>
+              <div className="min-w-0">
+                <label htmlFor="xero-contact-email" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">EMAIL ON THE INVOICE</label>
+                <input id="xero-contact-email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)}
+                  onBlur={saveContactIfDirty} placeholder="client@example.com"
+                  className="w-full border border-gold/30 px-2.5 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
+              </div>
+            </div>
+            <p className="font-dm text-[10px] text-ink/50">
+              Xero files the invoice under this contact. It emails nothing until you approve the draft there.
+            </p>
+          </div>
 
           {editingId !== null && (
             <div className="border border-blue-300 bg-blue-50 text-blue-900 font-dm text-xs p-2.5 flex items-center justify-between flex-wrap gap-y-2 gap-2">
@@ -407,7 +481,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
               className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink/70 hover:bg-gold/10">
               CANCEL
             </button>
-            <button onClick={send} disabled={push.isPending || !xeroStatus?.connected || xeroStatus?.tenantMissing}
+            <button onClick={send} disabled={push.isPending || saveContact.isPending || !xeroStatus?.connected || xeroStatus?.tenantMissing}
               className="font-bebas tracking-widest text-xs px-5 py-2 bg-forest text-cream hover:opacity-90 disabled:opacity-50">
               {push.isPending ? "SENDING…" : editingId !== null ? "UPDATE DRAFT IN XERO" : "SEND DRAFT TO XERO"}
             </button>
