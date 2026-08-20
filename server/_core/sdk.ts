@@ -23,6 +23,8 @@ export type SessionPayload = {
   appId: string;
   name: string;
   isTeamMember?: boolean;
+  /** Restricted staff login: events + runsheets only, no money or settings. */
+  isStaff?: boolean;
 };
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
@@ -195,6 +197,7 @@ class SDKServer {
       appId: payload.appId,
       name: payload.name,
       ...(payload.isTeamMember ? { isTeamMember: true } : {}),
+      ...(payload.isStaff ? { isStaff: true } : {}),
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
@@ -203,7 +206,7 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string; isTeamMember: boolean } | null> {
+  ): Promise<{ openId: string; appId: string; name: string; isTeamMember: boolean; isStaff: boolean } | null> {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -214,7 +217,7 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name, isTeamMember } = payload as Record<string, unknown>;
+      const { openId, appId, name, isTeamMember, isStaff } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
@@ -230,6 +233,7 @@ class SDKServer {
         appId,
         name,
         isTeamMember: isTeamMember === true,
+        isStaff: isStaff === true,
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
