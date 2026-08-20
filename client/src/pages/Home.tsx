@@ -37,7 +37,7 @@ function Eyebrow({ children, light = false }: { children: React.ReactNode; light
       style={{
         fontSize: 10,
         letterSpacing: "0.32em",
-        color: light ? "#a9c8f2" : "#2f5488",
+        color: light ? "#abc9f2" : "#2f5488",
       }}
     >
       {children}
@@ -163,13 +163,13 @@ export default function Home() {
 
           <div className="flex items-center gap-2.5">
             {isLoading ? null : user ? (
-              <Link href="/dashboard">
-                <Button className="whitespace-nowrap">
+              <Button asChild className="whitespace-nowrap">
+                <Link href="/dashboard">
                   <span className="sm:hidden">Dashboard</span>
                   <span className="hidden sm:inline">Go to Dashboard</span>
                   <ArrowRight className="w-3.5 h-3.5" />
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             ) : (
               <>
                 <a href={getLoginUrl()}>
@@ -202,9 +202,9 @@ export default function Home() {
 
           {isLoading ? null : user ? (
             <div className="flex items-center justify-center">
-              <Link href="/dashboard">
-                <Button size="lg">Go to Dashboard <ArrowRight className="w-[18px] h-[18px]" /></Button>
-              </Link>
+              <Button asChild size="lg">
+                <Link href="/dashboard">Go to Dashboard <ArrowRight className="w-[18px] h-[18px]" /></Link>
+              </Button>
             </div>
           ) : (
             <>
@@ -265,11 +265,11 @@ export default function Home() {
               "Finally a platform built for NZ venues. The enquiry-to-BEO flow is seamless and our chefs actually read the runsheets now."
             </p>
             <p className="text-white font-bold text-sm">James T.</p>
-            <p className="text-[13px]" style={{ color: "#a9c8f2" }}>Venue Director · Wellington</p>
+            <p className="text-[13px]" style={{ color: "#abc9f2" }}>Venue Director · Wellington</p>
           </div>
           <div className="text-center px-7" style={{ borderLeft: "1px solid rgba(255,255,255,0.18)", padding: "4px 28px" }}>
             <p className="font-serif text-white" style={{ fontSize: 52, fontWeight: 600, lineHeight: 1 }}>30<span style={{ fontSize: 22 }}>min</span></p>
-            <p className="mt-2 font-sans font-bold uppercase" style={{ fontSize: 12, color: "#a9c8f2", letterSpacing: "0.06em" }}>Average setup</p>
+            <p className="mt-2 font-sans font-bold uppercase" style={{ fontSize: 12, color: "#abc9f2", letterSpacing: "0.06em" }}>Average setup</p>
           </div>
         </div>
       </section>

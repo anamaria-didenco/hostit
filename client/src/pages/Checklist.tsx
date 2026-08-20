@@ -227,11 +227,11 @@ export default function Checklist() {
             {(templates ?? []).length === 0 ? (
               <div className="text-center py-6">
                 <p className="font-dm text-sm text-muted-foreground mb-4">No templates yet. Create one in Settings first.</p>
-                <Link href="/dashboard">
-                  <Button className="bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest rounded-none">
+                <Button asChild className="bg-burgundy hover:bg-burgundy/90 text-cream font-bebas tracking-widest rounded-none">
+                  <Link href="/dashboard">
                     GO TO SETTINGS
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
             ) : (
               <div className="space-y-2">

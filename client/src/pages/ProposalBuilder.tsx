@@ -424,11 +424,11 @@ export default function ProposalBuilder() {
     <div className="min-h-screen bg-parchment font-dm">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 min-h-14 flex items-center gap-y-1 px-4 sm:px-6 sticky top-0 z-40 shadow-sm overflow-x-auto">
-        <Link href="/dashboard">
-          <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-800 font-inter text-xs gap-1 mr-4">
-            <ChevronLeft className="w-4 h-4" /> Dashboard
-          </Button>
-        </Link>
+        <Button asChild variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900 font-inter text-xs gap-1 mr-4 min-h-[44px]">
+          <Link href="/dashboard">
+            <ChevronLeft className="w-4 h-4" aria-hidden /> Dashboard
+          </Link>
+        </Button>
         <div className="flex items-center mr-3">
           <span className="font-bold text-gray-900 text-base tracking-tight">VenueFlowHQ</span>
         </div>
@@ -487,7 +487,7 @@ export default function ProposalBuilder() {
               </div>
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">INTRO MESSAGE TO CLIENT</label>
-                <Textarea value={introMessage} onChange={e => setIntroMessage(e.target.value)}
+                <Textarea aria-label="Intro message shown to the client" value={introMessage} onChange={e => setIntroMessage(e.target.value)}
                   placeholder="Thank you for your enquiry! We'd love to host your event at our venue. Please find our proposal below..."
                   rows={3} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm" />
               </div>
@@ -523,7 +523,7 @@ export default function ProposalBuilder() {
                   </Select>
                 ) : (
                   <div className="border border-dashed border-border bg-muted/30 px-3 py-2 text-xs font-dm text-muted-foreground">
-                    No spaces saved yet — add them in <a href="/dashboard?tab=settings&sub=venue" className="text-primary hover:underline">Settings → Venue → Spaces</a>.
+                    No spaces saved yet — add them in <a href="/dashboard?tab=settings&sub=venue" className="text-primary underline underline-offset-2">Settings → Venue → Spaces</a>.
                   </div>
                 )}
               </div>
@@ -552,7 +552,7 @@ export default function ProposalBuilder() {
                   <div className="text-center py-6 border-2 border-dashed border-border">
                     <ChefHat className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                     <p className="font-dm text-sm text-muted-foreground">No menu packages yet.</p>
-                    <p className="font-dm text-xs text-muted-foreground/60 mt-1">Add Food or Beverage packages in Dashboard → Menu.</p>
+                    <p className="font-dm text-xs text-muted-foreground mt-1">Add Food or Beverage packages in Dashboard → Menu.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1203,8 +1203,8 @@ export default function ProposalBuilder() {
 
                 {/* Quote Notes */}
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">QUOTE NOTES (shown to client)</label>
-                  <Textarea value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)}
+                  <label htmlFor="pb-quote-notes" className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">QUOTE NOTES (shown to client)</label>
+                  <Textarea id="pb-quote-notes" value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)}
                     placeholder="Any additional notes about this quote..." rows={2}
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy resize-none text-sm font-dm" />
                 </div>
@@ -1217,7 +1217,7 @@ export default function ProposalBuilder() {
           {/* Terms */}
           <div className="bg-cream-card border border-border p-5 shadow-sm">
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">TERMS & CONDITIONS</h2>
-            <Textarea value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)}
+            <Textarea aria-label="Terms and conditions" value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)}
               rows={5} className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
           </div>
 
@@ -1225,6 +1225,7 @@ export default function ProposalBuilder() {
           <div className="bg-cream-card border border-dashed border-border p-5">
             <h2 className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">INTERNAL NOTES <span className="font-dm text-xs text-muted-foreground normal-case">(not shown to client)</span></h2>
             <Textarea value={internalNotes} onChange={e => setInternalNotes(e.target.value)}
+              aria-label="Internal notes (not shown to the client)"
               placeholder="Notes for your team only..." rows={2}
               className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary resize-none text-sm font-dm" />
           </div>
@@ -1400,11 +1401,11 @@ export default function ProposalBuilder() {
                   </Button>
                 </div>
               )}
-              <Link href="/dashboard">
-                <Button variant="outline" className="w-full border-2 border-border font-bebas tracking-widest rounded-none text-xs">
+              <Button asChild variant="outline" className="w-full border-2 border-border font-bebas tracking-widest rounded-none text-xs">
+                <Link href="/dashboard">
                   BACK TO DASHBOARD
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           )}
 

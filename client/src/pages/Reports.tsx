@@ -195,16 +195,25 @@ export default function Reports() {
             <div className="dante-card p-5">
               <h2 className="font-cormorant text-lg font-semibold text-ink mb-4">Enquiry Sources</h2>
               {sourceData && sourceData.length > 0 ? (
+                // Recharts marks every pie slice role="img" with no name of its
+                // own. Name the chart once and hide the decorative geometry, so
+                // a screen reader gets the figures rather than a run of
+                // unlabelled images. The slices are not focusable.
+                // role="img" makes the subtree a single leaf node to assistive
+                // tech, so the label below is what gets announced rather than a
+                // run of unnamed slice paths.
+                <div role="img" aria-label={`Enquiry sources: ${sourceData.map((d: any) => `${d.source}, ${d.count}`).join('; ')}`}>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
                     <Pie data={sourceData} dataKey="count" nameKey="source" cx="50%" cy="50%" outerRadius={75} label={({ source, percent }) => `${source} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                       {sourceData.map((_: any, i: number) => (
-                        <Cell key={i} fill={BRAND_COLORS[i % BRAND_COLORS.length]} />
+                        <Cell key={i} fill={BRAND_COLORS[i % BRAND_COLORS.length]} role="presentation" aria-hidden="true" />
                       ))}
                     </Pie>
                     <Tooltip formatter={(v: any, n: any) => [v, n]} />
                   </PieChart>
                 </ResponsiveContainer>
+                </div>
               ) : (
                 <div className="h-48 flex items-center justify-center text-sage/40 font-dm text-sm">No source data yet</div>
               )}

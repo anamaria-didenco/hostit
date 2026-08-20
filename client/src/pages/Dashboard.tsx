@@ -609,7 +609,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
               className={`w-full text-left px-4 py-2 font-dm text-sm transition-colors ${
                 settingsSubTab === item.id
                   ? "bg-sage-tint text-sage-dark font-semibold border-l-2 border-sage-green pl-[calc(1rem-2px)]"
-                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-l-2 border-transparent"
               }`}
             >
               {item.label}
@@ -618,14 +618,14 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
           <div className="my-2 border-t border-border" />
           <a
             href="/daily-checklists"
-            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
+            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
           >
             Daily Checklists
             <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
           </a>
           <a
             href="/staff-links"
-            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
+            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
           >
             Staff Portal Links
             <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
@@ -634,7 +634,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
             href="/eon-report.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
+            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
           >
             EON Report
             <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
@@ -643,7 +643,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
             href="/ordering-guide.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
+            className="w-full text-left px-4 py-2 font-dm text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
           >
             Ordering Guide
             <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
@@ -803,7 +803,7 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
 }
 
 export default function Dashboard() {
-  const { user, isAuthenticated, loading, isTeamMember, isStaff } = useAuth();
+  const { user, isAuthenticated, loading, isTeamMember, isStaff, error: authError, refresh: refreshAuth } = useAuth();
   const [, setLocation] = useLocation();
   type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"payments"|"expressbook";
   type SettingsSubTab = "venue"|"brand-pack"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
@@ -923,7 +923,7 @@ export default function Dashboard() {
   // ── Color-code calendar events by space, so it's easy to see *where* a booking
   // is at a glance. Hash the space name into a fixed palette of soft accents
   // (returns a CSS color string usable as borderLeftColor / a small dot).
-  const SPACE_PALETTE = ['#2f5488','#e4a25b','#7fb069','#c97b9c','#9b8acc','#5fb6ad','#d97a5b','#b88e4a','#8aa9d6','#a07cc5'];
+  const SPACE_PALETTE = ['#2f5488','#996d3d','#5d804d','#a1627d','#7c6ea3','#43817b','#ae6249','#91703a','#627898','#8869a7'];
   const spaceColor = (name?: string | null) => {
     if (!name) return null;
     let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
@@ -2412,9 +2412,35 @@ export default function Dashboard() {
     ? `${window.location.origin}/enquire/${venueSettings.slug}`
     : `${window.location.origin}/enquire`;
 
+  // A bare spinner announces nothing and, on a slow connection, reads as a
+  // blank screen. Say what is happening, and say it in the accessibility tree.
   if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <Spinner className="size-8 text-forest/40" />
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status" aria-live="polite">
+      <div className="flex flex-col items-center gap-3">
+        <Spinner className="size-8 text-forest/40" aria-hidden />
+        <p className="font-inter text-sm text-gray-600">Loading your dashboard…</p>
+      </div>
+    </div>
+  );
+
+  // An unreachable server is NOT the same as a signed-out session. Telling
+  // someone to sign in when the API is down sends them to re-enter a password
+  // that will also fail, and leaves them thinking their account is broken.
+  if (authError) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center max-w-sm w-full" role="alert">
+        <div className="flex items-center justify-center mb-4">
+          <img src="/logo-full.png" alt="VenueFlow" className="h-9 w-auto" />
+        </div>
+        <h2 className="font-inter text-xl text-gray-900 font-bold mb-2">Can&rsquo;t reach the server</h2>
+        <p className="font-inter text-gray-600 text-sm mb-6">
+          You&rsquo;re still signed in — we just can&rsquo;t load your data right now.
+          Check your connection and try again.
+        </p>
+        <button onClick={() => refreshAuth()} className="btn-forest w-full text-sm py-3 text-white">
+          Try again
+        </button>
+      </div>
     </div>
   );
 
@@ -2465,7 +2491,7 @@ export default function Dashboard() {
                       {showJumpDate && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setShowJumpDate(false)} />
-                          <div role="dialog" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
+                          <div role="dialog" aria-modal="true" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
                             <div className="flex items-center justify-between mb-3">
                               <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
                                 className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
@@ -4118,7 +4144,7 @@ export default function Dashboard() {
                     {showJumpDate && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setShowJumpDate(false)} />
-                        <div id="cal-jump-popover" role="dialog" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
+                        <div id="cal-jump-popover" role="dialog" aria-modal="true" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
                           {/* Year stepper */}
                           <div className="flex items-center justify-between mb-3">
                             <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
@@ -4375,7 +4401,8 @@ export default function Dashboard() {
                             {!isOverflow && (
                               <button
                                 onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: dateStr })); setShowAddLead(true); }}
-                                className="self-start mt-auto text-ink/20 hover:text-ink/70 transition-colors p-0.5"
+                                aria-label={`Add an event on ${dateStr}`}
+                                className="self-start mt-auto text-ink/30 hover:text-ink/70 transition-colors w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center"
                                 title="Add event on this day">
                                 <Edit2 className="w-2.5 h-2.5" />
                               </button>

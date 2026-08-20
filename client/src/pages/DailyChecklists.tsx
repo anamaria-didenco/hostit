@@ -223,7 +223,7 @@ export default function DailyChecklists() {
       <div className="bg-[#2f5488] text-white px-4 md:px-6 py-4 md:py-5">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="min-w-0">
-            <a href="/dashboard" className="text-white/60 text-xs font-dm hover:text-white transition-colors mb-1 block">← Back to Dashboard</a>
+            <a href="/dashboard" className="text-white/80 text-xs font-dm hover:text-white transition-colors mb-1 block">← Back to Dashboard</a>
             <h1 className="font-bebas text-2xl md:text-3xl tracking-wider text-white">Daily Operations</h1>
             <p className="font-dm text-xs md:text-sm text-white/70 mt-1">Checklists and shift runsheets for your team.</p>
           </div>
