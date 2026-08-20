@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { X, Plus, Trash2, RefreshCw, FileText } from "lucide-react";
+import { currency } from "@/lib/money";
 
 interface Props {
   open: boolean;
@@ -20,8 +21,7 @@ interface Props {
 
 interface Line { description: string; quantity: string; unitAmount: string; }
 
-const fmtNZD = (n: number) =>
-  n.toLocaleString("en-NZ", { style: "currency", currency: "NZD", minimumFractionDigits: 2 });
+const fmtNZD = (n: number) => currency(n);
 
 /**
  * Review-and-send modal for pushing an event's Food or Drinks invoice to Xero

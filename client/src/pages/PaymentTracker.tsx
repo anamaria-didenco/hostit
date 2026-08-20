@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, DollarSign, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { getLoginUrl } from "@/const";
+import { currency } from "@/lib/money";
 
 const PAYMENT_TYPES = [
   { value: "deposit", label: "Deposit" },
@@ -122,8 +123,7 @@ export default function PaymentTracker() {
     });
   }
 
-  const fmtNZD = (n: number) =>
-    n.toLocaleString("en-NZ", { style: "currency", currency: "NZD", minimumFractionDigits: 2 });
+  const fmtNZD = (n: number) => currency(n);
 
   return (
     <div className="min-h-screen bg-cream">

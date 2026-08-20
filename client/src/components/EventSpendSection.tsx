@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Trash2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { currencyWhole } from "@/lib/money";
 
 const CATEGORIES = ["food", "drinks", "staffing", "av", "décor", "other"];
 
@@ -87,7 +88,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
   const revenueTotal = (revenueFromCharges ?? 0) + incomeItemsTotal;
   const profit = revenueTotal - expensesTotal;
   const margin = revenueTotal > 0 ? (profit / revenueTotal) * 100 : 0;
-  const money = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(Math.round(n)).toLocaleString("en-NZ")}`;
+  const money = (n: number) => currencyWhole(n);
 
   function handleAdd() {
     if (!newName.trim()) return;
@@ -253,7 +254,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
                 </div>
                 <div className="text-right min-w-[56px]">
                   <div className="font-bebas text-[10px] tracking-widest text-ink/65">EST</div>
-                  <div className="font-dm text-xs text-ink/60">${(item.estimatedAmount ?? 0).toLocaleString("en-NZ")}</div>
+                  <div className="font-dm text-xs text-ink/60">{currencyWhole(item.estimatedAmount ?? 0)}</div>
                 </div>
                 <div className="text-right min-w-[64px]">
                   <div className="font-bebas text-[10px] tracking-widest text-ink/65">ACTUAL</div>
@@ -274,7 +275,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
                       title="Click to edit actual amount"
                       onClick={() => setEditingActual((prev) => ({ ...prev, [item.id]: String(item.actualAmount ?? 0) }))}
                     >
-                      ${(item.actualAmount ?? 0).toLocaleString("en-NZ")}
+                      {currencyWhole(item.actualAmount ?? 0)}
                     </button>
                   )}
                 </div>
@@ -297,13 +298,13 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
           <div className="text-center">
             <div className="font-bebas text-[10px] tracking-widest text-ink/65">EST NET</div>
             <div className={`font-cormorant text-base font-semibold ${totalEst >= 0 ? "text-forest" : "text-rose-500"}`}>
-              {totalEst < 0 ? "-" : ""}${Math.abs(totalEst).toLocaleString("en-NZ")}
+              {currencyWhole(totalEst)}
             </div>
           </div>
           <div className="text-center">
             <div className="font-bebas text-[10px] tracking-widest text-ink/65">ACTUAL NET</div>
             <div className={`font-cormorant text-base font-semibold ${totalActual >= 0 ? "text-forest" : "text-rose-500"}`}>
-              {totalActual < 0 ? "-" : ""}${Math.abs(totalActual).toLocaleString("en-NZ")}
+              {currencyWhole(totalActual)}
             </div>
           </div>
           <div className="text-center">
@@ -312,7 +313,7 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
               variance > 0 ? "text-forest" : variance < 0 ? "text-rose-500" : "text-ink/70"
             }`}>
               {variance > 0 ? <TrendingUp className="w-3 h-3" /> : variance < 0 ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
-              {variance < 0 ? "-" : "+"}${Math.abs(variance).toLocaleString("en-NZ")}
+              {variance >= 0 ? "+" : ""}{currencyWhole(variance)}
             </div>
           </div>
         </div>

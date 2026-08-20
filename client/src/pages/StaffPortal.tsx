@@ -6,6 +6,7 @@ import {
   AlertCircle, CheckCircle2, Loader2, User, Phone, Mail,
   Building2, DollarSign, CheckSquare, Square, ClipboardCheck, FileText, Printer, Wine,
 } from "lucide-react";
+import { currency } from "@/lib/money";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
 const CATEGORIES: Record<string, { label: string; color: string; dot: string }> = {
@@ -461,7 +462,7 @@ export default function StaffPortal() {
                   <p className="font-dm text-sm text-ink">
                     <span className="font-semibold">{formatBar(dd.barOption)}</span>
                     {dd.tabAmount && (dd.barOption === 'bar_tab' || dd.barOption === 'bar_tab_then_cash')
-                      ? ` — Bar tab: $${Number(dd.tabAmount).toLocaleString('en-NZ')}` : ''}
+                      ? ` — Bar tab: ${currency(Number(dd.tabAmount))}` : ''}
                   </p>
                 )}
                 {dd.barNotes && (
