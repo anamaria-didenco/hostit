@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import XeroPushModal from "@/components/XeroPushModal";
+import PaymentsReceived from "@/components/PaymentsReceived";
 import {
   DollarSign, FileText, Clock, CheckCircle2, Moon, Search,
   CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw,
@@ -62,6 +63,9 @@ export default function PaymentsBoard() {
   // is its money at", not "what's overdue".
   const [filter, setFilter] = useState<"action" | "upcoming" | "all">("upcoming");
   const [xeroFor, setXeroFor] = useState<Row | null>(null);
+  // "Events" tracks where each event's money is up to; "Received" is the ledger
+  // of money that actually landed — the view that reconciles against the bank.
+  const [view, setView] = useState<"events" | "received">("events");
 
   const { data, isLoading, isError, refetch } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
   const { data: xeroStatus } = trpc.xero.status.useQuery();
@@ -178,6 +182,19 @@ export default function PaymentsBoard() {
         </div>
       </div>
 
+      {/* View switcher */}
+      <div className="flex gap-1.5 mb-4 border-b border-gold/20" role="tablist" aria-label="Payments view">
+        {([["events", "Events"], ["received", "Received"]] as const).map(([k, lbl]) => (
+          <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)}
+            className={`font-bebas tracking-widest text-sm px-4 py-2.5 border-b-2 -mb-px transition-colors ${
+              view === k ? "border-forest text-forest" : "border-transparent text-sage hover:text-ink"}`}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {view === "received" ? <PaymentsReceived /> : (<>
+
       {/* Summary strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <SummaryCard label="To invoice" value={String(summary.toInvoice)} tone="amber" icon={<FileText className="w-4 h-4" />} />
@@ -237,6 +254,8 @@ export default function PaymentsBoard() {
           ))}
         </div>
       )}
+
+      </>)}
 
       <XeroPushModal
         open={xeroFor !== null}
