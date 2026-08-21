@@ -6,7 +6,7 @@ import XeroPushModal from "@/components/XeroPushModal";
 import PaymentsReceived from "@/components/PaymentsReceived";
 import {
   DollarSign, FileText, Clock, CheckCircle2, Moon, Search,
-  CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw,
+  CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw, Check, ChevronDown,
 } from "lucide-react";
 
 // ─── Types mirror the server payments.overview shape ────────────────────────
@@ -51,9 +51,21 @@ const CHIP = {
 } as const;
 
 // Forward-cycle helpers — one click advances to the next state, looping round.
-const FOOD_CYCLE: FoodStatus[] = ["to_invoice", "invoiced", "paid"];
-const DRINKS_CYCLE: DrinksStatus[] = ["on_night", "to_invoice", "invoiced", "paid"];
-const nextIn = <T,>(cycle: T[], cur: T): T => cycle[(cycle.indexOf(cur) + 1) % cycle.length];
+// Each chip's selectable statuses. Chips used to CYCLE on click — getting from
+// "to invoice" to "paid" meant tapping through every state in between, and one
+// tap too many wrapped back to the start. Now the chip opens this list and the
+// wanted state is picked directly.
+const FOOD_STATES: Array<{ value: FoodStatus; label: string; state: keyof typeof CHIP }> = [
+  { value: "to_invoice", label: "To invoice", state: "todo" },
+  { value: "invoiced", label: "Invoiced", state: "invoiced" },
+  { value: "paid", label: "Paid", state: "paid" },
+];
+const DRINKS_STATES: Array<{ value: DrinksStatus; label: string; state: keyof typeof CHIP }> = [
+  { value: "on_night", label: "On the night", state: "night" },
+  { value: "to_invoice", label: "To invoice", state: "todo" },
+  { value: "invoiced", label: "Invoiced", state: "invoiced" },
+  { value: "paid", label: "Paid", state: "paid" },
+];
 
 export default function PaymentsBoard() {
   const [, navigate] = useLocation();
@@ -217,7 +229,7 @@ export default function PaymentsBoard() {
 
       {/* Legend */}
       <p className="font-dm text-[11px] text-sage/80 mb-3">
-        Tap a chip to advance its status. Deposit ($575) is deducted off the drinks bill.
+        Tap a chip to choose its status. Deposit ($575) is deducted off the drinks bill.
       </p>
 
       {/* Rows */}
@@ -243,9 +255,9 @@ export default function PaymentsBoard() {
         <div className="flex flex-col gap-2">
           {rows.map(r => (
             <EventRow key={r.bookingId} row={r}
-              onFood={() => setFood(r, nextIn(FOOD_CYCLE, r.foodStatus))}
-              onDrinks={() => setDrinks(r, nextIn(DRINKS_CYCLE, r.drinksStatus))}
-              onDeposit={() => setDeposit(r, !r.depositPaid)}
+              onFood={(v) => setFood(r, v)}
+              onDrinks={(v) => setDrinks(r, v)}
+              onDeposit={(paid) => setDeposit(r, paid)}
               onOpen={() => navigate(`/event/${r.bookingId}`)}
               onRecord={() => navigate(`/payments?bookingId=${r.bookingId}`)}
               onXero={() => setXeroFor(r)}
@@ -299,9 +311,49 @@ function SummaryCard({ label, value, tone, icon }: {
 }
 
 // A single tappable status chip.
-function Chip({ label, state, onClick, title, disabled }: {
+function Chip({ label, state, onClick, title, disabled, menu }: {
   label: string; state: keyof typeof CHIP; onClick?: () => void; title?: string; disabled?: boolean;
+  /** When set, the chip opens this picker instead of firing onClick. */
+  menu?: { options: Array<{ label: string; state: keyof typeof CHIP; selected: boolean; onPick: () => void }> };
 }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  if (menu) {
+    const c = CHIP[state];
+    return (
+      <div ref={wrapRef} className="relative inline-block">
+        <button onClick={() => setOpen(o => !o)} disabled={disabled} title={title}
+          aria-haspopup="listbox" aria-expanded={open}
+          className="font-bebas tracking-widest text-[11px] px-2.5 py-1 rounded-md transition-transform active:scale-95 disabled:opacity-50 whitespace-nowrap inline-flex items-center gap-1"
+          style={{ background: c.bg, color: c.text }}>
+          {label} <ChevronDown className="w-3 h-3 -mr-0.5" aria-hidden="true" />
+        </button>
+        {open && (
+          <div role="listbox" className="absolute left-0 top-full mt-1 z-50 min-w-[10rem] bg-white border border-gold/25 rounded-md shadow-lg py-1">
+            {menu.options.map(o => {
+              const oc = CHIP[o.state];
+              return (
+                <button key={o.label} role="option" aria-selected={o.selected}
+                  onClick={() => { setOpen(false); if (!o.selected) o.onPick(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-linen/70">
+                  <span className="w-3.5 flex-none">{o.selected && <Check className="w-3.5 h-3.5 text-forest" aria-hidden="true" />}</span>
+                  <span className="font-bebas tracking-widest text-[11px] px-2 py-0.5 rounded" style={{ background: oc.bg, color: oc.text }}>{o.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
   const c = CHIP[state];
   return (
     <button onClick={onClick} disabled={disabled} title={title}
@@ -313,28 +365,34 @@ function Chip({ label, state, onClick, title, disabled }: {
 }
 
 function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, busy }: {
-  row: Row; onFood: () => void; onDrinks: () => void; onDeposit: () => void;
+  row: Row; onFood: (v: FoodStatus) => void; onDrinks: (v: DrinksStatus) => void; onDeposit: (paid: boolean) => void;
   onOpen: () => void; onRecord: () => void; onXero: () => void; busy: boolean;
 }) {
-  // Deposit chip
+  // Deposit chip — two states, so its menu is Due / Paid.
   const depositChip = !row.depositRequired
     ? <Chip label="No deposit" state="none" disabled title="This event doesn't require a deposit" />
-    : row.depositPaid
-      ? <Chip label={`Deposit ${fmtNZD(row.depositNzd || DEFAULT_DEPOSIT)} paid`} state="paid" onClick={onDeposit} disabled={busy} title="Tap to mark as pending" />
-      : <Chip label={`Deposit ${fmtNZD(row.depositNzd || DEFAULT_DEPOSIT)} due`} state="todo" onClick={onDeposit} disabled={busy} title="Tap to mark as paid" />;
+    : <Chip
+        label={`Deposit ${fmtNZD(row.depositNzd || DEFAULT_DEPOSIT)} ${row.depositPaid ? "paid" : "due"}`}
+        state={row.depositPaid ? "paid" : "todo"} disabled={busy} title="Choose the deposit status"
+        menu={{ options: [
+          { label: "Due", state: "todo", selected: !row.depositPaid, onPick: () => onDeposit(false) },
+          { label: "Paid", state: "paid", selected: row.depositPaid, onPick: () => onDeposit(true) },
+        ] }} />;
 
   // Food chip
   const foodState: keyof typeof CHIP = row.foodStatus === "paid" ? "paid" : row.foodStatus === "invoiced" ? "invoiced" : "todo";
-  const foodChip = <Chip label={`Food · ${labelFor(row.foodStatus)}`} state={foodState} onClick={onFood} disabled={busy}
-    title="Tap: To invoice → Invoiced → Paid" />;
+  const foodChip = <Chip label={`Food · ${labelFor(row.foodStatus)}`} state={foodState} disabled={busy}
+    title="Choose the food payment status"
+    menu={{ options: FOOD_STATES.map(o => ({ label: o.label, state: o.state, selected: row.foodStatus === o.value, onPick: () => onFood(o.value) })) }} />;
 
   // Drinks chip
   const drinksState: keyof typeof CHIP = row.drinksStatus === "paid" ? "paid"
     : row.drinksStatus === "invoiced" ? "invoiced"
     : row.drinksStatus === "on_night" ? "night" : "todo";
   const drinksLabel = `Drinks · ${labelFor(row.drinksStatus)}${row.drinksInferred && row.drinksStatus !== "paid" ? "?" : ""}`;
-  const drinksChip = <Chip label={drinksLabel} state={drinksState} onClick={onDrinks} disabled={busy}
-    title={row.drinksInferred ? "Suggested from the bar setup — tap to confirm/change: On the night → To invoice → Invoiced → Paid" : "Tap: On the night → To invoice → Invoiced → Paid"} />;
+  const drinksChip = <Chip label={drinksLabel} state={drinksState} disabled={busy}
+    title={row.drinksInferred ? "Suggested from the bar setup — choose to confirm or change it" : "Choose the drinks payment status"}
+    menu={{ options: DRINKS_STATES.map(o => ({ label: o.label, state: o.state, selected: row.drinksStatus === o.value, onPick: () => onDrinks(o.value) })) }} />;
 
   const settled = (!row.depositRequired || row.depositPaid) && row.foodStatus === "paid" && row.drinksStatus === "paid";
 
