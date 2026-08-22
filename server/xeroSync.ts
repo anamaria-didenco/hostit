@@ -63,6 +63,20 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
       if (s.status !== r.status) statusChanges++;
     }
 
+    // Approving the draft in Xero means the invoice has gone out, so the
+    // Payments board should say "invoiced" without anyone re-marking it here.
+    // Only the not-yet-invoiced states advance — a stream already marked paid
+    // (or invoiced by hand) is never downgraded by a sync.
+    if (s.status === "AUTHORISED" || s.status === "SUBMITTED") {
+      const col = r.stream === "food" ? bookings.foodStatus : bookings.drinksStatus;
+      await db.update(bookings)
+        .set((r.stream === "food" ? { foodStatus: "invoiced" } : { drinksStatus: "invoiced" }) as any)
+        .where(and(
+          eq(bookings.id, r.bookingId),
+          eq(bookings.ownerId, ownerId),
+          inArray(col, ["to_invoice", "on_night"]),
+        ));
+    }
     // Fully paid → the stream is settled on the Payments board.
     if (s.status === "PAID") {
       const streamUpdate = r.stream === "food" ? { foodStatus: "paid" } : { drinksStatus: "paid" };
@@ -118,4 +132,41 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
     console.log(`[XeroSync] owner ${ownerId}: imported ${paymentsImported} payment(s), $${amountImported.toFixed(2)}`);
   }
   return { statusChanges, paymentsImported, amountImported };
+}
+
+/**
+ * Background sync, hourly, for every venue with a Xero connection.
+ *
+ * Approving a draft in Xero tells VenueFlow nothing on its own — before this,
+ * the change only landed when someone opened the Payments board (which syncs on
+ * open). Now it lands within the hour regardless. One batched status call per
+ * venue per run, far inside Xero's 60 req/min tenant limit. Real-time would
+ * need Xero webhooks, which require per-app portal setup; the hourly pass is
+ * the reliable floor under it.
+ */
+export function startXeroSyncScheduler(): void {
+  const runAll = async () => {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      const { xeroConnections } = await import("../drizzle/schema");
+      const { isNotNull } = await import("drizzle-orm");
+      const conns = await db.select({ ownerId: xeroConnections.ownerId })
+        .from(xeroConnections).where(isNotNull(xeroConnections.tenantId));
+      for (const c of conns) {
+        try {
+          await syncXeroInvoicesForOwner(c.ownerId);
+        } catch (err: any) {
+          // One venue's dead connection must not stop the others syncing.
+          console.warn(`[XeroSync scheduler] owner ${c.ownerId}:`, err?.message ?? err);
+        }
+      }
+    } catch (err: any) {
+      console.error("[XeroSync scheduler] error:", err?.message ?? err);
+    }
+  };
+  // First pass shortly after boot (migrations settle first), then hourly.
+  setTimeout(() => { void runAll(); }, 60 * 1000);
+  setInterval(() => { void runAll(); }, 60 * 60 * 1000);
+  console.log("[XeroSync] hourly scheduler started");
 }

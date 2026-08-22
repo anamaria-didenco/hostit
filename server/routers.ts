@@ -1693,7 +1693,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         status: z.enum(['confirmed', 'tentative', 'cancelled', 'finished']).optional(),
         notes: z.string().nullable().optional(),
         // Payments board — food/drinks workflow stream statuses.
-        foodStatus: z.enum(['to_invoice', 'invoiced', 'paid']).optional(),
+        foodStatus: z.enum(['to_invoice', 'invoiced', 'paid', 'on_night']).optional(),
         drinksStatus: z.enum(['on_night', 'to_invoice', 'invoiced', 'paid']).nullable().optional(),
         // Billing TERMS — how the event is charged, printed on the BEO.
         // Separate from the statuses above, which track whether it's been paid.
@@ -1753,7 +1753,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.notes !== undefined) updates.notes = rest.notes;
         if (rest.foodStatus !== undefined) updates.foodStatus = rest.foodStatus;
         if (rest.drinksStatus !== undefined) updates.drinksStatus = rest.drinksStatus;
-        if (rest.billingFood !== undefined) updates.billingFood = rest.billingFood;
+        if (rest.billingFood !== undefined) {
+          updates.billingFood = rest.billingFood;
+          // Same rule as drinks below: food charged on the night is not "to
+          // invoice". Only the untouched default moves; an operator-advanced
+          // status (invoiced/paid) is real progress and is left alone.
+          if (rest.billingFood === 'on_night' && rest.foodStatus === undefined) {
+            const [cur] = await db.select({ foodStatus: bookings.foodStatus })
+              .from(bookings).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+            if (!cur?.foodStatus || cur.foodStatus === 'to_invoice') updates.foodStatus = 'on_night';
+          }
+        }
         if (rest.billingDrinks !== undefined) {
           updates.billingDrinks = rest.billingDrinks;
           // Keep the Payments board from contradicting the arrangement. Picking

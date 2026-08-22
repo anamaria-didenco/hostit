@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 // ─── Types mirror the server payments.overview shape ────────────────────────
-type FoodStatus = "to_invoice" | "invoiced" | "paid";
+type FoodStatus = "to_invoice" | "invoiced" | "paid" | "on_night";
 type DrinksStatus = "on_night" | "to_invoice" | "invoiced" | "paid";
 interface Row {
   bookingId: number;
@@ -56,6 +56,7 @@ const CHIP = {
 // tap too many wrapped back to the start. Now the chip opens this list and the
 // wanted state is picked directly.
 const FOOD_STATES: Array<{ value: FoodStatus; label: string; state: keyof typeof CHIP }> = [
+  { value: "on_night", label: "On the night", state: "night" },
   { value: "to_invoice", label: "To invoice", state: "todo" },
   { value: "invoiced", label: "Invoiced", state: "invoiced" },
   { value: "paid", label: "Paid", state: "paid" },
@@ -109,7 +110,8 @@ export default function PaymentsBoard() {
       utils.payments.overview.invalidate();
       utils.bookings.list.invalidate();
       let msg = "Updated";
-      if (vars.depositPaid !== undefined) msg = vars.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
+      if (vars.depositRequired === false) msg = "No deposit for this event";
+      else if (vars.depositPaid !== undefined) msg = vars.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
       else if (vars.foodStatus !== undefined) msg = `Food · ${labelFor(vars.foodStatus)}`;
       else if (vars.drinksStatus !== undefined) msg = `Drinks · ${labelFor(vars.drinksStatus)}`;
       toast.success(msg);
@@ -124,11 +126,11 @@ export default function PaymentsBoard() {
   const isFullySettled = (r: Row) =>
     (!r.depositRequired || r.depositPaid) && r.foodStatus === "paid" && r.drinksStatus === "paid";
   const isFuture = (r: Row) => !r.eventDate || new Date(r.eventDate).getTime() >= startOfToday();
+  // A stream settling on the night needs nothing until the event has happened.
+  const streamNeedsAction = (r: Row, status: string) =>
+    status === "to_invoice" || status === "invoiced" || (status === "on_night" && !isFuture(r));
   const needsAction = (r: Row) =>
-    isDepositDue(r) ||
-    r.foodStatus !== "paid" ||
-    r.drinksStatus === "to_invoice" || r.drinksStatus === "invoiced" ||
-    (r.drinksStatus === "on_night" && !isFuture(r)); // on-night that's already happened → collect/confirm
+    isDepositDue(r) || streamNeedsAction(r, r.foodStatus) || streamNeedsAction(r, r.drinksStatus);
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -149,14 +151,21 @@ export default function PaymentsBoard() {
   const summary = useMemo(() => {
     const toInvoice = all.filter(r => r.foodStatus === "to_invoice" || r.drinksStatus === "to_invoice").length;
     const awaiting = all.filter(r => isDepositDue(r) || r.foodStatus === "invoiced" || r.drinksStatus === "invoiced").length;
-    const onNight = all.filter(r => r.drinksStatus === "on_night" && isFuture(r)).length;
+    const onNight = all.filter(r => (r.drinksStatus === "on_night" || r.foodStatus === "on_night") && isFuture(r)).length;
     const settled = all.filter(isFullySettled).length;
     return { toInvoice, awaiting, onNight, settled };
   }, [all]);
 
   const setFood = (r: Row, next: FoodStatus) => update.mutate({ id: r.bookingId, foodStatus: next } as any);
   const setDrinks = (r: Row, next: DrinksStatus) => update.mutate({ id: r.bookingId, drinksStatus: next } as any);
-  const setDeposit = (r: Row, paid: boolean) => update.mutate({ id: r.bookingId, depositPaid: paid } as any);
+  // "Not taken" flips depositRequired off (the server clears the paid flag with
+  // it); the other two turn it back on, so a deposit can be reinstated from
+  // the same menu it was dismissed from.
+  const setDeposit = (r: Row, next: "due" | "paid" | "not_taken") => update.mutate(
+    next === "not_taken"
+      ? ({ id: r.bookingId, depositRequired: false } as any)
+      : ({ id: r.bookingId, depositRequired: true, depositPaid: next === "paid" } as any)
+  );
 
   return (
     <div className="p-4 md:p-6 max-w-[1200px] mx-auto">
@@ -257,7 +266,7 @@ export default function PaymentsBoard() {
             <EventRow key={r.bookingId} row={r}
               onFood={(v) => setFood(r, v)}
               onDrinks={(v) => setDrinks(r, v)}
-              onDeposit={(paid) => setDeposit(r, paid)}
+              onDeposit={(next) => setDeposit(r, next)}
               onOpen={() => navigate(`/event/${r.bookingId}`)}
               onRecord={() => navigate(`/payments?bookingId=${r.bookingId}`)}
               onXero={() => setXeroFor(r)}
@@ -365,22 +374,29 @@ function Chip({ label, state, onClick, title, disabled, menu }: {
 }
 
 function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, busy }: {
-  row: Row; onFood: (v: FoodStatus) => void; onDrinks: (v: DrinksStatus) => void; onDeposit: (paid: boolean) => void;
+  row: Row; onFood: (v: FoodStatus) => void; onDrinks: (v: DrinksStatus) => void; onDeposit: (next: "due" | "paid" | "not_taken") => void;
   onOpen: () => void; onRecord: () => void; onXero: () => void; busy: boolean;
 }) {
-  // Deposit chip — two states, so its menu is Due / Paid.
+  // Deposit chip — Due / Paid / Not taken. "No deposit" used to be a dead
+  // chip, so undoing it meant opening the event; it's the same menu now.
+  const depositMenu = {
+    options: [
+      { label: "Due", state: "todo" as const, selected: row.depositRequired && !row.depositPaid, onPick: () => onDeposit("due") },
+      { label: "Paid", state: "paid" as const, selected: row.depositRequired && row.depositPaid, onPick: () => onDeposit("paid") },
+      { label: "Not taken", state: "none" as const, selected: !row.depositRequired, onPick: () => onDeposit("not_taken") },
+    ],
+  };
   const depositChip = !row.depositRequired
-    ? <Chip label="No deposit" state="none" disabled title="This event doesn't require a deposit" />
+    ? <Chip label="No deposit" state="none" disabled={busy} title="No deposit for this event — choose Due or Paid to reinstate one" menu={depositMenu} />
     : <Chip
         label={`Deposit ${fmtNZD(row.depositNzd || DEFAULT_DEPOSIT)} ${row.depositPaid ? "paid" : "due"}`}
         state={row.depositPaid ? "paid" : "todo"} disabled={busy} title="Choose the deposit status"
-        menu={{ options: [
-          { label: "Due", state: "todo", selected: !row.depositPaid, onPick: () => onDeposit(false) },
-          { label: "Paid", state: "paid", selected: row.depositPaid, onPick: () => onDeposit(true) },
-        ] }} />;
+        menu={depositMenu} />;
 
   // Food chip
-  const foodState: keyof typeof CHIP = row.foodStatus === "paid" ? "paid" : row.foodStatus === "invoiced" ? "invoiced" : "todo";
+  const foodState: keyof typeof CHIP = row.foodStatus === "paid" ? "paid"
+    : row.foodStatus === "invoiced" ? "invoiced"
+    : row.foodStatus === "on_night" ? "night" : "todo";
   const foodChip = <Chip label={`Food · ${labelFor(row.foodStatus)}`} state={foodState} disabled={busy}
     title="Choose the food payment status"
     menu={{ options: FOOD_STATES.map(o => ({ label: o.label, state: o.state, selected: row.foodStatus === o.value, onPick: () => onFood(o.value) })) }} />;
