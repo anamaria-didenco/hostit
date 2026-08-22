@@ -23,6 +23,7 @@ import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { handleGithubWebhook } from "../githubWebhook";
 import { handleNbiWebhook } from "../nbiWebhook";
 import { startEnquiryReportScheduler } from "../enquiryReport";
+import { startXeroSyncScheduler } from "../xeroSync";
 // Custom migration runner. The stock drizzle migrator runs all journal
 // entries in one go and aborts the whole loop on the first error — even
 // a benign "object already exists" duplicate. That's catastrophic on a
@@ -513,6 +514,7 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     // Weekly enquiry/pipeline report email (Mon ~8am NZ by default).
     startEnquiryReportScheduler();
+    startXeroSyncScheduler();
   });
 }
 
