@@ -19,29 +19,7 @@ const SOURCE_OPTIONS = [
   "Word of Mouth / Referral", "Walk-In", "Event Directory", "Previous Client", "Other",
 ];
 
-type FormFieldDef = {
-  id: string;
-  label: string;
-  type: 'text' | 'email' | 'tel' | 'number' | 'date' | 'time' | 'select' | 'textarea';
-  required: boolean;
-  visible: boolean;
-  isDefault: boolean;
-};
-
-const DEFAULT_FORM_FIELDS: FormFieldDef[] = [
-  { id: 'firstName', label: 'First Name', type: 'text', required: true, visible: true, isDefault: true },
-  { id: 'lastName', label: 'Last Name', type: 'text', required: false, visible: true, isDefault: true },
-  { id: 'email', label: 'Email', type: 'email', required: true, visible: true, isDefault: true },
-  { id: 'phone', label: 'Phone', type: 'tel', required: false, visible: true, isDefault: true },
-  { id: 'company', label: 'Company / Organisation', type: 'text', required: false, visible: true, isDefault: true },
-  { id: 'eventType', label: 'Type of Event', type: 'select', required: false, visible: true, isDefault: true },
-  { id: 'eventDate', label: 'Preferred Date', type: 'date', required: false, visible: true, isDefault: true },
-  { id: 'eventTime', label: 'Preferred Time', type: 'time', required: false, visible: true, isDefault: true },
-  { id: 'guestCount', label: 'Guest Count', type: 'number', required: false, visible: true, isDefault: true },
-  { id: 'budget', label: 'Approximate Budget (NZD)', type: 'number', required: false, visible: true, isDefault: true },
-  { id: 'source', label: 'How did you hear about us?', type: 'select', required: false, visible: true, isDefault: true },
-  { id: 'message', label: 'Message / Tell us more', type: 'textarea', required: false, visible: true, isDefault: true },
-];
+import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
 
 const FONT_MAP: Record<string, string> = {
   inter: "'Inter', system-ui, sans-serif",
@@ -130,6 +108,12 @@ export default function LeadForm() {
 
   const doSubmit = () => {
     if (!venue?.ownerId) return toast.error("Venue not found");
+    // Guest count is compulsory: an enquiry without numbers can't be quoted or
+    // checked against capacity. Enforced here as well as by the input's
+    // `required`, because the embed widget submits via onClick and native form
+    // validation never runs there.
+    const guests = parseInt(form.guestCount ?? '');
+    if (!(guests >= 1)) return toast.error("Please tell us how many guests you're expecting.");
     const customParts = Object.entries(customFieldValues)
       .filter(([, v]) => v.trim())
       .map(([k, v]) => `${k}: ${v}`);
@@ -185,10 +169,11 @@ export default function LeadForm() {
   let galleryImages: string[] = [];
   try { galleryImages = JSON.parse((venue as any)?.formGalleryImages ?? '[]') || []; } catch {}
 
-  let fields: FormFieldDef[] = DEFAULT_FORM_FIELDS;
+  // Merge, don't replace: a saved config from before a default field existed
+  // (Company, Preferred Time) must still show that field.
+  let fields: FormFieldDef[] = mergeFormFields(null);
   try {
-    const parsed = JSON.parse((venue as any)?.customFormFields ?? '');
-    if (Array.isArray(parsed) && parsed.length > 0) fields = parsed;
+    fields = mergeFormFields(JSON.parse((venue as any)?.customFormFields ?? ''));
   } catch {}
   const visibleFields = fields.filter(f => f.visible);
 
