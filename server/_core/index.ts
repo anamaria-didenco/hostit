@@ -211,8 +211,12 @@ async function startServer() {
   const LOGIN_WINDOW_MS = 5 * 60 * 1000;
   const LOGIN_MAX = 10;
   function getClientIp(req: express.Request): string {
-    // With `trust proxy` configured above, Express resolves req.ip from the
-    // first hop in X-Forwarded-For — safe from client-side spoofing.
+    // Cloudflare fronts Render in production, so req.ip (one trusted hop) is
+    // Cloudflare's egress address — shared by many visitors. The login limiter
+    // keyed on it would lock out everyone behind an edge after 10 bad
+    // attempts by anyone. CF-Connecting-IP carries the real client.
+    const cf = req.headers["cf-connecting-ip"]?.toString().trim();
+    if (cf) return cf;
     return req.ip || "unknown";
   }
   function checkLoginRate(ip: string): boolean {

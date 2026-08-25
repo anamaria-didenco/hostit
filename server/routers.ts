@@ -506,7 +506,7 @@ export const appRouter = router({
         ownerId: z.number(),
         firstName: z.string().min(1).max(120),
         lastName: z.string().max(120).optional(),
-        email: z.string().email().max(254),
+        email: z.string().trim().email().max(254),
         phone: z.string().max(40).optional(),
         company: z.string().max(200).optional(),
         eventType: z.string().max(120).optional(),
@@ -521,7 +521,8 @@ export const appRouter = router({
         // `NODE_ENV=test` because the vitest suite calls leads.submit many
         // times from the same (unknown IP, ownerId 1) bucket — otherwise
         // unrelated tests start failing with "Too many submissions".
-        const ip = (ctx as any)?.req?.ip || "unknown";
+        const { getRequestIp } = await import('./_core/rateLimit');
+        const ip = getRequestIp((ctx as any)?.req);
         const key = `${ip}::${input.ownerId}`;
         const now = Date.now();
         const WINDOW_MS = 10 * 60 * 1000;
@@ -547,7 +548,7 @@ export const appRouter = router({
           } else {
             entry.count += 1;
             if (entry.count > MAX) {
-              throw new Error("Too many submissions. Please wait a few minutes and try again.");
+              throw new Error("Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there.");
             }
           }
         }
@@ -4710,7 +4711,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // leads.submit. This public mutation creates a lead AND emails the
         // owner, so it needs the same flood protection.
         {
-          const ip = (ctx as any)?.req?.ip || "unknown";
+          const { getRequestIp } = await import('./_core/rateLimit');
+          const ip = getRequestIp((ctx as any)?.req);
           const key = `${ip}::${input.ownerId}`;
           const now = Date.now();
           const WINDOW_MS = 10 * 60 * 1000, MAX = 5;
@@ -4721,7 +4723,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           if (process.env.NODE_ENV !== 'test') {
             const entry = bucket.get(key);
             if (!entry || entry.resetAt < now) bucket.set(key, { count: 1, resetAt: now + WINDOW_MS });
-            else { entry.count += 1; if (entry.count > MAX) throw new Error("Too many submissions. Please wait a few minutes and try again."); }
+            else { entry.count += 1; if (entry.count > MAX) throw new Error("Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there."); }
           }
         }
         const { getDb } = await import('./db');

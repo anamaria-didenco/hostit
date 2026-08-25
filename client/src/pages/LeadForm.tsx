@@ -103,7 +103,14 @@ export default function LeadForm() {
 
   const submitLead = trpc.leads.submit.useMutation({
     onSuccess: () => { setSubmitted(true); },
-    onError: () => toast.error("Failed to submit. Please try again."),
+    onError: (e) => {
+      // The real reason, not a shrug: "too many submissions" and a validation
+      // problem need different reactions from the person filling the form.
+      // Either way, give them a route that cannot fail — the venue's email.
+      const reason = e?.message?.trim() || "Something went wrong submitting the form.";
+      const fallback = (venue as any)?.email ? ` You can also email us directly at ${(venue as any).email}.` : "";
+      toast.error(`${reason}${fallback}`, { duration: 12000 });
+    },
   });
 
   const doSubmit = () => {
@@ -120,11 +127,11 @@ export default function LeadForm() {
     const fullMessage = [form.message, ...customParts].filter(Boolean).join('\n\n');
     submitLead.mutate({
       ownerId: venue.ownerId,
-      firstName: form.firstName ?? '',
-      lastName: form.lastName || undefined,
-      email: form.email ?? '',
-      phone: form.phone || undefined,
-      company: form.company || undefined,
+      firstName: (form.firstName ?? '').trim(),
+      lastName: form.lastName?.trim() || undefined,
+      email: (form.email ?? '').trim(),
+      phone: form.phone?.trim() || undefined,
+      company: form.company?.trim() || undefined,
       eventType: form.eventType || undefined,
       eventDate: combineLocalDateTime(form.eventDate, form.eventTime),
       guestCount: form.guestCount ? parseInt(form.guestCount) : undefined,
