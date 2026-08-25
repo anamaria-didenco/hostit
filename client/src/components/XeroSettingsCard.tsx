@@ -91,6 +91,23 @@ export default function XeroSettingsCard() {
         )}
       </div>
 
+      {/* Live-update state. With the webhook key set, approving an invoice in
+          Xero reaches the Payments board in seconds; without it, on the next
+          sync (board open, or hourly). */}
+      {status?.connected && (
+        <div className={`mt-3 font-dm text-xs p-2 border ${status?.webhookConfigured
+          ? "text-green-800 bg-green-50 border-green-200"
+          : "text-ink/60 bg-linen/50 border-gold/20"}`}>
+          {status?.webhookConfigured ? (
+            <>⚡ <b>Instant updates are on.</b> Approvals and payments in Xero reach the Payments board within seconds.</>
+          ) : (
+            <>Updates from Xero arrive when the Payments board opens, and hourly in the background. For instant updates, add a webhook on your Xero app
+              (developer.xero.com → your app → Webhooks): set the Delivery URL to <b>{`${window.location.origin}/api/xero/webhook`}</b>, tick <b>Invoices</b>,
+              then copy the Webhooks key into the server env as <b>XERO_WEBHOOK_KEY</b> and press &ldquo;Send intent to receive&rdquo;.</>
+          )}
+        </div>
+      )}
+
       {/* Organisation choice — never auto-pick. Xero does not guarantee the
           ordering of the connections list, so an implicit choice can silently
           invoice the wrong company. */}
