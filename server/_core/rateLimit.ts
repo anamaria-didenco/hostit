@@ -53,8 +53,23 @@ export function enforceRateLimit(
   }
 }
 
-/** Pull a stable-ish client IP from an Express request (works behind the Replit proxy). */
+/**
+ * Pull the real client IP from an Express request.
+ *
+ * Production sits behind TWO proxies — Cloudflare, then Render — but Express
+ * has `trust proxy: 1`, so req.ip resolves to Cloudflare's EGRESS IP, which is
+ * shared by every visitor routed through that edge. Keyed on that, the
+ * leads.submit bucket (5 per 10 min) was effectively shared across most NZ
+ * traffic: in Christmas enquiry season, real clients hit "Too many
+ * submissions" — the failure Kotahi Studio and EY reported. Cloudflare puts
+ * the true client address in CF-Connecting-IP, so that header wins when
+ * present. A caller who bypasses Cloudflare doesn't get to forge it into a
+ * bucket-spreader worth worrying about: rotating a header is no cheaper than
+ * rotating an IP, and this limiter is abuse-blunting, not authentication.
+ */
 export function getRequestIp(req: any): string {
+  const cf = req?.headers?.['cf-connecting-ip']?.toString().trim();
+  if (cf) return cf;
   return req?.ip || req?.headers?.['x-forwarded-for']?.toString().split(',')[0]?.trim() || 'unknown';
 }
 
