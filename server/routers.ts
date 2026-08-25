@@ -4099,7 +4099,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         salesAccountCodeDrinks: null as string | null,
         lineAmountsInclusive: false,
         salesTaxType: null as string | null,
+        // True once XERO_WEBHOOK_KEY is set — approvals in Xero then reach the
+        // Payments board instantly instead of on the next sync.
+        webhookConfigured: false,
       };
+      const { xeroWebhookConfigured } = await import('./xeroWebhook');
+      base.webhookConfigured = xeroWebhookConfigured();
       const db = await getDb();
       if (!db) return base;
       const [conn] = await db.select({

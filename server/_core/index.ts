@@ -9,6 +9,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
 import { handleBeoPdf, handleBeoPdfPublic, handleBeoPdfStaff } from "../beoPdf";
 import { handleXeroConnect, handleXeroCallback } from "../xero";
+import { handleXeroWebhook } from "../xeroWebhook";
 import { handleFloorPlanPdf } from "../floorPlanPdf";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -186,6 +187,10 @@ async function startServer() {
   // floor-plan canvases); binary uploads go through multer on their own
   // routes, so the old 50MB JSON limit was just a memory-exhaustion DoS
   // vector on a 512MB instance.
+  // Xero webhook — needs the RAW body (the signature covers exact bytes), so
+  // it mounts ahead of the JSON parser like the GitHub webhook above.
+  app.post("/api/xero/webhook", express.raw({ type: "*/*", limit: "5mb" }), handleXeroWebhook);
+
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
