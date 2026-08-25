@@ -511,6 +511,9 @@ export const appRouter = router({
         company: z.string().max(200).optional(),
         eventType: z.string().max(120).optional(),
         eventDate: z.string().max(40).optional(),
+        // The enquirer explicitly chose "no date yet" — kept as its own flag
+        // so the board can say "Date TBC" instead of a blank.
+        dateFlexible: z.boolean().optional(),
         guestCount: z.number().int().min(0).max(100000).optional(),
         budget: z.number().min(0).max(10_000_000).optional(),
         message: z.string().max(5000).optional(),
@@ -561,6 +564,7 @@ export const appRouter = router({
           company: input.company,
           eventType: input.eventType,
           eventDate: input.eventDate ? new Date(input.eventDate) : undefined,
+          dateFlexible: input.dateFlexible ?? false,
           guestCount: input.guestCount,
           budget: input.budget?.toString() as any,
           message: input.message,
