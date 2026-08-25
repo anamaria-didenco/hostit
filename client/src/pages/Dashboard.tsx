@@ -40,28 +40,7 @@ import { currency } from "@/lib/money";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
-type FormFieldDef = {
-  id: string;
-  label: string;
-  type: 'text' | 'email' | 'tel' | 'number' | 'date' | 'select' | 'textarea';
-  required: boolean;
-  visible: boolean;
-  isDefault: boolean;
-};
-
-const DEFAULT_FORM_FIELDS: FormFieldDef[] = [
-  { id: 'firstName', label: 'First Name', type: 'text', required: true, visible: true, isDefault: true },
-  { id: 'lastName', label: 'Last Name', type: 'text', required: false, visible: true, isDefault: true },
-  { id: 'email', label: 'Email', type: 'email', required: true, visible: true, isDefault: true },
-  { id: 'phone', label: 'Phone', type: 'tel', required: false, visible: true, isDefault: true },
-  { id: 'company', label: 'Company / Organisation', type: 'text', required: false, visible: true, isDefault: true },
-  { id: 'eventType', label: 'Type of Event', type: 'select', required: false, visible: true, isDefault: true },
-  { id: 'eventDate', label: 'Preferred Date', type: 'date', required: false, visible: true, isDefault: true },
-  { id: 'guestCount', label: 'Guest Count', type: 'number', required: false, visible: true, isDefault: true },
-  { id: 'budget', label: 'Approximate Budget (NZD)', type: 'number', required: false, visible: true, isDefault: true },
-  { id: 'source', label: 'How did you hear about us?', type: 'select', required: false, visible: true, isDefault: true },
-  { id: 'message', label: 'Message / Tell us more', type: 'textarea', required: false, visible: true, isDefault: true },
-];
+import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
 
 const FORM_FONTS = [
   { key: 'inter', label: 'Modern', sub: 'Inter / Sans-serif' },
@@ -2199,13 +2178,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (settingsSubTab === 'lead-form' && settingsForm && formFields === null) {
+      // Merge with the defaults so fields added after this venue first saved
+      // its form (Company, Preferred Time) show up here to be configured.
+      let parsed: unknown = null;
       if (settingsForm.customFormFields) {
-        try {
-          const parsed = JSON.parse(settingsForm.customFormFields);
-          if (Array.isArray(parsed)) { setFormFields(parsed); return; }
-        } catch {}
+        try { parsed = JSON.parse(settingsForm.customFormFields); } catch {}
       }
-      setFormFields(DEFAULT_FORM_FIELDS.map(f => ({ ...f })));
+      setFormFields(mergeFormFields(parsed));
     }
   }, [settingsSubTab, settingsForm, formFields]);
 
