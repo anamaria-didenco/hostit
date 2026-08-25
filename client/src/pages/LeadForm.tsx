@@ -99,6 +99,10 @@ export default function LeadForm() {
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   // Stepped embed widget state (NowBookIt-style: Booking → Your Details → Summary)
   const [embedStep, setEmbedStep] = useState(1);
+  // "We don't have a date yet" — an explicit answer, not a skipped field.
+  // Clients without a date were guessing one or abandoning; this makes
+  // no-date a first-class choice, stored on the lead as dateFlexible.
+  const [noDateYet, setNoDateYet] = useState(false);
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
 
   const submitLead = trpc.leads.submit.useMutation({
@@ -133,7 +137,8 @@ export default function LeadForm() {
       phone: form.phone?.trim() || undefined,
       company: form.company?.trim() || undefined,
       eventType: form.eventType || undefined,
-      eventDate: combineLocalDateTime(form.eventDate, form.eventTime),
+      eventDate: noDateYet ? undefined : combineLocalDateTime(form.eventDate, form.eventTime),
+      dateFlexible: noDateYet,
       guestCount: form.guestCount ? parseInt(form.guestCount) : undefined,
       budget: form.budget ? parseFloat(form.budget) : undefined,
       message: fullMessage || undefined,
@@ -212,18 +217,35 @@ export default function LeadForm() {
           rows={isEmbed ? 2 : 4} className={`${inputClass} resize-none ${isEmbed ? 'text-xs py-1 px-2' : ''}`} />
       );
     }
-    return (
+    const input = (
       <Input
         type={field.type}
         value={value}
-        onChange={onChange}
-        required={field.required}
+        onChange={field.id === 'eventDate' ? (e) => { setNoDateYet(false); onChange(e as any); } : onChange}
+        required={field.required && !(field.id === 'eventDate' && noDateYet)}
+        disabled={field.id === 'eventDate' && noDateYet}
         aria-label={field.label}
         min={field.type === 'date' ? new Date().toISOString().split("T")[0] : undefined}
         placeholder={field.type === 'date' ? undefined : field.id === 'phone' ? '+64 21 000 0000' : field.id === 'guestCount' ? '50' : field.id === 'budget' ? '5000' : ''}
         className={inputClass}
       />
     );
+    // The date gets an explicit "no date yet" answer: clients without one were
+    // guessing a date or walking away. Stored on the lead as dateFlexible.
+    if (field.id === 'eventDate') {
+      return (
+        <div>
+          {input}
+          <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer select-none text-xs text-gray-600">
+            <input type="checkbox" checked={noDateYet}
+              onChange={e => { setNoDateYet(e.target.checked); if (e.target.checked) setForm(p => ({ ...p, eventDate: '', eventTime: '' })); }}
+              className="h-3.5 w-3.5 accent-current" />
+            No date yet — we&rsquo;re flexible
+          </label>
+        </div>
+      );
+    }
+    return input;
   }
 
   /* ── NowBookIt-style selectable cards (event type) ─────────────────── */
@@ -283,9 +305,11 @@ export default function LeadForm() {
     for (let d = 1; d <= daysInMonth; d++) cells.push(d);
     const prevDisabled = calYear < today.getFullYear() || (calYear === today.getFullYear() && calIdx <= today.getMonth());
     const goMonth = (delta: number) => { const m = new Date(calMonth); m.setMonth(m.getMonth() + delta); setCalMonth(m); };
-    const fmtSelected = selectedDate
-      ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })
-      : 'Select a date';
+    const fmtSelected = noDateYet
+      ? 'Date to be confirmed'
+      : selectedDate
+        ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })
+        : 'Select a date';
 
     const detailsValid = !!(form.firstName ?? '').trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((form.email ?? '').trim());
     const steps = ['Booking', 'Your Details', 'Summary'];
@@ -372,7 +396,7 @@ export default function LeadForm() {
                             const dateStr = `${calYear}-${String(calIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                             return (
                               <button key={d} type="button" disabled={isPast}
-                                onClick={() => setForm(p => ({ ...p, eventDate: dateStr }))}
+                                onClick={() => { setNoDateYet(false); setForm(p => ({ ...p, eventDate: dateStr })); }}
                                 className={`text-[11px] h-7 rounded-full transition-colors ${isPast ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100'}`}
                                 style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, fontWeight: 700 } : {}}>
                                 {d}
@@ -380,6 +404,12 @@ export default function LeadForm() {
                             );
                           })}
                         </div>
+                        <button type="button" aria-pressed={noDateYet}
+                          onClick={() => { setNoDateYet(v => !v); setForm(p => ({ ...p, eventDate: '', eventTime: '' })); }}
+                          className={`mt-2 w-full rounded-full border text-[11px] py-1.5 transition-all ${noDateYet ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+                          style={noDateYet ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
+                          {noDateYet ? '✓ No date yet — we\u2019re flexible' : 'We don\u2019t have a date yet'}
+                        </button>
                       </div>
                     </div>
                   )}
@@ -452,7 +482,7 @@ export default function LeadForm() {
                   <div className="rounded-md border border-gray-200 divide-y divide-gray-100">
                     {([
                       ['Event', form.eventType],
-                      ['Date', selectedDate ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''],
+                      ['Date', noDateYet ? 'To be confirmed — we\u2019re flexible' : selectedDate ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''],
                       ['Time', form.eventTime],
                       ['Guests', form.guestCount],
                       ['Name', [form.firstName, form.lastName].filter(Boolean).join(' ')],

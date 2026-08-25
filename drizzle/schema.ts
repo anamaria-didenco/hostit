@@ -210,6 +210,9 @@ export const leads = pgTable("leads", {
   eventType: varchar("eventType", { length: 100 }),
   eventDate: timestamp("eventDate"),
   eventEndDate: timestamp("eventEndDate"),
+  // The client chose "no date yet" on the enquiry form — a deliberate answer,
+  // distinct from simply leaving the date blank. Shown as "Date TBC".
+  dateFlexible: boolean("dateFlexible").default(false),
   guestCount: integer("guestCount"),
   spaceId: integer("spaceId"),
   spaceName: varchar("spaceName", { length: 255 }),

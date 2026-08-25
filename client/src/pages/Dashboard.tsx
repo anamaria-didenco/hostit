@@ -2313,7 +2313,11 @@ export default function Dashboard() {
     const now = new Date();
     return list.filter((l: any) => {
       const d = l.eventDate ? new Date(l.eventDate) : null;
-      if (!d) return false;
+      // An enquiry with no date yet is not "past": it needs a date decided,
+      // and hiding it from Upcoming made no-date enquiries vanish from the
+      // default view entirely. It belongs in Upcoming; the specific-window
+      // filters (today / weekend / this month) still exclude it.
+      if (!d) return leadDateFilter === "future";
       if (leadDateFilter === "future") {
         const today = new Date(); today.setHours(0,0,0,0);
         return d >= today;
@@ -3227,7 +3231,7 @@ export default function Dashboard() {
                                 )}
                                 <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink whitespace-nowrap">{lead.firstName} {lead.lastName}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[160px] truncate">{lead.eventType || "—"}</td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
                                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                   <select
@@ -3323,6 +3327,8 @@ export default function Dashboard() {
                             {new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
                             {fmtEventTime(lead.eventDate) && <span className="text-forest/70"> · {fmtEventTime(lead.eventDate)}</span>}
                           </span>
+                        ) : (lead as any).dateFlexible ? (
+                          <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span>
                         ) : (
                           <span className="font-dm text-xs text-ink/55 italic">no date</span>
                         )}
