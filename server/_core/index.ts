@@ -524,6 +524,8 @@ async function startServer() {
     // Weekly enquiry/pipeline report email (Mon ~8am NZ by default).
     startEnquiryReportScheduler();
     startXeroSyncScheduler();
+    // Backfill missing beer / non-alcoholic categories into drink catalogues.
+    void (async () => { const { seedDrinksCatalog } = await import("../seedDrinksCatalog"); await seedDrinksCatalog(); })();
   });
 }
 
