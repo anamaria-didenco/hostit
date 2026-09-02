@@ -872,11 +872,11 @@ export default function RunsheetBuilder() {
       const priceMap: Record<string, number> = {};
       entries.forEach(e => {
         const it: any = e.item;
+        // Catalogue items carry `price` in CENTS (createItem stores dollars
+        // × 100). Reading it as dollars put an $85.00 wine on the BEO as
+        // $8,500.00. catalogPriceDollars owns the cents conversion.
         const p = it?.priceGlass != null ? Number(it.priceGlass)
-          : it?.priceCents != null ? Number(it.priceCents) / 100
-          : it?.price != null ? Number(it.price)
-          : it?.priceBottle != null ? Number(it.priceBottle)
-          : null;
+          : (catalogPriceDollars(it) || (it?.priceBottle != null ? Number(it.priceBottle) : 0));
         if (p != null && !isNaN(p) && p > 0) priceMap[it.name] = p;
       });
       if (Object.keys(priceMap).length) setRsDrinkPrices(prev => ({ ...priceMap, ...prev }));
