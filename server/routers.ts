@@ -6,6 +6,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { enforceRateLimit, getRequestIp } from "./_core/rateLimit";
+import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { smtpTls } from "./smtpTls";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
@@ -484,6 +485,9 @@ export const appRouter = router({
         // so the board can say "Date TBC" instead of a blank.
         dateFlexible: z.boolean().optional(),
         guestCount: z.number().int().min(0).max(100000).optional(),
+        // Qualifying answers: service format and a budget bracket.
+        eventFormat: z.enum(['seated', 'cocktail', 'both']).optional(),
+        budgetRange: z.enum(['under_5k', '5_10k', '10_20k', '20k_plus']).optional(),
         budget: z.number().min(0).max(10_000_000).optional(),
         message: z.string().max(5000).optional(),
         source: z.string().max(120).optional(),
@@ -534,6 +538,8 @@ export const appRouter = router({
           eventType: input.eventType,
           eventDate: input.eventDate ? new Date(input.eventDate) : undefined,
           dateFlexible: input.dateFlexible ?? false,
+          eventFormat: input.eventFormat,
+          budgetRange: input.budgetRange,
           guestCount: input.guestCount,
           budget: input.budget?.toString() as any,
           message: input.message,
@@ -669,6 +675,8 @@ export const appRouter = router({
                 input.eventType && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event type</td><td style="padding:4px 0;font-size:14px">${esc(input.eventType)}</td></tr>`,
                 formattedEventDate && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Event date</td><td style="padding:4px 0;font-size:14px;font-weight:bold;color:#2D4A3E">${esc(formattedEventDate)}</td></tr>`,
                 input.guestCount && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Guests</td><td style="padding:4px 0;font-size:14px">${esc(input.guestCount)}</td></tr>`,
+                input.eventFormat && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Format</td><td style="padding:4px 0;font-size:14px">${esc(eventFormatLabel(input.eventFormat) ?? input.eventFormat)}</td></tr>`,
+                input.budgetRange && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px;font-weight:bold;color:#2D4A3E">${esc(budgetRangeLabel(input.budgetRange) ?? input.budgetRange)}</td></tr>`,
                 input.budget && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px">$${esc(input.budget)} NZD</td></tr>`,
                 input.message && `<tr><td style="padding:4px 0;color:#666;font-size:14px;vertical-align:top">Message</td><td style="padding:4px 0;font-size:14px">${esc(input.message)}</td></tr>`,
               ].filter(Boolean).join('');

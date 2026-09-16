@@ -19,7 +19,7 @@ const SOURCE_OPTIONS = [
   "Word of Mouth / Referral", "Walk-In", "Event Directory", "Previous Client", "Other",
 ];
 
-import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
+import { DEFAULT_FORM_FIELDS, mergeFormFields, EVENT_FORMAT_OPTIONS, BUDGET_RANGE_OPTIONS, eventFormatLabel, budgetRangeLabel, type FormFieldDef } from "@shared/formFields";
 
 const FONT_MAP: Record<string, string> = {
   inter: "'Inter', system-ui, sans-serif",
@@ -140,6 +140,8 @@ export default function LeadForm() {
       eventDate: noDateYet ? undefined : combineLocalDateTime(form.eventDate, form.eventTime),
       dateFlexible: noDateYet,
       guestCount: form.guestCount ? parseInt(form.guestCount) : undefined,
+      eventFormat: (form.eventFormat || undefined) as any,
+      budgetRange: (form.budgetRange || undefined) as any,
       budget: form.budget ? parseFloat(form.budget) : undefined,
       message: fullMessage || undefined,
       source: form.source || "lead_form",
@@ -190,7 +192,7 @@ export default function LeadForm() {
   const visibleFields = fields.filter(f => f.visible);
 
   const detailIds = new Set(['firstName', 'lastName', 'email', 'phone', 'company']);
-  const eventIds = new Set(['eventType', 'eventDate', 'eventTime', 'guestCount', 'budget']);
+  const eventIds = new Set(['eventType', 'eventDate', 'eventTime', 'guestCount', 'eventFormat', 'budgetRange', 'budget']);
   const detailFields = visibleFields.filter(f => detailIds.has(f.id));
   const eventFields = visibleFields.filter(f => eventIds.has(f.id));
   const sourceField = visibleFields.find(f => f.id === 'source');
@@ -209,6 +211,8 @@ export default function LeadForm() {
 
     if (field.id === 'eventType') return renderEventTypeCards();
     if (field.id === 'source') return renderSourcePills();
+    if (field.id === 'eventFormat') return renderChoicePills('eventFormat', EVENT_FORMAT_OPTIONS);
+    if (field.id === 'budgetRange') return renderChoicePills('budgetRange', BUDGET_RANGE_OPTIONS);
     if (field.type === 'textarea') {
       return (
         <Textarea value={value} onChange={onChange} required={field.required}
@@ -246,6 +250,27 @@ export default function LeadForm() {
       );
     }
     return input;
+  }
+
+  /* ── Qualifying pills: format + budget bracket. One tap, tap again to
+        clear — never a typed number, the bracket IS the answer. ─────────── */
+  function renderChoicePills(id: string, options: ReadonlyArray<{ value: string; label: string }>) {
+    const selected = form[id] ?? '';
+    return (
+      <div className="flex gap-1.5 flex-wrap">
+        {options.map(o => {
+          const isSel = selected === o.value;
+          return (
+            <button key={o.value} type="button" aria-pressed={isSel}
+              onClick={() => setForm(p => ({ ...p, [id]: isSel ? '' : o.value }))}
+              className={`rounded-full border transition-all ${isEmbed ? 'px-2.5 py-1 text-[10px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+              style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    );
   }
 
   /* ── NowBookIt-style selectable cards (event type) ─────────────────── */
@@ -315,6 +340,8 @@ export default function LeadForm() {
     const steps = ['Booking', 'Your Details', 'Summary'];
     const timeField = eventFields.find(f => f.id === 'eventTime');
     const guestField = eventFields.find(f => f.id === 'guestCount');
+    const formatField = eventFields.find(f => f.id === 'eventFormat');
+    const budgetRangeField = eventFields.find(f => f.id === 'budgetRange');
 
     return (
       <div style={{ fontFamily, backgroundColor: '#fff' }} className="w-full overflow-hidden rounded-lg border border-gray-200 shadow-sm">
@@ -431,6 +458,20 @@ export default function LeadForm() {
                     </div>
                   )}
 
+                  {/* Qualifying pills — format and budget bracket. */}
+                  {formatField && (
+                    <div>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{formatField.label}</label>
+                      {renderField(formatField)}
+                    </div>
+                  )}
+                  {budgetRangeField && (
+                    <div>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{budgetRangeField.label}</label>
+                      {renderField(budgetRangeField)}
+                    </div>
+                  )}
+
                   <button type="button" onClick={() => setEmbedStep(2)}
                     className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90"
                     style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
@@ -485,6 +526,8 @@ export default function LeadForm() {
                       ['Date', noDateYet ? 'To be confirmed — we\u2019re flexible' : selectedDate ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''],
                       ['Time', form.eventTime],
                       ['Guests', form.guestCount],
+                      ['Format', eventFormatLabel(form.eventFormat) ?? ''],
+                      ['Budget', budgetRangeLabel(form.budgetRange) ?? ''],
                       ['Name', [form.firstName, form.lastName].filter(Boolean).join(' ')],
                       ['Email', form.email],
                       ['Phone', form.phone],

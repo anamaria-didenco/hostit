@@ -36,6 +36,7 @@ import XeroSettingsCard from "@/components/XeroSettingsCard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
 import XeroPushModal from "@/components/XeroPushModal";
+import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import { currency } from "@/lib/money";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
@@ -3234,7 +3235,7 @@ export default function Dashboard() {
                                   </td>
                                 )}
                                 <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink whitespace-nowrap">{lead.firstName} {lead.lastName}</td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[160px] truncate">{lead.eventType || "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[200px] truncate">{lead.eventType || "—"}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}{budgetRangeLabel((lead as any).budgetRange) ? <span className="ml-1.5 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap">{budgetRangeLabel((lead as any).budgetRange)}</span> : null}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
                                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
@@ -3325,7 +3326,12 @@ export default function Dashboard() {
                       <div className="font-dm text-xs text-ink/55 truncate">{lead.email}{lead.phone ? ` · ${lead.phone}` : ""}</div>
                       {/* Row 3: event type + date on one line */}
                       <div className="flex items-center gap-2 mt-0.5 min-w-0 flex-wrap">
-                        <span className="font-dm text-xs text-ink/70 truncate">{lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}</span>
+                        <span className="font-dm text-xs text-ink/70 truncate">{lead.eventType || "Event"}{lead.guestCount ? ` · ${lead.guestCount} guests` : ""}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}</span>
+                        {budgetRangeLabel((lead as any).budgetRange) && (
+                          <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap" title="Budget range the client selected on the enquiry form">
+                            {budgetRangeLabel((lead as any).budgetRange)}
+                          </span>
+                        )}
                         {lead.eventDate ? (
                           <span className="font-dm text-xs font-semibold text-forest whitespace-nowrap">
                             {new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}

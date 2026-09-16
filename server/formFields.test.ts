@@ -64,3 +64,28 @@ describe("enquiry form field merging", () => {
     expect(STALE).toEqual(copy);
   });
 });
+
+describe("qualifying fields", () => {
+  it("surfaces Format and Budget range on configs that predate them", () => {
+    const merged = mergeFormFields(STALE);
+    expect(merged.map(f => f.id)).toContain("eventFormat");
+    expect(merged.find(f => f.id === "budgetRange")).toMatchObject({ visible: true });
+  });
+
+  it("the budget BRACKET supersedes the old number box on upgrade", () => {
+    const withBudget = [...STALE, { id: "budget", label: "Approximate Budget (NZD)", type: "number", required: false, visible: true, isDefault: true }];
+    const merged = mergeFormFields(withBudget as any);
+    expect(merged.find(f => f.id === "budget")!.visible).toBe(false);
+    expect(merged.find(f => f.id === "budgetRange")!.visible).toBe(true);
+  });
+
+  it("a venue that deliberately re-enables the number box is respected", () => {
+    // Once the config contains budgetRange, the supersede rule never runs again.
+    const explicit = [
+      ...STALE,
+      { id: "budgetRange", label: "Budget range", type: "select", required: false, visible: true, isDefault: true },
+      { id: "budget", label: "Approximate Budget (NZD)", type: "number", required: false, visible: true, isDefault: true },
+    ];
+    expect(mergeFormFields(explicit as any).find(f => f.id === "budget")!.visible).toBe(true);
+  });
+});
