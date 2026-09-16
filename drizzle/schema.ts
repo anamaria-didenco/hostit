@@ -214,6 +214,12 @@ export const leads = pgTable("leads", {
   // distinct from simply leaving the date blank. Shown as "Date TBC".
   dateFlexible: boolean("dateFlexible").default(false),
   guestCount: integer("guestCount"),
+  // Qualifying answers from the enquiry form: seated/cocktail/both, and a
+  // budget BRACKET (under_5k · 5_10k · 10_20k · 20k_plus). The bracket is the
+  // qualifier — big budgets aren't scared of the question, small ones
+  // self-select out — while the legacy free-number `budget` stays for old data.
+  eventFormat: varchar("eventFormat", { length: 20 }),
+  budgetRange: varchar("budgetRange", { length: 20 }),
   spaceId: integer("spaceId"),
   spaceName: varchar("spaceName", { length: 255 }),
   budget: decimal("budget", { precision: 10, scale: 2 }),

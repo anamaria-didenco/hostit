@@ -18,6 +18,33 @@ export type FormFieldDef = {
   isDefault: boolean;
 };
 
+/** The event's service format — a qualifying answer, not free text. */
+export const EVENT_FORMAT_OPTIONS = [
+  { value: 'seated', label: 'Seated dinner' },
+  { value: 'cocktail', label: 'Cocktail / standing' },
+  { value: 'both', label: 'A bit of both' },
+] as const;
+
+/**
+ * Budget as a BRACKET, not a number box. Serious budgets aren't scared of the
+ * question and small ones self-select out — the bracket alone qualifies the
+ * enquiry. The legacy free-number budget field is superseded by this and
+ * hidden by default (still in the editor to re-enable).
+ */
+export const BUDGET_RANGE_OPTIONS = [
+  { value: 'under_5k', label: 'Under $5k' },
+  { value: '5_10k', label: '$5–10k' },
+  { value: '10_20k', label: '$10–20k' },
+  { value: '20k_plus', label: '$20k+' },
+] as const;
+
+export function eventFormatLabel(v: string | null | undefined): string | null {
+  return EVENT_FORMAT_OPTIONS.find(o => o.value === v)?.label ?? null;
+}
+export function budgetRangeLabel(v: string | null | undefined): string | null {
+  return BUDGET_RANGE_OPTIONS.find(o => o.value === v)?.label ?? null;
+}
+
 export const DEFAULT_FORM_FIELDS: FormFieldDef[] = [
   { id: 'firstName', label: 'First Name', type: 'text', required: true, visible: true, isDefault: true },
   { id: 'lastName', label: 'Last Name', type: 'text', required: false, visible: true, isDefault: true },
@@ -28,7 +55,9 @@ export const DEFAULT_FORM_FIELDS: FormFieldDef[] = [
   { id: 'eventDate', label: 'Preferred Date', type: 'date', required: false, visible: true, isDefault: true },
   { id: 'eventTime', label: 'Preferred Time', type: 'time', required: false, visible: true, isDefault: true },
   { id: 'guestCount', label: 'Guest Count', type: 'number', required: true, visible: true, isDefault: true },
-  { id: 'budget', label: 'Approximate Budget (NZD)', type: 'number', required: false, visible: true, isDefault: true },
+  { id: 'eventFormat', label: 'Format', type: 'select', required: false, visible: true, isDefault: true },
+  { id: 'budgetRange', label: 'Budget range', type: 'select', required: false, visible: true, isDefault: true },
+  { id: 'budget', label: 'Approximate Budget (NZD)', type: 'number', required: false, visible: false, isDefault: true },
   { id: 'source', label: 'How did you hear about us?', type: 'select', required: false, visible: true, isDefault: true },
   { id: 'message', label: 'Message / Tell us more', type: 'textarea', required: false, visible: true, isDefault: true },
 ];
@@ -53,6 +82,14 @@ export function mergeFormFields(stored: unknown): FormFieldDef[] {
   const have = new Set(base.map(f => f.id));
   for (const d of DEFAULT_FORM_FIELDS) {
     if (!have.has(d.id)) base.push({ ...d });
+  }
+  // A config that predates the budget BRACKET keeps its old numeric budget
+  // visible; the bracket supersedes it, so hide the number box on upgrade.
+  // A venue that deliberately re-enables it afterwards is respected (the
+  // config then contains budgetRange, and this branch never runs again).
+  if (!have.has('budgetRange')) {
+    const legacy = base.find(f => f.id === 'budget');
+    if (legacy) legacy.visible = false;
   }
   const guests = base.find(f => f.id === 'guestCount');
   if (guests) { guests.visible = true; guests.required = true; }

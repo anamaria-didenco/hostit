@@ -291,6 +291,8 @@
      carries WHITE text uses this darker step (~5.6:1) instead. Ink-on-amber is
      fine and keeps using .bg-gold / .bg-amber. */
   .bg-gold-deep   { background-color: #8a5f18; }
+  .text-gold-deep { color: #8a5f18; }              /* 6.2:1 on cream/linen */
+  .bg-gold-soft   { background-color: #f7efdb; }   /* chip fill for gold-deep text */
 
   /* ── iOS safe area ──────────────────────────────────────────────────────
      `safe-area-inset-bottom` was used on the mobile tab bar but never defined,
