@@ -67,21 +67,31 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
     // Payments board should say "invoiced" without anyone re-marking it here.
     // Only the not-yet-invoiced states advance — a stream already marked paid
     // (or invoiced by hand) is never downgraded by a sync.
-    if (s.status === "AUTHORISED" || s.status === "SUBMITTED") {
-      const col = r.stream === "food" ? bookings.foodStatus : bookings.drinksStatus;
-      await db.update(bookings)
-        .set((r.stream === "food" ? { foodStatus: "invoiced" } : { drinksStatus: "invoiced" }) as any)
-        .where(and(
-          eq(bookings.id, r.bookingId),
-          eq(bookings.ownerId, ownerId),
-          inArray(col, ["to_invoice", "on_night"]),
-        ));
-    }
-    // Fully paid → the stream is settled on the Payments board.
-    if (s.status === "PAID") {
-      const streamUpdate = r.stream === "food" ? { foodStatus: "paid" } : { drinksStatus: "paid" };
-      await db.update(bookings).set(streamUpdate as any)
-        .where(and(eq(bookings.id, r.bookingId), eq(bookings.ownerId, ownerId)));
+    // Deposit invoices are their own stream. They used to be pushed as
+    // "food", so a PAID deposit wrongly marked the food bill as settled;
+    // they now touch only the deposit flag, never a food/drinks status.
+    if (r.stream === "deposit") {
+      if (s.status === "PAID") {
+        await db.update(bookings).set({ depositPaid: true } as any)
+          .where(and(eq(bookings.id, r.bookingId), eq(bookings.ownerId, ownerId)));
+      }
+    } else {
+      if (s.status === "AUTHORISED" || s.status === "SUBMITTED") {
+        const col = r.stream === "food" ? bookings.foodStatus : bookings.drinksStatus;
+        await db.update(bookings)
+          .set((r.stream === "food" ? { foodStatus: "invoiced" } : { drinksStatus: "invoiced" }) as any)
+          .where(and(
+            eq(bookings.id, r.bookingId),
+            eq(bookings.ownerId, ownerId),
+            inArray(col, ["to_invoice", "on_night"]),
+          ));
+      }
+      // Fully paid → the stream is settled on the Payments board.
+      if (s.status === "PAID") {
+        const streamUpdate = r.stream === "food" ? { foodStatus: "paid" } : { drinksStatus: "paid" };
+        await db.update(bookings).set(streamUpdate as any)
+          .where(and(eq(bookings.id, r.bookingId), eq(bookings.ownerId, ownerId)));
+      }
     }
 
     // Any money received (including part-payments) gets mirrored into the
@@ -116,7 +126,7 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
         ownerId,
         amount: String(p.amount),
         // The drinks invoice carries the balance; food is the pre-event bill.
-        type: r.stream === "food" ? "partial" : "final",
+        type: r.stream === "deposit" ? "deposit" : r.stream === "food" ? "partial" : "final",
         method: "bank_transfer", // reconciled against a bank line in Xero
         paidAt: new Date(`${p.date}T00:00:00`),
         notes: `Reconciled in Xero · ${r.invoiceNumber ?? r.stream}${p.reference ? ` · ${p.reference}` : ""}`,
@@ -125,6 +135,13 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
       });
       paymentsImported++;
       amountImported += p.amount;
+    }
+    // Money imported from Xero counts toward the deposit exactly like a
+    // hand-recorded payment: once the net covers the deposit amount, the
+    // deposit chip flips to paid without anyone ticking it.
+    if (xeroPayments.length > 0) {
+      const { syncDepositPaidFlag } = await import("./db");
+      await syncDepositPaidFlag(r.bookingId, ownerId);
     }
   }
 
