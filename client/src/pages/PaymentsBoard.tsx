@@ -72,6 +72,9 @@ export default function PaymentsBoard() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const [q, setQ] = useState("");
+  // Direct event picker — typing a search works, but with a page of events
+  // "find the one I mean" is faster as a dropdown. 0 = all events.
+  const [eventFilter, setEventFilter] = useState(0);
   // Default to Upcoming: the day-to-day question is "what's coming up and where
   // is its money at", not "what's overdue".
   const [filter, setFilter] = useState<"action" | "upcoming" | "all">("upcoming");
@@ -133,6 +136,10 @@ export default function PaymentsBoard() {
     isDepositDue(r) || streamNeedsAction(r, r.foodStatus) || streamNeedsAction(r, r.drinksStatus);
 
   const rows = useMemo(() => {
+    if (eventFilter) {
+      const one = all.filter(r => r.bookingId === eventFilter);
+      if (one.length > 0) return one;
+    }
     const needle = q.trim().toLowerCase();
     let list = all.filter(r =>
       !needle ||
@@ -146,7 +153,7 @@ export default function PaymentsBoard() {
     if (filter === "all") list = [...list].sort((a, b) => (b.eventDate ? new Date(b.eventDate).getTime() : 0) - (a.eventDate ? new Date(a.eventDate).getTime() : 0));
     else list = [...list].sort((a, b) => ts(a) - ts(b));
     return list;
-  }, [all, q, filter]);
+  }, [all, q, filter, eventFilter]);
 
   const summary = useMemo(() => {
     const toInvoice = all.filter(r => r.foodStatus === "to_invoice" || r.drinksStatus === "to_invoice").length;
@@ -190,6 +197,19 @@ export default function PaymentsBoard() {
             {syncXero.isPending ? "SYNCING…" : "SYNC XERO"}
           </button>
         )}
+        <select
+          value={eventFilter}
+          onChange={e => setEventFilter(Number(e.target.value))}
+          aria-label="Jump to one event"
+          className="w-full sm:w-56 px-2 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
+        >
+          <option value={0}>All events…</option>
+          {[...all].sort((a, b) => (a.eventDate ? new Date(a.eventDate).getTime() : 0) - (b.eventDate ? new Date(b.eventDate).getTime() : 0)).map(r => (
+            <option key={r.bookingId} value={r.bookingId}>
+              {r.name}{r.eventDate ? ` — ${new Date(r.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}
+            </option>
+          ))}
+        </select>
         <div className="relative w-full sm:w-64">
           <Search className="w-4 h-4 text-sage absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
@@ -288,7 +308,8 @@ export default function PaymentsBoard() {
           depositPaid: xeroFor.depositPaid,
           depositNzd: xeroFor.depositNzd,
         } : null}
-        initialStream={xeroFor && xeroFor.foodStatus === "paid" ? "drinks" : "food"}
+        initialStream={xeroFor && xeroFor.depositRequired && !xeroFor.depositPaid ? "deposit"
+          : xeroFor && xeroFor.foodStatus === "paid" ? "drinks" : "food"}
       />
     </div>
   );

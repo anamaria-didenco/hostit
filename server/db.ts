@@ -368,3 +368,36 @@ export async function getDashboardStats(ownerId: number) {
     pendingPayments,
   };
 }
+
+// Recalculates and persists `bookings.depositPaid` based on net payments
+// (sum minus refunds) vs the booking's deposit amount. Called whenever
+// payments are added or removed so the deposit badge stays in sync without
+// the user having to tick a checkbox manually.
+export async function syncDepositPaidFlag(bookingId: number, ownerId: number) {
+  try {
+    const { getDb } = await import('./db');
+    const { bookings, payments } = await import('../drizzle/schema');
+    const { eq, and } = await import('drizzle-orm');
+    const db = await getDb();
+    if (!db) return;
+    const [booking] = await db.select().from(bookings)
+      .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ownerId)));
+    if (!booking) return;
+    const pmts = await db.select().from(payments)
+      .where(and(eq(payments.bookingId, bookingId), eq(payments.ownerId, ownerId)));
+    const net = pmts.reduce((s, p) => s + (p.type === 'refund' ? -1 : 1) * Number(p.amount), 0);
+    const depositAmount = Number(booking.depositNzd ?? 0);
+    // If the venue has marked this booking as not requiring a deposit,
+    // skip the auto-sync entirely — the flag is meaningless and the UI
+    // shows "Not required" anyway.
+    if ((booking as any).depositRequired === false) return;
+    const shouldBePaid = depositAmount > 0 && net >= depositAmount;
+    if (Boolean(booking.depositPaid) !== shouldBePaid) {
+      await db.update(bookings)
+        .set({ depositPaid: shouldBePaid })
+        .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ownerId)));
+    }
+  } catch (err) {
+    console.error('[syncDepositPaidFlag] failed', err);
+  }
+}

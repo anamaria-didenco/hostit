@@ -31,6 +31,7 @@ import {
   getProposals, getProposalById, getProposalByToken, getProposalsByLead, createProposal, updateProposal,
   getBookings, getBookingsByMonth, createBooking,
   getDashboardStats,
+  syncDepositPaidFlag,
 } from "./db";
 
 /**
@@ -46,38 +47,6 @@ function formatVenueDateTime(eventDate: Date | string, timeZone: string = "Pacif
   return { dateStr, timeStr };
 }
 
-// Recalculates and persists `bookings.depositPaid` based on net payments
-// (sum minus refunds) vs the booking's deposit amount. Called whenever
-// payments are added or removed so the deposit badge stays in sync without
-// the user having to tick a checkbox manually.
-async function syncDepositPaidFlag(bookingId: number, ownerId: number) {
-  try {
-    const { getDb } = await import('./db');
-    const { bookings, payments } = await import('../drizzle/schema');
-    const { eq, and } = await import('drizzle-orm');
-    const db = await getDb();
-    if (!db) return;
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ownerId)));
-    if (!booking) return;
-    const pmts = await db.select().from(payments)
-      .where(and(eq(payments.bookingId, bookingId), eq(payments.ownerId, ownerId)));
-    const net = pmts.reduce((s, p) => s + (p.type === 'refund' ? -1 : 1) * Number(p.amount), 0);
-    const depositAmount = Number(booking.depositNzd ?? 0);
-    // If the venue has marked this booking as not requiring a deposit,
-    // skip the auto-sync entirely — the flag is meaningless and the UI
-    // shows "Not required" anyway.
-    if ((booking as any).depositRequired === false) return;
-    const shouldBePaid = depositAmount > 0 && net >= depositAmount;
-    if (Boolean(booking.depositPaid) !== shouldBePaid) {
-      await db.update(bookings)
-        .set({ depositPaid: shouldBePaid })
-        .where(and(eq(bookings.id, bookingId), eq(bookings.ownerId, ownerId)));
-    }
-  } catch (err) {
-    console.error('[syncDepositPaidFlag] failed', err);
-  }
-}
 
 export const appRouter = router({
   system: systemRouter,
@@ -1787,6 +1756,33 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.billingDepositApplied !== undefined) updates.billingDepositApplied = rest.billingDepositApplied;
         if (rest.billingNote !== undefined) updates.billingNote = rest.billingNote?.trim() || null;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        // A cancelled event's draft invoices must not sit in Xero waiting to
+        // be approved by accident. Best-effort: drafts are deleted in Xero and
+        // dropped from our ledger; an approved or paid invoice is left alone
+        // (it moves the GST return — void or credit it in Xero), and a Xero
+        // outage never blocks the cancellation itself.
+        if (rest.status === 'cancelled') {
+          try {
+            const { xeroInvoices } = await import('../drizzle/schema');
+            const { deleteXeroDraftInvoice, isGoneFromXero } = await import('./xero');
+            const invs = await db.select().from(xeroInvoices)
+              .where(and(eq(xeroInvoices.bookingId, id), eq(xeroInvoices.ownerId, ctx.user.id)));
+            for (const inv of invs) {
+              if (inv.status === 'AUTHORISED' || inv.status === 'PAID') continue;
+              try {
+                if (inv.xeroInvoiceId && !isGoneFromXero(inv.status)) {
+                  await deleteXeroDraftInvoice(ctx.user.id, inv.xeroInvoiceId);
+                }
+                await db.delete(xeroInvoices).where(eq(xeroInvoices.id, inv.id));
+                console.log(`[Xero] cancelled booking ${id}: deleted draft ${inv.invoiceNumber ?? inv.xeroInvoiceId}`);
+              } catch (err: any) {
+                console.warn(`[Xero] cancelled booking ${id}: could not delete ${inv.invoiceNumber ?? inv.xeroInvoiceId}:`, err?.message ?? err);
+              }
+            }
+          } catch (err: any) {
+            console.warn('[Xero] cancel-cascade failed:', err?.message ?? err);
+          }
+        }
         // Cascade key shared fields back to the parent lead so the Events
         // table (which reads from leads.list) stays in sync with the
         // booking drawer. Without this, editing a booking's date would
@@ -4225,7 +4221,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
      * invoice and the BEO cannot quietly disagree.
      */
     suggestedLines: protectedProcedure
-      .input(z.object({ bookingId: z.number(), stream: z.enum(['food', 'drinks']) }))
+      .input(z.object({ bookingId: z.number(), stream: z.enum(['food', 'drinks', 'deposit']) }))
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
         const { bookings, runsheets, fnbItems } = await import('../drizzle/schema');
@@ -4236,6 +4232,21 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const [booking] = await db.select().from(bookings)
           .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
         if (!booking) return empty;
+
+        // The deposit needs no runsheet: it is one gross figure agreed up
+        // front, and gstInclusive is forced true for it — $575 means the
+        // client pays $575.
+        if (input.stream === 'deposit') {
+          const dep = Number((booking as any).depositNzd ?? 0);
+          return {
+            lines: dep > 0
+              ? [{ description: `Deposit — ${(booking as any).firstName ?? ''} ${(booking as any).lastName ?? ''}`.trim(), quantity: 1, unitAmount: dep }]
+              : [],
+            gstInclusive: true,
+            depositOnThisStream: false,
+            source: dep > 0 ? ('beo' as const) : ('none' as const),
+          };
+        }
 
         // Same runsheet lookup as the BEO: by bookingId, then by leadId for
         // sheets created through the event drawer (bookingId stays NULL there).
@@ -4274,7 +4285,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         return {
           lines,
           // The runsheet declares whether those amounts already carry GST; the
-          // modal must match it or Xero adds 15% to a gross figure.
+          // modal must match it or Xero adds 15% to a gross figure. A deposit
+          // is always quoted gross.
           gstInclusive: Boolean((runsheet as any).gstInclusive),
           depositOnThisStream,
           source: lines.length > 0 ? ('beo' as const) : ('none' as const),
@@ -4283,7 +4295,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     pushInvoice: protectedProcedure
       .input(z.object({
         bookingId: z.number(),
-        stream: z.enum(['food', 'drinks']),
+        stream: z.enum(['food', 'drinks', 'deposit']),
         lines: z.array(z.object({
           description: z.string().trim().min(1).max(500),
           quantity: z.number().positive().max(100000),
@@ -4378,7 +4390,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           inclusive: input.inclusive,
           accountCode: streamAccount || undefined,
           invoiceId: targetXeroId,
-          reference: `${input.stream === 'food' ? 'Food' : 'Drinks'} — ${clientName}${evDate ? ` · ${evDate}` : ''} (VenueFlow #${booking.id})`,
+          reference: `${input.stream === 'food' ? 'Food' : input.stream === 'drinks' ? 'Drinks' : 'Deposit'} — ${clientName}${evDate ? ` · ${evDate}` : ''} (VenueFlow #${booking.id})`,
           dueDate: input.dueDate,
           lines: input.lines,
         });
@@ -4398,6 +4410,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             status: result.status,
             total: String(result.total),
           });
+        }
+        // Raising the invoice IS the "invoiced" moment for the operator, so
+        // the board reflects it without a manual chip tap. Only the
+        // not-yet-invoiced states move — paid is never downgraded — and the
+        // deposit has no invoiced state, so its chip stays on Due until the
+        // money lands.
+        if (input.stream !== 'deposit') {
+          const { inArray } = await import('drizzle-orm');
+          const col = input.stream === 'food' ? bookings.foodStatus : bookings.drinksStatus;
+          await db.update(bookings)
+            .set((input.stream === 'food' ? { foodStatus: 'invoiced' } : { drinksStatus: 'invoiced' }) as any)
+            .where(and(
+              eq(bookings.id, input.bookingId),
+              eq(bookings.ownerId, ctx.user.id),
+              inArray(col, ['to_invoice', 'on_night']),
+            ));
         }
         return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, tenantName: result.tenantName, updated: input.updateInvoiceId !== undefined };
       }),

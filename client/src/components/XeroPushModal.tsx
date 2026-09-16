@@ -16,7 +16,7 @@ interface Props {
     depositNzd: number;
   } | null;
   /** Which stream the user tapped from (preselects the toggle). */
-  initialStream?: "food" | "drinks";
+  initialStream?: "food" | "drinks" | "deposit";
 }
 
 interface Line {
@@ -43,7 +43,7 @@ const isGone = (status: string | null | undefined) => status === "DELETED" || st
  */
 export default function XeroPushModal({ open, onClose, booking, initialStream }: Props) {
   const utils = trpc.useUtils();
-  const [stream, setStream] = useState<"food" | "drinks">(initialStream ?? "food");
+  const [stream, setStream] = useState<"food" | "drinks" | "deposit">(initialStream ?? "food");
   const [lines, setLines] = useState<Line[]>([]);
   const [dueDate, setDueDate] = useState("");
   // GST treatment for THIS invoice. Real-world practice is mixed (per-head
@@ -147,7 +147,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     const ev = booking.eventDate
       ? new Date(booking.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
       : "";
-    const label = `${stream === "food" ? "Food" : "Drinks"} — ${booking.name}${ev ? ` · ${ev}` : ""}`;
+    const label = `${stream === "food" ? "Food" : stream === "drinks" ? "Drinks" : "Deposit"} — ${booking.name}${ev ? ` · ${ev}` : ""}`;
     const fromBeo = (suggested?.lines ?? []).map(l => ({
       description: l.description,
       quantity: String(l.quantity),
@@ -179,6 +179,10 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   }, [inclusive]);
 
   useEffect(() => { if (!open) setEditingId(null); }, [open]);
+  // The stream preselect must apply on every OPEN, not just first mount: the
+  // modal stays mounted with open=false, so the useState initial value above
+  // was computed once (before any booking was chosen) and never again.
+  useEffect(() => { if (open) setStream(initialStream ?? "food"); }, [open, initialStream]);
 
   // The duplicate guard's message ends "…or confirm sending another", but no
   // confirm existed — the error was a dead end. When the guard refuses, offer
@@ -331,12 +335,14 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           )}
 
           {/* Stream toggle */}
-          <div className="flex gap-1.5" role="radiogroup" aria-label="Invoice type">
-            {(["food", "drinks"] as const).map(s => (
+          <div className="flex gap-1.5 flex-wrap" role="radiogroup" aria-label="Invoice type">
+            {/* Deposits are their own invoice type. They used to go out as
+                "food", so a paid deposit marked the food bill as settled. */}
+            {(["deposit", "food", "drinks"] as const).map(s => (
               <button key={s} role="radio" aria-checked={stream === s} onClick={() => setStream(s)}
                 className={`font-bebas tracking-widest text-xs px-4 py-2 border transition-colors ${
                   stream === s ? "bg-forest text-cream border-forest" : "border-gold/30 text-ink/70 hover:bg-gold/10"}`}>
-                {s === "food" ? "FOOD (PRE-EVENT)" : "DRINKS (AFTER)"}
+                {s === "food" ? "FOOD (PRE-EVENT)" : s === "drinks" ? "DRINKS (AFTER)" : "DEPOSIT"}
               </button>
             ))}
           </div>
@@ -405,13 +411,17 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                 <span className="font-dm text-[10px] text-ink/50">Reading the BEO…</span>
               ) : suggested?.source === "beo" ? (
                 <span className="font-dm text-[10px] text-ink/60">
-                  Pulled from this event&rsquo;s BEO {suggested.gstInclusive ? "· amounts include GST" : "· amounts exclude GST"} — edit anything before sending
+                  {stream === "deposit"
+                    ? "From the deposit set on this event · amount includes GST"
+                    : `Pulled from this event\u2019s BEO ${suggested.gstInclusive ? "· amounts include GST" : "· amounts exclude GST"} — edit anything before sending`}
                 </span>
               ) : (
                 <span className="font-dm text-[10px] text-ink/50">
                   {stream === "food"
                     ? "Nothing priced on the BEO yet — enter the amount"
-                    : "Bar bills on consumption — enter what the bar rang up"}
+                    : stream === "drinks"
+                    ? "Bar bills on consumption — enter what the bar rang up"
+                    : "No deposit amount on this event — enter it, or set it on the event"}
                 </span>
               )}
             </div>
