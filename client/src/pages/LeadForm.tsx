@@ -106,7 +106,41 @@ export default function LeadForm() {
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
 
   const submitLead = trpc.leads.submit.useMutation({
-    onSuccess: () => { setSubmitted(true); },
+    onSuccess: () => {
+      setSubmitted(true);
+      // ── Conversion signal ───────────────────────────────────────────────
+      // Embedding pages (and tag managers on them) need to know a submission
+      // happened — Google Ads conversion tracking can't see inside the
+      // iframe. Fired on BOTH modes; deliberately carries NO personal data,
+      // only the qualifiers useful for value-based bidding.
+      try {
+        window.parent?.postMessage({
+          type: "vf-enquiry-submitted",
+          eventType: form.eventType || null,
+          guestCount: form.guestCount ? parseInt(form.guestCount) : null,
+          budgetRange: form.budgetRange || null,
+          eventFormat: form.eventFormat || null,
+        }, "*");
+      } catch { /* no parent, or cross-origin quirk — the thank-you still shows */ }
+      // ── Optional thank-you redirect (?redirect=…) ───────────────────────
+      // Full-page mode only (navigating inside the iframe helps nobody). To
+      // keep this from being an open-redirect lure, the target must be https
+      // and on the venue's own website domain (or a subdomain of it).
+      if (!isEmbed) {
+        const target = sp.get("redirect");
+        const site = ((venue as any)?.website ?? "").toString();
+        if (target && site) {
+          try {
+            const t = new URL(target);
+            const v = new URL(site.startsWith("http") ? site : `https://${site}`);
+            const okHost = t.hostname === v.hostname || t.hostname.endsWith(`.${v.hostname.replace(/^www\./, "")}`) || t.hostname === v.hostname.replace(/^www\./, "");
+            if (t.protocol === "https:" && okHost) {
+              setTimeout(() => { window.location.href = t.href; }, 1200);
+            }
+          } catch { /* malformed redirect — ignore, show the normal thank-you */ }
+        }
+      }
+    },
     onError: (e) => {
       // The real reason, not a shrug: "too many submissions" and a validation
       // problem need different reactions from the person filling the form.
