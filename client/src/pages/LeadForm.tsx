@@ -153,10 +153,26 @@ export default function LeadForm() {
 
   const doSubmit = () => {
     if (!venue?.ownerId) return toast.error("Venue not found");
-    // Guest count is compulsory: an enquiry without numbers can't be quoted or
-    // checked against capacity. Enforced here as well as by the input's
-    // `required`, because the embed widget submits via onClick and native form
-    // validation never runs there.
+    // Every required field must actually be filled — checked explicitly here,
+    // not just via each input's `required` attribute, because eventType,
+    // source, eventFormat and budgetRange are button groups with no real
+    // <input> behind them for native HTML validation to see, and the embed
+    // widget submits via onClick, where native form validation never runs
+    // at all. Guest count gets its own check below since "filled" isn't the
+    // same as "a valid number".
+    const requiredGroups: Array<[FormFieldDef[], boolean]> = [
+      [eventFields, false],
+      [detailFields, false],
+      [customFields, true],
+      [sourceField ? [sourceField] : [], false],
+      [messageField ? [messageField] : [], false],
+    ];
+    for (const [group, isCustom] of requiredGroups) {
+      for (const f of group) {
+        if (f.id === 'guestCount') continue;
+        if (!isFieldFilled(f, isCustom)) return toast.error(`Please fill in "${f.label}".`);
+      }
+    }
     const guests = parseInt(form.guestCount ?? '');
     if (!(guests >= 1)) return toast.error("Please tell us how many guests you're expecting.");
     const customParts = Object.entries(customFieldValues)
@@ -182,6 +198,28 @@ export default function LeadForm() {
     });
   };
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); doSubmit(); };
+
+  /**
+   * Whether a field marked `required` in the venue's Lead Form settings is
+   * actually filled in. This is the single source of truth both validation
+   * paths below defer to, because "required" was previously only decorative
+   * for anything beyond First Name / Email:
+   *   - The embed's step gate checked ONLY firstName + email format, so a
+   *     venue that requires Last Name, Phone or Company (this one does) had
+   *     those silently skipped — confirmed with a real submission landing
+   *     with all three blank despite the setting.
+   *   - Neither mode enforces a required Event Type, Format, Budget range or
+   *     "How did you hear" — they render as button groups, not <input>s, so
+   *     there was never a real form control for native HTML validation (or
+   *     this check) to see.
+   */
+  const isFieldFilled = (field: FormFieldDef, isCustomField = false): boolean => {
+    if (!field.required) return true;
+    if (isCustomField) return !!(customFieldValues[field.label] ?? '').trim();
+    if (field.id === 'eventDate') return noDateYet || !!(form.eventDate ?? '').trim();
+    if (field.id === 'email') return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((form.email ?? '').trim());
+    return !!(form[field.id] ?? '').trim();
+  };
 
   if (isLoading) return (
     <div className={isEmbed ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center bg-[#f8f5f0]"}>
@@ -370,7 +408,16 @@ export default function LeadForm() {
         ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })
         : 'Select a date';
 
-    const detailsValid = !!(form.firstName ?? '').trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((form.email ?? '').trim());
+    // Step 1 (Booking): every visible+required event field, not just
+    // whichever ones happen to be plain inputs.
+    const step1Valid = eventFields.every(f => isFieldFilled(f));
+    // Step 2 (Your Details): same, across details/custom/source/message —
+    // this used to be firstName + email format ONLY, silently letting a
+    // required Last Name, Phone or Company through blank.
+    const step2Valid = detailFields.every(f => isFieldFilled(f))
+      && customFields.every(f => isFieldFilled(f, true))
+      && (!sourceField || isFieldFilled(sourceField))
+      && (!messageField || isFieldFilled(messageField));
     const steps = ['Booking', 'Your Details', 'Summary'];
     const timeField = eventFields.find(f => f.id === 'eventTime');
     const guestField = eventFields.find(f => f.id === 'guestCount');
@@ -506,8 +553,8 @@ export default function LeadForm() {
                     </div>
                   )}
 
-                  <button type="button" onClick={() => setEmbedStep(2)}
-                    className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90"
+                  <button type="button" disabled={!step1Valid} onClick={() => setEmbedStep(2)}
+                    className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
                     style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
                 </div>
               )}
@@ -544,7 +591,7 @@ export default function LeadForm() {
                   <div className="flex gap-2 pt-1">
                     <button type="button" onClick={() => setEmbedStep(1)}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
-                    <button type="button" disabled={!detailsValid} onClick={() => setEmbedStep(3)}
+                    <button type="button" disabled={!step2Valid} onClick={() => setEmbedStep(3)}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
                       style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
                   </div>
