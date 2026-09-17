@@ -671,30 +671,53 @@ export default function LeadForm() {
                 </div>
               )}
 
-              {/* Remaining event details (date, time, guests, budget) */}
-              {eventFields.filter(f => f.id !== 'eventType').length > 0 && (
-                <div>
-                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">EVENT DETAILS</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {eventFields.filter(f => f.id !== 'eventType').map(field => (
-                      <div key={field.id} className={field.id === 'budget' ? 'col-span-2' : ''}>
-                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
+              {/* Remaining event details (date, time, guests). Qualifying pills
+                  (format, budget bracket) are rendered separately below, full
+                  width — squeezed into a half grid column they either wrap
+                  ("Cocktail / standing" breaking mid-word) or, worse, end up
+                  the lone item in the last row with a wide empty gap beside
+                  them. A plain text/date/number input doesn't have that
+                  problem, so only those stay in the compact grid. */}
+              {(() => {
+                const gridFields = eventFields.filter(f => f.id !== 'eventType' && f.id !== 'eventFormat' && f.id !== 'budgetRange');
+                const pillFields = eventFields.filter(f => f.id === 'eventFormat' || f.id === 'budgetRange');
+                if (gridFields.length === 0 && pillFields.length === 0) return null;
+                return (
+                  <div>
+                    <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">EVENT DETAILS</label>
+                    {gridFields.length > 0 && (
+                      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${pillFields.length > 0 ? 'mb-4' : ''}`}>
+                        {gridFields.map(field => (
+                          <div key={field.id} className={field.id === 'budget' ? 'sm:col-span-2' : ''}>
+                            <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
+                              {field.label.toUpperCase()}{field.required && ' *'}
+                            </label>
+                            {renderField(field)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {pillFields.map(field => (
+                      <div key={field.id} className="mb-3 last:mb-0">
+                        <label className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">
                           {field.label.toUpperCase()}{field.required && ' *'}
                         </label>
                         {renderField(field)}
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {/* Your details */}
+              {/* Your details. Single column below sm: at 390px a fixed 2-col
+                  grid squeezed the Phone input so much its own placeholder
+                  ("+64 21 000 0000") got clipped. */}
               {detailFields.length > 0 && (
                 <div>
                   <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">YOUR DETAILS</label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {detailFields.map(field => (
-                      <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
+                      <div key={field.id} className={field.id === 'company' ? 'sm:col-span-2' : ''}>
                         <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
                           {field.label.toUpperCase()}{field.required && ' *'}
                         </label>
