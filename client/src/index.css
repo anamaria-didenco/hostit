@@ -1117,6 +1117,14 @@
 }
 .skip-link:focus { transform: translateY(0); }
 
+/* Enquiry form's Preferred Time field: a single custom clock icon (see
+   LeadForm.tsx) replaces the browser's own, so Chromium/desktop doesn't end
+   up showing two overlapping icons — iOS Safari never renders a native one
+   here, which is exactly the "looks like a blank box" issue this fixes. */
+.vf-time-input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
 /* Honour the OS "reduce motion" preference (vestibular safety). */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
