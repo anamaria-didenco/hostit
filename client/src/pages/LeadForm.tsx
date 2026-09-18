@@ -3,7 +3,7 @@ import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, MapPin, Phone, Mail } from "lucide-react";
+import { CheckCircle, MapPin, Phone, Mail, Clock } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { combineLocalDateTime } from "@/lib/dateTime";
 import { toast } from "sonner";
@@ -221,6 +221,13 @@ export default function LeadForm() {
     return !!(form[field.id] ?? '').trim();
   };
 
+  // A required field is only obvious if every field label says so. Some
+  // labels (Event type, Guest Count, Format, Budget range in the embed's
+  // Step 1; "WHAT KIND OF EVENT?" on the full page) were hardcoded text
+  // with no asterisk at all, so a required field could block the Next/
+  // Submit button with no visible reason why. One marker, used everywhere.
+  const reqMark = (required?: boolean) => required ? <span className="text-red-500 font-bold"> *</span> : null;
+
   if (isLoading) return (
     <div className={isEmbed ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center bg-[#f8f5f0]"}>
       <div className="text-xl italic animate-pulse text-gray-600">Loading…</div>
@@ -303,7 +310,7 @@ export default function LeadForm() {
         aria-label={field.label}
         min={field.type === 'date' ? new Date().toISOString().split("T")[0] : undefined}
         placeholder={field.type === 'date' ? undefined : field.id === 'phone' ? '+64 21 000 0000' : field.id === 'guestCount' ? '50' : field.id === 'budget' ? '5000' : ''}
-        className={inputClass}
+        className={`${inputClass}${field.id === 'eventTime' ? ' pr-7 vf-time-input' : ''}`}
       />
     );
     // The date gets an explicit "no date yet" answer: clients without one were
@@ -318,6 +325,19 @@ export default function LeadForm() {
               className="h-3.5 w-3.5 accent-current" />
             No date yet — we&rsquo;re flexible
           </label>
+        </div>
+      );
+    }
+    // Native <input type="time"> renders as a plain, unlabelled box on
+    // iOS Safari — no clock icon, no hint it's tappable — unlike Chrome's
+    // built-in picker glyph. A decorative icon (pointer-events-none, so it
+    // never steals the tap from the native control underneath) makes it
+    // read as a picker everywhere.
+    if (field.id === 'eventTime') {
+      return (
+        <div className="relative">
+          {input}
+          <Clock className="w-3.5 h-3.5 text-gray-400 absolute top-1/2 -translate-y-1/2 right-2.5 pointer-events-none" />
         </div>
       );
     }
@@ -419,6 +439,7 @@ export default function LeadForm() {
       && (!sourceField || isFieldFilled(sourceField))
       && (!messageField || isFieldFilled(messageField));
     const steps = ['Booking', 'Your Details', 'Summary'];
+    const eventTypeField = eventFields.find(f => f.id === 'eventType');
     const timeField = eventFields.find(f => f.id === 'eventTime');
     const guestField = eventFields.find(f => f.id === 'guestCount');
     const formatField = eventFields.find(f => f.id === 'eventFormat');
@@ -475,7 +496,7 @@ export default function LeadForm() {
                 <div className="space-y-3">
                   {eventFields.some(f => f.id === 'eventType') && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type</label>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
                       {renderEventTypeCards()}
                     </div>
                   )}
@@ -526,13 +547,13 @@ export default function LeadForm() {
                     <div className="grid grid-cols-2 gap-2">
                       {timeField && (
                         <div>
-                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{timeField.label}</label>
+                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{timeField.label}{reqMark(timeField.required)}</label>
                           {renderField(timeField)}
                         </div>
                       )}
                       {guestField && (
                         <div>
-                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{guestField.label}</label>
+                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{guestField.label}{reqMark(guestField.required)}</label>
                           {renderField(guestField)}
                         </div>
                       )}
@@ -542,13 +563,13 @@ export default function LeadForm() {
                   {/* Qualifying pills — format and budget bracket. */}
                   {formatField && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{formatField.label}</label>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{formatField.label}{reqMark(formatField.required)}</label>
                       {renderField(formatField)}
                     </div>
                   )}
                   {budgetRangeField && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{budgetRangeField.label}</label>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{budgetRangeField.label}{reqMark(budgetRangeField.required)}</label>
                       {renderField(budgetRangeField)}
                     </div>
                   )}
@@ -565,14 +586,14 @@ export default function LeadForm() {
                   <div className="grid grid-cols-2 gap-2">
                     {detailFields.map(field => (
                       <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
-                        <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{field.required && ' *'}</label>
+                        <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
                         {renderField(field)}
                       </div>
                     ))}
                   </div>
                   {customFields.map(field => (
                     <div key={field.id}>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{field.required && ' *'}</label>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
                       {renderField(field, true)}
                     </div>
                   ))}
@@ -713,7 +734,7 @@ export default function LeadForm() {
               {/* Event type — tappable cards (the signature NowBookIt element, shown first) */}
               {eventFields.some(f => f.id === 'eventType') && (
                 <div>
-                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">WHAT KIND OF EVENT?</label>
+                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">WHAT KIND OF EVENT?{reqMark(eventFields.find(f => f.id === 'eventType')?.required)}</label>
                   {renderEventTypeCards()}
                 </div>
               )}
@@ -737,7 +758,7 @@ export default function LeadForm() {
                         {gridFields.map(field => (
                           <div key={field.id} className={field.id === 'budget' ? 'sm:col-span-2' : ''}>
                             <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
-                              {field.label.toUpperCase()}{field.required && ' *'}
+                              {field.label.toUpperCase()}{reqMark(field.required)}
                             </label>
                             {renderField(field)}
                           </div>
@@ -747,7 +768,7 @@ export default function LeadForm() {
                     {pillFields.map(field => (
                       <div key={field.id} className="mb-3 last:mb-0">
                         <label className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">
-                          {field.label.toUpperCase()}{field.required && ' *'}
+                          {field.label.toUpperCase()}{reqMark(field.required)}
                         </label>
                         {renderField(field)}
                       </div>
@@ -766,7 +787,7 @@ export default function LeadForm() {
                     {detailFields.map(field => (
                       <div key={field.id} className={field.id === 'company' ? 'sm:col-span-2' : ''}>
                         <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
-                          {field.label.toUpperCase()}{field.required && ' *'}
+                          {field.label.toUpperCase()}{reqMark(field.required)}
                         </label>
                         {renderField(field)}
                       </div>
@@ -783,7 +804,7 @@ export default function LeadForm() {
                     {customFields.map(field => (
                       <div key={field.id}>
                         <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
-                          {field.label.toUpperCase()}{field.required && ' *'}
+                          {field.label.toUpperCase()}{reqMark(field.required)}
                         </label>
                         {renderField(field, true)}
                       </div>
