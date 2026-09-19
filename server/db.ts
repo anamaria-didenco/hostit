@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import {
@@ -156,7 +156,10 @@ export async function createContact(data: InsertContact) {
 export async function getLeads(ownerId: number, status?: string) {
   const db = await getDb();
   if (!db) return [];
-  const conditions = [eq(leads.ownerId, ownerId)];
+  // Synthetic pings (manual deploy/migration verification — see
+  // routers.ts leads.submit) use source 'healthcheck' specifically so they
+  // never show up as a real, unread enquiry in anyone's dashboard.
+  const conditions = [eq(leads.ownerId, ownerId), ne(leads.source, 'healthcheck')];
   if (status) conditions.push(eq(leads.status, status as any));
   return db.select().from(leads).where(and(...conditions)).orderBy(desc(leads.createdAt));
 }
@@ -318,7 +321,7 @@ export async function getDashboardStats(ownerId: number) {
   const db = await getDb();
   if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0, upcomingEvents: 0, overdueTasks: 0, conversionRate: 0, totalRevenueAllTime: 0, pendingPayments: 0 };
   const { tasks, bookings: bookingsTable, payments } = await import('../drizzle/schema');
-  const allLeads = await db.select().from(leads).where(eq(leads.ownerId, ownerId));
+  const allLeads = await db.select().from(leads).where(and(eq(leads.ownerId, ownerId), ne(leads.source, 'healthcheck')));
   // Active enquiries: any lead not yet booked/lost/cancelled
   const newLeads = allLeads.filter(l => !['booked', 'lost', 'cancelled'].includes(l.status ?? '')).length;
   const now = new Date();
