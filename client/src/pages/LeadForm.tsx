@@ -345,17 +345,19 @@ export default function LeadForm() {
   }
 
   /* ── Qualifying pills: format + budget bracket. One tap, tap again to
-        clear — never a typed number, the bracket IS the answer. ─────────── */
+        clear — never a typed number, the bracket IS the answer. Sized (and
+        gapped) for a comfortable mobile tap target: these carry Format and
+        Budget range, the fields that actually qualify a lead. ──────────── */
   function renderChoicePills(id: string, options: ReadonlyArray<{ value: string; label: string }>) {
     const selected = form[id] ?? '';
     return (
-      <div className="flex gap-1.5 flex-wrap">
+      <div className="flex gap-2 flex-wrap">
         {options.map(o => {
           const isSel = selected === o.value;
           return (
             <button key={o.value} type="button" aria-pressed={isSel}
               onClick={() => setForm(p => ({ ...p, [id]: isSel ? '' : o.value }))}
-              className={`rounded-full border transition-all ${isEmbed ? 'px-2.5 py-1 text-[10px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+              className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
               style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
               {o.label}
             </button>
@@ -375,7 +377,7 @@ export default function LeadForm() {
           return (
             <button key={t} type="button"
               onClick={() => setForm(p => ({ ...p, eventType: isSel ? '' : t }))}
-              className={`rounded-lg border text-center transition-all ${isEmbed ? 'px-2 py-2 text-[11px]' : 'px-3 py-3 text-sm'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+              className={`rounded-lg border text-center transition-all ${isEmbed ? 'px-2.5 py-2.5 text-xs' : 'px-3 py-3 text-sm'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
               style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
               {t}
             </button>
@@ -389,13 +391,13 @@ export default function LeadForm() {
   function renderSourcePills() {
     const selected = form.source ?? '';
     return (
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {SOURCE_OPTIONS.map(s => {
           const isSel = selected === s;
           return (
             <button key={s} type="button"
               onClick={() => setForm(p => ({ ...p, source: isSel ? '' : s }))}
-              className={`rounded-full border transition-all ${isEmbed ? 'px-2.5 py-1 text-[10px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+              className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
               style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
               {s}
             </button>
@@ -445,8 +447,13 @@ export default function LeadForm() {
     const formatField = eventFields.find(f => f.id === 'eventFormat');
     const budgetRangeField = eventFields.find(f => f.id === 'budgetRange');
 
+    // Capped at a card-like width: the widget fills whatever the host page's
+    // iframe/container gives it, and some site builders give a "custom HTML"
+    // embed the full column width on desktop — without a cap this stretches
+    // into oversized buttons and a wide, squat calendar instead of the
+    // compact card it's designed as.
     return (
-      <div style={{ fontFamily, backgroundColor: '#fff' }} className="w-full overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+      <div style={{ fontFamily, backgroundColor: '#fff' }} className="w-full max-w-md mx-auto overflow-hidden rounded-lg border border-gray-200 shadow-sm">
 
         {/* Brand header bar */}
         <div className="flex items-center gap-2 px-4 py-2.5" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
@@ -633,6 +640,7 @@ export default function LeadForm() {
                       ['Name', [form.firstName, form.lastName].filter(Boolean).join(' ')],
                       ['Email', form.email],
                       ['Phone', form.phone],
+                      ['Company', form.company],
                     ] as [string, string | undefined][]).filter(([, v]) => v && v.trim()).map(([k, v]) => (
                       <div key={k} className="flex justify-between gap-3 px-3 py-1.5 text-xs">
                         <span className="text-gray-600 font-semibold uppercase text-[10px] tracking-wider flex-shrink-0">{k}</span>
