@@ -15,6 +15,10 @@
  *   - on a successful submit, pushes a dataLayer event, calls gtag() if
  *     present (including an optional Google Ads conversion), and calls
  *     window.VenueFlow.onSubmit if the venue defined one
+ *   - on step 1 of the wizard being completed (a name + email saved, even
+ *     if the visitor never finishes), pushes a separate, lighter dataLayer
+ *     event/gtag call — a secondary signal for the ads to learn from while
+ *     full submissions are rare, distinct from a real conversion
  *
  * Supports multiple venue script tags on one page. Safe to load once.
  */
@@ -147,6 +151,23 @@
 
     if (data.type === "vf-embed-height" && data.height) {
       inst.iframe.style.height = data.height + "px";
+      return;
+    }
+
+    if (data.type === "vf-partial-captured") {
+      // A visitor gave a name + email but hasn't finished the enquiry yet.
+      // Pushed under its own event name (never "generate_lead") so it can't
+      // be mistaken for a real submission in reporting, and deliberately
+      // does NOT fire inst.gadsLabel's conversion action — that's reserved
+      // for a completed enquiry. Still worth a signal: full submissions are
+      // rare, and this gives the ads something to learn from in the
+      // meantime (set up a secondary Google Ads conversion action off this
+      // GA4/GTM event if useful).
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({ event: "vf_partial_captured" });
+      if (typeof window.gtag === "function") {
+        window.gtag("event", "generate_lead_partial");
+      }
       return;
     }
 
