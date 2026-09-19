@@ -103,7 +103,6 @@ export default function LeadForm() {
   // Clients without a date were guessing one or abandoning; this makes
   // no-date a first-class choice, stored on the lead as dateFlexible.
   const [noDateYet, setNoDateYet] = useState(false);
-  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
 
   const submitLead = trpc.leads.submit.useMutation({
     onSuccess: () => {
@@ -154,12 +153,12 @@ export default function LeadForm() {
   const doSubmit = () => {
     if (!venue?.ownerId) return toast.error("Venue not found");
     // Every required field must actually be filled — checked explicitly here,
-    // not just via each input's `required` attribute, because eventType,
-    // source, eventFormat and budgetRange are button groups with no real
-    // <input> behind them for native HTML validation to see, and the embed
-    // widget submits via onClick, where native form validation never runs
-    // at all. Guest count gets its own check below since "filled" isn't the
-    // same as "a valid number".
+    // not just via each input's `required` attribute, because source,
+    // eventFormat and budgetRange are button groups with no real <input>
+    // behind them for native HTML validation to see, and the embed widget
+    // submits via onClick, where native form validation never runs at all
+    // (even for eventType's <select>). Guest count gets its own check below
+    // since "filled" isn't the same as "a valid number".
     const requiredGroups: Array<[FormFieldDef[], boolean]> = [
       [eventFields, false],
       [detailFields, false],
@@ -288,7 +287,7 @@ export default function LeadForm() {
       ? (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setCustomFieldValues(p => ({ ...p, [field.label]: e.target.value }))
       : (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(p => ({ ...p, [field.id]: e.target.value }));
 
-    if (field.id === 'eventType') return renderEventTypeCards();
+    if (field.id === 'eventType') return renderEventTypeSelect();
     if (field.id === 'source') return renderSourcePills();
     if (field.id === 'eventFormat') return renderChoicePills('eventFormat', EVENT_FORMAT_OPTIONS);
     if (field.id === 'budgetRange') return renderChoicePills('budgetRange', BUDGET_RANGE_OPTIONS);
@@ -367,23 +366,22 @@ export default function LeadForm() {
     );
   }
 
-  /* ── NowBookIt-style selectable cards (event type) ─────────────────── */
-  function renderEventTypeCards() {
-    const selected = form.eventType ?? '';
+  /* ── Event type — a plain dropdown. A real <select> also gives the
+        full page's native form validation something to actually enforce
+        `required` against, which the old tappable card grid never had. ── */
+  function renderEventTypeSelect() {
+    const required = eventFields.find(f => f.id === 'eventType')?.required;
     return (
-      <div className={`grid gap-2 ${isEmbed ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}>
-        {EVENT_TYPES.map(t => {
-          const isSel = selected === t;
-          return (
-            <button key={t} type="button"
-              onClick={() => setForm(p => ({ ...p, eventType: isSel ? '' : t }))}
-              className={`rounded-lg border text-center transition-all ${isEmbed ? 'px-2.5 py-2.5 text-xs' : 'px-3 py-3 text-sm'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
-              style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
-              {t}
-            </button>
-          );
-        })}
-      </div>
+      <select
+        value={form.eventType ?? ''}
+        onChange={e => setForm(p => ({ ...p, eventType: e.target.value }))}
+        required={required}
+        aria-label="Type of Event"
+        className={inputClass}
+      >
+        <option value="">Select an event type…</option>
+        {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+      </select>
     );
   }
 
@@ -409,26 +407,8 @@ export default function LeadForm() {
 
   /* ── EMBED MODE — stepped widget (Booking → Your Details → Summary) ──── */
   if (isEmbed) {
-    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    // Used by the Summary step's "Date" row, further down.
     const selectedDate = form.eventDate ? new Date(form.eventDate + 'T00:00:00') : null;
-
-    // Calendar grid for the displayed month (Monday-first)
-    const calYear = calMonth.getFullYear();
-    const calIdx = calMonth.getMonth();
-    const startOffset = (new Date(calYear, calIdx, 1).getDay() + 6) % 7;
-    const daysInMonth = new Date(calYear, calIdx + 1, 0).getDate();
-    const cells: (number | null)[] = [];
-    for (let i = 0; i < startOffset; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-    const prevDisabled = calYear < today.getFullYear() || (calYear === today.getFullYear() && calIdx <= today.getMonth());
-    const goMonth = (delta: number) => { const m = new Date(calMonth); m.setMonth(m.getMonth() + delta); setCalMonth(m); };
-    const fmtSelected = noDateYet
-      ? 'Date to be confirmed'
-      : selectedDate
-        ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })
-        : 'Select a date';
 
     // Step 1 (Booking): every visible+required event field, not just
     // whichever ones happen to be plain inputs.
@@ -442,6 +422,7 @@ export default function LeadForm() {
       && (!messageField || isFieldFilled(messageField));
     const steps = ['Booking', 'Your Details', 'Summary'];
     const eventTypeField = eventFields.find(f => f.id === 'eventType');
+    const eventDateField = eventFields.find(f => f.id === 'eventDate');
     const timeField = eventFields.find(f => f.id === 'eventTime');
     const guestField = eventFields.find(f => f.id === 'guestCount');
     const formatField = eventFields.find(f => f.id === 'eventFormat');
@@ -504,49 +485,14 @@ export default function LeadForm() {
                   {eventFields.some(f => f.id === 'eventType') && (
                     <div>
                       <label className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
-                      {renderEventTypeCards()}
+                      {renderEventTypeSelect()}
                     </div>
                   )}
 
-                  {eventFields.some(f => f.id === 'eventDate') && (
+                  {eventDateField && (
                     <div>
-                      <div className="flex items-center justify-between flex-wrap gap-y-2 px-3 py-2 rounded-t-md" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
-                        <span className="font-bold text-sm">{calYear}</span>
-                        <span className="text-xs opacity-90">{fmtSelected}</span>
-                      </div>
-                      <div className="border border-t-0 border-gray-200 rounded-b-md px-2 py-2">
-                        <div className="flex items-center justify-between px-1 mb-1.5">
-                          <button type="button" disabled={prevDisabled} onClick={() => goMonth(-1)}
-                            className="w-6 h-6 flex items-center justify-center text-gray-500 disabled:opacity-25 hover:bg-gray-100 rounded">‹</button>
-                          <span className="text-xs font-semibold text-gray-700">{MONTH_NAMES[calIdx]} {calYear}</span>
-                          <button type="button" onClick={() => goMonth(1)}
-                            className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded">›</button>
-                        </div>
-                        <div className="grid grid-cols-7 gap-0.5 text-center">
-                          {DOW.map(d => <div key={d} className="text-[9px] text-gray-600 font-semibold py-0.5">{d}</div>)}
-                          {cells.map((d, i) => {
-                            if (d === null) return <div key={`e${i}`} />;
-                            const cellDate = new Date(calYear, calIdx, d);
-                            const isPast = cellDate < today;
-                            const isSel = !!selectedDate && cellDate.getTime() === selectedDate.getTime();
-                            const dateStr = `${calYear}-${String(calIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                            return (
-                              <button key={d} type="button" disabled={isPast}
-                                onClick={() => { setNoDateYet(false); setForm(p => ({ ...p, eventDate: dateStr })); }}
-                                className={`text-[11px] h-7 rounded-full transition-colors ${isPast ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100'}`}
-                                style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, fontWeight: 700 } : {}}>
-                                {d}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <button type="button" aria-pressed={noDateYet}
-                          onClick={() => { setNoDateYet(v => !v); setForm(p => ({ ...p, eventDate: '', eventTime: '' })); }}
-                          className={`mt-2 w-full rounded-full border text-[11px] py-1.5 transition-all ${noDateYet ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
-                          style={noDateYet ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
-                          {noDateYet ? '✓ No date yet — we\u2019re flexible' : 'We don\u2019t have a date yet'}
-                        </button>
-                      </div>
+                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{eventDateField.label}{reqMark(eventDateField.required)}</label>
+                      {renderField(eventDateField)}
                     </div>
                   )}
 
@@ -743,7 +689,7 @@ export default function LeadForm() {
               {eventFields.some(f => f.id === 'eventType') && (
                 <div>
                   <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">WHAT KIND OF EVENT?{reqMark(eventFields.find(f => f.id === 'eventType')?.required)}</label>
-                  {renderEventTypeCards()}
+                  {renderEventTypeSelect()}
                 </div>
               )}
 
