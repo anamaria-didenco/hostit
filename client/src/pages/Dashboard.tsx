@@ -37,6 +37,7 @@ import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
 import XeroPushModal from "@/components/XeroPushModal";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
+import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import { currency } from "@/lib/money";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
@@ -102,6 +103,24 @@ function adAttribution(lead: any): { label: string; clickId: string | null } | n
     return { label, clickId: null };
   }
   return null;
+}
+
+// True for a lead the embed wizard autosaved after step 1 (name + email)
+// that never completed step 2 — leads.submit clears this back to null the
+// moment that same lead is completed, so a stale "Partial" chip never lingers
+// on a lead that's since come in properly.
+function isPartialLead(lead: any): boolean {
+  return lead?.internalNotes === PARTIAL_LEAD_NOTE;
+}
+
+function PartialChip() {
+  return (
+    <span
+      title="Gave a name + email but never finished the enquiry"
+      className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap flex-shrink-0">
+      PARTIAL
+    </span>
+  );
 }
 
 // ── Overview Widget Sub-Components ──────────────────────────────────────────────
@@ -875,6 +894,9 @@ export default function Dashboard() {
   const [leadSearch, setLeadSearch] = useState("");
   // Multi-select status filter — empty array means "All Statuses".
   const [leadStatusFilter, setLeadStatusFilter] = useState<string[]>([]);
+  // Leads the embed autosaved after step 1 but that never completed step 2 —
+  // real, contactable, but easy to miss among finished enquiries otherwise.
+  const [showPartialOnly, setShowPartialOnly] = useState(false);
   const [statusFilterOpen, setStatusFilterOpen] = useState(false);
   const statusFilterRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -2385,6 +2407,7 @@ export default function Dashboard() {
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const filteredLeads = leadsToShow
     .filter((l: any) => !leadStatusExclude.includes(l.status))
+    .filter((l: any) => !showPartialOnly || isPartialLead(l))
     .filter((l: any) =>
       !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
     )
@@ -3146,6 +3169,14 @@ export default function Dashboard() {
                         </div>
                       )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPartialOnly(v => !v)}
+                      title="Leads who gave a name + email but never finished the enquiry — worth a quick follow-up"
+                      className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-1.5 ${showPartialOnly ? "border-amber-400 bg-amber-50 text-amber-800" : "border-gray-200 bg-white text-ink"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${showPartialOnly ? "bg-amber-500" : "bg-amber-400/60"}`} />
+                      Partial{leadsToShow.filter(isPartialLead).length > 0 ? ` (${leadsToShow.filter(isPartialLead).length})` : ""}
+                    </button>
                     <Select value={leadDateFilter} onValueChange={(v: any) => { setLeadDateFilter(v); if (v !== "custom") { setCustomDateFrom(""); setCustomDateTo(""); } }}>
                       <SelectTrigger aria-label="Filter events by date" title="Filter events by date" className={`h-8 w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadDateFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
                         <SelectValue />
@@ -3256,7 +3287,12 @@ export default function Dashboard() {
                                       className="w-3.5 h-3.5 accent-forest cursor-pointer" />
                                   </td>
                                 )}
-                                <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink whitespace-nowrap">{lead.firstName} {lead.lastName}</td>
+                                <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink whitespace-nowrap">
+                                  <span className="inline-flex items-center gap-1.5">
+                                    {lead.firstName} {lead.lastName}
+                                    {isPartialLead(lead) && <PartialChip />}
+                                  </span>
+                                </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[200px] truncate">{lead.eventType || "—"}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}{budgetRangeLabel((lead as any).budgetRange) ? <span className="ml-1.5 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap">{budgetRangeLabel((lead as any).budgetRange)}</span> : null}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
@@ -3340,6 +3376,7 @@ export default function Dashboard() {
                       {/* Row 1: name + status badge */}
                       <div className="flex items-center gap-2 mb-0.5 min-w-0">
                         <div className="font-cormorant font-semibold text-base text-ink truncate flex-1 min-w-0">{lead.firstName} {lead.lastName}</div>
+                        {isPartialLead(lead) && <PartialChip />}
                         <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
                           {pipelineStages.find(s => s.key === lead.status)?.label ?? String(lead.status ?? "").replace(/_/g, " ").toUpperCase()}
                         </div>
@@ -3476,7 +3513,10 @@ export default function Dashboard() {
                       <ChevronLeft className="w-4 h-4" /> BACK
                     </button>
                     <div className="flex-1">
-                      <h2 className="font-cormorant text-ink" style={{ fontSize: '1.8rem', fontWeight: 600 }}>{selectedLead.firstName} {selectedLead.lastName}</h2>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="font-cormorant text-ink" style={{ fontSize: '1.8rem', fontWeight: 600 }}>{selectedLead.firstName} {selectedLead.lastName}</h2>
+                        {isPartialLead(selectedLead) && <PartialChip />}
+                      </div>
                       <div className="font-dm text-sm text-ink/60">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap flex-shrink-0">

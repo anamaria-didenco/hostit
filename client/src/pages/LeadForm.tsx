@@ -160,12 +160,32 @@ export default function LeadForm() {
     return initial;
   });
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
-  // Stepped embed widget state (NowBookIt-style: Booking → Your Details → Summary)
+  // Stepped embed widget state (Your Details → Your Event — contact info
+  // comes first so a stranger who bails after step 1 still leaves behind a
+  // name and email, not nothing).
   const [embedStep, setEmbedStep] = useState(1);
   // "We don't have a date yet" — an explicit answer, not a skipped field.
   // Clients without a date were guessing one or abandoning; this makes
   // no-date a first-class choice, stored on the lead as dateFlexible.
   const [noDateYet, setNoDateYet] = useState(false);
+  // Set once startCapture succeeds after step 1 — passed to submit() so it
+  // UPDATEs this row instead of inserting a second one. Staying null just
+  // means submit() falls back to a normal insert; the visitor's flow never
+  // waits on or breaks over this write.
+  const [capturedLeadId, setCapturedLeadId] = useState<number | null>(null);
+
+  // Autosaves a real, contactable lead the moment step 1 (Your Details) is
+  // complete — firstName + email are always required by then. Without this,
+  // everyone who taps an ad, gets as far as typing their name and email, then
+  // bails on the event questions, simply vanishes: no record, no follow-up.
+  const startCapture = trpc.leads.startCapture.useMutation({
+    onSuccess: (data) => {
+      setCapturedLeadId(data.leadId);
+      try { window.parent?.postMessage({ type: 'vf-partial-captured' }, paramParentOrigin); } catch { /* no parent, or cross-origin quirk */ }
+    },
+    // No error toast — this is a background nicety. If it fails, submit()
+    // just falls back to a normal insert; the visitor never sees a hiccup.
+  });
 
   const submitLead = trpc.leads.submit.useMutation({
     onSuccess: () => {
@@ -243,6 +263,10 @@ export default function LeadForm() {
     const fullMessage = [form.message, ...customParts].filter(Boolean).join('\n\n');
     submitLead.mutate({
       ownerId: venue.ownerId,
+      // If step 1's autosave landed, complete that same row instead of
+      // inserting a second one. If it never fired (or is still in flight),
+      // this is undefined and the server falls back to a normal insert.
+      leadId: capturedLeadId ?? undefined,
       firstName: (form.firstName ?? '').trim(),
       lastName: form.lastName?.trim() || undefined,
       email: (form.email ?? '').trim(),
@@ -471,20 +495,17 @@ export default function LeadForm() {
 
   /* ── EMBED MODE — stepped widget (Booking → Your Details → Summary) ──── */
   if (isEmbed) {
-    // Used by the Summary step's "Date" row, further down.
-    const selectedDate = form.eventDate ? new Date(form.eventDate + 'T00:00:00') : null;
-
-    // Step 1 (Booking): every visible+required event field, not just
-    // whichever ones happen to be plain inputs.
-    const step1Valid = eventFields.every(f => isFieldFilled(f));
-    // Step 2 (Your Details): same, across details/custom/source/message —
-    // this used to be firstName + email format ONLY, silently letting a
-    // required Last Name, Phone or Company through blank.
-    const step2Valid = detailFields.every(f => isFieldFilled(f))
+    // Step 1 ("Your Details"): just the contact fields — the fastest
+    // possible path to a name + email, so someone who bails on step 2 still
+    // leaves behind a real, contactable lead (startCapture, below).
+    const detailsValid = detailFields.every(f => isFieldFilled(f));
+    // Step 2 ("Your Event"): everything else — event fields, any custom
+    // fields, source and message. Submits directly; there's no Summary step.
+    const eventStepValid = eventFields.every(f => isFieldFilled(f))
       && customFields.every(f => isFieldFilled(f, true))
       && (!sourceField || isFieldFilled(sourceField))
       && (!messageField || isFieldFilled(messageField));
-    const steps = ['Booking', 'Your Details', 'Summary'];
+    const steps = ['Your Details', 'Your Event'];
     const eventTypeField = eventFields.find(f => f.id === 'eventType');
     const eventDateField = eventFields.find(f => f.id === 'eventDate');
     const timeField = eventFields.find(f => f.id === 'eventTime');
@@ -593,7 +614,7 @@ export default function LeadForm() {
                 {renderSourcePills()}
               </div>
             )}
-            <button type="button" disabled={!(step1Valid && step2Valid) || submitLead.isPending} onClick={doSubmit}
+            <button type="button" disabled={!(detailsValid && eventStepValid) || submitLead.isPending} onClick={doSubmit}
               className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
               {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
@@ -623,8 +644,43 @@ export default function LeadForm() {
             </div>
 
             <div className="px-4 pb-4 pt-1">
-              {/* ── STEP 1: Booking ── */}
+              {/* ── STEP 1: Your Details — contact info first. A stranger who
+                    taps an ad shouldn't hit a 12-option dropdown and a
+                    guest-count box before they've typed their name. ────── */}
               {embedStep === 1 && (
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    {detailFields.map(field => (
+                      <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
+                        <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
+                        {renderField(field)}
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" disabled={!detailsValid} onClick={() => {
+                    // Autosave a contactable lead the moment we have a name
+                    // + email — once per visit, so going Back then Next
+                    // again doesn't create a second partial row.
+                    if (!capturedLeadId && venue?.ownerId) {
+                      startCapture.mutate({
+                        ownerId: venue.ownerId,
+                        firstName: (form.firstName ?? '').trim(),
+                        lastName: form.lastName?.trim() || undefined,
+                        email: (form.email ?? '').trim(),
+                        phone: form.phone?.trim() || undefined,
+                        company: form.company?.trim() || undefined,
+                        ...clickAttribution,
+                      });
+                    }
+                    setEmbedStep(2);
+                  }}
+                    className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+                    style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
+                </div>
+              )}
+
+              {/* ── STEP 2: Your Event — submits directly, no Summary step. ── */}
+              {embedStep === 2 && (
                 <div className="space-y-3">
                   {eventFields.some(f => f.id === 'eventType') && (
                     <div>
@@ -671,23 +727,6 @@ export default function LeadForm() {
                     </div>
                   )}
 
-                  <button type="button" disabled={!step1Valid} onClick={() => setEmbedStep(2)}
-                    className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
-                    style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
-                </div>
-              )}
-
-              {/* ── STEP 2: Your Details ── */}
-              {embedStep === 2 && (
-                <div className="space-y-2.5">
-                  <div className="grid grid-cols-2 gap-2">
-                    {detailFields.map(field => (
-                      <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
-                        <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
-                        {renderField(field)}
-                      </div>
-                    ))}
-                  </div>
                   {customFields.map(field => (
                     <div key={field.id}>
                       <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
@@ -706,43 +745,12 @@ export default function LeadForm() {
                       {renderSourcePills()}
                     </div>
                   )}
+
                   <div className="flex gap-2 pt-1">
                     <button type="button" onClick={() => setEmbedStep(1)}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
-                    <button type="button" disabled={!step2Valid} onClick={() => setEmbedStep(3)}
+                    <button type="button" disabled={!eventStepValid || submitLead.isPending} onClick={doSubmit}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
-                      style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── STEP 3: Summary ── */}
-              {embedStep === 3 && (
-                <div className="space-y-3">
-                  <div className="rounded-md border border-gray-200 divide-y divide-gray-100">
-                    {([
-                      ['Event', form.eventType],
-                      ['Date', noDateYet ? 'To be confirmed — we\u2019re flexible' : selectedDate ? selectedDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''],
-                      ['Time', form.eventTime],
-                      ['Guests', form.guestCount],
-                      ['Format', eventFormatLabel(form.eventFormat) ?? ''],
-                      ['Budget', budgetRangeLabel(form.budgetRange) ?? ''],
-                      ['Name', [form.firstName, form.lastName].filter(Boolean).join(' ')],
-                      ['Email', form.email],
-                      ['Phone', form.phone],
-                      ['Company', form.company],
-                    ] as [string, string | undefined][]).filter(([, v]) => v && v.trim()).map(([k, v]) => (
-                      <div key={k} className="flex justify-between gap-3 px-3 py-1.5 text-xs">
-                        <span className="text-gray-600 font-semibold uppercase text-[10px] tracking-wider flex-shrink-0">{k}</span>
-                        <span className="text-gray-800 text-right">{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setEmbedStep(2)}
-                      className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
-                    <button type="button" disabled={submitLead.isPending} onClick={doSubmit}
-                      className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                       style={{ backgroundColor: formButtonColor, color: textOnButton }}>
                       {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
                     </button>
