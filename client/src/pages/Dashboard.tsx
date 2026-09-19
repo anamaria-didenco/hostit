@@ -88,6 +88,22 @@ function fmtBudget(v: any): string | null {
   return `$${n.toLocaleString("en-NZ", { maximumFractionDigits: 0 })}`;
 }
 
+// A lead's ad-click attribution (gclid/gbraid/wbraid/fbclid/utm_*), captured
+// by the embed loader off the venue's own page — never guaranteed to be
+// there (most leads are organic), so every caller treats this as optional.
+function adAttribution(lead: any): { label: string; clickId: string | null } | null {
+  if (!lead) return null;
+  if (lead.gclid) return { label: "Google Ads", clickId: lead.gclid };
+  if (lead.gbraid) return { label: "Google Ads (app)", clickId: lead.gbraid };
+  if (lead.wbraid) return { label: "Google Ads (web, privacy-safe)", clickId: lead.wbraid };
+  if (lead.fbclid) return { label: "Meta / Facebook Ads", clickId: lead.fbclid };
+  if (lead.utmSource) {
+    const label = lead.utmCampaign ? `${lead.utmSource} · ${lead.utmCampaign}` : lead.utmSource;
+    return { label, clickId: null };
+  }
+  return null;
+}
+
 // ── Overview Widget Sub-Components ──────────────────────────────────────────────
 
 function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings, monthLeadEvents, onPrev, onNext, onDayClick, onViewCalendar, onCreateEvent }: {
@@ -2175,6 +2191,12 @@ export default function Dashboard() {
   const [embedAccent, setEmbedAccent] = useState("");   // hex w/o # — "" = use saved branding
   const [embedFont, setEmbedFont] = useState("");        // Google Font family — "" = use saved
   const [embedHeight, setEmbedHeight] = useState("640");
+  // Embed SDK v1 controls — the one-line <script> snippet is the default;
+  // the legacy hand-pasted <iframe> stays available for existing customers.
+  const [embedSnippetTab, setEmbedSnippetTab] = useState<"script" | "iframe">("script");
+  const [embedLayout, setEmbedLayout] = useState<"" | "compact">("");
+  const [embedPrefillEventType, setEmbedPrefillEventType] = useState("");
+  const [embedGadsLabel, setEmbedGadsLabel] = useState("");   // "AW-XXXXXXX/yyyy"
   const [formFields, setFormFields] = useState<FormFieldDef[] | null>(null);
   const [galleryDragIdx, setGalleryDragIdx] = useState<number | null>(null);
   const [galleryDragOverIdx, setGalleryDragOverIdx] = useState<number | null>(null);
@@ -3719,6 +3741,19 @@ export default function Dashboard() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {(() => {
+                      const attribution = adAttribution(selectedLead);
+                      if (!attribution) return null;
+                      return (
+                        <div className="mt-3 pt-3 border-t border-gold/20">
+                          <div className="font-bebas text-[10px] tracking-widest text-ink/50 mb-1">AD CLICK ATTRIBUTION</div>
+                          <div className="font-dm text-sm text-foreground">{attribution.label}</div>
+                          {attribution.clickId && (
+                            <div className="font-dm text-[11px] text-ink/60 mt-0.5 break-all">{attribution.clickId}</div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               ) : leadViewMode === "list" ? (
@@ -4569,22 +4604,29 @@ export default function Dashboard() {
                           ...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })),
                           ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' })),
                         ].sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
-                        const header = ['Type','First Name','Last Name','Email','Phone','Event Type','Event Date','Guests','Status','Company','Space','Notes','Created'];
-                        const csvRows = [header, ...rows.map((r: any) => [
-                          r._type === 'booking' ? 'Booking' : 'Enquiry',
-                          r.firstName ?? '',
-                          r.lastName ?? '',
-                          r.email ?? '',
-                          r.phone ?? '',
-                          r.eventType ?? '',
-                          r.eventDate ? new Date(r.eventDate).toLocaleDateString('en-NZ') : '',
-                          r.guestCount ?? '',
-                          r.status ?? '',
-                          r.company ?? '',
-                          r.space ?? '',
-                          (r.notes ?? r.message ?? '').replace(/[\r\n,]/g, ' '),
-                          r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-NZ') : '',
-                        ])];
+                        const header = ['Type','First Name','Last Name','Email','Phone','Event Type','Event Date','Guests','Status','Company','Space','Notes','Created','Ad Source','Click ID','UTM Campaign'];
+                        const csvRows = [header, ...rows.map((r: any) => {
+                          const attribution = adAttribution(r);
+                          const clickId = r.gclid || r.gbraid || r.wbraid || r.fbclid || '';
+                          return [
+                            r._type === 'booking' ? 'Booking' : 'Enquiry',
+                            r.firstName ?? '',
+                            r.lastName ?? '',
+                            r.email ?? '',
+                            r.phone ?? '',
+                            r.eventType ?? '',
+                            r.eventDate ? new Date(r.eventDate).toLocaleDateString('en-NZ') : '',
+                            r.guestCount ?? '',
+                            r.status ?? '',
+                            r.company ?? '',
+                            r.space ?? '',
+                            (r.notes ?? r.message ?? '').replace(/[\r\n,]/g, ' '),
+                            r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-NZ') : '',
+                            attribution?.label ?? '',
+                            clickId,
+                            r.utmCampaign ?? '',
+                          ];
+                        })];
                         const csv = csvRows.map(row => row.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
                         const blob = new Blob([csv], { type: 'text/csv' });
                         const url = URL.createObjectURL(blob);
@@ -6024,17 +6066,37 @@ export default function Dashboard() {
                     </a>
                   </div>
                 </div>
-                {/* Iframe embed code + customiser */}
+                {/* Embed code + customiser — one-line <script> (recommended) or the
+                    legacy <iframe> snippet, kept working for existing customers. */}
                 {venueSettings?.slug && (() => {
+                  const esc = (s: string) => s.replace(/"/g, "&quot;");
                   const cleanHex = embedAccent.replace(/^#/, "").trim();
                   const accentValid = /^[0-9a-fA-F]{3,8}$/.test(cleanHex);
+                  const h = parseInt(embedHeight) || 640;
+                  const FONTS = ["", "Inter", "Lora", "Montserrat", "Playfair Display", "Poppins", "Roboto", "Cormorant Garamond", "DM Sans", "Open Sans"];
+
+                  // Legacy iframe snippet — unchanged, still works for anyone who
+                  // already has it pasted in.
                   const params = new URLSearchParams({ embed: "1" });
                   if (accentValid) params.set("accent", cleanHex);
                   if (embedFont.trim()) params.set("font", embedFont.trim());
-                  const h = parseInt(embedHeight) || 640;
                   const embedUrl = `${window.location.origin}/enquire/${venueSettings.slug}?${params.toString()}`;
                   const iframeCode = `<iframe id="vf-enquiry"\n  src="${embedUrl}"\n  width="100%"\n  height="${h}"\n  frameborder="0"\n  style="border:none;max-width:520px;"\n  title="Event Enquiry Form"></iframe>\n<script>\n  window.addEventListener('message', function (e) {\n    if (e.data && e.data.type === 'vf-embed-height' && e.data.height) {\n      var f = document.getElementById('vf-enquiry');\n      if (f) f.style.height = e.data.height + 'px';\n    }\n  });\n</script>`;
-                  const FONTS = ["", "Inter", "Lora", "Montserrat", "Playfair Display", "Poppins", "Roboto", "Cormorant Garamond", "DM Sans", "Open Sans"];
+
+                  // Recommended: one <script> tag. embed.js builds the iframe,
+                  // wires resize + conversion tracking, and captures gclid/UTM
+                  // params off the venue's own page — none of that needs a
+                  // second snippet or any manual wiring.
+                  const scriptAttrs = [`data-venue="${esc(venueSettings.slug)}"`];
+                  if (accentValid) scriptAttrs.push(`data-accent="${cleanHex}"`);
+                  if (embedFont.trim()) scriptAttrs.push(`data-font="${esc(embedFont.trim())}"`);
+                  if (h !== 640) scriptAttrs.push(`data-height="${h}"`);
+                  if (embedLayout) scriptAttrs.push(`data-layout="${embedLayout}"`);
+                  if (embedPrefillEventType.trim()) scriptAttrs.push(`data-event-type="${esc(embedPrefillEventType.trim())}"`);
+                  if (embedGadsLabel.trim()) scriptAttrs.push(`data-gads-label="${esc(embedGadsLabel.trim())}"`);
+                  const scriptCode = `<script src="${window.location.origin}/embed.js"\n  ${scriptAttrs.join('\n  ')}></script>`;
+
+                  const activeCode = embedSnippetTab === "script" ? scriptCode : iframeCode;
                   return (
                     <div className="mb-6 bg-sage-tint border border-sage-green/20 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
@@ -6043,11 +6105,24 @@ export default function Dashboard() {
                           <p className="font-inter text-xs text-gray-500 mt-0.5">Customise the look, then copy the code into your website HTML.</p>
                         </div>
                         <button
-                          onClick={() => { navigator.clipboard.writeText(iframeCode); toast.success('Embed code copied!'); }}
+                          onClick={() => { navigator.clipboard.writeText(activeCode); toast.success('Embed code copied!'); }}
                           className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-2 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors flex-shrink-0 ml-4">
                           <Copy className="w-3.5 h-3.5" /> Copy Code
                         </button>
                       </div>
+
+                      {/* Snippet tab */}
+                      <div className="flex gap-1 mb-3">
+                        <button type="button" onClick={() => setEmbedSnippetTab("script")}
+                          className={`font-inter text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${embedSnippetTab === "script" ? "bg-sage-green text-white" : "bg-white text-gray-500 border border-border hover:bg-sage-tint"}`}>
+                          One line (recommended)
+                        </button>
+                        <button type="button" onClick={() => setEmbedSnippetTab("iframe")}
+                          className={`font-inter text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${embedSnippetTab === "iframe" ? "bg-sage-green text-white" : "bg-white text-gray-500 border border-border hover:bg-sage-tint"}`}>
+                          Advanced (iframe)
+                        </button>
+                      </div>
+
                       {/* Customiser controls */}
                       <div className="grid grid-cols-3 gap-3 mb-3">
                         <div>
@@ -6073,15 +6148,51 @@ export default function Dashboard() {
                             className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                         </div>
                       </div>
-                      <pre className="bg-white border border-border rounded-lg p-3 text-xs font-mono text-gray-700 overflow-x-auto whitespace-pre-wrap break-all select-all">{iframeCode}</pre>
-                      <div className="flex items-center gap-2 mt-2">
-                        <a href={embedUrl} target="_blank" rel="noopener noreferrer"
-                          className="font-inter text-xs text-sage-dark hover:underline flex items-center gap-1">
-                          <ExternalLink className="w-3 h-3" /> Preview this embed
-                        </a>
-                        <span className="text-gray-300">·</span>
-                        <span className="font-inter text-[11px] text-gray-400">The iframe auto-resizes to fit each step (the script below handles it). Leave colour/font blank to use saved branding.</span>
-                      </div>
+
+                      {embedSnippetTab === "script" && (
+                        <div className="grid grid-cols-3 gap-3 mb-3">
+                          <div>
+                            <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">LAYOUT</label>
+                            <select value={embedLayout} onChange={e => setEmbedLayout(e.target.value as "" | "compact")}
+                              className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
+                              <option value="">3 steps (default)</option>
+                              <option value="compact">Compact — one scrolling form</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">PREFILL EVENT TYPE</label>
+                            <input type="text" value={embedPrefillEventType} onChange={e => setEmbedPrefillEventType(e.target.value)}
+                              placeholder="e.g. Christmas Party" className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
+                          </div>
+                          <div>
+                            <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">GOOGLE ADS LABEL</label>
+                            <input type="text" value={embedGadsLabel} onChange={e => setEmbedGadsLabel(e.target.value)}
+                              placeholder="AW-XXXXXXX/yyyy" className="w-full border border-border rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-sage-green" />
+                          </div>
+                        </div>
+                      )}
+
+                      <pre className="bg-white border border-border rounded-lg p-3 text-xs font-mono text-gray-700 overflow-x-auto whitespace-pre-wrap break-all select-all">{activeCode}</pre>
+
+                      {embedSnippetTab === "script" ? (
+                        <div className="mt-2 space-y-1">
+                          <p className="font-inter text-[11px] text-gray-400">
+                            This one tag builds the form, auto-resizes it, and captures which ad (Google, Facebook, or a utm_ link) sent the enquiry — stored on the lead automatically, no setup needed.
+                          </p>
+                          <p className="font-inter text-[11px] text-gray-400">
+                            Run Google Ads? Paste your conversion label above (Google Ads → Goals → Conversions → your action → "Use Google tag") and every submission reports as a conversion automatically — as long as your site already has the Google tag (gtag.js) installed.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-2">
+                          <a href={embedUrl} target="_blank" rel="noopener noreferrer"
+                            className="font-inter text-xs text-sage-dark hover:underline flex items-center gap-1">
+                            <ExternalLink className="w-3 h-3" /> Preview this embed
+                          </a>
+                          <span className="text-gray-300">·</span>
+                          <span className="font-inter text-[11px] text-gray-400">The iframe auto-resizes to fit each step (the script below handles it). Leave colour/font blank to use saved branding.</span>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

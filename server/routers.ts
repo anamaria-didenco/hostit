@@ -491,6 +491,18 @@ export const appRouter = router({
         budget: z.number().min(0).max(10_000_000).optional(),
         message: z.string().max(5000).optional(),
         source: z.string().max(120).optional(),
+        // Ad-click attribution, read by the embed loader from the parent
+        // page's URL at load time (the iframe can't see it — cross-origin)
+        // and carried through as plain query params on the iframe src.
+        gclid: z.string().max(255).optional(),
+        gbraid: z.string().max(255).optional(),
+        wbraid: z.string().max(255).optional(),
+        fbclid: z.string().max(255).optional(),
+        utmSource: z.string().max(255).optional(),
+        utmMedium: z.string().max(255).optional(),
+        utmCampaign: z.string().max(255).optional(),
+        utmTerm: z.string().max(255).optional(),
+        utmContent: z.string().max(255).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Anti-spam: 5 submissions / 10 min per (IP, ownerId). Skipped under
@@ -545,6 +557,15 @@ export const appRouter = router({
           message: input.message,
           source: input.source ?? "lead_form",
           status: "new",
+          gclid: input.gclid,
+          gbraid: input.gbraid,
+          wbraid: input.wbraid,
+          fbclid: input.fbclid,
+          utmSource: input.utmSource,
+          utmMedium: input.utmMedium,
+          utmCampaign: input.utmCampaign,
+          utmTerm: input.utmTerm,
+          utmContent: input.utmContent,
         });
 
         // Send notification email to venue owner if they have configured one
