@@ -40,6 +40,23 @@ function isLight(hex: string) {
   return (r * 299 + g * 587 + b * 114) / 1000 > 128;
 }
 
+// Prefill params (embed.js's data-event-type="christmas-party" etc.) come
+// from whatever a venue typed into a script tag, not a dropdown, so they're
+// matched loosely against the real option strings — case/punctuation/spacing
+// insensitive — rather than requiring an exact string. No match, no prefill;
+// never a crash or a silently-wrong selection.
+const normLoose = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+function fuzzyMatch(raw: string | null, options: readonly string[]): string | undefined {
+  if (!raw) return undefined;
+  const target = normLoose(raw);
+  return options.find(o => normLoose(o) === target);
+}
+function fuzzyMatchOption(raw: string | null, options: ReadonlyArray<{ value: string; label: string }>): string | undefined {
+  if (!raw) return undefined;
+  const target = normLoose(raw);
+  return options.find(o => normLoose(o.value) === target || normLoose(o.label) === target)?.value;
+}
+
 export default function LeadForm() {
   const { slug } = useParams<{ slug?: string }>();
   const [submitted, setSubmitted] = useState(false);
@@ -52,6 +69,45 @@ export default function LeadForm() {
   const paramAccent = sp.get("accent");   // hex, no leading #
   const paramFont = sp.get("font");       // any Google Font family name
   const paramBg = sp.get("bg");           // hex, no leading #
+  // Collapses the embed's 3-step wizard into one scrolling form — set by
+  // embed.js from data-layout="compact". Most traffic to these pages is
+  // mobile, where three steps is pure friction.
+  const isCompact = isEmbed && sp.get("layout") === "compact";
+  // embed.js reads its OWN parent page's origin (the iframe can't — that's
+  // the whole reason it's passed in) and appends it here so postMessage can
+  // target that exact origin instead of "*". Validated, not trusted as-is:
+  // a malformed value falls back to "*" rather than silently going dark, so
+  // a hand-pasted old-style iframe (no embed.js, no param) still works.
+  const paramParentOrigin = (() => {
+    const raw = sp.get("parentOrigin");
+    if (!raw) return "*";
+    try { return new URL(raw).origin; } catch { return "*"; }
+  })();
+  // Ad-click attribution: embed.js reads these off the PARENT page's URL at
+  // load time (the iframe can't — cross-origin) and passes them through as
+  // plain query params. Captured here, carried on the submit payload below,
+  // so a venue can answer "did this come from an ad, and which one?" even
+  // if they never wire up conversion tracking at all.
+  const clickAttribution = {
+    gclid: sp.get("gclid") || undefined,
+    gbraid: sp.get("gbraid") || undefined,
+    wbraid: sp.get("wbraid") || undefined,
+    fbclid: sp.get("fbclid") || undefined,
+    utmSource: sp.get("utm_source") || undefined,
+    utmMedium: sp.get("utm_medium") || undefined,
+    utmCampaign: sp.get("utm_campaign") || undefined,
+    utmTerm: sp.get("utm_term") || undefined,
+    utmContent: sp.get("utm_content") || undefined,
+  };
+  // Prefill from embed.js's data-event-type/date/guests/format, e.g. a
+  // Christmas landing page opening the form already on "Christmas Party" —
+  // fewer taps, better mobile conversion. Each is independently optional.
+  const prefillEventType = fuzzyMatch(sp.get("prefillEventType"), EVENT_TYPES);
+  const prefillDateRaw = sp.get("prefillDate");
+  const prefillDate = prefillDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(prefillDateRaw) ? prefillDateRaw : undefined;
+  const prefillGuestsRaw = parseInt(sp.get("prefillGuests") ?? '', 10);
+  const prefillGuests = Number.isFinite(prefillGuestsRaw) && prefillGuestsRaw > 0 ? String(prefillGuestsRaw) : undefined;
+  const prefillFormat = fuzzyMatchOption(sp.get("prefillFormat"), EVENT_FORMAT_OPTIONS);
 
   // Load the requested Google Font on the fly so any family works.
   useEffect(() => {
@@ -72,7 +128,7 @@ export default function LeadForm() {
     if (!isEmbed) return;
     const post = () => {
       const h = Math.ceil(document.documentElement.scrollHeight);
-      try { window.parent?.postMessage({ type: "vf-embed-height", height: h }, "*"); } catch { /* cross-origin */ }
+      try { window.parent?.postMessage({ type: "vf-embed-height", height: h }, paramParentOrigin); } catch { /* cross-origin */ }
     };
     post();
     const ro = new ResizeObserver(() => post());
@@ -95,7 +151,14 @@ export default function LeadForm() {
   const venue = slug ? venueBySlug : venueDefault;
   const isLoading = slug ? loadingBySlug : loadingDefault;
 
-  const [form, setForm] = useState<Record<string, string>>({});
+  const [form, setForm] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    if (prefillEventType) initial.eventType = prefillEventType;
+    if (prefillDate) initial.eventDate = prefillDate;
+    if (prefillGuests) initial.guestCount = prefillGuests;
+    if (prefillFormat) initial.eventFormat = prefillFormat;
+    return initial;
+  });
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   // Stepped embed widget state (NowBookIt-style: Booking → Your Details → Summary)
   const [embedStep, setEmbedStep] = useState(1);
@@ -119,7 +182,7 @@ export default function LeadForm() {
           guestCount: form.guestCount ? parseInt(form.guestCount) : null,
           budgetRange: form.budgetRange || null,
           eventFormat: form.eventFormat || null,
-        }, "*");
+        }, paramParentOrigin);
       } catch { /* no parent, or cross-origin quirk — the thank-you still shows */ }
       // ── Optional thank-you redirect (?redirect=…) ───────────────────────
       // Full-page mode only (navigating inside the iframe helps nobody). To
@@ -194,6 +257,7 @@ export default function LeadForm() {
       budget: form.budget ? parseFloat(form.budget) : undefined,
       message: fullMessage || undefined,
       source: form.source || "lead_form",
+      ...clickAttribution,
     });
   };
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); doSubmit(); };
@@ -455,6 +519,86 @@ export default function LeadForm() {
             <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: formButtonColor }} />
             <p className="font-semibold text-gray-800 text-sm mb-1">Enquiry Received!</p>
             <p className="text-xs text-gray-600 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
+          </div>
+        ) : isCompact ? (
+          // ── COMPACT MODE (data-layout="compact") ── One continuous scroll
+          // instead of the 3-step wizard: most traffic here is mobile, and
+          // three steps of tapping NEXT is pure friction on a landing page a
+          // visitor already committed to by tapping an ad. Same fields, same
+          // renderField()/reqMark() as the wizard steps — just laid out flat.
+          <div className="px-4 pb-4 pt-3 space-y-3">
+            {eventFields.some(f => f.id === 'eventType') && (
+              <div>
+                <label className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
+                {renderEventTypeSelect()}
+              </div>
+            )}
+            {eventDateField && (
+              <div>
+                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{eventDateField.label}{reqMark(eventDateField.required)}</label>
+                {renderField(eventDateField)}
+              </div>
+            )}
+            {(timeField || guestField) && (
+              <div className="grid grid-cols-2 gap-2">
+                {timeField && (
+                  <div>
+                    <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{timeField.label}{reqMark(timeField.required)}</label>
+                    {renderField(timeField)}
+                  </div>
+                )}
+                {guestField && (
+                  <div>
+                    <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{guestField.label}{reqMark(guestField.required)}</label>
+                    {renderField(guestField)}
+                  </div>
+                )}
+              </div>
+            )}
+            {formatField && (
+              <div>
+                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{formatField.label}{reqMark(formatField.required)}</label>
+                {renderField(formatField)}
+              </div>
+            )}
+            {budgetRangeField && (
+              <div>
+                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{budgetRangeField.label}{reqMark(budgetRangeField.required)}</label>
+                {renderField(budgetRangeField)}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              {detailFields.map(field => (
+                <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
+                  <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
+                  {renderField(field)}
+                </div>
+              ))}
+            </div>
+            {customFields.map(field => (
+              <div key={field.id}>
+                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
+                {renderField(field, true)}
+              </div>
+            ))}
+            {messageField && (
+              <div>
+                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{messageField.label}</label>
+                {renderField(messageField)}
+              </div>
+            )}
+            {sourceField && (
+              <div>
+                <label className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-600 uppercase">{sourceField.label}</label>
+                {renderSourcePills()}
+              </div>
+            )}
+            <button type="button" disabled={!(step1Valid && step2Valid) || submitLead.isPending} onClick={doSubmit}
+              className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+              style={{ backgroundColor: formButtonColor, color: textOnButton }}>
+              {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
+            </button>
+            <p className="text-[9px] text-center text-gray-300">By submitting you agree to be contacted by {venueName}.</p>
           </div>
         ) : (
           <>

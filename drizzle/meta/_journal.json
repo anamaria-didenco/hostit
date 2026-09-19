@@ -420,6 +420,13 @@
       "when": 1779801503000,
       "tag": "0059_lead_qualifiers",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1779801504000,
+      "tag": "0060_lead_click_attribution",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,9 @@
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "gclid" varchar(255);
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "gbraid" varchar(255);
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "wbraid" varchar(255);
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "fbclid" varchar(255);
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "utmSource" varchar(255);
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "utmMedium" varchar(255);
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "utmCampaign" varchar(255);
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "utmTerm" varchar(255);
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "utmContent" varchar(255);
