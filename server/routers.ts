@@ -7,6 +7,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { enforceRateLimit, getRequestIp } from "./_core/rateLimit";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
+import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { smtpTls } from "./smtpTls";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
@@ -46,6 +47,44 @@ function formatVenueDateTime(eventDate: Date | string, timeZone: string = "Pacif
   const dateStr = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
   const timeStr = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
   return { dateStr, timeStr };
+}
+
+// Anti-spam for the public lead-form endpoints: 5 writes / 10 min per (IP,
+// ownerId), shared by leads.submit AND leads.startCapture — a bot hammering
+// startCapture without ever calling submit still burns the same budget,
+// rather than getting a second, unlimited quota. Skipped under
+// `NODE_ENV=test` because the vitest suite calls these many times from the
+// same (unknown IP, ownerId 1) bucket.
+async function enforceLeadRateLimit(ctx: any, ownerId: number) {
+  const { getRequestIp } = await import('./_core/rateLimit');
+  const ip = getRequestIp(ctx?.req);
+  const key = `${ip}::${ownerId}`;
+  const now = Date.now();
+  const WINDOW_MS = 10 * 60 * 1000;
+  const MAX = 5;
+  const g: any = globalThis as any;
+  if (!g.__leadSubmitRate) g.__leadSubmitRate = new Map<string, { count: number; resetAt: number }>();
+  const bucket: Map<string, { count: number; resetAt: number }> = g.__leadSubmitRate;
+  if (process.env.NODE_ENV === 'test') return;
+  // Lazy prune: every ~100 writes, sweep expired entries; also enforce a hard
+  // cap so a flood of unique IPs can't grow the map without bound.
+  if (bucket.size > 5000) {
+    for (const [k, v] of bucket) { if (v.resetAt < now) bucket.delete(k); }
+    if (bucket.size > 10000) {
+      // Hard cap: drop oldest-resetting entries to keep memory bounded.
+      const sorted = [...bucket.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
+      for (let i = 0; i < sorted.length - 5000; i++) bucket.delete(sorted[i][0]);
+    }
+  }
+  const entry = bucket.get(key);
+  if (!entry || entry.resetAt < now) {
+    bucket.set(key, { count: 1, resetAt: now + WINDOW_MS });
+  } else {
+    entry.count += 1;
+    if (entry.count > MAX) {
+      throw new Error("Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there.");
+    }
+  }
 }
 
 
@@ -469,11 +508,66 @@ export const appRouter = router({
         return getLeadById(input.id, ctx.user.id);
       }),
 
+    // Public: autosaves a lead the moment the embed wizard's contact-details
+    // step is complete — before the visitor has answered anything about the
+    // event itself. Cold-traffic ad clicks bail on multi-step forms; without
+    // this, someone who types their name and email then abandons the event
+    // questions leaves no trace at all. leads.submit later completes this
+    // same row (by id) instead of inserting a second one.
+    startCapture: publicProcedure
+      .input(z.object({
+        ownerId: z.number(),
+        firstName: z.string().min(1).max(120),
+        lastName: z.string().max(120).optional(),
+        email: z.string().trim().email().max(254),
+        phone: z.string().max(40).optional(),
+        company: z.string().max(200).optional(),
+        gclid: z.string().max(255).optional(),
+        gbraid: z.string().max(255).optional(),
+        wbraid: z.string().max(255).optional(),
+        fbclid: z.string().max(255).optional(),
+        utmSource: z.string().max(255).optional(),
+        utmMedium: z.string().max(255).optional(),
+        utmCampaign: z.string().max(255).optional(),
+        utmTerm: z.string().max(255).optional(),
+        utmContent: z.string().max(255).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await enforceLeadRateLimit(ctx, input.ownerId);
+        const lead = await createLead({
+          ownerId: input.ownerId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone,
+          company: input.company,
+          status: "new",
+          source: "lead_form",
+          internalNotes: PARTIAL_LEAD_NOTE,
+          gclid: input.gclid,
+          gbraid: input.gbraid,
+          wbraid: input.wbraid,
+          fbclid: input.fbclid,
+          utmSource: input.utmSource,
+          utmMedium: input.utmMedium,
+          utmCampaign: input.utmCampaign,
+          utmTerm: input.utmTerm,
+          utmContent: input.utmContent,
+        });
+        if (!lead) throw new Error("Could not save — please try again.");
+        return { leadId: lead.id };
+      }),
+
     // Public: submit from lead form. Rate-limited per (IP, ownerId) to prevent
     // spam/abuse since this endpoint is public and accepts ownerId from the client.
     submit: publicProcedure
       .input(z.object({
         ownerId: z.number(),
+        // Set when step 1's startCapture already created this lead — this
+        // completes that same row instead of inserting a second one. Absent
+        // (or the row no longer exists) falls back to a normal insert, so a
+        // submission is never lost over a failed or skipped autosave.
+        leadId: z.number().optional(),
         firstName: z.string().min(1).max(120),
         lastName: z.string().max(120).optional(),
         email: z.string().trim().email().max(254),
@@ -505,42 +599,9 @@ export const appRouter = router({
         utmContent: z.string().max(255).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        // Anti-spam: 5 submissions / 10 min per (IP, ownerId). Skipped under
-        // `NODE_ENV=test` because the vitest suite calls leads.submit many
-        // times from the same (unknown IP, ownerId 1) bucket — otherwise
-        // unrelated tests start failing with "Too many submissions".
-        const { getRequestIp } = await import('./_core/rateLimit');
-        const ip = getRequestIp((ctx as any)?.req);
-        const key = `${ip}::${input.ownerId}`;
-        const now = Date.now();
-        const WINDOW_MS = 10 * 60 * 1000;
-        const MAX = 5;
-        const g: any = globalThis as any;
-        if (!g.__leadSubmitRate) g.__leadSubmitRate = new Map<string, { count: number; resetAt: number }>();
-        const bucket: Map<string, { count: number; resetAt: number }> = g.__leadSubmitRate;
-        const skipRateLimit = process.env.NODE_ENV === 'test';
-        // Lazy prune: every ~100 writes, sweep expired entries; also enforce a hard
-        // cap so a flood of unique IPs can't grow the map without bound.
-        if (bucket.size > 5000) {
-          for (const [k, v] of bucket) { if (v.resetAt < now) bucket.delete(k); }
-          if (bucket.size > 10000) {
-            // Hard cap: drop oldest-resetting entries to keep memory bounded.
-            const sorted = [...bucket.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
-            for (let i = 0; i < sorted.length - 5000; i++) bucket.delete(sorted[i][0]);
-          }
-        }
-        if (!skipRateLimit) {
-          const entry = bucket.get(key);
-          if (!entry || entry.resetAt < now) {
-            bucket.set(key, { count: 1, resetAt: now + WINDOW_MS });
-          } else {
-            entry.count += 1;
-            if (entry.count > MAX) {
-              throw new Error("Too many submissions from your connection just now — please try again in a few minutes, or email the venue directly and we'll pick it up from there.");
-            }
-          }
-        }
-        const lead = await createLead({
+        await enforceLeadRateLimit(ctx, input.ownerId);
+
+        const leadData = {
           ownerId: input.ownerId,
           firstName: input.firstName,
           lastName: input.lastName,
@@ -566,7 +627,31 @@ export const appRouter = router({
           utmCampaign: input.utmCampaign,
           utmTerm: input.utmTerm,
           utmContent: input.utmContent,
-        });
+        };
+
+        let lead = null;
+        if (input.leadId) {
+          // Completing a lead startCapture already created at step 1 —
+          // update that row rather than insert a second one, and clear the
+          // "Partial" marker (unless a staff member already overwrote it
+          // with a real note in the meantime — that's theirs, not ours to
+          // erase).
+          const existing = await getLeadById(input.leadId, input.ownerId);
+          if (existing) {
+            await updateLead(input.leadId, input.ownerId, {
+              ...leadData,
+              internalNotes: existing.internalNotes === PARTIAL_LEAD_NOTE ? null : existing.internalNotes,
+              updatedAt: new Date(),
+            });
+            lead = await getLeadById(input.leadId, input.ownerId);
+          }
+        }
+        if (!lead) {
+          // No leadId (or its row vanished) — startCapture never ran, or
+          // failed. Either way a submission is never silently lost: insert
+          // fresh, exactly as before this feature existed.
+          lead = await createLead(leadData);
+        }
 
         // Send notification email to venue owner if they have configured one
         try {
@@ -966,13 +1051,14 @@ export const appRouter = router({
     overdue: protectedProcedure.query(async ({ ctx }) => {
       const { getDb } = await import('./db');
       const { leads } = await import('../drizzle/schema');
-      const { eq, and, lte, isNotNull, notInArray } = await import('drizzle-orm');
+      const { eq, and, lte, isNotNull, notInArray, ne } = await import('drizzle-orm');
       const db = await getDb();
       if (!db) return [];
       const now = new Date();
       return db.select().from(leads).where(
         and(
           eq(leads.ownerId, ctx.user.id),
+          ne(leads.source, 'healthcheck'),
           isNotNull(leads.followUpDate),
           lte(leads.followUpDate, now),
           notInArray(leads.status, ['booked', 'lost', 'cancelled']),
@@ -985,7 +1071,7 @@ export const appRouter = router({
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
         const { leads } = await import('../drizzle/schema');
-        const { eq, and, gte, lt, isNotNull } = await import('drizzle-orm');
+        const { eq, and, gte, lt, isNotNull, ne } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return [];
         const start = new Date(input.year, input.month - 1, 1);
@@ -993,6 +1079,7 @@ export const appRouter = router({
         return db.select().from(leads).where(
           and(
             eq(leads.ownerId, ctx.user.id),
+            ne(leads.source, 'healthcheck'),
             isNotNull(leads.followUpDate),
             gte(leads.followUpDate, start),
             lt(leads.followUpDate, end),
@@ -1005,7 +1092,7 @@ export const appRouter = router({
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
         const { leads } = await import('../drizzle/schema');
-        const { eq, and, gte, lt, isNotNull } = await import('drizzle-orm');
+        const { eq, and, gte, lt, isNotNull, ne } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return [];
         const start = new Date(input.year, input.month - 1, 1);
@@ -1013,6 +1100,7 @@ export const appRouter = router({
         return db.select().from(leads).where(
           and(
             eq(leads.ownerId, ctx.user.id),
+            ne(leads.source, 'healthcheck'),
             isNotNull(leads.eventDate),
             gte(leads.eventDate, start),
             lt(leads.eventDate, end),
@@ -4637,10 +4725,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     pipeline: protectedProcedure.query(async ({ ctx }) => {
       const { getDb } = await import('./db');
       const { leads, proposals, bookings } = await import('../drizzle/schema');
-      const { eq } = await import('drizzle-orm');
+      const { eq, and, ne } = await import('drizzle-orm');
       const db = await getDb();
       if (!db) return { enquiries: 0, proposals: 0, confirmed: 0, pipeline: 0, confirmed_revenue: 0 };
-      const allLeads = await db.select().from(leads).where(eq(leads.ownerId, ctx.user.id));
+      const allLeads = await db.select().from(leads).where(and(eq(leads.ownerId, ctx.user.id), ne(leads.source, 'healthcheck')));
       const allProposals = await db.select().from(proposals).where(eq(proposals.ownerId, ctx.user.id));
       const allBookings = await db.select().from(bookings).where(eq(bookings.ownerId, ctx.user.id));
       const confirmedRevenue = allBookings.filter(b => b.status !== 'cancelled').reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);
@@ -4702,10 +4790,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     sourceBreakdown: protectedProcedure.query(async ({ ctx }) => {
       const { getDb } = await import('./db');
       const { leads } = await import('../drizzle/schema');
-      const { eq } = await import('drizzle-orm');
+      const { eq, and, ne } = await import('drizzle-orm');
       const db = await getDb();
       if (!db) return [];
-      const rows = await db.select().from(leads).where(eq(leads.ownerId, ctx.user.id));
+      const rows = await db.select().from(leads).where(and(eq(leads.ownerId, ctx.user.id), ne(leads.source, 'healthcheck')));
       const map: Record<string, number> = {};
       for (const lead of rows) {
         const src = lead.source ?? 'Unknown';
