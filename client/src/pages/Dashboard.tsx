@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
@@ -2514,52 +2515,48 @@ export default function Dashboard() {
                     <button aria-label="Previous month" onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
                     <button aria-label="Next month" onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
                     <div className="flex-1 min-w-0 relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowJumpDate(v => !v)}
-                        title="Click to jump to a different month"
-                        aria-haspopup="dialog"
-                        aria-expanded={showJumpDate}
-                        className="font-cormorant text-lg font-semibold text-ink hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
-                        <span className="truncate">{MONTHS[month]} {year}</span>
-                        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showJumpDate && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setShowJumpDate(false)} />
-                          <div role="dialog" aria-modal="true" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
-                            <div className="flex items-center justify-between mb-3">
-                              <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
-                                className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
-                              <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
-                              <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
-                                className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
-                            </div>
-                            <div className="grid grid-cols-3 gap-1 mb-3">
-                              {MONTHS.map((m, i) => {
-                                const isCurrent = i === month;
-                                const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
-                                return (
-                                  <button key={m}
-                                    onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
-                                    className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
-                                      isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
-                                      : isThisMonth ? 'border-gold text-forest hover:bg-linen'
-                                      : 'border-gold/20 text-ink/70 hover:bg-linen'
-                                    }`}>{m.slice(0, 3).toUpperCase()}</button>
-                                );
-                              })}
-                            </div>
-                            <div className="flex gap-2 pt-2 border-t border-gold/15">
-                              <button onClick={() => { setCalDate(new Date()); setShowJumpDate(false); }}
-                                className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
-                              <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
-                                onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
-                                className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
-                            </div>
+                      <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            title="Click to jump to a different month"
+                            className="font-cormorant text-lg font-semibold text-ink hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
+                            <span className="truncate">{MONTHS[month]} {year}</span>
+                            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" sideOffset={8} aria-label="Jump to date" className="w-72 bg-white border border-gold/30 shadow-xl p-3">
+                          <div className="flex items-center justify-between mb-3">
+                            <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
+                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
+                            <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
+                            <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
+                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
                           </div>
-                        </>
-                      )}
+                          <div className="grid grid-cols-3 gap-1 mb-3">
+                            {MONTHS.map((m, i) => {
+                              const isCurrent = i === month;
+                              const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
+                              return (
+                                <button key={m}
+                                  onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
+                                  className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
+                                    isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
+                                    : isThisMonth ? 'border-gold text-forest hover:bg-linen'
+                                    : 'border-gold/20 text-ink/70 hover:bg-linen'
+                                  }`}>{m.slice(0, 3).toUpperCase()}</button>
+                              );
+                            })}
+                          </div>
+                          <div className="flex gap-2 pt-2 border-t border-gold/15">
+                            <button onClick={() => { setCalDate(new Date()); setShowJumpDate(false); }}
+                              className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
+                            <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
+                              onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
+                              className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
                     <button onClick={() => setTab('calendar' as any)} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors">FULL VIEW</button>
@@ -4193,68 +4190,63 @@ export default function Dashboard() {
                     <List className="w-3 h-3" /> EVENTS
                   </button>
                   <div className="flex-1 min-w-0 relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowJumpDate(v => !v)}
-                      title="Click to jump to a different month"
-                      aria-haspopup="dialog"
-                      aria-expanded={showJumpDate}
-                      aria-controls="cal-jump-popover"
-                      className="font-cormorant text-base md:text-xl font-semibold text-ink truncate hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
-                      <span className="truncate">
-                        {calendarView === 'week' ? (() => {
-                          const dow = (calDate.getDay() + 6) % 7;
-                          const ws = new Date(calDate); ws.setDate(calDate.getDate() - dow);
-                          const we = new Date(ws); we.setDate(ws.getDate() + 6);
-                          return `${ws.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-                        })() : calendarView === 'day'
-                          ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-                          : `${MONTHS[month]} ${year}`}
-                      </span>
-                      <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showJumpDate && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setShowJumpDate(false)} />
-                        <div id="cal-jump-popover" role="dialog" aria-modal="true" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
-                          {/* Year stepper */}
-                          <div className="flex items-center justify-between mb-3">
-                            <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
-                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
-                            <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
-                            <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
-                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
-                          </div>
-                          {/* Month grid */}
-                          <div className="grid grid-cols-3 gap-1 mb-3">
-                            {MONTHS.map((m, i) => {
-                              const isCurrent = i === month;
-                              const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
-                              return (
-                                <button key={m}
-                                  onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
-                                  className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
-                                    isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
-                                    : isThisMonth ? 'border-gold text-forest hover:bg-linen'
-                                    : 'border-gold/20 text-ink/70 hover:bg-linen'
-                                  }`}>{m.slice(0, 3).toUpperCase()}</button>
-                              );
-                            })}
-                          </div>
-                          {/* Quick actions */}
-                          <div className="flex gap-2 pt-2 border-t border-gold/15">
-                            <button onClick={() => { navCalendarToday(); setShowJumpDate(false); }}
-                              className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
-                            <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
-                              onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
-                              className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
-                          </div>
-                          <p className="hidden md:block font-dm text-[10px] text-sage/60 mt-3 leading-snug">
-                            Tip: use <kbd className="px-1 border border-gold/30 bg-linen">←</kbd> <kbd className="px-1 border border-gold/30 bg-linen">→</kbd> to navigate, <kbd className="px-1 border border-gold/30 bg-linen">T</kbd> for today, <kbd className="px-1 border border-gold/30 bg-linen">M/W/D/L</kbd> to switch views.
-                          </p>
+                    <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          title="Click to jump to a different month"
+                          className="font-cormorant text-base md:text-xl font-semibold text-ink truncate hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
+                          <span className="truncate">
+                            {calendarView === 'week' ? (() => {
+                              const dow = (calDate.getDay() + 6) % 7;
+                              const ws = new Date(calDate); ws.setDate(calDate.getDate() - dow);
+                              const we = new Date(ws); we.setDate(ws.getDate() + 6);
+                              return `${ws.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+                            })() : calendarView === 'day'
+                              ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                              : `${MONTHS[month]} ${year}`}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent id="cal-jump-popover" align="start" sideOffset={8} aria-label="Jump to date" className="w-72 bg-white border border-gold/30 shadow-xl p-3">
+                        {/* Year stepper */}
+                        <div className="flex items-center justify-between mb-3">
+                          <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
+                            className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
+                          <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
+                          <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
+                            className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
                         </div>
-                      </>
-                    )}
+                        {/* Month grid */}
+                        <div className="grid grid-cols-3 gap-1 mb-3">
+                          {MONTHS.map((m, i) => {
+                            const isCurrent = i === month;
+                            const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
+                            return (
+                              <button key={m}
+                                onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
+                                className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
+                                  isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
+                                  : isThisMonth ? 'border-gold text-forest hover:bg-linen'
+                                  : 'border-gold/20 text-ink/70 hover:bg-linen'
+                                }`}>{m.slice(0, 3).toUpperCase()}</button>
+                            );
+                          })}
+                        </div>
+                        {/* Quick actions */}
+                        <div className="flex gap-2 pt-2 border-t border-gold/15">
+                          <button onClick={() => { navCalendarToday(); setShowJumpDate(false); }}
+                            className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
+                          <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
+                            onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
+                            className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
+                        </div>
+                        <p className="hidden md:block font-dm text-[10px] text-sage/60 mt-3 leading-snug">
+                          Tip: use <kbd className="px-1 border border-gold/30 bg-linen">←</kbd> <kbd className="px-1 border border-gold/30 bg-linen">→</kbd> to navigate, <kbd className="px-1 border border-gold/30 bg-linen">T</kbd> for today, <kbd className="px-1 border border-gold/30 bg-linen">M/W/D/L</kbd> to switch views.
+                        </p>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   {/* Desktop-only view switcher on row 1 */}
                   <div className="hidden md:flex border border-gold/30">
