@@ -1073,15 +1073,50 @@ export default function Dashboard() {
   // Xero invoice modal, opened straight from the event drawer — invoicing an
   // event used to mean leaving for the Payments board and finding it again.
   const [xeroInvoiceFor, setXeroInvoiceFor] = useState<any>(null);
-  // Event drawer accessibility: close on Escape and move focus into the panel
-  // when it opens (keyed on the booking id so inline edits don't steal focus).
+  // Event drawer accessibility: close on Escape, trap Tab focus inside the
+  // panel, hide the rest of the app from assistive tech while it's open, and
+  // return focus to whatever opened it (keyed on the booking id so inline
+  // edits don't steal focus).
   const drawerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!selectedBooking) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectedBooking(null); };
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const appRoot = document.getElementById("root");
+    appRoot?.setAttribute("inert", "");
+
+    const getFocusable = () => {
+      const root = drawerRef.current;
+      if (!root) return [];
+      return Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter(el => el.offsetParent !== null);
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setSelectedBooking(null); return; }
+      if (e.key !== "Tab") return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener("keydown", onKey);
     const t = setTimeout(() => drawerRef.current?.focus(), 0);
-    return () => { document.removeEventListener("keydown", onKey); clearTimeout(t); };
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      clearTimeout(t);
+      appRoot?.removeAttribute("inert");
+      previouslyFocused?.focus?.();
+    };
   }, [selectedBooking?.id]);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
   const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked', spaceName: '' });
