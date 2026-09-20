@@ -2673,9 +2673,9 @@ export default function Dashboard() {
                                     <div className="hidden sm:block">
                                       <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
                                       {(b.guestCount || b.spaceName) && (
-                                        <div className="opacity-75 truncate text-[9px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                        <div className="opacity-95 truncate text-[9px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
                                       )}
-                                      <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                      <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                     </div>
                                   </button>
                                 ))}
@@ -2690,9 +2690,9 @@ export default function Dashboard() {
                                     <div className="hidden sm:block">
                                       <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                                       {l.guestCount && (
-                                        <div className="opacity-75 truncate text-[9px]">{l.guestCount} pax</div>
+                                        <div className="opacity-95 truncate text-[9px]">{l.guestCount} pax</div>
                                       )}
-                                      <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                      <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                     </div>
                                   </button>
                                 ))}
@@ -2980,10 +2980,10 @@ export default function Dashboard() {
                                   openEventDrawer(e._type === 'booking' ? fullItem : { ...fullItem, _isLead: true });
                                 }}
                                 className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
-                                <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} />
+                                <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} aria-hidden="true" />
                                 <div className="flex-1 min-w-0">
                                   <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{e.firstName} {e.lastName}</div>
-                                  <div className="font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{new Date(e.eventDate).toLocaleDateString('en-NZ', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
+                                  <div className="font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(e.status).label}{' · '}{new Date(e.eventDate).toLocaleDateString('en-NZ', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
                                 </div>
                               </button>
                             );
@@ -3009,10 +3009,10 @@ export default function Dashboard() {
                         {newEnquiries.slice(0, 6).map((lead: any) => (
                           <button key={lead.id} onClick={() => { selectLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
-                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} />
+                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} aria-hidden="true" />
                             <div className="flex-1 min-w-0">
                               <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
+                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(lead.status).label}{' · '}{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
                             </div>
                           </button>
                         ))}
@@ -4437,9 +4437,9 @@ export default function Dashboard() {
                                   title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
                                   <div className="hidden sm:block">
                                     <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                                    {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
-                                    {b.startTime && <div className="opacity-70">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
-                                    {b.guestCount ? <div className="opacity-70 truncate">{b.guestCount} guests</div> : null}
+                                    {b.eventType && <div className="opacity-95 truncate">{b.eventType}</div>}
+                                    {b.startTime && <div className="opacity-95">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
+                                    {b.guestCount ? <div className="opacity-95 truncate">{b.guestCount} guests</div> : null}
                                     {b.spaceName && (
                                       <div className="mt-0.5">
                                         <span
@@ -4449,7 +4449,7 @@ export default function Dashboard() {
                                         </span>
                                       </div>
                                     )}
-                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                    <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                   </div>
                                 </button>
                                 {!isOverflow && (
@@ -4474,8 +4474,8 @@ export default function Dashboard() {
                                   title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
                                   <div className="hidden sm:block">
                                     <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                    {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
-                                    {l.guestCount ? <div className="opacity-70 truncate">{l.guestCount} guests</div> : null}
+                                    {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
+                                    {l.guestCount ? <div className="opacity-95 truncate">{l.guestCount} guests</div> : null}
                                     {l.spaceName && (
                                       <div className="mt-0.5">
                                         <span
@@ -4485,7 +4485,7 @@ export default function Dashboard() {
                                         </span>
                                       </div>
                                     )}
-                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                    <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                   </div>
                                 </button>
                                 {!isOverflow && (
@@ -4918,10 +4918,10 @@ export default function Dashboard() {
                               onClick={() => setSelectedBooking(b)}
                               className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity`}>
                               <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                              {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
-                              {b.startTime && <div className="opacity-75">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
-                              {b.guestCount && <div className="opacity-70">{b.guestCount} pax</div>}
-                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(b.status)}</div>
+                              {b.eventType && <div className="opacity-95 truncate">{b.eventType}</div>}
+                              {b.startTime && <div className="opacity-95">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
+                              {b.guestCount && <div className="opacity-95">{b.guestCount} pax</div>}
+                              <div className="opacity-95 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(b.status)}</div>
                             </button>
                           ))}
                           {dayLeads.map((l: any) => (
@@ -4929,9 +4929,9 @@ export default function Dashboard() {
                               onClick={() => openEventDrawer({ ...l, _isLead: true })}
                               className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}>
                               <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                              {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
-                              {l.guestCount && <div className="opacity-70">{l.guestCount} pax</div>}
-                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(l.status)}</div>
+                              {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
+                              {l.guestCount && <div className="opacity-95">{l.guestCount} pax</div>}
+                              <div className="opacity-95 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(l.status)}</div>
                             </button>
                           ))}
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
@@ -8869,11 +8869,9 @@ export default function Dashboard() {
               {/* Status + Type */}
               {(() => {
                 const stage = pipelineStages.find(s => s.key === selectedBooking.status);
-                const swatch = stage?.swatch ?? '#888';
                 return (
                   <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
-                    <span className="font-bebas text-xs tracking-widest px-2 py-1 border"
-                      style={{ color: swatch, backgroundColor: swatch + '18', borderColor: swatch + '55' }}>
+                    <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${stage?.color ?? 'border-gray-400 bg-gray-100 text-gray-700'}`}>
                       {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status)
                         ? (stage?.label ?? 'ENQUIRY').toUpperCase()
                         : (stage?.label ?? selectedBooking.status ?? 'EVENT').toUpperCase()}
