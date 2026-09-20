@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -1084,6 +1084,7 @@ export default function Dashboard() {
   }, [selectedBooking?.id]);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
   const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked', spaceName: '' });
+  const quickCreateFormId = useId();
   const [widgetEditMode, setWidgetEditMode] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
@@ -1100,6 +1101,7 @@ export default function Dashboard() {
   const [enquiryParsing, setEnquiryParsing] = useState(false);
   const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
   const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '' });
+  const addEnquiryFormId = useId();
 
   const utils = trpc.useUtils();
 
@@ -9861,43 +9863,43 @@ export default function Dashboard() {
           }} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">First Name *</label>
-                <Input required value={quickCreateForm.firstName}
+                <label htmlFor={`${quickCreateFormId}-firstName`} className="font-inter text-xs font-medium text-gray-500 block mb-1">First Name *</label>
+                <Input id={`${quickCreateFormId}-firstName`} required value={quickCreateForm.firstName}
                   onChange={e => setQuickCreateForm(f => ({ ...f, firstName: e.target.value }))}
                   placeholder="First name" className="rounded-xl border-gray-200 text-sm" />
               </div>
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Last Name</label>
-                <Input value={quickCreateForm.lastName}
+                <label htmlFor={`${quickCreateFormId}-lastName`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Last Name</label>
+                <Input id={`${quickCreateFormId}-lastName`} value={quickCreateForm.lastName}
                   onChange={e => setQuickCreateForm(f => ({ ...f, lastName: e.target.value }))}
                   placeholder="Last name" className="rounded-xl border-gray-200 text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Type</label>
-                <Input value={quickCreateForm.eventType}
+                <label htmlFor={`${quickCreateFormId}-eventType`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Type</label>
+                <Input id={`${quickCreateFormId}-eventType`} value={quickCreateForm.eventType}
                   onChange={e => setQuickCreateForm(f => ({ ...f, eventType: e.target.value }))}
                   placeholder="e.g. Wedding" className="rounded-xl border-gray-200 text-sm" />
               </div>
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Time</label>
-                <Input type="time" value={quickCreateForm.eventTime}
+                <label htmlFor={`${quickCreateFormId}-eventTime`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Time</label>
+                <Input id={`${quickCreateFormId}-eventTime`} type="time" value={quickCreateForm.eventTime}
                   onChange={e => setQuickCreateForm(f => ({ ...f, eventTime: e.target.value }))}
                   className="rounded-xl border-gray-200 text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Guest Count</label>
-                <Input type="number" value={quickCreateForm.guestCount}
+                <label htmlFor={`${quickCreateFormId}-guestCount`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Guest Count</label>
+                <Input id={`${quickCreateFormId}-guestCount`} type="number" value={quickCreateForm.guestCount}
                   onChange={e => setQuickCreateForm(f => ({ ...f, guestCount: e.target.value }))}
                   placeholder="e.g. 80" className="rounded-xl border-gray-200 text-sm" />
               </div>
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Status</label>
+                <label htmlFor={`${quickCreateFormId}-status`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Status</label>
                 <Select value={quickCreateForm.status} onValueChange={v => setQuickCreateForm(f => ({ ...f, status: v as any }))}>
-                  <SelectTrigger className="rounded-xl border-gray-200 text-sm">
+                  <SelectTrigger id={`${quickCreateFormId}-status`} className="rounded-xl border-gray-200 text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -9908,8 +9910,8 @@ export default function Dashboard() {
                 </Select>
               </div>
             </div>
-            <div>
-              <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-500">*</span></label>
+            <fieldset>
+              <legend className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-500">*</span></legend>
               {spaces && spaces.length > 0 ? (
                 <SpaceMultiSelect value={quickCreateForm.spaceName} onChange={v => setQuickCreateForm(f => ({ ...f, spaceName: v }))} spaces={spaces} />
               ) : (
@@ -9918,10 +9920,10 @@ export default function Dashboard() {
                   placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
                   className="rounded-xl border-gray-200 text-sm" />
               )}
-            </div>
+            </fieldset>
             <div>
-              <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Notes</label>
-              <textarea value={quickCreateForm.notes}
+              <label htmlFor={`${quickCreateFormId}-notes`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Notes</label>
+              <textarea id={`${quickCreateFormId}-notes`} value={quickCreateForm.notes}
                 onChange={e => setQuickCreateForm(f => ({ ...f, notes: e.target.value }))}
                 rows={2} placeholder="Any additional details..."
                 className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-inter focus:outline-none focus:ring-1 focus:ring-sage-green/40 resize-none" />
@@ -10200,12 +10202,13 @@ export default function Dashboard() {
             <div className="space-y-3">
               <div className="bg-forest/5 border border-forest/20 p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-bebas tracking-widest text-xs text-forest">SMART PASTE</span>
+                  <span id={`${addEnquiryFormId}-smart-paste`} className="font-bebas tracking-widest text-xs text-forest">SMART PASTE</span>
                   <span className="font-dm text-[10px] text-ink/60 ml-1">— paste a client email, booking request, or any text</span>
                 </div>
                 <textarea
                   autoFocus
                   rows={7}
+                  aria-labelledby={`${addEnquiryFormId}-smart-paste`}
                   value={enquiryPasteText}
                   onPaste={e => {
                     const text = e.clipboardData.getData('text');
@@ -10271,67 +10274,67 @@ export default function Dashboard() {
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FIRST NAME *</label>
-                  <Input required value={addEnquiryForm.firstName} onChange={e => setAddEnquiryForm(f => ({ ...f, firstName: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-firstName`} className="font-bebas text-xs tracking-widest text-sage block mb-1">FIRST NAME *</label>
+                  <Input id={`${addEnquiryFormId}-firstName`} required value={addEnquiryForm.firstName} onChange={e => setAddEnquiryForm(f => ({ ...f, firstName: e.target.value }))}
                     placeholder="Jane" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">LAST NAME</label>
-                  <Input value={addEnquiryForm.lastName} onChange={e => setAddEnquiryForm(f => ({ ...f, lastName: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-lastName`} className="font-bebas text-xs tracking-widest text-sage block mb-1">LAST NAME</label>
+                  <Input id={`${addEnquiryFormId}-lastName`} value={addEnquiryForm.lastName} onChange={e => setAddEnquiryForm(f => ({ ...f, lastName: e.target.value }))}
                     placeholder="Smith" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EMAIL</label>
-                  <Input type="email" value={addEnquiryForm.email} onChange={e => setAddEnquiryForm(f => ({ ...f, email: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-email`} className="font-bebas text-xs tracking-widest text-sage block mb-1">EMAIL</label>
+                  <Input id={`${addEnquiryFormId}-email`} type="email" value={addEnquiryForm.email} onChange={e => setAddEnquiryForm(f => ({ ...f, email: e.target.value }))}
                     placeholder="jane@example.com" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PHONE</label>
-                  <Input value={addEnquiryForm.phone} onChange={e => setAddEnquiryForm(f => ({ ...f, phone: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-phone`} className="font-bebas text-xs tracking-widest text-sage block mb-1">PHONE</label>
+                  <Input id={`${addEnquiryFormId}-phone`} value={addEnquiryForm.phone} onChange={e => setAddEnquiryForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder="021 000 0000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">COMPANY</label>
-                  <Input value={addEnquiryForm.company} onChange={e => setAddEnquiryForm(f => ({ ...f, company: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-company`} className="font-bebas text-xs tracking-widest text-sage block mb-1">COMPANY</label>
+                  <Input id={`${addEnquiryFormId}-company`} value={addEnquiryForm.company} onChange={e => setAddEnquiryForm(f => ({ ...f, company: e.target.value }))}
                     placeholder="Acme Ltd" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TYPE</label>
-                  <Input value={addEnquiryForm.eventType} onChange={e => setAddEnquiryForm(f => ({ ...f, eventType: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-eventType`} className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TYPE</label>
+                  <Input id={`${addEnquiryFormId}-eventType`} value={addEnquiryForm.eventType} onChange={e => setAddEnquiryForm(f => ({ ...f, eventType: e.target.value }))}
                     placeholder="Wedding, Birthday, Corporate..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT DATE</label>
-                  <Input type="date" value={addEnquiryForm.eventDate} onChange={e => setAddEnquiryForm(f => ({ ...f, eventDate: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-eventDate`} className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT DATE</label>
+                  <Input id={`${addEnquiryFormId}-eventDate`} type="date" value={addEnquiryForm.eventDate} onChange={e => setAddEnquiryForm(f => ({ ...f, eventDate: e.target.value }))}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME</label>
-                  <Input type="time" value={addEnquiryForm.eventTime} onChange={e => setAddEnquiryForm(f => ({ ...f, eventTime: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-eventTime`} className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME</label>
+                  <Input id={`${addEnquiryFormId}-eventTime`} type="time" value={addEnquiryForm.eventTime} onChange={e => setAddEnquiryForm(f => ({ ...f, eventTime: e.target.value }))}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">GUEST COUNT</label>
-                  <Input type="number" value={addEnquiryForm.guestCount} onChange={e => setAddEnquiryForm(f => ({ ...f, guestCount: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-guestCount`} className="font-bebas text-xs tracking-widest text-sage block mb-1">GUEST COUNT</label>
+                  <Input id={`${addEnquiryFormId}-guestCount`} type="number" value={addEnquiryForm.guestCount} onChange={e => setAddEnquiryForm(f => ({ ...f, guestCount: e.target.value }))}
                     placeholder="50" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">BUDGET (NZD)</label>
-                  <Input type="number" value={addEnquiryForm.budget} onChange={e => setAddEnquiryForm(f => ({ ...f, budget: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-budget`} className="font-bebas text-xs tracking-widest text-sage block mb-1">BUDGET (NZD)</label>
+                  <Input id={`${addEnquiryFormId}-budget`} type="number" value={addEnquiryForm.budget} onChange={e => setAddEnquiryForm(f => ({ ...f, budget: e.target.value }))}
                     placeholder="5000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STATUS</label>
+                  <label htmlFor={`${addEnquiryFormId}-status`} className="font-bebas text-xs tracking-widest text-sage block mb-1">STATUS</label>
                   <Select value={addEnquiryForm.status} onValueChange={v => setAddEnquiryForm(f => ({ ...f, status: v as any }))}>
-                    <SelectTrigger className="rounded-none border border-gold/30 text-xs font-bebas tracking-widest focus:ring-0">
+                    <SelectTrigger id={`${addEnquiryFormId}-status`} className="rounded-none border border-gold/30 text-xs font-bebas tracking-widest focus:ring-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -10342,8 +10345,8 @@ export default function Dashboard() {
                   </Select>
                 </div>
               </div>
-              <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE <span className="text-red-500">*</span></label>
+              <fieldset>
+                <legend className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE <span className="text-red-500">*</span></legend>
                 {spaces && spaces.length > 0 ? (
                   <SpaceMultiSelect value={addEnquiryForm.spaceName} onChange={v => setAddEnquiryForm(f => ({ ...f, spaceName: v }))} spaces={spaces} />
                 ) : (
@@ -10352,10 +10355,10 @@ export default function Dashboard() {
                     placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 )}
-              </div>
+              </fieldset>
               <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTES</label>
-                <Textarea value={addEnquiryForm.message} onChange={e => setAddEnquiryForm(f => ({ ...f, message: e.target.value }))}
+                <label htmlFor={`${addEnquiryFormId}-message`} className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTES</label>
+                <Textarea id={`${addEnquiryFormId}-message`} value={addEnquiryForm.message} onChange={e => setAddEnquiryForm(f => ({ ...f, message: e.target.value }))}
                   rows={2} placeholder="Any additional details..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
               </div>
               <button type="submit" disabled={createEnquiry.isPending}
