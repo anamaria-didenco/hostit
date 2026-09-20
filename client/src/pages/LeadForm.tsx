@@ -455,13 +455,20 @@ export default function LeadForm() {
         type={field.type}
         value={value}
         onChange={field.id === 'eventDate' ? (e) => { setNoDateYet(false); onChange(e as any); } : onChange}
+        onClick={(field.type === 'date' || field.type === 'time') ? (e) => {
+          // Native date/time inputs only open their picker when the tiny
+          // calendar/clock glyph is clicked exactly — clicking anywhere else
+          // on the bar just places a text cursor. Open it from anywhere in
+          // the field instead; showPicker() is a no-op if it's already open.
+          try { (e.currentTarget as HTMLInputElement).showPicker?.(); } catch { /* unsupported browser — native click-to-type still works */ }
+        } : undefined}
         required={field.required && !(field.id === 'eventDate' && noDateYet)}
         disabled={field.id === 'eventDate' && noDateYet}
         autoComplete={!isCustom ? AUTOCOMPLETE[field.id] : undefined}
         aria-invalid={hasError}
         aria-describedby={describedBy}
         min={field.type === 'date' ? new Date().toISOString().split("T")[0] : undefined}
-        placeholder={field.type === 'date' ? undefined : field.id === 'phone' ? '+64 21 000 0000' : field.id === 'guestCount' ? '50' : field.id === 'budget' ? '5000' : ''}
+        placeholder={field.type === 'date' ? undefined : field.id === 'phone' ? '+64 21 000 0000' : field.id === 'guestCount' ? 'e.g. 50' : field.id === 'budget' ? 'e.g. 5000' : ''}
         className={`${inputClass}${field.id === 'eventTime' ? ' pr-7 vf-time-input' : ''}`}
       />
     );
