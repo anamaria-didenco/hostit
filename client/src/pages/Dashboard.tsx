@@ -2924,7 +2924,7 @@ export default function Dashboard() {
                       <button onClick={() => setTab('calendar')} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {(() => {
-                      const upcoming = [...(monthBookings ?? []).filter(Boolean), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id))]
+                      const upcoming = [...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
                         .filter((e: any) => !['cancelled','lost','declined'].includes(e.status))
                         .filter((e: any) => new Date(e.eventDate) >= new Date())
                         .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
