@@ -2899,7 +2899,6 @@ export default function Dashboard() {
                         key={s.id}
                         type="button"
                         onClick={() => { setTab(target); }}
-                        aria-label={`Open ${s.label}`}
                         className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         <div className="mb-2 md:mb-3">{s.icon}</div>
