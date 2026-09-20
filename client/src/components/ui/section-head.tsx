@@ -17,18 +17,22 @@ const TONE: Record<SectionTone, { text: string; rule: string }> = {
   ink:   { text: "text-foreground",         rule: "bg-foreground" },
 };
 
+type HeadingTag = "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+
 function SectionHead({
   title,
   tone = "blue",
   meta,
   icon,
   className,
+  as: Heading = "h2",
   ...props
 }: Omit<React.ComponentProps<"div">, "title"> & {
   title: React.ReactNode;
   tone?: SectionTone;
   meta?: React.ReactNode;
   icon?: React.ReactNode;
+  as?: HeadingTag;
 }) {
   const t = TONE[tone];
   return (
@@ -39,14 +43,14 @@ function SectionHead({
     >
       <div className={cn("flex items-center gap-1.5 shrink-0", t.text)}>
         {icon}
-        <h6
+        <Heading
           className={cn(
             "font-sans text-[12px] font-extrabold uppercase tracking-[0.2em] leading-none m-0",
             t.text
           )}
         >
           {title}
-        </h6>
+        </Heading>
       </div>
       <span className={cn("h-[2px] flex-1 rounded-full", t.rule)} aria-hidden />
       {meta != null ? (

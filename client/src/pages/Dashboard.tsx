@@ -1121,6 +1121,7 @@ export default function Dashboard() {
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
   const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked', spaceName: '' });
   const quickCreateFormId = useId();
+  const [quickCreateSpaceError, setQuickCreateSpaceError] = useState(false);
   const [widgetEditMode, setWidgetEditMode] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
@@ -1138,6 +1139,7 @@ export default function Dashboard() {
   const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
   const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '' });
   const addEnquiryFormId = useId();
+  const [addEnquirySpaceError, setAddEnquirySpaceError] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -2527,17 +2529,13 @@ export default function Dashboard() {
         </div>
         <h2 className="font-inter text-2xl text-gray-900 font-700 mb-2" style={{ fontWeight: 700, letterSpacing: '-0.02em' }}>Sign in to your dashboard</h2>
         <p className="font-inter text-gray-500 text-sm mb-8">Manage event enquiries, build proposals, and track bookings — all in one place.</p>
-        <a href={getLoginUrl()}>
-          <button className="btn-forest w-full text-sm py-3 text-white">
-            Sign In
-          </button>
+        <a href={getLoginUrl()} className="btn-forest w-full text-sm py-3 text-white inline-flex items-center justify-center">
+          Sign In
         </a>
         <div className="mt-6 border-t border-gray-100 pt-6">
           <p className="font-inter text-xs text-gray-600 mb-3">Looking to enquire about an event?</p>
-          <Link href="/enquire">
-            <button className="btn-terra-outline w-full text-xs py-2.5">
-              Submit an Enquiry
-            </button>
+          <Link href="/enquire" className="btn-terra-outline w-full text-xs py-2.5 inline-flex items-center justify-center">
+            Submit an Enquiry
           </Link>
         </div>
       </div>
@@ -2638,6 +2636,7 @@ export default function Dashboard() {
                             const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                             return (
                               <div key={di}
+                                aria-current={isToday ? "date" : undefined}
                                 className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
                                   isOverflow ? 'bg-linen/40' : isWeekend ? 'bg-linen/20' : 'bg-white'
                                 } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!isOverflow ? 'hover:bg-linen/30 transition-colors' : ''}`}
@@ -2649,7 +2648,7 @@ export default function Dashboard() {
                                 } : undefined}
                               >
                                 <div className="flex items-center justify-between mb-0.5">
-                                  <span className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
+                                  <span aria-hidden={isOverflow ? true : undefined} className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
                                     isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
                                   }`}>{day}</span>
                                   {!isOverflow && (
@@ -2772,11 +2771,12 @@ export default function Dashboard() {
             onClick={() => { setTab("enquiries" as any); setLeadsSubTab("new"); }}
             className="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
             title={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
+            aria-label={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
           >
-            <Bell className={`w-4.5 h-4.5 ${unreadCount > 0 ? 'text-sage-dark' : 'text-gray-400'}`} />
+            <Bell className={`w-4.5 h-4.5 ${unreadCount > 0 ? 'text-sage-dark' : 'text-gray-400'}`} aria-hidden="true" />
             {unreadCount > 0 && (
               <>
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none animate-pulse">
+                <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none animate-pulse">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               </>
@@ -2956,7 +2956,7 @@ export default function Dashboard() {
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
                       <SectionHead title="Upcoming Events" className="flex-1" />
-                      <button onClick={() => setTab('calendar')} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <button onClick={() => setTab('calendar')} aria-label="View all upcoming events" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {(() => {
                       const upcoming = [...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
@@ -2999,7 +2999,7 @@ export default function Dashboard() {
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
                       <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
-                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} aria-label="View all new enquiries" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {newEnquiries.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
@@ -4383,7 +4383,9 @@ export default function Dashboard() {
                           : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                         const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                         return (
-                          <div key={di} className={`border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
+                          <div key={di}
+                            aria-current={isToday ? "date" : undefined}
+                            className={`border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
                             isOverflow ? 'bg-[#f4efe6]/40' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
                           } ${dragOverDate === dateStr ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
                             onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
@@ -4392,7 +4394,7 @@ export default function Dashboard() {
                               e.preventDefault(); setDragOverDate(null);
                               try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
                             } : undefined}>
-                            <span className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
+                            <span aria-hidden={isOverflow ? true : undefined} className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
                               isToday ? 'bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
                             }`}>{day}</span>
                             {/* Space-split stripe — one coloured segment per distinct space
@@ -9862,7 +9864,7 @@ export default function Dashboard() {
       </Dialog>
 
       {/* Quick Create Event from Mini Calendar */}
-      <Dialog open={!!quickCreateDate} onOpenChange={(open) => !open && setQuickCreateDate(null)}>
+      <Dialog open={!!quickCreateDate} onOpenChange={(open) => { if (!open) { setQuickCreateDate(null); setQuickCreateSpaceError(false); } }}>
         <DialogContent className="max-w-md rounded-2xl border border-gray-200 shadow-xl">
           <DialogHeader>
             <div className="bg-sage-green -mx-6 -mt-6 px-6 py-4 mb-4 rounded-t-2xl">
@@ -9879,7 +9881,8 @@ export default function Dashboard() {
           <form onSubmit={e => {
             e.preventDefault();
             if (!quickCreateDate) return;
-            if (!quickCreateForm.spaceName.trim()) { toast.error('Please pick an event space.'); return; }
+            if (!quickCreateForm.spaceName.trim()) { setQuickCreateSpaceError(true); toast.error('Please pick an event space.'); return; }
+            setQuickCreateSpaceError(false);
             createEnquiryFromCalendar.mutate({
               firstName: quickCreateForm.firstName,
               lastName: quickCreateForm.lastName || undefined,
@@ -9944,12 +9947,18 @@ export default function Dashboard() {
             <fieldset>
               <legend className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-500">*</span></legend>
               {spaces && spaces.length > 0 ? (
-                <SpaceMultiSelect value={quickCreateForm.spaceName} onChange={v => setQuickCreateForm(f => ({ ...f, spaceName: v }))} spaces={spaces} />
+                <SpaceMultiSelect value={quickCreateForm.spaceName}
+                  onChange={v => { setQuickCreateForm(f => ({ ...f, spaceName: v })); if (v.trim()) setQuickCreateSpaceError(false); }}
+                  spaces={spaces} invalid={quickCreateSpaceError} />
               ) : (
                 <Input value={quickCreateForm.spaceName}
-                  onChange={e => setQuickCreateForm(f => ({ ...f, spaceName: e.target.value }))}
+                  onChange={e => { setQuickCreateForm(f => ({ ...f, spaceName: e.target.value })); if (e.target.value.trim()) setQuickCreateSpaceError(false); }}
                   placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
+                  aria-invalid={quickCreateSpaceError}
                   className="rounded-xl border-[#6a7282] text-sm" />
+              )}
+              {quickCreateSpaceError && (
+                <p role="alert" className="font-inter text-xs text-red-600 mt-1">Please pick an event space.</p>
               )}
             </fieldset>
             <div>
@@ -10219,7 +10228,7 @@ export default function Dashboard() {
       )}
 
       {/* Add Enquiry Modal */}
-      <Dialog open={showAddLead} onOpenChange={open => { setShowAddLead(open); if (!open) { setEnquiryPasteText(''); setEnquiryPasteMode(true); } }}>
+      <Dialog open={showAddLead} onOpenChange={open => { setShowAddLead(open); if (!open) { setEnquiryPasteText(''); setEnquiryPasteMode(true); setAddEnquirySpaceError(false); } }}>
         <DialogContent className="max-w-lg rounded-none border border-gold/30 max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">
@@ -10280,7 +10289,8 @@ export default function Dashboard() {
           ) : (
             <form onSubmit={e => {
               e.preventDefault();
-              if (!addEnquiryForm.spaceName.trim()) { toast.error('Please pick an event space.'); return; }
+              if (!addEnquiryForm.spaceName.trim()) { setAddEnquirySpaceError(true); toast.error('Please pick an event space.'); return; }
+              setAddEnquirySpaceError(false);
               createEnquiry.mutate({
                 firstName: addEnquiryForm.firstName,
                 lastName: addEnquiryForm.lastName || undefined,
@@ -10379,12 +10389,18 @@ export default function Dashboard() {
               <fieldset>
                 <legend className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE <span className="text-red-500">*</span></legend>
                 {spaces && spaces.length > 0 ? (
-                  <SpaceMultiSelect value={addEnquiryForm.spaceName} onChange={v => setAddEnquiryForm(f => ({ ...f, spaceName: v }))} spaces={spaces} />
+                  <SpaceMultiSelect value={addEnquiryForm.spaceName}
+                    onChange={v => { setAddEnquiryForm(f => ({ ...f, spaceName: v })); if (v.trim()) setAddEnquirySpaceError(false); }}
+                    spaces={spaces} invalid={addEnquirySpaceError} />
                 ) : (
                   <Input value={addEnquiryForm.spaceName}
-                    onChange={e => setAddEnquiryForm(f => ({ ...f, spaceName: e.target.value }))}
+                    onChange={e => { setAddEnquiryForm(f => ({ ...f, spaceName: e.target.value })); if (e.target.value.trim()) setAddEnquirySpaceError(false); }}
                     placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
+                    aria-invalid={addEnquirySpaceError}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                )}
+                {addEnquirySpaceError && (
+                  <p role="alert" className="font-dm text-xs text-red-600 mt-1">Please pick an event space.</p>
                 )}
               </fieldset>
               <div>
