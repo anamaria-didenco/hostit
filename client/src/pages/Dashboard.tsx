@@ -2655,7 +2655,8 @@ export default function Dashboard() {
                                   {!isOverflow && (
                                     <button
                                       onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' }); }}
-                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+                                      aria-label={`Add event on ${new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
                                       title="Add event">
                                       <Plus className="w-3 h-3 text-forest" />
                                     </button>
@@ -4935,7 +4936,8 @@ export default function Dashboard() {
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
                             <button
                               onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
-                              className="text-ink/20 hover:text-ink/70 transition-colors self-start mt-1 p-0.5"
+                              className="text-ink/20 hover:text-ink/70 transition-colors self-start mt-1 p-1.5 -m-1.5 rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+                              aria-label={`Add event on ${d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
                               title="Add event">
                               <Edit2 className="w-3 h-3" />
                             </button>
