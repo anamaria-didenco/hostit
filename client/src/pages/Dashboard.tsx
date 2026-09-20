@@ -2593,8 +2593,8 @@ export default function Dashboard() {
                         </PopoverContent>
                       </Popover>
                     </div>
-                    <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
-                    <button onClick={() => setTab('calendar' as any)} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors">FULL VIEW</button>
+                    <button onClick={() => setCalDate(new Date())} className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
+                    <button onClick={() => setTab('calendar' as any)} className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors"><span className="hidden sm:inline">FULL </span>VIEW</button>
                   </div>
                   <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
                     {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
@@ -2668,8 +2668,9 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { setSelectedBooking(b); }}
                                     style={spaceColor(b.spaceName) ? { borderLeft: `3px solid ${spaceColor(b.spaceName)}` } : undefined}
-                                    className={`w-full text-left rounded font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
+                                    className={`w-full text-left rounded font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
+                                    <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{b.firstName} {b.lastName}</div>
                                     <div className="hidden sm:block">
                                       <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
                                       {(b.guestCount || b.spaceName) && (
@@ -2685,8 +2686,9 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { openEventDrawer({ ...l, _isLead: true }); }}
                                     style={spaceColor(l.spaceName) ? { borderLeft: `3px solid ${spaceColor(l.spaceName)}` } : undefined}
-                                    className={`w-full text-left rounded font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
+                                    className={`w-full text-left rounded font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
+                                    <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{l.firstName} {l.lastName}</div>
                                     <div className="hidden sm:block">
                                       <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                                       {l.guestCount && (
@@ -4433,8 +4435,9 @@ export default function Dashboard() {
                                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => setSelectedBooking(b)}
                                   style={spaceColor(b.spaceName) ? { borderLeft: `4px solid ${spaceColor(b.spaceName)}` } : undefined}
-                                  className={`w-full text-left rounded font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
+                                  className={`w-full text-left rounded font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
                                   title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
+                                  <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{b.firstName} {b.lastName}</div>
                                   <div className="hidden sm:block">
                                     <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
                                     {b.eventType && <div className="opacity-95 truncate">{b.eventType}</div>}
@@ -4470,8 +4473,9 @@ export default function Dashboard() {
                                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => openEventDrawer({ ...l, _isLead: true })}
                                   style={spaceColor(l.spaceName) ? { borderLeft: `4px solid ${spaceColor(l.spaceName)}` } : undefined}
-                                  className={`w-full text-left rounded font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
+                                  className={`w-full text-left rounded font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
                                   title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
+                                  <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{l.firstName} {l.lastName}</div>
                                   <div className="hidden sm:block">
                                     <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                                     {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
