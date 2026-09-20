@@ -2876,7 +2876,7 @@ export default function Dashboard() {
             return (
             <div className="p-6 space-y-6">
               {/* Header */}
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h1 className="font-cormorant text-3xl font-semibold text-ink">Overview</h1>
                   <p className="font-dm text-sm text-sage mt-0.5">Your venue at a glance</p>
