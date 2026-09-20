@@ -2533,7 +2533,7 @@ export default function Dashboard() {
           </button>
         </a>
         <div className="mt-6 border-t border-gray-100 pt-6">
-          <p className="font-inter text-xs text-gray-400 mb-3">Looking to enquire about an event?</p>
+          <p className="font-inter text-xs text-gray-600 mb-3">Looking to enquire about an event?</p>
           <Link href="/enquire">
             <button className="btn-terra-outline w-full text-xs py-2.5">
               Submit an Enquiry
@@ -2639,7 +2639,7 @@ export default function Dashboard() {
                             return (
                               <div key={di}
                                 className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
-                                  isOverflow ? 'bg-linen/40 opacity-60' : isWeekend ? 'bg-linen/20' : 'bg-white'
+                                  isOverflow ? 'bg-linen/40' : isWeekend ? 'bg-linen/20' : 'bg-white'
                                 } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!isOverflow ? 'hover:bg-linen/30 transition-colors' : ''}`}
                                 onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
                                 onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
@@ -2650,7 +2650,7 @@ export default function Dashboard() {
                               >
                                 <div className="flex items-center justify-between mb-0.5">
                                   <span className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                                    isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : isOverflow ? 'text-muted-foreground/40 font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
+                                    isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
                                   }`}>{day}</span>
                                   {!isOverflow && (
                                     <button
@@ -3464,7 +3464,7 @@ export default function Dashboard() {
                             {/* Column header — tracked title, colored rule, serif total */}
                             <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0" style={{ borderBottom: `2px solid ${tone}` }}>
                               <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: tone }}>{stage.label}</span>
-                              <span className="font-sans text-[11px] font-bold" style={{ color: '#8a8073' }}>{stageLeads.length}</span>
+                              <span className="font-sans text-[11px] font-bold" style={{ color: '#6e665c' }}>{stageLeads.length}</span>
                               <span className="flex-1" />
                               {stageTotalLabel && (
                                 <span className="font-serif text-[13px] font-semibold text-stormy [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
@@ -3478,7 +3478,7 @@ export default function Dashboard() {
                                 return (
                                   <button key={lead.id}
                                     onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
-                                    className="group w-full text-left bg-cream rounded-lg p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] hover:border-[#8a8073] hover:shadow-[0_6px_18px_rgba(22,20,15,0.09)] transition-all">
+                                    className="group w-full text-left bg-cream rounded-lg p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] hover:border-[#6e665c] hover:shadow-[0_6px_18px_rgba(22,20,15,0.09)] transition-all">
                                     {/* Name + type + BEO */}
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
@@ -3486,7 +3486,7 @@ export default function Dashboard() {
                                           {lead.firstName}{lead.lastName ? ` ${lead.lastName}` : ''}
                                         </div>
                                         {lead.eventType && (
-                                          <div className="font-sans text-[11.5px] font-semibold uppercase tracking-[0.04em] mt-1 truncate" style={{ color: '#8a8073' }}>{lead.eventType}</div>
+                                          <div className="font-sans text-[11.5px] font-semibold uppercase tracking-[0.04em] mt-1 truncate" style={{ color: '#6e665c' }}>{lead.eventType}</div>
                                         )}
                                       </div>
                                       {lead.status === 'booked' && (
@@ -4382,7 +4382,7 @@ export default function Dashboard() {
                         const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                         return (
                           <div key={di} className={`border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
-                            isOverflow ? 'bg-[#f4efe6]/40 opacity-60' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
+                            isOverflow ? 'bg-[#f4efe6]/40' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
                           } ${dragOverDate === dateStr ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
                             onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
                             onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
@@ -4391,7 +4391,7 @@ export default function Dashboard() {
                               try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
                             } : undefined}>
                             <span className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                              isToday ? 'bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground/40 font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
+                              isToday ? 'bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
                             }`}>{day}</span>
                             {/* Space-split stripe — one coloured segment per distinct space
                                 booked that day (bookings + live leads), widths proportional
@@ -8856,7 +8856,7 @@ export default function Dashboard() {
             {/* Header */}
             <div className="bg-forest-dark px-4 md:px-5 py-4 flex items-center justify-between">
               <div>
-                <div className="font-bebas tracking-widest text-xs text-gold mb-0.5">EVENT DETAILS</div>
+                <div className="font-bebas tracking-widest text-xs text-cream/80 mb-0.5">EVENT DETAILS</div>
                 <h2 id="event-drawer-title" className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</h2>
               </div>
               <button onClick={() => setSelectedBooking(null)} aria-label="Close event details"
@@ -9893,13 +9893,13 @@ export default function Dashboard() {
                 <label htmlFor={`${quickCreateFormId}-firstName`} className="font-inter text-xs font-medium text-gray-500 block mb-1">First Name *</label>
                 <Input id={`${quickCreateFormId}-firstName`} required value={quickCreateForm.firstName}
                   onChange={e => setQuickCreateForm(f => ({ ...f, firstName: e.target.value }))}
-                  placeholder="First name" className="rounded-xl border-gray-200 text-sm" />
+                  placeholder="First name" className="rounded-xl border-[#6a7282] text-sm" />
               </div>
               <div>
                 <label htmlFor={`${quickCreateFormId}-lastName`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Last Name</label>
                 <Input id={`${quickCreateFormId}-lastName`} value={quickCreateForm.lastName}
                   onChange={e => setQuickCreateForm(f => ({ ...f, lastName: e.target.value }))}
-                  placeholder="Last name" className="rounded-xl border-gray-200 text-sm" />
+                  placeholder="Last name" className="rounded-xl border-[#6a7282] text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -9907,13 +9907,13 @@ export default function Dashboard() {
                 <label htmlFor={`${quickCreateFormId}-eventType`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Type</label>
                 <Input id={`${quickCreateFormId}-eventType`} value={quickCreateForm.eventType}
                   onChange={e => setQuickCreateForm(f => ({ ...f, eventType: e.target.value }))}
-                  placeholder="e.g. Wedding" className="rounded-xl border-gray-200 text-sm" />
+                  placeholder="e.g. Wedding" className="rounded-xl border-[#6a7282] text-sm" />
               </div>
               <div>
                 <label htmlFor={`${quickCreateFormId}-eventTime`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Time</label>
                 <Input id={`${quickCreateFormId}-eventTime`} type="time" value={quickCreateForm.eventTime}
                   onChange={e => setQuickCreateForm(f => ({ ...f, eventTime: e.target.value }))}
-                  className="rounded-xl border-gray-200 text-sm" />
+                  className="rounded-xl border-[#6a7282] text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -9921,12 +9921,12 @@ export default function Dashboard() {
                 <label htmlFor={`${quickCreateFormId}-guestCount`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Guest Count</label>
                 <Input id={`${quickCreateFormId}-guestCount`} type="number" value={quickCreateForm.guestCount}
                   onChange={e => setQuickCreateForm(f => ({ ...f, guestCount: e.target.value }))}
-                  placeholder="e.g. 80" className="rounded-xl border-gray-200 text-sm" />
+                  placeholder="e.g. 80" className="rounded-xl border-[#6a7282] text-sm" />
               </div>
               <div>
                 <label htmlFor={`${quickCreateFormId}-status`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Status</label>
                 <Select value={quickCreateForm.status} onValueChange={v => setQuickCreateForm(f => ({ ...f, status: v as any }))}>
-                  <SelectTrigger id={`${quickCreateFormId}-status`} className="rounded-xl border-gray-200 text-sm">
+                  <SelectTrigger id={`${quickCreateFormId}-status`} className="rounded-xl border-[#6a7282] text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -9945,7 +9945,7 @@ export default function Dashboard() {
                 <Input value={quickCreateForm.spaceName}
                   onChange={e => setQuickCreateForm(f => ({ ...f, spaceName: e.target.value }))}
                   placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
-                  className="rounded-xl border-gray-200 text-sm" />
+                  className="rounded-xl border-[#6a7282] text-sm" />
               )}
             </fieldset>
             <div>
@@ -9953,7 +9953,7 @@ export default function Dashboard() {
               <textarea id={`${quickCreateFormId}-notes`} value={quickCreateForm.notes}
                 onChange={e => setQuickCreateForm(f => ({ ...f, notes: e.target.value }))}
                 rows={2} placeholder="Any additional details..."
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-inter focus:outline-none focus:ring-1 focus:ring-sage-green/40 resize-none" />
+                className="w-full rounded-xl border border-[#6a7282] px-3 py-2 text-sm font-inter focus:outline-none focus:ring-1 focus:ring-sage-green/40 resize-none" />
             </div>
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={() => setQuickCreateDate(null)}
@@ -10220,7 +10220,7 @@ export default function Dashboard() {
           <DialogHeader>
             <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">
               <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add New</DialogTitle>
-              <p className="font-dm text-white/50 text-xs mt-1">Paste an email or brief to auto-fill, or enter details manually.</p>
+              <p className="font-dm text-white/75 text-xs mt-1">Paste an email or brief to auto-fill, or enter details manually.</p>
             </div>
           </DialogHeader>
 
