@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   LayoutDashboard, Users, FileText, Calendar, Settings, ChevronLeft, ChevronRight, ChevronDown,
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
@@ -1072,18 +1073,55 @@ export default function Dashboard() {
   // Xero invoice modal, opened straight from the event drawer — invoicing an
   // event used to mean leaving for the Payments board and finding it again.
   const [xeroInvoiceFor, setXeroInvoiceFor] = useState<any>(null);
-  // Event drawer accessibility: close on Escape and move focus into the panel
-  // when it opens (keyed on the booking id so inline edits don't steal focus).
+  // Event drawer accessibility: close on Escape, trap Tab focus inside the
+  // panel, hide the rest of the app from assistive tech while it's open, and
+  // return focus to whatever opened it (keyed on the booking id so inline
+  // edits don't steal focus).
   const drawerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!selectedBooking) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectedBooking(null); };
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const appRoot = document.getElementById("root");
+    appRoot?.setAttribute("inert", "");
+
+    const getFocusable = () => {
+      const root = drawerRef.current;
+      if (!root) return [];
+      return Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter(el => el.offsetParent !== null);
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setSelectedBooking(null); return; }
+      if (e.key !== "Tab") return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener("keydown", onKey);
     const t = setTimeout(() => drawerRef.current?.focus(), 0);
-    return () => { document.removeEventListener("keydown", onKey); clearTimeout(t); };
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      clearTimeout(t);
+      appRoot?.removeAttribute("inert");
+      previouslyFocused?.focus?.();
+    };
   }, [selectedBooking?.id]);
   const [quickCreateDate, setQuickCreateDate] = useState<string | null>(null);
   const [quickCreateForm, setQuickCreateForm] = useState({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new' as 'new' | 'contacted' | 'booked', spaceName: '' });
+  const quickCreateFormId = useId();
+  const [quickCreateSpaceError, setQuickCreateSpaceError] = useState(false);
   const [widgetEditMode, setWidgetEditMode] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
@@ -1100,6 +1138,8 @@ export default function Dashboard() {
   const [enquiryParsing, setEnquiryParsing] = useState(false);
   const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
   const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '' });
+  const addEnquiryFormId = useId();
+  const [addEnquirySpaceError, setAddEnquirySpaceError] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -2489,17 +2529,13 @@ export default function Dashboard() {
         </div>
         <h2 className="font-inter text-2xl text-gray-900 font-700 mb-2" style={{ fontWeight: 700, letterSpacing: '-0.02em' }}>Sign in to your dashboard</h2>
         <p className="font-inter text-gray-500 text-sm mb-8">Manage event enquiries, build proposals, and track bookings — all in one place.</p>
-        <a href={getLoginUrl()}>
-          <button className="btn-forest w-full text-sm py-3 text-white">
-            Sign In
-          </button>
+        <a href={getLoginUrl()} className="btn-forest w-full text-sm py-3 text-white inline-flex items-center justify-center">
+          Sign In
         </a>
         <div className="mt-6 border-t border-gray-100 pt-6">
-          <p className="font-inter text-xs text-gray-400 mb-3">Looking to enquire about an event?</p>
-          <Link href="/enquire">
-            <button className="btn-terra-outline w-full text-xs py-2.5">
-              Submit an Enquiry
-            </button>
+          <p className="font-inter text-xs text-gray-600 mb-3">Looking to enquire about an event?</p>
+          <Link href="/enquire" className="btn-terra-outline w-full text-xs py-2.5 inline-flex items-center justify-center">
+            Submit an Enquiry
           </Link>
         </div>
       </div>
@@ -2512,55 +2548,51 @@ export default function Dashboard() {
                     <button aria-label="Previous month" onClick={() => setCalDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronLeft className="w-4 h-4" /></button>
                     <button aria-label="Next month" onClick={() => setCalDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-linen transition-colors text-sage"><ChevronRight className="w-4 h-4" /></button>
                     <div className="flex-1 min-w-0 relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowJumpDate(v => !v)}
-                        title="Click to jump to a different month"
-                        aria-haspopup="dialog"
-                        aria-expanded={showJumpDate}
-                        className="font-cormorant text-lg font-semibold text-ink hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
-                        <span className="truncate">{MONTHS[month]} {year}</span>
-                        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showJumpDate && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setShowJumpDate(false)} />
-                          <div role="dialog" aria-modal="true" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
-                            <div className="flex items-center justify-between mb-3">
-                              <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
-                                className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
-                              <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
-                              <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
-                                className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
-                            </div>
-                            <div className="grid grid-cols-3 gap-1 mb-3">
-                              {MONTHS.map((m, i) => {
-                                const isCurrent = i === month;
-                                const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
-                                return (
-                                  <button key={m}
-                                    onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
-                                    className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
-                                      isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
-                                      : isThisMonth ? 'border-gold text-forest hover:bg-linen'
-                                      : 'border-gold/20 text-ink/70 hover:bg-linen'
-                                    }`}>{m.slice(0, 3).toUpperCase()}</button>
-                                );
-                              })}
-                            </div>
-                            <div className="flex gap-2 pt-2 border-t border-gold/15">
-                              <button onClick={() => { setCalDate(new Date()); setShowJumpDate(false); }}
-                                className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
-                              <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
-                                onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
-                                className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
-                            </div>
+                      <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            title="Click to jump to a different month"
+                            className="font-cormorant text-lg font-semibold text-ink hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
+                            <span className="truncate">{MONTHS[month]} {year}</span>
+                            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" sideOffset={8} aria-label="Jump to date" className="w-72 bg-white border border-gold/30 shadow-xl p-3">
+                          <div className="flex items-center justify-between mb-3">
+                            <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
+                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
+                            <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
+                            <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
+                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
                           </div>
-                        </>
-                      )}
+                          <div className="grid grid-cols-3 gap-1 mb-3">
+                            {MONTHS.map((m, i) => {
+                              const isCurrent = i === month;
+                              const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
+                              return (
+                                <button key={m}
+                                  onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
+                                  className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
+                                    isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
+                                    : isThisMonth ? 'border-gold text-forest hover:bg-linen'
+                                    : 'border-gold/20 text-ink/70 hover:bg-linen'
+                                  }`}>{m.slice(0, 3).toUpperCase()}</button>
+                              );
+                            })}
+                          </div>
+                          <div className="flex gap-2 pt-2 border-t border-gold/15">
+                            <button onClick={() => { setCalDate(new Date()); setShowJumpDate(false); }}
+                              className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
+                            <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
+                              onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
+                              className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
-                    <button onClick={() => setCalDate(new Date())} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
-                    <button onClick={() => setTab('calendar' as any)} className="font-bebas tracking-widest text-xs px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors">FULL VIEW</button>
+                    <button onClick={() => setCalDate(new Date())} className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
+                    <button onClick={() => setTab('calendar' as any)} className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors"><span className="hidden sm:inline">FULL </span>VIEW</button>
                   </div>
                   <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
                     {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
@@ -2604,8 +2636,9 @@ export default function Dashboard() {
                             const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                             return (
                               <div key={di}
+                                aria-current={isToday ? "date" : undefined}
                                 className={`group border-r border-border last:border-r-0 flex flex-col p-1.5 gap-0.5 min-h-[56px] ${
-                                  isOverflow ? 'bg-linen/40 opacity-60' : isWeekend ? 'bg-linen/20' : 'bg-white'
+                                  isOverflow ? 'bg-linen/40' : isWeekend ? 'bg-linen/20' : 'bg-white'
                                 } ${isToday ? 'ring-2 ring-inset ring-forest' : ''} ${dragOverDate === dateStr ? 'bg-forest/10 ring-2 ring-inset ring-forest/40' : ''} ${!isOverflow ? 'hover:bg-linen/30 transition-colors' : ''}`}
                                 onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
                                 onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
@@ -2615,13 +2648,14 @@ export default function Dashboard() {
                                 } : undefined}
                               >
                                 <div className="flex items-center justify-between mb-0.5">
-                                  <span className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                                    isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : isOverflow ? 'text-muted-foreground/40 font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
+                                  <span aria-hidden={isOverflow ? true : undefined} className={`font-serif text-sm leading-none [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
+                                    isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
                                   }`}>{day}</span>
                                   {!isOverflow && (
                                     <button
                                       onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' }); }}
-                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-0.5 hover:bg-linen rounded"
+                                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+                                      aria-label={`Add event on ${new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
                                       title="Add event">
                                       <Plus className="w-3 h-3 text-forest" />
                                     </button>
@@ -2633,14 +2667,15 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { setSelectedBooking(b); }}
                                     style={spaceColor(b.spaceName) ? { borderLeft: `3px solid ${spaceColor(b.spaceName)}` } : undefined}
-                                    className={`w-full text-left rounded font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
+                                    className={`w-full text-left rounded font-dm ${getStatusInfo(b.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
                                     title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'}${b.guestCount ? ` — ${b.guestCount} guests` : ''}${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
+                                    <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{b.firstName} {b.lastName}</div>
                                     <div className="hidden sm:block">
                                       <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
                                       {(b.guestCount || b.spaceName) && (
-                                        <div className="opacity-75 truncate text-[9px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
+                                        <div className="opacity-95 truncate text-[9px] font-semibold">{b.guestCount ? `${b.guestCount} pax` : ''}{b.guestCount && b.spaceName ? ' · ' : ''}{b.spaceName ?? ''}</div>
                                       )}
-                                      <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                      <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                     </div>
                                   </button>
                                 ))}
@@ -2650,14 +2685,15 @@ export default function Dashboard() {
                                     onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                     onClick={() => { openEventDrawer({ ...l, _isLead: true }); }}
                                     style={spaceColor(l.spaceName) ? { borderLeft: `3px solid ${spaceColor(l.spaceName)}` } : undefined}
-                                    className={`w-full text-left rounded font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
+                                    className={`w-full text-left rounded font-dm ${getStatusInfo(l.status).calClasses} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:leading-snug`}
                                     title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'}${l.guestCount ? ` — ${l.guestCount} guests` : ''}`}>
+                                    <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{l.firstName} {l.lastName}</div>
                                     <div className="hidden sm:block">
                                       <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                                       {l.guestCount && (
-                                        <div className="opacity-75 truncate text-[9px]">{l.guestCount} pax</div>
+                                        <div className="opacity-95 truncate text-[9px]">{l.guestCount} pax</div>
                                       )}
-                                      <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                      <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                     </div>
                                   </button>
                                 ))}
@@ -2735,11 +2771,12 @@ export default function Dashboard() {
             onClick={() => { setTab("enquiries" as any); setLeadsSubTab("new"); }}
             className="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
             title={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
+            aria-label={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
           >
-            <Bell className={`w-4.5 h-4.5 ${unreadCount > 0 ? 'text-sage-dark' : 'text-gray-400'}`} />
+            <Bell className={`w-4.5 h-4.5 ${unreadCount > 0 ? 'text-sage-dark' : 'text-gray-400'}`} aria-hidden="true" />
             {unreadCount > 0 && (
               <>
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none animate-pulse">
+                <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none animate-pulse">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               </>
@@ -2839,38 +2876,37 @@ export default function Dashboard() {
             return (
             <div className="p-6 space-y-6">
               {/* Header */}
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h1 className="font-cormorant text-3xl font-semibold text-ink">Overview</h1>
                   <p className="font-dm text-sm text-sage mt-0.5">Your venue at a glance</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowStatsCustomize(v => !v)}
-                      className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 border border-border text-sage hover:text-ink hover:border-ink/30 transition-colors"
-                    >
-                      <Settings className="w-3 h-3" /> CUSTOMISE
-                    </button>
-                    {showStatsCustomize && (
-                      <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg p-3 z-30 w-52">
-                        <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
-                        {allStats.map(s => (
-                          <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
-                            <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
-                              setHiddenStats(prev => {
-                                const next = new Set(prev);
-                                if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
-                                localStorage.setItem('vfhq_hidden_stats', JSON.stringify([...next]));
-                                return next;
-                              });
-                            }} className="w-3.5 h-3.5 accent-forest" />
-                            <span className="font-dm text-xs text-ink">{s.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <Popover open={showStatsCustomize} onOpenChange={setShowStatsCustomize}>
+                    <PopoverTrigger asChild>
+                      <button
+                        className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 border border-border text-sage hover:text-ink hover:border-ink/30 transition-colors"
+                      >
+                        <Settings className="w-3 h-3" /> CUSTOMISE
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" sideOffset={4} className="bg-white border border-border shadow-lg p-3 w-52">
+                      <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
+                      {allStats.map(s => (
+                        <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
+                          <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
+                            setHiddenStats(prev => {
+                              const next = new Set(prev);
+                              if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                              localStorage.setItem('vfhq_hidden_stats', JSON.stringify([...next]));
+                              return next;
+                            });
+                          }} className="w-3.5 h-3.5 accent-forest" />
+                          <span className="font-dm text-xs text-ink">{s.label}</span>
+                        </label>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
                   <button
                     onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
                     className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 bg-forest text-cream hover:bg-forest-dark transition-colors">
@@ -2897,7 +2933,6 @@ export default function Dashboard() {
                         key={s.id}
                         type="button"
                         onClick={() => { setTab(target); }}
-                        aria-label={`Open ${s.label}`}
                         className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         <div className="mb-2 md:mb-3">{s.icon}</div>
@@ -2921,10 +2956,10 @@ export default function Dashboard() {
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
                       <SectionHead title="Upcoming Events" className="flex-1" />
-                      <button onClick={() => setTab('calendar')} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <button onClick={() => setTab('calendar')} aria-label="View all upcoming events" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {(() => {
-                      const upcoming = [...(monthBookings ?? []).filter(Boolean), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id))]
+                      const upcoming = [...(monthBookings ?? []).filter(Boolean).map((b: any) => ({ ...b, _type: 'booking' })), ...(monthLeadEvents ?? []).filter(Boolean).filter((l: any) => (l.status === 'booked' || l.status === 'confirmed') && !bookedLeadIds.has(l.id)).map((l: any) => ({ ...l, _type: 'lead' }))]
                         .filter((e: any) => !['cancelled','lost','declined'].includes(e.status))
                         .filter((e: any) => new Date(e.eventDate) >= new Date())
                         .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
@@ -2947,10 +2982,10 @@ export default function Dashboard() {
                                   openEventDrawer(e._type === 'booking' ? fullItem : { ...fullItem, _isLead: true });
                                 }}
                                 className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
-                                <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} />
+                                <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} aria-hidden="true" />
                                 <div className="flex-1 min-w-0">
                                   <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{e.firstName} {e.lastName}</div>
-                                  <div className="font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{new Date(e.eventDate).toLocaleDateString('en-NZ', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
+                                  <div className="font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(e.status).label}{' · '}{new Date(e.eventDate).toLocaleDateString('en-NZ', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
                                 </div>
                               </button>
                             );
@@ -2964,7 +2999,7 @@ export default function Dashboard() {
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
                       <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
-                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} aria-label="View all new enquiries" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {newEnquiries.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
@@ -2976,10 +3011,10 @@ export default function Dashboard() {
                         {newEnquiries.slice(0, 6).map((lead: any) => (
                           <button key={lead.id} onClick={() => { selectLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
-                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} />
+                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} aria-hidden="true" />
                             <div className="flex-1 min-w-0">
                               <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{lead.firstName} {lead.lastName}</div>
-                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
+                              <div className="font-sans text-xs text-muted-foreground truncate [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(lead.status).label}{' · '}{lead.eventType || 'Event'}{lead.eventDate ? ` · ${new Date(lead.eventDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}${fmtEventTime(lead.eventDate) ? ' ' + fmtEventTime(lead.eventDate) : ''}` : ''}</div>
                             </div>
                           </button>
                         ))}
@@ -2993,6 +3028,8 @@ export default function Dashboard() {
               <div className="mt-4 border border-gold/20 bg-white overflow-hidden">
                 <button
                   onClick={() => setSpendSectionOpen(v => !v)}
+                  aria-expanded={spendSectionOpen}
+                  aria-controls="record-actual-spend-content"
                   className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-linen/40 transition-colors"
                 >
                   <div className="flex items-center gap-2">
@@ -3002,7 +3039,7 @@ export default function Dashboard() {
                   <ChevronDown className={`w-4 h-4 text-ink/65 transition-transform duration-200 ${spendSectionOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {spendSectionOpen && (
-                  <div className="border-t border-gold/20">
+                  <div id="record-actual-spend-content" className="border-t border-gold/20">
                     <PostEventSpendPrompt />
                   </div>
                 )}
@@ -3429,7 +3466,7 @@ export default function Dashboard() {
                             {/* Column header — tracked title, colored rule, serif total */}
                             <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0" style={{ borderBottom: `2px solid ${tone}` }}>
                               <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: tone }}>{stage.label}</span>
-                              <span className="font-sans text-[11px] font-bold" style={{ color: '#8a8073' }}>{stageLeads.length}</span>
+                              <span className="font-sans text-[11px] font-bold" style={{ color: '#6e665c' }}>{stageLeads.length}</span>
                               <span className="flex-1" />
                               {stageTotalLabel && (
                                 <span className="font-serif text-[13px] font-semibold text-stormy [font-variant-numeric:tabular-nums_lining-nums]">{stageTotalLabel}</span>
@@ -3443,7 +3480,7 @@ export default function Dashboard() {
                                 return (
                                   <button key={lead.id}
                                     onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
-                                    className="group w-full text-left bg-cream rounded-lg p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] hover:border-[#8a8073] hover:shadow-[0_6px_18px_rgba(22,20,15,0.09)] transition-all">
+                                    className="group w-full text-left bg-cream rounded-lg p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] hover:border-[#6e665c] hover:shadow-[0_6px_18px_rgba(22,20,15,0.09)] transition-all">
                                     {/* Name + type + BEO */}
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
@@ -3451,7 +3488,7 @@ export default function Dashboard() {
                                           {lead.firstName}{lead.lastName ? ` ${lead.lastName}` : ''}
                                         </div>
                                         {lead.eventType && (
-                                          <div className="font-sans text-[11.5px] font-semibold uppercase tracking-[0.04em] mt-1 truncate" style={{ color: '#8a8073' }}>{lead.eventType}</div>
+                                          <div className="font-sans text-[11.5px] font-semibold uppercase tracking-[0.04em] mt-1 truncate" style={{ color: '#6e665c' }}>{lead.eventType}</div>
                                         )}
                                       </div>
                                       {lead.status === 'booked' && (
@@ -4192,68 +4229,63 @@ export default function Dashboard() {
                     <List className="w-3 h-3" /> EVENTS
                   </button>
                   <div className="flex-1 min-w-0 relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowJumpDate(v => !v)}
-                      title="Click to jump to a different month"
-                      aria-haspopup="dialog"
-                      aria-expanded={showJumpDate}
-                      aria-controls="cal-jump-popover"
-                      className="font-cormorant text-base md:text-xl font-semibold text-ink truncate hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
-                      <span className="truncate">
-                        {calendarView === 'week' ? (() => {
-                          const dow = (calDate.getDay() + 6) % 7;
-                          const ws = new Date(calDate); ws.setDate(calDate.getDate() - dow);
-                          const we = new Date(ws); we.setDate(ws.getDate() + 6);
-                          return `${ws.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-                        })() : calendarView === 'day'
-                          ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-                          : `${MONTHS[month]} ${year}`}
-                      </span>
-                      <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showJumpDate && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setShowJumpDate(false)} />
-                        <div id="cal-jump-popover" role="dialog" aria-modal="true" aria-label="Jump to date" className="absolute left-0 top-full mt-2 z-50 bg-white border border-gold/30 shadow-xl p-3 w-72">
-                          {/* Year stepper */}
-                          <div className="flex items-center justify-between mb-3">
-                            <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
-                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
-                            <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
-                            <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
-                              className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
-                          </div>
-                          {/* Month grid */}
-                          <div className="grid grid-cols-3 gap-1 mb-3">
-                            {MONTHS.map((m, i) => {
-                              const isCurrent = i === month;
-                              const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
-                              return (
-                                <button key={m}
-                                  onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
-                                  className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
-                                    isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
-                                    : isThisMonth ? 'border-gold text-forest hover:bg-linen'
-                                    : 'border-gold/20 text-ink/70 hover:bg-linen'
-                                  }`}>{m.slice(0, 3).toUpperCase()}</button>
-                              );
-                            })}
-                          </div>
-                          {/* Quick actions */}
-                          <div className="flex gap-2 pt-2 border-t border-gold/15">
-                            <button onClick={() => { navCalendarToday(); setShowJumpDate(false); }}
-                              className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
-                            <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
-                              onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
-                              className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
-                          </div>
-                          <p className="hidden md:block font-dm text-[10px] text-sage/60 mt-3 leading-snug">
-                            Tip: use <kbd className="px-1 border border-gold/30 bg-linen">←</kbd> <kbd className="px-1 border border-gold/30 bg-linen">→</kbd> to navigate, <kbd className="px-1 border border-gold/30 bg-linen">T</kbd> for today, <kbd className="px-1 border border-gold/30 bg-linen">M/W/D/L</kbd> to switch views.
-                          </p>
+                    <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          title="Click to jump to a different month"
+                          className="font-cormorant text-base md:text-xl font-semibold text-ink truncate hover:text-forest transition-colors flex items-center gap-1.5 max-w-full">
+                          <span className="truncate">
+                            {calendarView === 'week' ? (() => {
+                              const dow = (calDate.getDay() + 6) % 7;
+                              const ws = new Date(calDate); ws.setDate(calDate.getDate() - dow);
+                              const we = new Date(ws); we.setDate(ws.getDate() + 6);
+                              return `${ws.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+                            })() : calendarView === 'day'
+                              ? calDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                              : `${MONTHS[month]} ${year}`}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJumpDate ? 'rotate-180' : ''}`} />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent id="cal-jump-popover" align="start" sideOffset={8} aria-label="Jump to date" className="w-72 bg-white border border-gold/30 shadow-xl p-3">
+                        {/* Year stepper */}
+                        <div className="flex items-center justify-between mb-3">
+                          <button aria-label="Previous year" onClick={() => setCalDate(new Date(year - 1, month, 1))}
+                            className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronLeft className="w-4 h-4" /></button>
+                          <span className="font-cormorant text-lg font-semibold text-ink">{year}</span>
+                          <button aria-label="Next year" onClick={() => setCalDate(new Date(year + 1, month, 1))}
+                            className="p-1.5 hover:bg-linen border border-gold/20 text-forest"><ChevronRight className="w-4 h-4" /></button>
                         </div>
-                      </>
-                    )}
+                        {/* Month grid */}
+                        <div className="grid grid-cols-3 gap-1 mb-3">
+                          {MONTHS.map((m, i) => {
+                            const isCurrent = i === month;
+                            const isThisMonth = i === new Date().getMonth() && year === new Date().getFullYear();
+                            return (
+                              <button key={m}
+                                onClick={() => { setCalDate(new Date(year, i, 1)); setShowJumpDate(false); }}
+                                className={`font-bebas tracking-widest text-xs py-2 border transition-colors ${
+                                  isCurrent ? 'bg-forest-dark text-cream border-forest-dark'
+                                  : isThisMonth ? 'border-gold text-forest hover:bg-linen'
+                                  : 'border-gold/20 text-ink/70 hover:bg-linen'
+                                }`}>{m.slice(0, 3).toUpperCase()}</button>
+                            );
+                          })}
+                        </div>
+                        {/* Quick actions */}
+                        <div className="flex gap-2 pt-2 border-t border-gold/15">
+                          <button onClick={() => { navCalendarToday(); setShowJumpDate(false); }}
+                            className="flex-1 font-bebas tracking-widest text-xs py-2 border border-gold/30 text-ink/80 hover:bg-linen">TODAY</button>
+                          <input type="date" defaultValue={`${year}-${String(month+1).padStart(2,'0')}-${String(calDate.getDate()).padStart(2,'0')}`}
+                            onChange={e => { if (e.target.value) { setCalDate(new Date(e.target.value)); setShowJumpDate(false); } }}
+                            className="flex-1 font-dm text-xs px-2 py-1.5 border border-gold/30 text-ink/80 focus:outline-none focus:border-gold" />
+                        </div>
+                        <p className="hidden md:block font-dm text-[10px] text-sage/60 mt-3 leading-snug">
+                          Tip: use <kbd className="px-1 border border-gold/30 bg-linen">←</kbd> <kbd className="px-1 border border-gold/30 bg-linen">→</kbd> to navigate, <kbd className="px-1 border border-gold/30 bg-linen">T</kbd> for today, <kbd className="px-1 border border-gold/30 bg-linen">M/W/D/L</kbd> to switch views.
+                        </p>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   {/* Desktop-only view switcher on row 1 */}
                   <div className="hidden md:flex border border-gold/30">
@@ -4351,8 +4383,10 @@ export default function Dashboard() {
                           : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                         const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                         return (
-                          <div key={di} className={`border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
-                            isOverflow ? 'bg-[#f4efe6]/40 opacity-60' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
+                          <div key={di}
+                            aria-current={isToday ? "date" : undefined}
+                            className={`border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
+                            isOverflow ? 'bg-[#f4efe6]/40' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
                           } ${dragOverDate === dateStr ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
                             onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
                             onDragLeave={!isOverflow ? () => setDragOverDate(prev => prev === dateStr ? null : prev) : undefined}
@@ -4360,8 +4394,8 @@ export default function Dashboard() {
                               e.preventDefault(); setDragOverDate(null);
                               try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
                             } : undefined}>
-                            <span className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
-                              isToday ? 'bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground/40 font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
+                            <span aria-hidden={isOverflow ? true : undefined} className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
+                              isToday ? 'bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
                             }`}>{day}</span>
                             {/* Space-split stripe — one coloured segment per distinct space
                                 booked that day (bookings + live leads), widths proportional
@@ -4403,13 +4437,14 @@ export default function Dashboard() {
                                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => setSelectedBooking(b)}
                                   style={spaceColor(b.spaceName) ? { borderLeft: `4px solid ${spaceColor(b.spaceName)}` } : undefined}
-                                  className={`w-full text-left rounded font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
+                                  className={`w-full text-left rounded font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
                                   title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
+                                  <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{b.firstName} {b.lastName}</div>
                                   <div className="hidden sm:block">
                                     <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                                    {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
-                                    {b.startTime && <div className="opacity-70">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
-                                    {b.guestCount ? <div className="opacity-70 truncate">{b.guestCount} guests</div> : null}
+                                    {b.eventType && <div className="opacity-95 truncate">{b.eventType}</div>}
+                                    {b.startTime && <div className="opacity-95">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
+                                    {b.guestCount ? <div className="opacity-95 truncate">{b.guestCount} guests</div> : null}
                                     {b.spaceName && (
                                       <div className="mt-0.5">
                                         <span
@@ -4419,7 +4454,7 @@ export default function Dashboard() {
                                         </span>
                                       </div>
                                     )}
-                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
+                                    <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
                                   </div>
                                 </button>
                                 {!isOverflow && (
@@ -4440,12 +4475,13 @@ export default function Dashboard() {
                                   onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                   onClick={() => openEventDrawer({ ...l, _isLead: true })}
                                   style={spaceColor(l.spaceName) ? { borderLeft: `4px solid ${spaceColor(l.spaceName)}` } : undefined}
-                                  className={`w-full text-left rounded font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move h-2.5 sm:h-auto sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
+                                  className={`w-full text-left rounded font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
                                   title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
+                                  <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{l.firstName} {l.lastName}</div>
                                   <div className="hidden sm:block">
                                     <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                    {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
-                                    {l.guestCount ? <div className="opacity-70 truncate">{l.guestCount} guests</div> : null}
+                                    {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
+                                    {l.guestCount ? <div className="opacity-95 truncate">{l.guestCount} guests</div> : null}
                                     {l.spaceName && (
                                       <div className="mt-0.5">
                                         <span
@@ -4455,7 +4491,7 @@ export default function Dashboard() {
                                         </span>
                                       </div>
                                     )}
-                                    <div className="opacity-80 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                    <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                   </div>
                                 </button>
                                 {!isOverflow && (
@@ -4888,10 +4924,10 @@ export default function Dashboard() {
                               onClick={() => setSelectedBooking(b)}
                               className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity`}>
                               <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                              {b.eventType && <div className="opacity-85 truncate">{b.eventType}</div>}
-                              {b.startTime && <div className="opacity-75">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
-                              {b.guestCount && <div className="opacity-70">{b.guestCount} pax</div>}
-                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(b.status)}</div>
+                              {b.eventType && <div className="opacity-95 truncate">{b.eventType}</div>}
+                              {b.startTime && <div className="opacity-95">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
+                              {b.guestCount && <div className="opacity-95">{b.guestCount} pax</div>}
+                              <div className="opacity-95 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(b.status)}</div>
                             </button>
                           ))}
                           {dayLeads.map((l: any) => (
@@ -4899,15 +4935,16 @@ export default function Dashboard() {
                               onClick={() => openEventDrawer({ ...l, _isLead: true })}
                               className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}>
                               <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                              {l.eventType && <div className="opacity-85 truncate">{l.eventType}</div>}
-                              {l.guestCount && <div className="opacity-70">{l.guestCount} pax</div>}
-                              <div className="opacity-80 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(l.status)}</div>
+                              {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
+                              {l.guestCount && <div className="opacity-95">{l.guestCount} pax</div>}
+                              <div className="opacity-95 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(l.status)}</div>
                             </button>
                           ))}
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
                             <button
                               onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
-                              className="text-ink/20 hover:text-ink/70 transition-colors self-start mt-1 p-0.5"
+                              className="text-ink/20 hover:text-ink/70 transition-colors self-start mt-1 p-1.5 -m-1.5 rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+                              aria-label={`Add event on ${d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
                               title="Add event">
                               <Edit2 className="w-3 h-3" />
                             </button>
@@ -8825,7 +8862,7 @@ export default function Dashboard() {
             {/* Header */}
             <div className="bg-forest-dark px-4 md:px-5 py-4 flex items-center justify-between">
               <div>
-                <div className="font-bebas tracking-widest text-xs text-gold mb-0.5">EVENT DETAILS</div>
+                <div className="font-bebas tracking-widest text-xs text-cream/80 mb-0.5">EVENT DETAILS</div>
                 <h2 id="event-drawer-title" className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</h2>
               </div>
               <button onClick={() => setSelectedBooking(null)} aria-label="Close event details"
@@ -8838,11 +8875,9 @@ export default function Dashboard() {
               {/* Status + Type */}
               {(() => {
                 const stage = pipelineStages.find(s => s.key === selectedBooking.status);
-                const swatch = stage?.swatch ?? '#888';
                 return (
                   <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
-                    <span className="font-bebas text-xs tracking-widest px-2 py-1 border"
-                      style={{ color: swatch, backgroundColor: swatch + '18', borderColor: swatch + '55' }}>
+                    <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${stage?.color ?? 'border-gray-400 bg-gray-100 text-gray-700'}`}>
                       {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status)
                         ? (stage?.label ?? 'ENQUIRY').toUpperCase()
                         : (stage?.label ?? selectedBooking.status ?? 'EVENT').toUpperCase()}
@@ -9829,7 +9864,7 @@ export default function Dashboard() {
       </Dialog>
 
       {/* Quick Create Event from Mini Calendar */}
-      <Dialog open={!!quickCreateDate} onOpenChange={(open) => !open && setQuickCreateDate(null)}>
+      <Dialog open={!!quickCreateDate} onOpenChange={(open) => { if (!open) { setQuickCreateDate(null); setQuickCreateSpaceError(false); } }}>
         <DialogContent className="max-w-md rounded-2xl border border-gray-200 shadow-xl">
           <DialogHeader>
             <div className="bg-sage-green -mx-6 -mt-6 px-6 py-4 mb-4 rounded-t-2xl">
@@ -9846,7 +9881,8 @@ export default function Dashboard() {
           <form onSubmit={e => {
             e.preventDefault();
             if (!quickCreateDate) return;
-            if (!quickCreateForm.spaceName.trim()) { toast.error('Please pick an event space.'); return; }
+            if (!quickCreateForm.spaceName.trim()) { setQuickCreateSpaceError(true); toast.error('Please pick an event space.'); return; }
+            setQuickCreateSpaceError(false);
             createEnquiryFromCalendar.mutate({
               firstName: quickCreateForm.firstName,
               lastName: quickCreateForm.lastName || undefined,
@@ -9861,43 +9897,43 @@ export default function Dashboard() {
           }} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">First Name *</label>
-                <Input required value={quickCreateForm.firstName}
+                <label htmlFor={`${quickCreateFormId}-firstName`} className="font-inter text-xs font-medium text-gray-500 block mb-1">First Name *</label>
+                <Input id={`${quickCreateFormId}-firstName`} required value={quickCreateForm.firstName}
                   onChange={e => setQuickCreateForm(f => ({ ...f, firstName: e.target.value }))}
-                  placeholder="First name" className="rounded-xl border-gray-200 text-sm" />
+                  placeholder="First name" className="rounded-xl border-[#6a7282] text-sm" />
               </div>
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Last Name</label>
-                <Input value={quickCreateForm.lastName}
+                <label htmlFor={`${quickCreateFormId}-lastName`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Last Name</label>
+                <Input id={`${quickCreateFormId}-lastName`} value={quickCreateForm.lastName}
                   onChange={e => setQuickCreateForm(f => ({ ...f, lastName: e.target.value }))}
-                  placeholder="Last name" className="rounded-xl border-gray-200 text-sm" />
+                  placeholder="Last name" className="rounded-xl border-[#6a7282] text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Type</label>
-                <Input value={quickCreateForm.eventType}
+                <label htmlFor={`${quickCreateFormId}-eventType`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Type</label>
+                <Input id={`${quickCreateFormId}-eventType`} value={quickCreateForm.eventType}
                   onChange={e => setQuickCreateForm(f => ({ ...f, eventType: e.target.value }))}
-                  placeholder="e.g. Wedding" className="rounded-xl border-gray-200 text-sm" />
+                  placeholder="e.g. Wedding" className="rounded-xl border-[#6a7282] text-sm" />
               </div>
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Time</label>
-                <Input type="time" value={quickCreateForm.eventTime}
+                <label htmlFor={`${quickCreateFormId}-eventTime`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Event Time</label>
+                <Input id={`${quickCreateFormId}-eventTime`} type="time" value={quickCreateForm.eventTime}
                   onChange={e => setQuickCreateForm(f => ({ ...f, eventTime: e.target.value }))}
-                  className="rounded-xl border-gray-200 text-sm" />
+                  className="rounded-xl border-[#6a7282] text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Guest Count</label>
-                <Input type="number" value={quickCreateForm.guestCount}
+                <label htmlFor={`${quickCreateFormId}-guestCount`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Guest Count</label>
+                <Input id={`${quickCreateFormId}-guestCount`} type="number" value={quickCreateForm.guestCount}
                   onChange={e => setQuickCreateForm(f => ({ ...f, guestCount: e.target.value }))}
-                  placeholder="e.g. 80" className="rounded-xl border-gray-200 text-sm" />
+                  placeholder="e.g. 80" className="rounded-xl border-[#6a7282] text-sm" />
               </div>
               <div>
-                <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Status</label>
+                <label htmlFor={`${quickCreateFormId}-status`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Status</label>
                 <Select value={quickCreateForm.status} onValueChange={v => setQuickCreateForm(f => ({ ...f, status: v as any }))}>
-                  <SelectTrigger className="rounded-xl border-gray-200 text-sm">
+                  <SelectTrigger id={`${quickCreateFormId}-status`} className="rounded-xl border-[#6a7282] text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -9908,23 +9944,29 @@ export default function Dashboard() {
                 </Select>
               </div>
             </div>
-            <div>
-              <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-500">*</span></label>
+            <fieldset>
+              <legend className="font-inter text-xs font-medium text-gray-500 block mb-1">Space <span className="text-red-500">*</span></legend>
               {spaces && spaces.length > 0 ? (
-                <SpaceMultiSelect value={quickCreateForm.spaceName} onChange={v => setQuickCreateForm(f => ({ ...f, spaceName: v }))} spaces={spaces} />
+                <SpaceMultiSelect value={quickCreateForm.spaceName}
+                  onChange={v => { setQuickCreateForm(f => ({ ...f, spaceName: v })); if (v.trim()) setQuickCreateSpaceError(false); }}
+                  spaces={spaces} invalid={quickCreateSpaceError} />
               ) : (
                 <Input value={quickCreateForm.spaceName}
-                  onChange={e => setQuickCreateForm(f => ({ ...f, spaceName: e.target.value }))}
+                  onChange={e => { setQuickCreateForm(f => ({ ...f, spaceName: e.target.value })); if (e.target.value.trim()) setQuickCreateSpaceError(false); }}
                   placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
-                  className="rounded-xl border-gray-200 text-sm" />
+                  aria-invalid={quickCreateSpaceError}
+                  className="rounded-xl border-[#6a7282] text-sm" />
               )}
-            </div>
+              {quickCreateSpaceError && (
+                <p role="alert" className="font-inter text-xs text-red-600 mt-1">Please pick an event space.</p>
+              )}
+            </fieldset>
             <div>
-              <label className="font-inter text-xs font-medium text-gray-500 block mb-1">Notes</label>
-              <textarea value={quickCreateForm.notes}
+              <label htmlFor={`${quickCreateFormId}-notes`} className="font-inter text-xs font-medium text-gray-500 block mb-1">Notes</label>
+              <textarea id={`${quickCreateFormId}-notes`} value={quickCreateForm.notes}
                 onChange={e => setQuickCreateForm(f => ({ ...f, notes: e.target.value }))}
                 rows={2} placeholder="Any additional details..."
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-inter focus:outline-none focus:ring-1 focus:ring-sage-green/40 resize-none" />
+                className="w-full rounded-xl border border-[#6a7282] px-3 py-2 text-sm font-inter focus:outline-none focus:ring-1 focus:ring-sage-green/40 resize-none" />
             </div>
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={() => setQuickCreateDate(null)}
@@ -10186,12 +10228,12 @@ export default function Dashboard() {
       )}
 
       {/* Add Enquiry Modal */}
-      <Dialog open={showAddLead} onOpenChange={open => { setShowAddLead(open); if (!open) { setEnquiryPasteText(''); setEnquiryPasteMode(true); } }}>
+      <Dialog open={showAddLead} onOpenChange={open => { setShowAddLead(open); if (!open) { setEnquiryPasteText(''); setEnquiryPasteMode(true); setAddEnquirySpaceError(false); } }}>
         <DialogContent className="max-w-lg rounded-none border border-gold/30 max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">
               <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add New</DialogTitle>
-              <p className="font-dm text-white/50 text-xs mt-1">Paste an email or brief to auto-fill, or enter details manually.</p>
+              <p className="font-dm text-white/75 text-xs mt-1">Paste an email or brief to auto-fill, or enter details manually.</p>
             </div>
           </DialogHeader>
 
@@ -10200,12 +10242,13 @@ export default function Dashboard() {
             <div className="space-y-3">
               <div className="bg-forest/5 border border-forest/20 p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-bebas tracking-widest text-xs text-forest">SMART PASTE</span>
+                  <span id={`${addEnquiryFormId}-smart-paste`} className="font-bebas tracking-widest text-xs text-forest">SMART PASTE</span>
                   <span className="font-dm text-[10px] text-ink/60 ml-1">— paste a client email, booking request, or any text</span>
                 </div>
                 <textarea
                   autoFocus
                   rows={7}
+                  aria-labelledby={`${addEnquiryFormId}-smart-paste`}
                   value={enquiryPasteText}
                   onPaste={e => {
                     const text = e.clipboardData.getData('text');
@@ -10246,7 +10289,8 @@ export default function Dashboard() {
           ) : (
             <form onSubmit={e => {
               e.preventDefault();
-              if (!addEnquiryForm.spaceName.trim()) { toast.error('Please pick an event space.'); return; }
+              if (!addEnquiryForm.spaceName.trim()) { setAddEnquirySpaceError(true); toast.error('Please pick an event space.'); return; }
+              setAddEnquirySpaceError(false);
               createEnquiry.mutate({
                 firstName: addEnquiryForm.firstName,
                 lastName: addEnquiryForm.lastName || undefined,
@@ -10271,67 +10315,67 @@ export default function Dashboard() {
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FIRST NAME *</label>
-                  <Input required value={addEnquiryForm.firstName} onChange={e => setAddEnquiryForm(f => ({ ...f, firstName: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-firstName`} className="font-bebas text-xs tracking-widest text-sage block mb-1">FIRST NAME *</label>
+                  <Input id={`${addEnquiryFormId}-firstName`} required value={addEnquiryForm.firstName} onChange={e => setAddEnquiryForm(f => ({ ...f, firstName: e.target.value }))}
                     placeholder="Jane" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">LAST NAME</label>
-                  <Input value={addEnquiryForm.lastName} onChange={e => setAddEnquiryForm(f => ({ ...f, lastName: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-lastName`} className="font-bebas text-xs tracking-widest text-sage block mb-1">LAST NAME</label>
+                  <Input id={`${addEnquiryFormId}-lastName`} value={addEnquiryForm.lastName} onChange={e => setAddEnquiryForm(f => ({ ...f, lastName: e.target.value }))}
                     placeholder="Smith" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EMAIL</label>
-                  <Input type="email" value={addEnquiryForm.email} onChange={e => setAddEnquiryForm(f => ({ ...f, email: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-email`} className="font-bebas text-xs tracking-widest text-sage block mb-1">EMAIL</label>
+                  <Input id={`${addEnquiryFormId}-email`} type="email" value={addEnquiryForm.email} onChange={e => setAddEnquiryForm(f => ({ ...f, email: e.target.value }))}
                     placeholder="jane@example.com" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PHONE</label>
-                  <Input value={addEnquiryForm.phone} onChange={e => setAddEnquiryForm(f => ({ ...f, phone: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-phone`} className="font-bebas text-xs tracking-widest text-sage block mb-1">PHONE</label>
+                  <Input id={`${addEnquiryFormId}-phone`} value={addEnquiryForm.phone} onChange={e => setAddEnquiryForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder="021 000 0000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">COMPANY</label>
-                  <Input value={addEnquiryForm.company} onChange={e => setAddEnquiryForm(f => ({ ...f, company: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-company`} className="font-bebas text-xs tracking-widest text-sage block mb-1">COMPANY</label>
+                  <Input id={`${addEnquiryFormId}-company`} value={addEnquiryForm.company} onChange={e => setAddEnquiryForm(f => ({ ...f, company: e.target.value }))}
                     placeholder="Acme Ltd" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TYPE</label>
-                  <Input value={addEnquiryForm.eventType} onChange={e => setAddEnquiryForm(f => ({ ...f, eventType: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-eventType`} className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TYPE</label>
+                  <Input id={`${addEnquiryFormId}-eventType`} value={addEnquiryForm.eventType} onChange={e => setAddEnquiryForm(f => ({ ...f, eventType: e.target.value }))}
                     placeholder="Wedding, Birthday, Corporate..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT DATE</label>
-                  <Input type="date" value={addEnquiryForm.eventDate} onChange={e => setAddEnquiryForm(f => ({ ...f, eventDate: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-eventDate`} className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT DATE</label>
+                  <Input id={`${addEnquiryFormId}-eventDate`} type="date" value={addEnquiryForm.eventDate} onChange={e => setAddEnquiryForm(f => ({ ...f, eventDate: e.target.value }))}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME</label>
-                  <Input type="time" value={addEnquiryForm.eventTime} onChange={e => setAddEnquiryForm(f => ({ ...f, eventTime: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-eventTime`} className="font-bebas text-xs tracking-widest text-sage block mb-1">EVENT TIME</label>
+                  <Input id={`${addEnquiryFormId}-eventTime`} type="time" value={addEnquiryForm.eventTime} onChange={e => setAddEnquiryForm(f => ({ ...f, eventTime: e.target.value }))}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">GUEST COUNT</label>
-                  <Input type="number" value={addEnquiryForm.guestCount} onChange={e => setAddEnquiryForm(f => ({ ...f, guestCount: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-guestCount`} className="font-bebas text-xs tracking-widest text-sage block mb-1">GUEST COUNT</label>
+                  <Input id={`${addEnquiryFormId}-guestCount`} type="number" value={addEnquiryForm.guestCount} onChange={e => setAddEnquiryForm(f => ({ ...f, guestCount: e.target.value }))}
                     placeholder="50" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">BUDGET (NZD)</label>
-                  <Input type="number" value={addEnquiryForm.budget} onChange={e => setAddEnquiryForm(f => ({ ...f, budget: e.target.value }))}
+                  <label htmlFor={`${addEnquiryFormId}-budget`} className="font-bebas text-xs tracking-widest text-sage block mb-1">BUDGET (NZD)</label>
+                  <Input id={`${addEnquiryFormId}-budget`} type="number" value={addEnquiryForm.budget} onChange={e => setAddEnquiryForm(f => ({ ...f, budget: e.target.value }))}
                     placeholder="5000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 </div>
                 <div>
-                  <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STATUS</label>
+                  <label htmlFor={`${addEnquiryFormId}-status`} className="font-bebas text-xs tracking-widest text-sage block mb-1">STATUS</label>
                   <Select value={addEnquiryForm.status} onValueChange={v => setAddEnquiryForm(f => ({ ...f, status: v as any }))}>
-                    <SelectTrigger className="rounded-none border border-gold/30 text-xs font-bebas tracking-widest focus:ring-0">
+                    <SelectTrigger id={`${addEnquiryFormId}-status`} className="rounded-none border border-gold/30 text-xs font-bebas tracking-widest focus:ring-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -10342,20 +10386,26 @@ export default function Dashboard() {
                   </Select>
                 </div>
               </div>
-              <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE <span className="text-red-500">*</span></label>
+              <fieldset>
+                <legend className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE <span className="text-red-500">*</span></legend>
                 {spaces && spaces.length > 0 ? (
-                  <SpaceMultiSelect value={addEnquiryForm.spaceName} onChange={v => setAddEnquiryForm(f => ({ ...f, spaceName: v }))} spaces={spaces} />
+                  <SpaceMultiSelect value={addEnquiryForm.spaceName}
+                    onChange={v => { setAddEnquiryForm(f => ({ ...f, spaceName: v })); if (v.trim()) setAddEnquirySpaceError(false); }}
+                    spaces={spaces} invalid={addEnquirySpaceError} />
                 ) : (
                   <Input value={addEnquiryForm.spaceName}
-                    onChange={e => setAddEnquiryForm(f => ({ ...f, spaceName: e.target.value }))}
+                    onChange={e => { setAddEnquiryForm(f => ({ ...f, spaceName: e.target.value })); if (e.target.value.trim()) setAddEnquirySpaceError(false); }}
                     placeholder="e.g. Main Room — add spaces in Settings → Venue → Spaces"
+                    aria-invalid={addEnquirySpaceError}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 )}
-              </div>
+                {addEnquirySpaceError && (
+                  <p role="alert" className="font-dm text-xs text-red-600 mt-1">Please pick an event space.</p>
+                )}
+              </fieldset>
               <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTES</label>
-                <Textarea value={addEnquiryForm.message} onChange={e => setAddEnquiryForm(f => ({ ...f, message: e.target.value }))}
+                <label htmlFor={`${addEnquiryFormId}-message`} className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTES</label>
+                <Textarea id={`${addEnquiryFormId}-message`} value={addEnquiryForm.message} onChange={e => setAddEnquiryForm(f => ({ ...f, message: e.target.value }))}
                   rows={2} placeholder="Any additional details..." className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
               </div>
               <button type="submit" disabled={createEnquiry.isPending}

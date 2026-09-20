@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,17 @@ const SOURCE_OPTIONS = [
   "Instagram", "Facebook", "Google Search", "Website",
   "Word of Mouth / Referral", "Walk-In", "Event Directory", "Previous Client", "Other",
 ];
+
+// Browser autofill hints for the contact fields — lets a phone's keyboard/
+// autofill offer the right saved value instead of treating every field the
+// same as generic free text.
+const AUTOCOMPLETE: Record<string, string> = {
+  firstName: "given-name",
+  lastName: "family-name",
+  email: "email",
+  phone: "tel",
+  company: "organization",
+};
 
 import { DEFAULT_FORM_FIELDS, mergeFormFields, EVENT_FORMAT_OPTIONS, BUDGET_RANGE_OPTIONS, eventFormatLabel, budgetRangeLabel, type FormFieldDef } from "@shared/formFields";
 
@@ -59,6 +70,8 @@ function fuzzyMatchOption(raw: string | null, options: ReadonlyArray<{ value: st
 
 export default function LeadForm() {
   const { slug } = useParams<{ slug?: string }>();
+  const formId = useId();
+  const fieldElId = (f: FormFieldDef) => `${formId}-${f.id}`;
   const [submitted, setSubmitted] = useState(false);
   // Embed + per-embed customisation read from the URL, e.g.
   //   /enquire/<slug>?embed=1&accent=BE1622&font=Lora&bg=ffffff
@@ -151,6 +164,15 @@ export default function LeadForm() {
   const venue = slug ? venueBySlug : venueDefault;
   const isLoading = slug ? loadingBySlug : loadingDefault;
 
+  // Full-page mode is a real, standalone page a visitor navigates to
+  // directly — give it a real document title. The embed widget lives inside
+  // someone else's page/iframe, where overwriting document.title would be
+  // meaningless (or surprising), so it's skipped there.
+  useEffect(() => {
+    if (isEmbed) return;
+    document.title = `Enquire — ${venue?.name ?? "VenueFlowHQ Venue"}`;
+  }, [isEmbed, venue?.name]);
+
   const [form, setForm] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     if (prefillEventType) initial.eventType = prefillEventType;
@@ -173,6 +195,11 @@ export default function LeadForm() {
   // means submit() falls back to a normal insert; the visitor's flow never
   // waits on or breaks over this write.
   const [capturedLeadId, setCapturedLeadId] = useState<number | null>(null);
+  // Field ids that failed validation on the last submit attempt — drives the
+  // inline error text/aria-invalid under each field. Cleared on submit, and
+  // implicitly "resolved" per-field the moment isFieldFilled() says so again
+  // (no per-keystroke bookkeeping needed).
+  const [touchedInvalid, setTouchedInvalid] = useState<Set<string>>(new Set());
 
   // Autosaves a real, contactable lead the moment step 1 (Your Details) is
   // complete — firstName + email are always required by then. Without this,
@@ -249,14 +276,22 @@ export default function LeadForm() {
       [sourceField ? [sourceField] : [], false],
       [messageField ? [messageField] : [], false],
     ];
+    const invalid: FormFieldDef[] = [];
     for (const [group, isCustom] of requiredGroups) {
       for (const f of group) {
-        if (f.id === 'guestCount') continue;
-        if (!isFieldFilled(f, isCustom)) return toast.error(`Please fill in "${f.label}".`);
+        if (!isFieldFilled(f, isCustom)) invalid.push(f);
       }
     }
-    const guests = parseInt(form.guestCount ?? '');
-    if (!(guests >= 1)) return toast.error("Please tell us how many guests you're expecting.");
+    if (invalid.length > 0) {
+      setTouchedInvalid(new Set(invalid.map(f => f.id)));
+      toast.error(fieldErrorMessage(invalid[0]));
+      // Land keyboard/screen-reader focus right on the first problem field —
+      // the toast alone is easy to miss, especially for a screen reader user
+      // who isn't looking at the corner of the screen it appears in.
+      requestAnimationFrame(() => { document.getElementById(fieldElId(invalid[0]))?.focus(); });
+      return;
+    }
+    setTouchedInvalid(new Set());
     const customParts = Object.entries(customFieldValues)
       .filter(([, v]) => v.trim())
       .map(([k, v]) => `${k}: ${v}`);
@@ -305,15 +340,30 @@ export default function LeadForm() {
     if (isCustomField) return !!(customFieldValues[field.label] ?? '').trim();
     if (field.id === 'eventDate') return noDateYet || !!(form.eventDate ?? '').trim();
     if (field.id === 'email') return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((form.email ?? '').trim());
+    // "Filled" isn't the same as "a valid number" — reject "abc", "0", "-5".
+    if (field.id === 'guestCount') return parseInt(form.guestCount ?? '', 10) >= 1;
     return !!(form[field.id] ?? '').trim();
   };
+
+  // Error id/message plumbing for inline field errors — the single place
+  // that decides whether a field should show as invalid right now, so a
+  // field's error disappears the moment it's actually fixed (isFieldFilled
+  // says so again) without any separate per-keystroke clearing logic.
+  const fieldErrorId = (f: FormFieldDef) => `${fieldElId(f)}-error`;
+  const fieldHasError = (f: FormFieldDef, isCustom = false) => touchedInvalid.has(f.id) && !isFieldFilled(f, isCustom);
+  const fieldErrorMessage = (f: FormFieldDef) =>
+    f.id === 'guestCount' ? "Please tell us how many guests you're expecting." : `Please fill in "${f.label}".`;
+  function FieldError({ field, isCustom }: { field: FormFieldDef; isCustom?: boolean }) {
+    if (!fieldHasError(field, isCustom)) return null;
+    return <p id={fieldErrorId(field)} role="alert" className="text-red-700 text-xs mt-1">{fieldErrorMessage(field)}</p>;
+  }
 
   // A required field is only obvious if every field label says so. Some
   // labels (Event type, Guest Count, Format, Budget range in the embed's
   // Step 1; "WHAT KIND OF EVENT?" on the full page) were hardcoded text
   // with no asterisk at all, so a required field could block the Next/
   // Submit button with no visible reason why. One marker, used everywhere.
-  const reqMark = (required?: boolean) => required ? <span className="text-red-500 font-bold"> *</span> : null;
+  const reqMark = (required?: boolean) => required ? <span className="text-red-700 font-bold"> *</span> : null;
 
   if (isLoading) return (
     <div className={isEmbed ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center bg-[#f8f5f0]"}>
@@ -331,6 +381,11 @@ export default function LeadForm() {
 
   const primaryColor = accentOverride ?? venue?.primaryColor ?? "#2D4A3E";
   const logoUrl      = (venue as any)?.logoUrl;
+  // The white-out filter below only makes sense for a logo with real
+  // transparency — a JPEG (never transparent) turns into a solid white
+  // square under it. PNG/SVG at least support transparency; anything else
+  // (or no recognisable extension, e.g. a bare upload URL) is shown as-is.
+  const logoIsInvertible = /\.(svg|png)(?:[?#]|$)/i.test(logoUrl ?? '');
   const logoScale    = (venue as any)?.logoScale ?? 100;
   const formFont     = (venue as any)?.formFont ?? 'inter';
   // A ?font= param wins (loaded from Google Fonts above); else the saved font.
@@ -366,8 +421,8 @@ export default function LeadForm() {
   const customFields = visibleFields.filter(f => !f.isDefault);
 
   const inputClass = isEmbed
-    ? "rounded-sm border border-gray-200 focus-visible:ring-1 focus-visible:ring-offset-0 text-xs bg-white h-7 px-2"
-    : "rounded-sm border border-gray-200 focus-visible:ring-1 focus-visible:ring-offset-0 text-sm bg-white";
+    ? "rounded-sm border border-[#6a7282] focus-visible:ring-1 focus-visible:ring-offset-0 text-xs bg-white h-7 px-2"
+    : "rounded-sm border border-[#6a7282] focus-visible:ring-1 focus-visible:ring-offset-0 text-sm bg-white";
 
   function renderField(field: FormFieldDef, isCustom = false) {
     const value = isCustom ? (customFieldValues[field.label] ?? '') : (form[field.id] ?? '');
@@ -377,24 +432,34 @@ export default function LeadForm() {
 
     if (field.id === 'eventType') return renderEventTypeSelect();
     if (field.id === 'source') return renderSourcePills();
-    if (field.id === 'eventFormat') return renderChoicePills('eventFormat', EVENT_FORMAT_OPTIONS);
-    if (field.id === 'budgetRange') return renderChoicePills('budgetRange', BUDGET_RANGE_OPTIONS);
+    if (field.id === 'eventFormat' || field.id === 'budgetRange') return renderChoicePills(field);
+
+    const controlId = fieldElId(field);
+    const hasError = fieldHasError(field, isCustom);
+    const describedBy = hasError ? fieldErrorId(field) : undefined;
+
     if (field.type === 'textarea') {
       return (
-        <Textarea value={value} onChange={onChange} required={field.required}
-          aria-label={field.label}
-          placeholder="Any additional details…"
-          rows={isEmbed ? 2 : 4} className={`${inputClass} resize-none ${isEmbed ? 'text-xs py-1 px-2' : ''}`} />
+        <>
+          <Textarea id={controlId} value={value} onChange={onChange} required={field.required}
+            aria-invalid={hasError} aria-describedby={describedBy}
+            placeholder="Any additional details…"
+            rows={isEmbed ? 2 : 4} className={`${inputClass} resize-none ${isEmbed ? 'text-xs py-1 px-2' : ''}`} />
+          <FieldError field={field} isCustom={isCustom} />
+        </>
       );
     }
     const input = (
       <Input
+        id={controlId}
         type={field.type}
         value={value}
         onChange={field.id === 'eventDate' ? (e) => { setNoDateYet(false); onChange(e as any); } : onChange}
         required={field.required && !(field.id === 'eventDate' && noDateYet)}
         disabled={field.id === 'eventDate' && noDateYet}
-        aria-label={field.label}
+        autoComplete={!isCustom ? AUTOCOMPLETE[field.id] : undefined}
+        aria-invalid={hasError}
+        aria-describedby={describedBy}
         min={field.type === 'date' ? new Date().toISOString().split("T")[0] : undefined}
         placeholder={field.type === 'date' ? undefined : field.id === 'phone' ? '+64 21 000 0000' : field.id === 'guestCount' ? '50' : field.id === 'budget' ? '5000' : ''}
         className={`${inputClass}${field.id === 'eventTime' ? ' pr-7 vf-time-input' : ''}`}
@@ -406,12 +471,13 @@ export default function LeadForm() {
       return (
         <div>
           {input}
-          <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer select-none text-xs text-gray-600">
+          <label className="flex items-center gap-1.5 mt-1.5 min-h-[24px] cursor-pointer select-none text-xs text-gray-600">
             <input type="checkbox" checked={noDateYet}
               onChange={e => { setNoDateYet(e.target.checked); if (e.target.checked) setForm(p => ({ ...p, eventDate: '', eventTime: '' })); }}
               className="h-3.5 w-3.5 accent-current" />
             No date yet — we&rsquo;re flexible
           </label>
+          <FieldError field={field} isCustom={isCustom} />
         </div>
       );
     }
@@ -422,35 +488,45 @@ export default function LeadForm() {
     // read as a picker everywhere.
     if (field.id === 'eventTime') {
       return (
-        <div className="relative">
-          {input}
-          <Clock className="w-3.5 h-3.5 text-gray-400 absolute top-1/2 -translate-y-1/2 right-2.5 pointer-events-none" />
-        </div>
+        <>
+          <div className="relative">
+            {input}
+            <Clock className="w-3.5 h-3.5 text-gray-400 absolute top-1/2 -translate-y-1/2 right-2.5 pointer-events-none" />
+          </div>
+          <FieldError field={field} isCustom={isCustom} />
+        </>
       );
     }
-    return input;
+    return <>{input}<FieldError field={field} isCustom={isCustom} /></>;
   }
 
   /* ── Qualifying pills: format + budget bracket. One tap, tap again to
         clear — never a typed number, the bracket IS the answer. Sized (and
         gapped) for a comfortable mobile tap target: these carry Format and
-        Budget range, the fields that actually qualify a lead. ──────────── */
-  function renderChoicePills(id: string, options: ReadonlyArray<{ value: string; label: string }>) {
-    const selected = form[id] ?? '';
+        Budget range, the fields that actually qualify a lead. A real
+        radiogroup (not just visually pill-shaped buttons) so a screen
+        reader announces the group's name, how many options, and which one
+        (if any) is currently selected. ────────────────────────────────── */
+  function renderChoicePills(field: FormFieldDef) {
+    const options = field.id === 'eventFormat' ? EVENT_FORMAT_OPTIONS : BUDGET_RANGE_OPTIONS;
+    const selected = form[field.id] ?? '';
     return (
-      <div className="flex gap-2 flex-wrap">
-        {options.map(o => {
-          const isSel = selected === o.value;
-          return (
-            <button key={o.value} type="button" aria-pressed={isSel}
-              onClick={() => setForm(p => ({ ...p, [id]: isSel ? '' : o.value }))}
-              className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
-              style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
+      <>
+        <div role="radiogroup" aria-labelledby={`${fieldElId(field)}-label`} id={fieldElId(field)} tabIndex={-1} className="flex gap-2 flex-wrap">
+          {options.map(o => {
+            const isSel = selected === o.value;
+            return (
+              <button key={o.value} type="button" role="radio" aria-checked={isSel}
+                onClick={() => setForm(p => ({ ...p, [field.id]: isSel ? '' : o.value }))}
+                className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+                style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+        <FieldError field={field} />
+      </>
     );
   }
 
@@ -458,38 +534,50 @@ export default function LeadForm() {
         full page's native form validation something to actually enforce
         `required` against, which the old tappable card grid never had. ── */
   function renderEventTypeSelect() {
-    const required = eventFields.find(f => f.id === 'eventType')?.required;
+    const field = eventFields.find(f => f.id === 'eventType');
+    const hasError = field ? fieldHasError(field) : false;
     return (
-      <select
-        value={form.eventType ?? ''}
-        onChange={e => setForm(p => ({ ...p, eventType: e.target.value }))}
-        required={required}
-        aria-label="Type of Event"
-        className={inputClass}
-      >
-        <option value="">Select an event type…</option>
-        {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-      </select>
+      <>
+        <select
+          id={field ? fieldElId(field) : undefined}
+          value={form.eventType ?? ''}
+          onChange={e => setForm(p => ({ ...p, eventType: e.target.value }))}
+          required={field?.required}
+          aria-invalid={hasError}
+          aria-describedby={field && hasError ? fieldErrorId(field) : undefined}
+          className={`${inputClass} min-h-[24px]`}
+        >
+          <option value="">Select an event type…</option>
+          {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        {field && <FieldError field={field} />}
+      </>
     );
   }
 
-  /* ── NowBookIt-style selectable pills (how did you hear) ───────────── */
+  /* ── NowBookIt-style selectable pills (how did you hear) — same
+        radiogroup treatment as the format/budget pills above. Previously
+        the only group here with literally no selected-state exposed to
+        assistive tech at all (no aria-pressed, nothing). ───────────────── */
   function renderSourcePills() {
     const selected = form.source ?? '';
     return (
-      <div className="flex flex-wrap gap-2">
-        {SOURCE_OPTIONS.map(s => {
-          const isSel = selected === s;
-          return (
-            <button key={s} type="button"
-              onClick={() => setForm(p => ({ ...p, source: isSel ? '' : s }))}
-              className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
-              style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
-              {s}
-            </button>
-          );
-        })}
-      </div>
+      <>
+        <div role="radiogroup" aria-labelledby={`${formId}-source-label`} id={`${formId}-source`} tabIndex={-1} className="flex flex-wrap gap-2">
+          {SOURCE_OPTIONS.map(s => {
+            const isSel = selected === s;
+            return (
+              <button key={s} type="button" role="radio" aria-checked={isSel}
+                onClick={() => setForm(p => ({ ...p, source: isSel ? '' : s }))}
+                className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+                style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
+                {s}
+              </button>
+            );
+          })}
+        </div>
+        {sourceField && <FieldError field={sourceField} />}
+      </>
     );
   }
 
@@ -536,7 +624,7 @@ export default function LeadForm() {
         </div>
 
         {submitted ? (
-          <div className="text-center py-10 px-4">
+          <div role="status" className="text-center py-10 px-4">
             <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: formButtonColor }} />
             <p className="font-semibold text-gray-800 text-sm mb-1">Enquiry Received!</p>
             <p className="text-xs text-gray-600 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
@@ -550,13 +638,13 @@ export default function LeadForm() {
           <div className="px-4 pb-4 pt-3 space-y-3">
             {eventFields.some(f => f.id === 'eventType') && (
               <div>
-                <label className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
+                <label htmlFor={eventTypeField ? fieldElId(eventTypeField) : undefined} className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
                 {renderEventTypeSelect()}
               </div>
             )}
             {eventDateField && (
               <div>
-                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{eventDateField.label}{reqMark(eventDateField.required)}</label>
+                <label htmlFor={fieldElId(eventDateField)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{eventDateField.label}{reqMark(eventDateField.required)}</label>
                 {renderField(eventDateField)}
               </div>
             )}
@@ -564,13 +652,13 @@ export default function LeadForm() {
               <div className="grid grid-cols-2 gap-2">
                 {timeField && (
                   <div>
-                    <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{timeField.label}{reqMark(timeField.required)}</label>
+                    <label htmlFor={fieldElId(timeField)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{timeField.label}{reqMark(timeField.required)}</label>
                     {renderField(timeField)}
                   </div>
                 )}
                 {guestField && (
                   <div>
-                    <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{guestField.label}{reqMark(guestField.required)}</label>
+                    <label htmlFor={fieldElId(guestField)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{guestField.label}{reqMark(guestField.required)}</label>
                     {renderField(guestField)}
                   </div>
                 )}
@@ -578,39 +666,39 @@ export default function LeadForm() {
             )}
             {formatField && (
               <div>
-                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{formatField.label}{reqMark(formatField.required)}</label>
+                <label id={`${fieldElId(formatField)}-label`} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{formatField.label}{reqMark(formatField.required)}</label>
                 {renderField(formatField)}
               </div>
             )}
             {budgetRangeField && (
               <div>
-                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{budgetRangeField.label}{reqMark(budgetRangeField.required)}</label>
+                <label id={`${fieldElId(budgetRangeField)}-label`} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{budgetRangeField.label}{reqMark(budgetRangeField.required)}</label>
                 {renderField(budgetRangeField)}
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">
               {detailFields.map(field => (
                 <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
-                  <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
+                  <label htmlFor={fieldElId(field)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
                   {renderField(field)}
                 </div>
               ))}
             </div>
             {customFields.map(field => (
               <div key={field.id}>
-                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
+                <label htmlFor={fieldElId(field)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
                 {renderField(field, true)}
               </div>
             ))}
             {messageField && (
               <div>
-                <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{messageField.label}</label>
+                <label htmlFor={fieldElId(messageField)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{messageField.label}</label>
                 {renderField(messageField)}
               </div>
             )}
             {sourceField && (
               <div>
-                <label className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-600 uppercase">{sourceField.label}</label>
+                <label id={`${formId}-source-label`} className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-600 uppercase">{sourceField.label}</label>
                 {renderSourcePills()}
               </div>
             )}
@@ -652,7 +740,7 @@ export default function LeadForm() {
                   <div className="grid grid-cols-2 gap-2">
                     {detailFields.map(field => (
                       <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
-                        <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
+                        <label htmlFor={fieldElId(field)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
                         {renderField(field)}
                       </div>
                     ))}
@@ -684,14 +772,14 @@ export default function LeadForm() {
                 <div className="space-y-3">
                   {eventFields.some(f => f.id === 'eventType') && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
+                      <label htmlFor={eventTypeField ? fieldElId(eventTypeField) : undefined} className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
                       {renderEventTypeSelect()}
                     </div>
                   )}
 
                   {eventDateField && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{eventDateField.label}{reqMark(eventDateField.required)}</label>
+                      <label htmlFor={fieldElId(eventDateField)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{eventDateField.label}{reqMark(eventDateField.required)}</label>
                       {renderField(eventDateField)}
                     </div>
                   )}
@@ -700,13 +788,13 @@ export default function LeadForm() {
                     <div className="grid grid-cols-2 gap-2">
                       {timeField && (
                         <div>
-                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{timeField.label}{reqMark(timeField.required)}</label>
+                          <label htmlFor={fieldElId(timeField)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{timeField.label}{reqMark(timeField.required)}</label>
                           {renderField(timeField)}
                         </div>
                       )}
                       {guestField && (
                         <div>
-                          <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{guestField.label}{reqMark(guestField.required)}</label>
+                          <label htmlFor={fieldElId(guestField)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{guestField.label}{reqMark(guestField.required)}</label>
                           {renderField(guestField)}
                         </div>
                       )}
@@ -716,32 +804,32 @@ export default function LeadForm() {
                   {/* Qualifying pills — format and budget bracket. */}
                   {formatField && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{formatField.label}{reqMark(formatField.required)}</label>
+                      <label id={`${fieldElId(formatField)}-label`} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{formatField.label}{reqMark(formatField.required)}</label>
                       {renderField(formatField)}
                     </div>
                   )}
                   {budgetRangeField && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{budgetRangeField.label}{reqMark(budgetRangeField.required)}</label>
+                      <label id={`${fieldElId(budgetRangeField)}-label`} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{budgetRangeField.label}{reqMark(budgetRangeField.required)}</label>
                       {renderField(budgetRangeField)}
                     </div>
                   )}
 
                   {customFields.map(field => (
                     <div key={field.id}>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
+                      <label htmlFor={fieldElId(field)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{field.label}{reqMark(field.required)}</label>
                       {renderField(field, true)}
                     </div>
                   ))}
                   {messageField && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{messageField.label}</label>
+                      <label htmlFor={fieldElId(messageField)} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{messageField.label}</label>
                       {renderField(messageField)}
                     </div>
                   )}
                   {sourceField && (
                     <div>
-                      <label className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-600 uppercase">{sourceField.label}</label>
+                      <label id={`${formId}-source-label`} className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-600 uppercase">{sourceField.label}</label>
                       {renderSourcePills()}
                     </div>
                   )}
@@ -770,9 +858,10 @@ export default function LeadForm() {
     backgroundColor: formPageBg,
     ...(formPageBgImage ? { backgroundImage: `url(${formPageBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' } : {}),
   };
+  const eventTypeFieldDef = eventFields.find(f => f.id === 'eventType');
 
   return (
-    <div className="min-h-screen" style={{ ...pageBgStyle, fontFamily }}>
+    <main className="min-h-screen" style={{ ...pageBgStyle, fontFamily }}>
 
       {/* Venue Header */}
       <div style={{ backgroundColor: primaryColor, color: textOnPrimary }}>
@@ -780,7 +869,7 @@ export default function LeadForm() {
           <div className="flex items-center justify-center mb-5">
             {logoUrl ? (
               <img src={logoUrl} alt={venueName}
-                style={{ height: `${Math.round(logoScale * 0.64)}px`, width: 'auto', objectFit: 'contain', maxWidth: '80%', ...(isLight(primaryColor) ? {} : { filter: 'brightness(0) invert(1)' }) }} />
+                style={{ height: `${Math.round(logoScale * 0.64)}px`, width: 'auto', objectFit: 'contain', maxWidth: '80%', ...(isLight(primaryColor) || !logoIsInvertible ? {} : { filter: 'brightness(0) invert(1)' }) }} />
             ) : (
               <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold"
                 style={{ backgroundColor: `${textOnPrimary}22`, color: textOnPrimary }}>
@@ -793,8 +882,8 @@ export default function LeadForm() {
             <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: `${textOnPrimary}88` }} />
             <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
           </div>
-          <div className="text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: textOnPrimary }}>{venueName}</div>
-          <h1 className="text-xl italic mb-3" style={{ color: textOnPrimary }}>{formTitle}</h1>
+          <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: textOnPrimary }}>{venueName}</h1>
+          {formTitle && <p className="text-xl italic mb-3" style={{ color: textOnPrimary }}>{formTitle}</p>}
           <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}e6` }}>{formSubtitle}</p>
           {(venue?.city || venue?.phone || venue?.email) && (
             <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
@@ -820,7 +909,7 @@ export default function LeadForm() {
 
       <div className="max-w-2xl mx-auto px-6 py-10">
         {submitted ? (
-          <div className="rounded-lg border border-gray-100 shadow-sm p-10 text-center" style={{ backgroundColor: formCardBg }}>
+          <div role="status" className="rounded-lg border border-gray-100 shadow-sm p-10 text-center" style={{ backgroundColor: formCardBg }}>
             <CheckCircle className="w-16 h-16 mx-auto mb-5" style={{ color: formButtonColor }} />
             <h2 className="text-3xl font-bold mb-3 text-gray-800">Enquiry Received!</h2>
             <p className="text-gray-500 mb-2">
@@ -840,7 +929,7 @@ export default function LeadForm() {
               {/* Event type — tappable cards (the signature NowBookIt element, shown first) */}
               {eventFields.some(f => f.id === 'eventType') && (
                 <div>
-                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">WHAT KIND OF EVENT?{reqMark(eventFields.find(f => f.id === 'eventType')?.required)}</label>
+                  <label htmlFor={eventTypeFieldDef ? fieldElId(eventTypeFieldDef) : undefined} className="font-bold text-xs tracking-widest block mb-3 text-gray-600">WHAT KIND OF EVENT?{reqMark(eventTypeFieldDef?.required)}</label>
                   {renderEventTypeSelect()}
                 </div>
               )}
@@ -858,12 +947,12 @@ export default function LeadForm() {
                 if (gridFields.length === 0 && pillFields.length === 0) return null;
                 return (
                   <div>
-                    <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">EVENT DETAILS</label>
+                    <label className="font-bold text-xs tracking-widest block mb-3 text-gray-600">EVENT DETAILS</label>
                     {gridFields.length > 0 && (
                       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${pillFields.length > 0 ? 'mb-4' : ''}`}>
                         {gridFields.map(field => (
                           <div key={field.id} className={field.id === 'budget' ? 'sm:col-span-2' : ''}>
-                            <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
+                            <label htmlFor={fieldElId(field)} className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
                               {field.label.toUpperCase()}{reqMark(field.required)}
                             </label>
                             {renderField(field)}
@@ -873,7 +962,7 @@ export default function LeadForm() {
                     )}
                     {pillFields.map(field => (
                       <div key={field.id} className="mb-3 last:mb-0">
-                        <label className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">
+                        <label id={`${fieldElId(field)}-label`} className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">
                           {field.label.toUpperCase()}{reqMark(field.required)}
                         </label>
                         {renderField(field)}
@@ -888,11 +977,11 @@ export default function LeadForm() {
                   ("+64 21 000 0000") got clipped. */}
               {detailFields.length > 0 && (
                 <div>
-                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">YOUR DETAILS</label>
+                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-600">YOUR DETAILS</label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {detailFields.map(field => (
                       <div key={field.id} className={field.id === 'company' ? 'sm:col-span-2' : ''}>
-                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
+                        <label htmlFor={fieldElId(field)} className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
                           {field.label.toUpperCase()}{reqMark(field.required)}
                         </label>
                         {renderField(field)}
@@ -905,11 +994,11 @@ export default function LeadForm() {
               {/* Additional custom fields */}
               {customFields.length > 0 && (
                 <div>
-                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">ADDITIONAL INFORMATION</label>
+                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-600">ADDITIONAL INFORMATION</label>
                   <div className="space-y-3">
                     {customFields.map(field => (
                       <div key={field.id}>
-                        <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
+                        <label htmlFor={fieldElId(field)} className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
                           {field.label.toUpperCase()}{reqMark(field.required)}
                         </label>
                         {renderField(field, true)}
@@ -922,7 +1011,7 @@ export default function LeadForm() {
               {/* How did you hear — pills */}
               {sourceField && (
                 <div>
-                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">{sourceField.label.toUpperCase()}</label>
+                  <label id={`${formId}-source-label`} className="font-bold text-xs tracking-widest block mb-3 text-gray-600">{sourceField.label.toUpperCase()}</label>
                   {renderSourcePills()}
                 </div>
               )}
@@ -930,7 +1019,7 @@ export default function LeadForm() {
               {/* Message */}
               {messageField && (
                 <div>
-                  <label className="font-bold text-xs tracking-widest block mb-3 text-gray-500">{messageField.label.toUpperCase()}</label>
+                  <label htmlFor={fieldElId(messageField)} className="font-bold text-xs tracking-widest block mb-3 text-gray-600">{messageField.label.toUpperCase()}</label>
                   {renderField(messageField)}
                 </div>
               )}
@@ -957,6 +1046,6 @@ export default function LeadForm() {
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
