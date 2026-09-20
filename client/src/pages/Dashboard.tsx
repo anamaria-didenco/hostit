@@ -2880,32 +2880,31 @@ export default function Dashboard() {
                   <p className="font-dm text-sm text-sage mt-0.5">Your venue at a glance</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowStatsCustomize(v => !v)}
-                      className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 border border-border text-sage hover:text-ink hover:border-ink/30 transition-colors"
-                    >
-                      <Settings className="w-3 h-3" /> CUSTOMISE
-                    </button>
-                    {showStatsCustomize && (
-                      <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg p-3 z-30 w-52">
-                        <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
-                        {allStats.map(s => (
-                          <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
-                            <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
-                              setHiddenStats(prev => {
-                                const next = new Set(prev);
-                                if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
-                                localStorage.setItem('vfhq_hidden_stats', JSON.stringify([...next]));
-                                return next;
-                              });
-                            }} className="w-3.5 h-3.5 accent-forest" />
-                            <span className="font-dm text-xs text-ink">{s.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <Popover open={showStatsCustomize} onOpenChange={setShowStatsCustomize}>
+                    <PopoverTrigger asChild>
+                      <button
+                        className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 border border-border text-sage hover:text-ink hover:border-ink/30 transition-colors"
+                      >
+                        <Settings className="w-3 h-3" /> CUSTOMISE
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" sideOffset={4} className="bg-white border border-border shadow-lg p-3 w-52">
+                      <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
+                      {allStats.map(s => (
+                        <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
+                          <input type="checkbox" checked={!hiddenStats.has(s.id)} onChange={() => {
+                            setHiddenStats(prev => {
+                              const next = new Set(prev);
+                              if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                              localStorage.setItem('vfhq_hidden_stats', JSON.stringify([...next]));
+                              return next;
+                            });
+                          }} className="w-3.5 h-3.5 accent-forest" />
+                          <span className="font-dm text-xs text-ink">{s.label}</span>
+                        </label>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
                   <button
                     onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
                     className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 bg-forest text-cream hover:bg-forest-dark transition-colors">
@@ -3027,6 +3026,8 @@ export default function Dashboard() {
               <div className="mt-4 border border-gold/20 bg-white overflow-hidden">
                 <button
                   onClick={() => setSpendSectionOpen(v => !v)}
+                  aria-expanded={spendSectionOpen}
+                  aria-controls="record-actual-spend-content"
                   className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-linen/40 transition-colors"
                 >
                   <div className="flex items-center gap-2">
@@ -3036,7 +3037,7 @@ export default function Dashboard() {
                   <ChevronDown className={`w-4 h-4 text-ink/65 transition-transform duration-200 ${spendSectionOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {spendSectionOpen && (
-                  <div className="border-t border-gold/20">
+                  <div id="record-actual-spend-content" className="border-t border-gold/20">
                     <PostEventSpendPrompt />
                   </div>
                 )}
