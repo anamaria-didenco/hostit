@@ -8,6 +8,7 @@ import { CheckCircle, MapPin, Phone, Mail, Clock, Calendar as CalendarIcon, Chev
 import { trpc } from "@/lib/trpc";
 import { combineLocalDateTime } from "@/lib/dateTime";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const EVENT_TYPES = [
   "Wedding Reception", "Corporate Dinner", "Birthday Celebration",
@@ -93,7 +94,12 @@ function DatePickerField({ id, value, onChange, min, disabled, ariaInvalid, aria
   ariaInvalid?: boolean; ariaDescribedby?: string; inputClass: string; accentColor: string; accentTextColor: string;
 }) {
   const [open, setOpen] = useState(false);
-  const parsed = value ? new Date(value + 'T00:00:00') : null;
+  // A prefill param only has to look date-shaped (see prefillDate's regex) to
+  // reach here — "2026-13-01" passes that check but parses to Invalid Date.
+  // Guard it: an unguarded NaN year/month below turns into a negative or NaN
+  // mondayOffset, and Array(NaN) throws, blanking the whole embed.
+  const parsedRaw = value ? new Date(value + 'T00:00:00') : null;
+  const parsed = parsedRaw && !isNaN(parsedRaw.getTime()) ? parsedRaw : null;
   const [viewDate, setViewDate] = useState<Date>(parsed ?? new Date());
   useEffect(() => { if (parsed) setViewDate(parsed); }, [value]);
 
@@ -112,7 +118,7 @@ function DatePickerField({ id, value, onChange, min, disabled, ariaInvalid, aria
       <PopoverTrigger asChild>
         <button type="button" id={id} disabled={disabled}
           aria-haspopup="dialog" aria-invalid={ariaInvalid} aria-describedby={ariaDescribedby}
-          className={`${inputClass} flex items-center justify-between text-left disabled:opacity-50 disabled:cursor-not-allowed`}>
+          className={cn("h-9 w-full min-w-0 px-3 py-1", inputClass, "flex items-center justify-between text-left disabled:opacity-50 disabled:cursor-not-allowed")}>
           <span className={value ? '' : 'text-muted-foreground'}>{value ? formatDateNZ(value) : 'Select a date'}</span>
           <CalendarIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
         </button>
@@ -162,7 +168,7 @@ function TimePickerField({ id, value, onChange, ariaInvalid, ariaDescribedby, in
       <PopoverTrigger asChild>
         <button type="button" id={id}
           aria-haspopup="dialog" aria-invalid={ariaInvalid} aria-describedby={ariaDescribedby}
-          className={`${inputClass} flex items-center justify-between text-left`}>
+          className={cn("h-9 w-full min-w-0 px-3 py-1", inputClass, "flex items-center justify-between text-left")}>
           <span className={value ? '' : 'text-muted-foreground'}>{value ? formatTime12h(value) : 'Select a time'}</span>
           <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
         </button>
@@ -175,6 +181,15 @@ function TimePickerField({ id, value, onChange, ariaInvalid, ariaDescribedby, in
             {formatTime12h(t)}
           </button>
         ))}
+        {/* The list only offers half-hour steps — an exact time (e.g. 7:15)
+            still needs a way in. A directly-clicked native time input opens
+            fine even in a cross-origin embed; it's only a *programmatic*
+            showPicker() call that a cross-origin iframe blocks. */}
+        <div className="border-t border-gray-200 mt-1 pt-1 px-1">
+          <input type="time" value={value} aria-label="Enter an exact time"
+            onChange={e => { if (e.target.value) { onChange(e.target.value); setOpen(false); } }}
+            className="w-full text-xs border border-gray-200 rounded px-1.5 py-1" />
+        </div>
       </PopoverContent>
     </Popover>
   );
