@@ -3,10 +3,12 @@ import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, MapPin, Phone, Mail, Clock } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { CheckCircle, MapPin, Phone, Mail, Clock, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { combineLocalDateTime } from "@/lib/dateTime";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const EVENT_TYPES = [
   "Wedding Reception", "Corporate Dinner", "Birthday Celebration",
@@ -66,6 +68,131 @@ function fuzzyMatchOption(raw: string | null, options: ReadonlyArray<{ value: st
   if (!raw) return undefined;
   const target = normLoose(raw);
   return options.find(o => normLoose(o.value) === target || normLoose(o.label) === target)?.value;
+}
+
+/* ── Custom date/time pickers ──────────────────────────────────────────
+   Native <input type="date">/<input type="time"> only open their picker
+   from the tiny calendar/clock glyph — clicking the rest of the bar just
+   places a text cursor. Worse, showPicker() (which can open it from
+   anywhere) throws a SecurityError when called from a cross-origin
+   iframe — exactly the embed widget's real deployment, so that "fix"
+   silently did nothing there. A real popover, built from our own click
+   handler, works everywhere: full page and embedded alike. ──────────── */
+function formatDateNZ(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function formatTime12h(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function DatePickerField({ id, value, onChange, min, disabled, ariaInvalid, ariaDescribedby, inputClass, accentColor, accentTextColor }: {
+  id: string; value: string; onChange: (v: string) => void; min?: string; disabled?: boolean;
+  ariaInvalid?: boolean; ariaDescribedby?: string; inputClass: string; accentColor: string; accentTextColor: string;
+}) {
+  const [open, setOpen] = useState(false);
+  // A prefill param only has to look date-shaped (see prefillDate's regex) to
+  // reach here — "2026-13-01" passes that check but parses to Invalid Date.
+  // Guard it: an unguarded NaN year/month below turns into a negative or NaN
+  // mondayOffset, and Array(NaN) throws, blanking the whole embed.
+  const parsedRaw = value ? new Date(value + 'T00:00:00') : null;
+  const parsed = parsedRaw && !isNaN(parsedRaw.getTime()) ? parsedRaw : null;
+  const [viewDate, setViewDate] = useState<Date>(parsed ?? new Date());
+  useEffect(() => { if (parsed) setViewDate(parsed); }, [value]);
+
+  const minDate = min ? new Date(min + 'T00:00:00') : null;
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const mondayOffset = (firstDay + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = Array(mondayOffset).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => i + 1));
+  while (cells.length % 7 !== 0) cells.push(null);
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  return (
+    <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" id={id} disabled={disabled}
+          aria-haspopup="dialog" aria-invalid={ariaInvalid} aria-describedby={ariaDescribedby}
+          className={cn("h-9 w-full min-w-0 px-3 py-1", inputClass, "flex items-center justify-between text-left disabled:opacity-50 disabled:cursor-not-allowed")}>
+          <span className={value ? '' : 'text-muted-foreground'}>{value ? formatDateNZ(value) : 'Select a date'}</span>
+          <CalendarIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} aria-label="Previous month" className="p-1 hover:bg-gray-100 rounded"><ChevronLeft className="w-4 h-4" /></button>
+          <span className="text-sm font-semibold">{viewDate.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })}</span>
+          <button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} aria-label="Next month" className="p-1 hover:bg-gray-100 rounded"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+        <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-gray-400 mb-1">
+          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i}>{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-0.5">
+          {cells.map((day, i) => {
+            if (day == null) return <div key={i} />;
+            const cellDate = new Date(year, month, day);
+            const isPast = minDate ? cellDate < minDate : false;
+            const cellIso = fmt(cellDate);
+            const isSelected = value === cellIso;
+            return (
+              <button key={i} type="button" disabled={isPast}
+                onClick={() => { onChange(cellIso); setOpen(false); }}
+                aria-current={isSelected ? 'date' : undefined}
+                className={`text-xs py-1.5 rounded transition-colors ${isPast ? 'text-gray-300 cursor-not-allowed' : isSelected ? 'font-semibold' : 'hover:bg-gray-100'}`}
+                style={isSelected ? { backgroundColor: accentColor, color: accentTextColor } : undefined}>
+                {day}
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function TimePickerField({ id, value, onChange, ariaInvalid, ariaDescribedby, inputClass, accentColor, accentTextColor }: {
+  id: string; value: string; onChange: (v: string) => void;
+  ariaInvalid?: boolean; ariaDescribedby?: string; inputClass: string; accentColor: string; accentTextColor: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const times: string[] = [];
+  for (let h = 0; h < 24; h++) for (let m = 0; m < 60; m += 30) times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" id={id}
+          aria-haspopup="dialog" aria-invalid={ariaInvalid} aria-describedby={ariaDescribedby}
+          className={cn("h-9 w-full min-w-0 px-3 py-1", inputClass, "flex items-center justify-between text-left")}>
+          <span className={value ? '' : 'text-muted-foreground'}>{value ? formatTime12h(value) : 'Select a time'}</span>
+          <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-36 p-1 max-h-64 overflow-y-auto">
+        {times.map(t => (
+          <button key={t} type="button" onClick={() => { onChange(t); setOpen(false); }}
+            className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-gray-100"
+            style={value === t ? { backgroundColor: accentColor, color: accentTextColor } : undefined}>
+            {formatTime12h(t)}
+          </button>
+        ))}
+        {/* The list only offers half-hour steps — an exact time (e.g. 7:15)
+            still needs a way in. A directly-clicked native time input opens
+            fine even in a cross-origin embed; it's only a *programmatic*
+            showPicker() call that a cross-origin iframe blocks. */}
+        <div className="border-t border-gray-200 mt-1 pt-1 px-1">
+          <input type="time" value={value} aria-label="Enter an exact time"
+            onChange={e => { if (e.target.value) { onChange(e.target.value); setOpen(false); } }}
+            className="w-full text-xs border border-gray-200 rounded px-1.5 py-1" />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export default function LeadForm() {
@@ -449,35 +576,23 @@ export default function LeadForm() {
         </>
       );
     }
-    const input = (
-      <Input
-        id={controlId}
-        type={field.type}
-        value={value}
-        onChange={field.id === 'eventDate' ? (e) => { setNoDateYet(false); onChange(e as any); } : onChange}
-        onClick={(field.type === 'date' || field.type === 'time') ? (e) => {
-          // Native date/time inputs only open their picker when the tiny
-          // calendar/clock glyph is clicked exactly — clicking anywhere else
-          // on the bar just places a text cursor. Open it from anywhere in
-          // the field instead; showPicker() is a no-op if it's already open.
-          try { (e.currentTarget as HTMLInputElement).showPicker?.(); } catch { /* unsupported browser — native click-to-type still works */ }
-        } : undefined}
-        required={field.required && !(field.id === 'eventDate' && noDateYet)}
-        disabled={field.id === 'eventDate' && noDateYet}
-        autoComplete={!isCustom ? AUTOCOMPLETE[field.id] : undefined}
-        aria-invalid={hasError}
-        aria-describedby={describedBy}
-        min={field.type === 'date' ? new Date().toISOString().split("T")[0] : undefined}
-        placeholder={field.type === 'date' ? undefined : field.id === 'phone' ? '+64 21 000 0000' : field.id === 'guestCount' ? 'e.g. 50' : field.id === 'budget' ? 'e.g. 5000' : ''}
-        className={`${inputClass}${field.id === 'eventTime' ? ' pr-7 vf-time-input' : ''}`}
-      />
-    );
     // The date gets an explicit "no date yet" answer: clients without one were
     // guessing a date or walking away. Stored on the lead as dateFlexible.
     if (field.id === 'eventDate') {
       return (
         <div>
-          {input}
+          <DatePickerField
+            id={controlId}
+            value={value}
+            onChange={(v) => { setNoDateYet(false); setForm(p => ({ ...p, eventDate: v })); }}
+            min={new Date().toISOString().split("T")[0]}
+            disabled={noDateYet}
+            ariaInvalid={hasError}
+            ariaDescribedby={describedBy}
+            inputClass={inputClass}
+            accentColor={formButtonColor}
+            accentTextColor={textOnButton}
+          />
           <label className="flex items-center gap-1.5 mt-1.5 min-h-[24px] cursor-pointer select-none text-xs text-gray-600">
             <input type="checkbox" checked={noDateYet}
               onChange={e => { setNoDateYet(e.target.checked); if (e.target.checked) setForm(p => ({ ...p, eventDate: '', eventTime: '' })); }}
@@ -488,22 +603,37 @@ export default function LeadForm() {
         </div>
       );
     }
-    // Native <input type="time"> renders as a plain, unlabelled box on
-    // iOS Safari — no clock icon, no hint it's tappable — unlike Chrome's
-    // built-in picker glyph. A decorative icon (pointer-events-none, so it
-    // never steals the tap from the native control underneath) makes it
-    // read as a picker everywhere.
     if (field.id === 'eventTime') {
       return (
         <>
-          <div className="relative">
-            {input}
-            <Clock className="w-3.5 h-3.5 text-gray-400 absolute top-1/2 -translate-y-1/2 right-2.5 pointer-events-none" />
-          </div>
+          <TimePickerField
+            id={controlId}
+            value={value}
+            onChange={(v) => setForm(p => ({ ...p, eventTime: v }))}
+            ariaInvalid={hasError}
+            ariaDescribedby={describedBy}
+            inputClass={inputClass}
+            accentColor={formButtonColor}
+            accentTextColor={textOnButton}
+          />
           <FieldError field={field} isCustom={isCustom} />
         </>
       );
     }
+    const input = (
+      <Input
+        id={controlId}
+        type={field.type}
+        value={value}
+        onChange={onChange}
+        required={field.required}
+        autoComplete={!isCustom ? AUTOCOMPLETE[field.id] : undefined}
+        aria-invalid={hasError}
+        aria-describedby={describedBy}
+        placeholder={field.id === 'phone' ? '+64 21 000 0000' : ''}
+        className={inputClass}
+      />
+    );
     return <>{input}<FieldError field={field} isCustom={isCustom} /></>;
   }
 
