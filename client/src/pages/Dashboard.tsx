@@ -2999,7 +2999,7 @@ export default function Dashboard() {
                   <div className="dante-card overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
                       <SectionHead title="New Enquiries" meta={newEnquiries.length > 0 ? `${newEnquiries.length} new` : undefined} className="flex-1" />
-                      <button onClick={() => { setLeadsSubTab('new'); setTab('enquiries'); }} aria-label="View all new enquiries" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
+                      <button onClick={() => { setLeadStatusFilter([]); setLeadsSubTab('new'); setTab('enquiries'); }} aria-label="View all new enquiries" className="shrink-0 font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary hover:text-primary/80 transition-colors">View all</button>
                     </div>
                     {newEnquiries.length === 0 ? (
                       <div className="flex flex-col items-center justify-center p-6 text-center">
@@ -3009,7 +3009,7 @@ export default function Dashboard() {
                     ) : (
                       <div className="divide-y divide-border max-h-56 overflow-auto">
                         {newEnquiries.slice(0, 6).map((lead: any) => (
-                          <button key={lead.id} onClick={() => { selectLead(lead); setLeadsSubTab('new'); setTab('enquiries'); }}
+                          <button key={lead.id} onClick={() => { selectLead(lead); setLeadStatusFilter([]); setLeadsSubTab('new'); setTab('enquiries'); }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-linen transition-colors text-left">
                             <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getStatusInfo(lead.status).swatch }} aria-hidden="true" />
                             <div className="flex-1 min-w-0">
@@ -3087,12 +3087,12 @@ export default function Dashboard() {
                   {/* Sub-tabs or heading */}
                   {newEnquiries.length > 0 ? (
                     <div className="flex bg-muted rounded-xl p-0.5 gap-0.5">
-                      <button onClick={() => { setLeadsSubTab("new"); setSelectedLead(null); }}
+                      <button onClick={() => { setLeadStatusFilter([]); setLeadsSubTab("new"); setSelectedLead(null); }}
                         className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`}>
                         NEW
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
                       </button>
-                      <button onClick={() => { setLeadsSubTab("all"); setSelectedLead(null); }}
+                      <button onClick={() => { setLeadStatusFilter([]); setLeadsSubTab("all"); setSelectedLead(null); }}
                         className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`}>
                         ALL EVENTS
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "all" ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
