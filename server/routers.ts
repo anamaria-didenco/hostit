@@ -6303,17 +6303,30 @@ Return ONLY valid JSON.`;
           await db.update(checklistInstances).set({ shareToken }).where(eq(checklistInstances.id, checklistInstance.id));
           checklistInstance = { ...checklistInstance, shareToken };
         }
-        // Fetch contact info from lead if linked
-        let contactName: string | null = null;
-        let contactEmail: string | null = null;
-        let contactPhone: string | null = null;
-        if (runsheet.leadId) {
+        // Contact info: the runsheet's own saved value wins (an edit made in
+        // the Runsheet Builder must show up here, not the original lead's
+        // stale details), then the linked lead, then the linked booking —
+        // a booking-only runsheet (no leadId) has no lead to fall back to,
+        // and previously showed no contact card at all.
+        let contactName: string | null = (runsheet as any).contactName ?? null;
+        let contactEmail: string | null = (runsheet as any).contactEmail ?? null;
+        let contactPhone: string | null = (runsheet as any).contactPhone ?? null;
+        if ((contactName == null || contactEmail == null || contactPhone == null) && runsheet.leadId) {
           const { leads } = await import('../drizzle/schema');
           const [lead] = await db.select().from(leads).where(eq(leads.id, runsheet.leadId)).limit(1);
           if (lead) {
-            contactName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
-            contactEmail = lead.email;
-            contactPhone = lead.phone ?? null;
+            if (contactName == null) contactName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
+            if (contactEmail == null) contactEmail = lead.email;
+            if (contactPhone == null) contactPhone = lead.phone ?? null;
+          }
+        }
+        // Bookings have no phone column, so only name/email can fall back here.
+        if ((contactName == null || contactEmail == null) && runsheet.bookingId) {
+          const { bookings } = await import('../drizzle/schema');
+          const [linkedBooking] = await db.select().from(bookings).where(eq(bookings.id, runsheet.bookingId)).limit(1);
+          if (linkedBooking) {
+            if (contactName == null) contactName = [linkedBooking.firstName, linkedBooking.lastName].filter(Boolean).join(' ');
+            if (contactEmail == null) contactEmail = linkedBooking.email;
           }
         }
         // Fetch payment records if runsheet is linked to a booking

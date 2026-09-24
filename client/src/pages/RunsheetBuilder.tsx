@@ -1745,6 +1745,21 @@ export default function RunsheetBuilder() {
     }
   }, [booking, sheetId]);
 
+  // Booking-only fallback for an EXISTING runsheet's contact fields (opened
+  // from "My Runsheets" or Event Detail, not the fresh-from-booking path
+  // above). A runsheet linked only by bookingId (no leadId) has no lead to
+  // pull from, and predates the contactName/contactEmail/contactPhone
+  // columns for any runsheet created before this change — without this,
+  // those always showed blank instead of the booking's own contact. Reuses
+  // `billingBooking` (keyed off effectiveBookingId, not gated on !sheetId)
+  // rather than adding another query.
+  useEffect(() => {
+    if (!sheetId || effectiveLeadId || !billingBooking) return;
+    const ex = (existing ?? {}) as any;
+    if (ex.contactName == null) setContactName(`${billingBooking.firstName} ${billingBooking.lastName ?? ""}`.trim());
+    if (ex.contactEmail == null) setContactEmail(billingBooking.email ?? "");
+  }, [sheetId, effectiveLeadId, billingBooking, existing]);
+
   // Auto-populate F&B from proposal quote items
   const proposalFnbSeeded = React.useRef(false);
   useEffect(() => {
