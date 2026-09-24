@@ -322,13 +322,20 @@ export async function getDashboardStats(ownerId: number) {
   if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0, upcomingEvents: 0, overdueTasks: 0, conversionRate: 0, totalRevenueAllTime: 0, pendingPayments: 0 };
   const { tasks, bookings: bookingsTable, payments } = await import('../drizzle/schema');
   const allLeads = await db.select().from(leads).where(and(eq(leads.ownerId, ownerId), ne(leads.source, 'healthcheck')));
-  // Active enquiries: any lead not yet booked/lost/cancelled
-  const newLeads = allLeads.filter(l => !['booked', 'lost', 'cancelled'].includes(l.status ?? '')).length;
+  // The pipeline's "won" statuses. 'booked' was renamed to 'confirmed' app-wide
+  // (and 'finished' follows it), but these tiles still tested only the retired
+  // name — so every confirmed event kept counting as an active enquiry, the
+  // conversion rate was pinned at 0% and confirmed leads never appeared in
+  // "upcoming events". Keep 'booked' for any historical rows.
+  const WON = ['booked', 'confirmed', 'finished'];
+  const CLOSED = [...WON, 'lost', 'cancelled'];
+  // Active enquiries: any lead not yet won/lost/cancelled
+  const newLeads = allLeads.filter(l => !CLOSED.includes(l.status ?? '')).length;
   const now = new Date();
   const overdueFollowUps = allLeads.filter(l =>
     l.followUpDate &&
     new Date(l.followUpDate) <= now &&
-    !['booked', 'lost', 'cancelled'].includes(l.status ?? '')
+    !CLOSED.includes(l.status ?? '')
   ).length;
   const allProposals = await db.select().from(proposals).where(eq(proposals.ownerId, ownerId));
   const proposalsSent = allProposals.filter(p => ['sent', 'viewed', 'accepted'].includes(p.status)).length;
@@ -337,14 +344,20 @@ export async function getDashboardStats(ownerId: number) {
   // Upcoming events (next 30 days) — bookings table + booked leads
   const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const allBookings = await db.select().from(bookingsTable).where(eq(bookingsTable.ownerId, ownerId));
-  const upcomingFromBookings = allBookings.filter(b => b.eventDate && new Date(b.eventDate) >= now && new Date(b.eventDate) <= in30 && b.status !== 'cancelled').length;
-  const upcomingFromLeads = allLeads.filter(l => l.status === 'booked' && l.eventDate && new Date(l.eventDate) >= now && new Date(l.eventDate) <= in30).length;
-  const upcomingEvents = upcomingFromBookings + upcomingFromLeads;
+  const upcomingBookings = allBookings.filter(b => b.eventDate && new Date(b.eventDate) >= now && new Date(b.eventDate) <= in30 && b.status !== 'cancelled');
+  // A confirmed lead normally has a bookings row too (ensureForLead) — don't
+  // count the same event twice.
+  const bookedLeadIds = new Set(upcomingBookings.map(b => b.leadId).filter((id): id is number => id != null));
+  const upcomingFromLeads = allLeads.filter(l =>
+    WON.includes(l.status ?? '') && !bookedLeadIds.has(l.id) &&
+    l.eventDate && new Date(l.eventDate) >= now && new Date(l.eventDate) <= in30
+  ).length;
+  const upcomingEvents = upcomingBookings.length + upcomingFromLeads;
   // Overdue tasks
   const allTasks = await db.select().from(tasks).where(eq(tasks.ownerId, ownerId));
   const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && t.dueDate < now.getTime()).length;
   // Conversion rate (leads -> booked)
-  const bookedLeads = allLeads.filter(l => l.status === 'booked').length;
+  const bookedLeads = allLeads.filter(l => WON.includes(l.status ?? '')).length;
   const conversionRate = allLeads.length > 0 ? Math.round((bookedLeads / allLeads.length) * 100) : 0;
   // Total revenue all time
   const totalRevenueAllTime = allBookings.filter(b => b.status === 'confirmed' || b.status === 'finished').reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);

@@ -1061,7 +1061,8 @@ export const appRouter = router({
           ne(leads.source, 'healthcheck'),
           isNotNull(leads.followUpDate),
           lte(leads.followUpDate, now),
-          notInArray(leads.status, ['booked', 'lost', 'cancelled']),
+          // 'booked' was renamed 'confirmed'; keep the old value for legacy rows.
+          notInArray(leads.status, ['booked', 'confirmed', 'finished', 'lost', 'cancelled']),
         )
       ).orderBy(leads.followUpDate);
     }),
@@ -3616,6 +3617,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         venueArea: z.string().optional().nullable(),
         eventStartTime: z.string().optional().nullable(),
         eventEndTime: z.string().optional().nullable(),
+        contactName: z.string().max(255).optional().nullable(),
+        contactEmail: z.string().max(320).optional().nullable(),
+        contactPhone: z.string().max(50).optional().nullable(),
         guestCount: z.number().optional(),
         eventType: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
@@ -3663,6 +3667,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           venueArea: input.venueArea ?? null,
           eventStartTime: input.eventStartTime ?? null,
           eventEndTime: input.eventEndTime ?? null,
+          contactName: input.contactName ?? null,
+          contactEmail: input.contactEmail ?? null,
+          contactPhone: input.contactPhone ?? null,
           guestCount: input.guestCount ?? null,
           eventType: input.eventType ?? null,
           notes: input.notes ?? null,
@@ -3713,6 +3720,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         venueArea: z.string().optional().nullable(),
         eventStartTime: z.string().optional().nullable(),
         eventEndTime: z.string().optional().nullable(),
+        contactName: z.string().max(255).optional().nullable(),
+        contactEmail: z.string().max(320).optional().nullable(),
+        contactPhone: z.string().max(50).optional().nullable(),
         guestCount: z.number().optional(),
         eventType: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
@@ -3744,6 +3754,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.venueArea !== undefined) updateData.venueArea = fields.venueArea;
         if (fields.eventStartTime !== undefined) updateData.eventStartTime = fields.eventStartTime;
         if (fields.eventEndTime !== undefined) updateData.eventEndTime = fields.eventEndTime;
+        if (fields.contactName !== undefined) updateData.contactName = fields.contactName;
+        if (fields.contactEmail !== undefined) updateData.contactEmail = fields.contactEmail;
+        if (fields.contactPhone !== undefined) updateData.contactPhone = fields.contactPhone;
         if (fields.guestCount !== undefined) updateData.guestCount = fields.guestCount;
         if (fields.eventType !== undefined) updateData.eventType = fields.eventType;
         if (fields.notes !== undefined) updateData.notes = fields.notes;

@@ -1370,7 +1370,11 @@ export default function RunsheetBuilder() {
 
   // Queries
   const { data: existing } = trpc.runsheets.get.useQuery({ id: sheetId! }, { enabled: !!sheetId });
-  const { data: lead } = trpc.leads.get.useQuery({ id: leadId! }, { enabled: !!leadId });
+  // A runsheet opened from the "My runsheets" list (or a bookmark) has no
+  // leadId in the URL but usually has one on the record — resolve the lead
+  // from either so the client contact still prefills.
+  const effectiveLeadId: number | undefined = leadId ?? (existing as any)?.leadId ?? undefined;
+  const { data: lead } = trpc.leads.get.useQuery({ id: effectiveLeadId! }, { enabled: !!effectiveLeadId });
   const { data: leadProposals } = trpc.proposals.byLead.useQuery(
     { leadId: leadId! },
     { enabled: !!leadId }
@@ -1397,8 +1401,15 @@ export default function RunsheetBuilder() {
     { bookingId: bookingId! },
     { enabled: !!bookingId && !sheetId }
   );
+  // Both redirects below must also check the id param itself. A disabled
+  // useQuery still reads the cache, and react-query keys `{ leadId: undefined }`
+  // identically to `{}` — so on the plain /runsheet home page the disabled
+  // "runsheets for this lead" query picked up the ALL-runsheets result and
+  // bounced every visit straight into the first runsheet (as
+  // `?id=…&leadId=undefined`). The "My runsheets" list was unreachable.
   useEffect(() => {
-    if (!sheetId && bookingRunsheets && bookingRunsheets.length > 0) {
+    if (!bookingId || sheetId) return;
+    if (bookingRunsheets && bookingRunsheets.length > 0) {
       const existingId = bookingRunsheets[0].id;
       // Set state directly so the existing-runsheet query fires immediately —
       // wouter's useLocation only tracks pathname, so navigate() alone won't
@@ -1406,20 +1417,20 @@ export default function RunsheetBuilder() {
       setSheetId(existingId);
       navigate(`/runsheet?id=${existingId}&bookingId=${bookingId}`, { replace: true });
     }
-  }, [bookingRunsheets, sheetId]);
+  }, [bookingRunsheets, sheetId, bookingId]);
   // If this lead already has a runsheet, redirect to edit it instead of creating a new one
   const { data: leadRunsheets } = trpc.runsheets.list.useQuery(
     { leadId: leadId! },
     { enabled: !!leadId && !sheetId }
   );
   useEffect(() => {
-    if (!sheetId && leadRunsheets && leadRunsheets.length > 0) {
+    if (!leadId || sheetId) return;
+    if (leadRunsheets && leadRunsheets.length > 0) {
       const existingId = leadRunsheets[0].id;
-      const qs = [`id=${existingId}`, `leadId=${leadId}`].join('&');
       setSheetId(existingId);
-      navigate(`/runsheet?${qs}`, { replace: true });
+      navigate(`/runsheet?id=${existingId}&leadId=${leadId}`, { replace: true });
     }
-  }, [leadRunsheets, sheetId]);
+  }, [leadRunsheets, sheetId, leadId]);
 
   // All runsheets (for home screen when no specific runsheet is selected)
   const { data: allRunsheets } = trpc.runsheets.list.useQuery(
@@ -1657,6 +1668,11 @@ export default function RunsheetBuilder() {
       setVenueArea((existing as any).venueArea ?? "");
       setEventStartTime((existing as any).eventStartTime ?? "");
       setEventEndTime((existing as any).eventEndTime ?? "");
+      // Null means "never edited here" — leave whatever the lead/booking
+      // prefill supplied rather than blanking it.
+      if ((existing as any).contactName != null) setContactName((existing as any).contactName);
+      if ((existing as any).contactEmail != null) setContactEmail((existing as any).contactEmail);
+      if ((existing as any).contactPhone != null) setContactPhone((existing as any).contactPhone);
       const dd = (existing as any).drinksData;
       if (dd) {
         if (dd.barOption) setRsBarOption(dd.barOption);
@@ -1684,10 +1700,12 @@ export default function RunsheetBuilder() {
   const { data: spacesForPrefill } = trpc.spaces.list.useQuery(undefined, { enabled: !!leadId });
   useEffect(() => {
     if (!lead) return;
-    // Always restore contact info from lead (contact fields are not persisted in DB)
-    setContactName(`${lead.firstName} ${lead.lastName ?? ""}`.trim());
-    setContactEmail(lead.email ?? "");
-    setContactPhone(lead.phone ?? "");
+    // Prefill contact info from the lead unless this runsheet has its own
+    // saved value (an edit made in the builder must survive a reload).
+    const ex = (existing ?? {}) as any;
+    if (!sheetId || ex.contactName == null) setContactName(`${lead.firstName} ${lead.lastName ?? ""}`.trim());
+    if (!sheetId || ex.contactEmail == null) setContactEmail(lead.email ?? "");
+    if (!sheetId || ex.contactPhone == null) setContactPhone(lead.phone ?? "");
     // Only seed main fields if we're creating fresh (no existing runsheet)
     if (!sheetId) {
       setTitle(`${lead.firstName} ${lead.lastName ?? ""} — ${lead.eventType ?? "Event"}`);
@@ -1703,7 +1721,7 @@ export default function RunsheetBuilder() {
       const msgParts = [lead.message, (lead as any).internalNotes].filter(Boolean);
       if (msgParts.length) setNotes(msgParts.join("\n\n"));
     }
-  }, [lead, sheetId, spacesForPrefill]);
+  }, [lead, sheetId, spacesForPrefill, existing]);
 
   // Auto-populate from linked proposal
   useEffect(() => {
@@ -1902,6 +1920,9 @@ export default function RunsheetBuilder() {
         venueArea: venueArea || null,
         eventStartTime: eventStartTime || null,
         eventEndTime: eventEndTime || null,
+        contactName: contactName || null,
+        contactEmail: contactEmail || null,
+        contactPhone: contactPhone || null,
         guestCount: guestCount ? Number(guestCount) : undefined,
         eventType: eventType || null,
         venueSetup: venueSetup || null,
@@ -1917,7 +1938,7 @@ export default function RunsheetBuilder() {
       } as any, { onSuccess: () => markClean('doc') });
     }, 1000);
     return () => clearTimeout(t);
-  }, [sheetId, notes, footerText, kitchenNotes, paymentNotes, paymentInstructions, spaceName, venueArea, eventStartTime, eventEndTime, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices, showDrinkPrices]);
+  }, [sheetId, notes, footerText, kitchenNotes, paymentNotes, paymentInstructions, spaceName, venueArea, eventStartTime, eventEndTime, contactName, contactEmail, contactPhone, guestCount, eventType, venueSetup, setupSummary, gstInclusive, costItems, linkedProposalId, linkedFloorPlanId, rsBarOption, rsBarNotes, rsTabAmount, rsSelectedDrinks, rsCustomDrinks, rsDrinkTypes, rsDrinkPrices, showDrinkPrices]);
 
   // Auto-save FOOD items (debounced) — silent (no toast, no refetch) so it
   // doesn't interrupt typing. Gated on fnbReadyRef so we never persist an empty
@@ -2046,6 +2067,9 @@ export default function RunsheetBuilder() {
           venueArea: venueArea || null,
           eventStartTime: eventStartTime || undefined,
           eventEndTime: eventEndTime || undefined,
+          contactName: contactName || undefined,
+          contactEmail: contactEmail || undefined,
+          contactPhone: contactPhone || undefined,
           guestCount: guestCount ? Number(guestCount) : undefined,
           eventType: eventType || null,
           notes: notes || null,
@@ -2084,6 +2108,9 @@ export default function RunsheetBuilder() {
           venueArea: venueArea || null,
           eventStartTime: eventStartTime || null,
           eventEndTime: eventEndTime || null,
+          contactName: contactName || null,
+          contactEmail: contactEmail || null,
+          contactPhone: contactPhone || null,
           guestCount: guestCount ? Number(guestCount) : undefined,
           eventType: eventType || null,
           notes: notes || null,
