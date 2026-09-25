@@ -457,6 +457,13 @@ export const runsheets = pgTable("runsheets", {
   venueArea: varchar("venueArea", { length: 50 }),
   eventStartTime: varchar("eventStartTime", { length: 10 }),
   eventEndTime: varchar("eventEndTime", { length: 10 }),
+  // Client contact shown in the builder's Event Details. These were UI-only
+  // state: the inputs were editable and the header said "All changes saved",
+  // but nothing was written anywhere and a reload emptied them. Null = fall
+  // back to the linked lead / booking's contact.
+  contactName: varchar("contactName", { length: 255 }),
+  contactEmail: varchar("contactEmail", { length: 320 }),
+  contactPhone: varchar("contactPhone", { length: 50 }),
   publicToken: varchar("publicToken", { length: 64 }).unique(),
   attachments: json("attachments").$type<{ id: string; name: string; url: string; size: number; contentType: string; uploadedAt: number }[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

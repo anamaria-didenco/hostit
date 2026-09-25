@@ -63,6 +63,14 @@ export default function StaffPortal() {
   // content actually changed — so we reload the BEO iframe only on real edits.
   const [beoNonce, setBeoNonce] = useState(0);
   useEffect(() => { setBeoNonce(n => n + 1); }, [data]);
+  // Nothing on screen told a screen-reader user that the manager just edited
+  // the runsheet mid-shift — the content silently swapped underneath them.
+  // beoNonce only advances on a REAL change (see above), so skip the initial
+  // mount (nonce 0 → 1) and announce every edit after that.
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  useEffect(() => {
+    if (beoNonce > 1) setLiveAnnouncement("Runsheet updated");
+  }, [beoNonce]);
 
   const checklist: any = (data as any)?.checklist ?? null;
   const [localItems, setLocalItems] = useState<any[]>([]);
@@ -86,12 +94,18 @@ export default function StaffPortal() {
     });
   }, [checklist]);
 
+  // Which single item's toggle is in flight — used only to disable that one
+  // row's button. Previously every row shared `toggleItem.isPending`, so
+  // tapping one item froze every other item on the list for the round-trip.
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const toggleItem = trpc.checklists.toggleItemByToken.useMutation({
     onSuccess: () => {
       pendingToggles.current.clear();
+      setPendingItemId(null);
     },
     onError: () => {
       pendingToggles.current.clear();
+      setPendingItemId(null);
       if (checklist?.items) setLocalItems(checklist.items);
     },
   });
@@ -145,6 +159,7 @@ export default function StaffPortal() {
     if (!checklist?.shareToken) return;
     const nextChecked = !currentChecked;
     pendingToggles.current.add(itemId);
+    setPendingItemId(itemId);
     setLocalItems(prev => prev.map(i => i.id === itemId ? { ...i, checked: nextChecked } : i));
     toggleItem.mutate({ token: checklist.shareToken, itemId, checked: nextChecked });
   }
@@ -194,7 +209,7 @@ export default function StaffPortal() {
       <header className="bg-forest sticky top-0 z-10 shadow-md">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <p className="font-bebas tracking-[0.22em] text-white/60 text-[11px]">FUNCTION RUNSHEET · STAFF COPY</p>
+            <p className="font-bebas tracking-[0.22em] text-white/85 text-[11px]">FUNCTION RUNSHEET · STAFF COPY</p>
             <h1 className="font-serif text-white text-xl leading-tight">{runsheet.title}</h1>
           </div>
           <div className="flex items-center gap-2">
@@ -217,32 +232,44 @@ export default function StaffPortal() {
             </div>
           </div>
         </div>
-        {/* Tab bar */}
-        <div className="max-w-4xl mx-auto px-4 flex border-t border-white/10">
+        {/* Tab bar — a real tablist so a screen reader announces which of the
+            two views is showing, not just "button, button". */}
+        <div role="tablist" aria-label="Staff portal view" className="max-w-4xl mx-auto px-4 flex border-t border-white/10">
           <button
+            id="vf-tab-runsheet"
+            role="tab"
+            aria-selected={activePortalTab === 'runsheet'}
+            aria-controls="vf-tabpanel-runsheet"
             onClick={() => setActivePortalTab('runsheet')}
             className={`font-bebas tracking-widest text-sm px-5 py-2 transition-colors border-b-2 ${
               activePortalTab === 'runsheet'
                 ? 'text-white border-white'
-                : 'text-white/45 border-transparent hover:text-white/70'
+                : 'text-white/70 border-transparent hover:text-white/90'
             }`}
           >
             RUNSHEET
           </button>
           <button
+            id="vf-tab-checklist"
+            role="tab"
+            aria-selected={activePortalTab === 'checklist'}
+            aria-controls="vf-tabpanel-checklist"
             onClick={() => setActivePortalTab('checklist')}
             className={`font-bebas tracking-widest text-sm px-5 py-2 transition-colors border-b-2 flex items-center gap-2 ${
               activePortalTab === 'checklist'
                 ? 'text-white border-white'
-                : 'text-white/45 border-transparent hover:text-white/70'
+                : 'text-white/70 border-transparent hover:text-white/90'
             }`}
           >
             CHECKLIST
+            {/* Solid light background + dark text rather than translucent
+                white-on-white — the previous version measured 3.62:1
+                against the header's green, under the 4.5:1 minimum. */}
             {localItems.length > 0 && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-dm ${
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-dm font-semibold ${
                 checkedCount === localItems.length
-                  ? 'bg-green-400/30 text-green-200'
-                  : 'bg-white/20 text-white/80'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-white text-forest'
               }`}>
                 {checkedCount}/{localItems.length}
               </span>
@@ -252,6 +279,9 @@ export default function StaffPortal() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-5 space-y-4">
+        <div aria-live="polite" className="sr-only">{liveAnnouncement}</div>
+
+        <div id="vf-tabpanel-runsheet" role="tabpanel" aria-labelledby="vf-tab-runsheet" hidden={activePortalTab !== 'runsheet'} className={activePortalTab === 'runsheet' ? 'space-y-4' : undefined}>
 
         {/* Booking-backed runsheets render the REAL BEO document (same HTML the
             PDF is built from) so the live link mirrors the BEO 1:1. Lead-only
@@ -272,7 +302,7 @@ export default function StaffPortal() {
         <div className="bg-white border border-gold/30 shadow-sm">
           <div className="px-5 py-3 border-b-2 border-forest/70 flex items-center gap-2">
             <Calendar className="w-4 h-4 text-forest" />
-            <span className="font-bebas tracking-[0.2em] text-sm text-forest">EVENT DETAILS</span>
+            <h2 className="font-bebas tracking-[0.2em] text-sm text-forest">EVENT DETAILS</h2>
           </div>
           <div className="px-5 py-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -363,7 +393,7 @@ export default function StaffPortal() {
           <div className="bg-white border border-gold/30 shadow-sm">
             <div className="px-5 py-3 border-b-2 border-forest/70 flex items-center gap-2">
               <Building2 className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-[0.2em] text-sm text-forest">VENUE SETUP</span>
+              <h2 className="font-bebas tracking-[0.2em] text-sm text-forest">VENUE SETUP</h2>
             </div>
             <div className="px-5 py-4">
               <div className="font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.venueSetup }} />
@@ -376,7 +406,7 @@ export default function StaffPortal() {
           <div className="bg-white border border-gold/30 shadow-sm">
             <div className="px-5 py-3 border-b-2 border-forest/70 flex items-center gap-2">
               <ChefHat className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-[0.2em] text-sm text-forest">KITCHEN NOTES</span>
+              <h2 className="font-bebas tracking-[0.2em] text-sm text-forest">KITCHEN NOTES</h2>
             </div>
             <div className="px-5 py-4 font-dm text-sm text-ink/80 whitespace-pre-wrap">{(runsheet as any).kitchenNotes}</div>
           </div>
@@ -387,7 +417,7 @@ export default function StaffPortal() {
           <div className="bg-white border border-gold/30 shadow-sm">
             <div className="px-5 py-3 border-b-2 border-red-400/70 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-red-500" />
-              <span className="font-bebas tracking-[0.2em] text-sm text-red-600">⚠ DIETARY &amp; ALLERGIES</span>
+              <h2 className="font-bebas tracking-[0.2em] text-sm text-red-600">⚠ DIETARY &amp; ALLERGIES</h2>
             </div>
             <div className="px-5 py-4 flex flex-wrap gap-2">
               {runsheet.dietaries.map((d, i) => (
@@ -396,7 +426,10 @@ export default function StaffPortal() {
                   className="font-dm text-xs bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1.5"
                 >
                   <span className="font-semibold">{d.name}</span>
-                  <span className="mx-1 text-amber-500">×</span>
+                  {/* Purely visual separator — "Vegetarian × 3" reads fine
+                      without a screen reader announcing "times", and the
+                      light amber measured as an unresolved contrast case. */}
+                  <span aria-hidden="true" className="mx-1 text-amber-700">×</span>
                   <span>{d.count}</span>
                   {d.notes && <span className="ml-1 text-amber-600">({d.notes})</span>}
                 </span>
@@ -410,7 +443,7 @@ export default function StaffPortal() {
           <div className="bg-white border border-gold/30 shadow-sm">
             <div className="flex items-center gap-2 px-5 py-3 border-b-2 border-forest/70">
               <Clock className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-[0.2em] text-sm text-forest">EVENT TIMELINE</span>
+              <h2 className="font-bebas tracking-[0.2em] text-sm text-forest">EVENT TIMELINE</h2>
               {sortedItems.length > 0 && (
                 <span className="font-dm text-ink/45 text-xs ml-auto">
                   {formatTime12(sortedItems[0].time)} – {formatTime12(addMinutes(sortedItems[sortedItems.length - 1].time, sortedItems[sortedItems.length - 1].duration ?? 0))}
@@ -455,7 +488,7 @@ export default function StaffPortal() {
             <div className="bg-white border border-gold/30 shadow-sm">
               <div className="flex items-center gap-2 px-5 py-3 border-b-2 border-forest/70">
                 <Wine className="w-4 h-4 text-forest" />
-                <span className="font-bebas tracking-[0.2em] text-sm text-forest">BAR ARRANGEMENT</span>
+                <h2 className="font-bebas tracking-[0.2em] text-sm text-forest">BAR ARRANGEMENT</h2>
               </div>
               <div className="px-5 py-4 space-y-2">
                 {dd.barOption && (
@@ -492,7 +525,7 @@ export default function StaffPortal() {
           <div className="bg-white border border-gold/30 shadow-sm">
             <div className="flex items-center gap-2 px-5 py-3 border-b-2 border-forest/70">
               <UtensilsCrossed className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-[0.2em] text-sm text-forest">FRONT OF HOUSE — F&amp;B SHEET</span>
+              <h2 className="font-bebas tracking-[0.2em] text-sm text-forest">FRONT OF HOUSE — F&amp;B SHEET</h2>
             </div>
             <div className="overflow-x-auto">
             <div className="min-w-[640px]">
@@ -540,7 +573,7 @@ export default function StaffPortal() {
           <div className="bg-white border border-gold/30 shadow-sm">
             <div className="flex items-center gap-2 px-5 py-3 border-b-2 border-forest/70">
               <ChefHat className="w-4 h-4 text-forest" />
-              <span className="font-bebas tracking-[0.2em] text-sm text-forest">KITCHEN SHEET</span>
+              <h2 className="font-bebas tracking-[0.2em] text-sm text-forest">KITCHEN SHEET</h2>
             </div>
             <div className="overflow-x-auto">
             <div className="min-w-[640px]">
@@ -596,7 +629,7 @@ export default function StaffPortal() {
           <div className="bg-white border border-gold/30 shadow-sm">
             <div className="flex items-center gap-2 px-5 py-3 border-b border-gold/30 bg-forest">
               <DollarSign className="w-4 h-4 text-white" />
-              <span className="font-bebas tracking-widest text-sm text-white">PAYMENT SUMMARY</span>
+              <h2 className="font-bebas tracking-widest text-sm text-white">PAYMENT SUMMARY</h2>
             </div>
             <div className="overflow-x-auto">
             <div className="divide-y divide-gold/20 min-w-[500px]">
@@ -646,7 +679,7 @@ export default function StaffPortal() {
           return (
             <div className="bg-white border border-gold/30 shadow-sm">
               <div className="px-5 py-3 border-b border-gold/30">
-                <span className="font-bebas tracking-widest text-sm text-ink/60">ATTACHMENTS</span>
+                <h2 className="font-bebas tracking-widest text-sm text-ink/60">ATTACHMENTS</h2>
               </div>
               <div className="divide-y divide-gold/20">
                 {safe.map((att: any) => (
@@ -672,7 +705,7 @@ export default function StaffPortal() {
         {runsheet.notes && (
           <div className="bg-white border border-gold/30 shadow-sm">
             <div className="px-5 py-3 border-b border-gold/30">
-              <span className="font-bebas tracking-widest text-sm text-ink/60">GENERAL NOTES</span>
+              <h2 className="font-bebas tracking-widest text-sm text-ink/60">GENERAL NOTES</h2>
             </div>
             <div className="px-5 py-4">
               <div className="font-dm text-sm vf-rich-content" dangerouslySetInnerHTML={{ __html: runsheet.notes }} />
@@ -691,7 +724,10 @@ export default function StaffPortal() {
 
         </>)}
 
+        </div>
+
         {/* ── Checklist Tab ── */}
+        <div id="vf-tabpanel-checklist" role="tabpanel" aria-labelledby="vf-tab-checklist" hidden={activePortalTab !== 'checklist'}>
         {activePortalTab === 'checklist' && (
           <>
             {localItems.length > 0 ? (
@@ -699,7 +735,7 @@ export default function StaffPortal() {
                 <div className="flex items-center justify-between px-5 py-3 border-b-2 border-forest/70">
                   <div className="flex items-center gap-2">
                     <ClipboardCheck className="w-4 h-4 text-forest" />
-                    <span className="font-bebas tracking-[0.2em] text-sm text-forest">STAFF CHECKLIST</span>
+                    <h2 className="font-bebas tracking-[0.2em] text-sm text-forest">STAFF CHECKLIST</h2>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-dm text-xs text-ink/65">{checkedCount} of {localItems.length} done</span>
@@ -711,7 +747,14 @@ export default function StaffPortal() {
                   </div>
                 </div>
                 {/* Progress bar */}
-                <div className="h-1.5 bg-gold/20">
+                <div
+                  role="progressbar"
+                  aria-valuenow={checkedCount}
+                  aria-valuemin={0}
+                  aria-valuemax={localItems.length}
+                  aria-label={`${checkedCount} of ${localItems.length} checklist items complete`}
+                  className="h-1.5 bg-gold/20"
+                >
                   <div
                     className="h-1.5 bg-forest transition-all duration-300"
                     style={{ width: localItems.length > 0 ? `${(checkedCount / localItems.length) * 100}%` : "0%" }}
@@ -722,8 +765,10 @@ export default function StaffPortal() {
                     <div key={item.id}>
                       <button
                         onClick={() => handleToggle(item.id, item.checked)}
-                        disabled={toggleItem.isPending}
-                        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-linen/50 transition-colors"
+                        disabled={pendingItemId === item.id}
+                        role="checkbox"
+                        aria-checked={item.checked}
+                        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-linen/50 transition-colors disabled:opacity-60"
                       >
                         <span className={`flex-shrink-0 transition-colors ${item.checked ? "text-forest" : "text-ink/25"}`}>
                           {item.checked ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6" />}
@@ -755,6 +800,7 @@ export default function StaffPortal() {
             )}
           </>
         )}
+        </div>
 
         {/* ── Footer ── */}
         <div className="text-center font-bebas tracking-widest text-xs text-ink/65 pb-8">

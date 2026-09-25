@@ -429,10 +429,13 @@ export default function ProposalBuilder() {
             <ChevronLeft className="w-4 h-4" aria-hidden /> Dashboard
           </Link>
         </Button>
-        <div className="flex items-center mr-3">
+        {/* At phone widths the brand + page title wrapped into each other
+            and pushed "Save Draft" off-screen; keep them on one line and drop
+            the brand mark where there's no room for both. */}
+        <div className="hidden sm:flex items-center mr-3">
           <span className="font-bold text-gray-900 text-base tracking-tight">VenueFlowHQ</span>
         </div>
-        <div className="font-inter text-sm font-medium text-gray-700">Proposal Builder</div>
+        <div className="font-inter text-sm font-medium text-gray-700 whitespace-nowrap">Proposal Builder</div>
         <div className="ml-auto flex items-center gap-2">
           {savedProposal?.publicToken && (
             <Button

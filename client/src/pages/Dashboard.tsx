@@ -15,7 +15,7 @@ import {
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
   SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare,
-  Link as LinkIcon
+  Link as LinkIcon, LogOut
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
@@ -821,8 +821,15 @@ function SpaceMultiSelect({ value, onChange, spaces, invalid }: {
 }
 
 export default function Dashboard() {
-  const { user, isAuthenticated, loading, isTeamMember, isStaff, error: authError, refresh: refreshAuth } = useAuth();
+  const { user, isAuthenticated, loading, isTeamMember, isStaff, error: authError, refresh: refreshAuth, logout } = useAuth();
   const [, setLocation] = useLocation();
+  // The shell had no sign-out control at all (the only one lived in the
+  // unused DashboardLayout scaffold), so on a shared or borrowed device the
+  // session could only be ended by clearing cookies.
+  const handleSignOut = async () => {
+    try { await logout(); } catch { /* session already gone — fall through */ }
+    window.location.href = "/login";
+  };
   type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"payments"|"expressbook";
   type SettingsSubTab = "venue"|"brand-pack"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
   const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","payments","expressbook"];
@@ -1257,7 +1264,7 @@ export default function Dashboard() {
     onError: () => toast.error('Failed to remove payment'),
   });
   const [drawerNewPayment, setDrawerNewPayment] = React.useState({ amount: '', type: 'deposit', method: 'bank_transfer', paidAt: new Date().toISOString().split('T')[0], notes: '' });
-  const { data: venueSettings, refetch: refetchSettings } = trpc.venue.get.useQuery(
+  const { data: venueSettings, refetch: refetchSettings, isFetched: venueSettingsFetched } = trpc.venue.get.useQuery(
     { ownerId: user?.id },
     { enabled: !!user?.id }
   );
@@ -2277,9 +2284,14 @@ export default function Dashboard() {
     }
   }, [settingsSubTab, settingsForm, formFields]);
 
+  // Seed the settings form once the venue row has been fetched. A brand-new
+  // account has NO venue_settings row yet (the query resolves to null), and
+  // waiting for a truthy row meant the whole Venue / Contact Form / Brand
+  // Pack settings area rendered blank forever — with no way to create the row
+  // it was waiting for. Seed from defaults in that case.
   useMemo(() => {
-    if (!settingsForm && venueSettings) {
-      const vs = venueSettings as any;
+    if (!settingsForm && venueSettingsFetched) {
+      const vs = (venueSettings ?? {}) as any;
       setSettingsForm({
         name: vs?.name ?? "",
         tagline: vs?.tagline ?? "",
@@ -2359,7 +2371,7 @@ export default function Dashboard() {
         })(),
       });
     }
-   }, [venueSettings]);
+   }, [venueSettings, venueSettingsFetched]);
 
   // Apply colour theme from venue settings
   useEffect(() => {
@@ -2787,6 +2799,10 @@ export default function Dashboard() {
           <div className="w-8 h-8 rounded-full bg-sage-green flex items-center justify-center font-inter text-white text-sm font-semibold">
             {(user?.name ?? "U").charAt(0).toUpperCase()}
           </div>
+          <button onClick={handleSignOut} aria-label="Sign out" title="Sign out"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+            <LogOut className="w-4 h-4 text-gray-500" aria-hidden="true" />
+          </button>
         </div>
       </nav>
 
@@ -2852,6 +2868,10 @@ export default function Dashboard() {
               <div className="text-[13px] font-semibold text-white truncate">{user?.name ?? "User"}</div>
               <div className="text-[11.5px] truncate" style={{ color: '#bcc8db' }}>{venueSettings?.name ?? "Your Venue"}</div>
             </div>
+            <button onClick={handleSignOut} aria-label="Sign out" title="Sign out"
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors flex-shrink-0">
+              <LogOut className="w-4 h-4" aria-hidden="true" style={{ color: '#bcc8db' }} />
+            </button>
           </div>
         </div>
       </aside>
@@ -4202,6 +4222,13 @@ export default function Dashboard() {
           {/* ── CALENDAR ─────────────────────────────────────────────────────── */}
           {tab === "calendar" && (
             <div className="flex flex-col h-full overflow-hidden">
+              {/* Every other tab has a page-level <h1> (Overview, Pipeline,
+                  Contacts, Tasks, Settings, …) — Calendar was the one
+                  exception, which matters most here since a restricted staff
+                  account lands on this tab by default and can't navigate
+                  by heading at all otherwise. Visually hidden since "Sep
+                  2026" in the toolbar already reads as the page's title. */}
+              <h1 className="sr-only">Calendar</h1>
               {monthBookingsError && (
                 <div className="flex items-center justify-center gap-3 px-4 py-2 bg-red-50 border-b border-red-200">
                   <AlertCircle className="w-4 h-4 text-red-500/80 flex-shrink-0" />
@@ -4323,8 +4350,15 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Legend */}
-              <div className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto">
+              {/* Legend — scrolls horizontally on narrow screens; without
+                  tabIndex a keyboard or switch-access user has no way to
+                  reach the content past the visible edge. */}
+              <div
+                role="region"
+                aria-label="Status colour legend"
+                tabIndex={0}
+                className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest"
+              >
                 {pipelineStages.map(s => (
                   <div key={s.key} className="flex items-center gap-1.5 flex-shrink-0">
                     <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: s.swatch }} />
@@ -8971,9 +9005,13 @@ export default function Dashboard() {
                         <div className="font-dm text-sm text-ink">
                           {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
                         </div>
-                        {/* Always-on inline START / END time editors — change saves immediately */}
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="flex items-center gap-1">
+                        {/* Always-on inline START / END time editors — change saves immediately.
+                            The DATE cell is half the panel wide, so two 90px time
+                            inputs side by side were crushed to ~30px each (the
+                            browser showed a sliver of "--:--"). Let them wrap and
+                            never shrink. */}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             <span className="font-bebas text-[10px] tracking-widest text-ink/70">START</span>
                             <Input
                               type="time"
@@ -8983,10 +9021,10 @@ export default function Dashboard() {
                                 const combined = combineDateAndTime(selectedBooking.eventDate, e.target.value);
                                 if (combined) saveDrawerField("eventDate", combined);
                               }}
-                              className="h-7 text-xs px-2 w-[90px]"
+                              className="h-7 text-xs px-2 w-[110px] flex-shrink-0"
                             />
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             <span className="font-bebas text-[10px] tracking-widest text-ink/70">END</span>
                             <Input
                               type="time"
@@ -9000,7 +9038,7 @@ export default function Dashboard() {
                                 const combined = combineDateAndTime(selectedBooking.eventEndDate, e.target.value, selectedBooking.eventDate);
                                 if (combined) saveDrawerField("eventEndDate", combined);
                               }}
-                              className="h-7 text-xs px-2 w-[90px]"
+                              className="h-7 text-xs px-2 w-[110px] flex-shrink-0"
                             />
                           </div>
                         </div>
@@ -10431,8 +10469,10 @@ export default function Dashboard() {
           { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
           { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
         ]).map(item => {
+          // gray-400 measured at 2.5–2.8:1 against this white bar — well
+          // under the 4.5:1 small-text minimum. gray-500 clears it.
           const baseClass = `flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
-            tab === item.id ? "text-sage-dark" : "text-gray-400"
+            tab === item.id ? "text-sage-dark" : "text-gray-500"
           }`;
           if ((item as any).href) {
             return (
