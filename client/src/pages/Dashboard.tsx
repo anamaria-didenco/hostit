@@ -4222,6 +4222,13 @@ export default function Dashboard() {
           {/* ── CALENDAR ─────────────────────────────────────────────────────── */}
           {tab === "calendar" && (
             <div className="flex flex-col h-full overflow-hidden">
+              {/* Every other tab has a page-level <h1> (Overview, Pipeline,
+                  Contacts, Tasks, Settings, …) — Calendar was the one
+                  exception, which matters most here since a restricted staff
+                  account lands on this tab by default and can't navigate
+                  by heading at all otherwise. Visually hidden since "Sep
+                  2026" in the toolbar already reads as the page's title. */}
+              <h1 className="sr-only">Calendar</h1>
               {monthBookingsError && (
                 <div className="flex items-center justify-center gap-3 px-4 py-2 bg-red-50 border-b border-red-200">
                   <AlertCircle className="w-4 h-4 text-red-500/80 flex-shrink-0" />
@@ -4343,8 +4350,15 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Legend */}
-              <div className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto">
+              {/* Legend — scrolls horizontally on narrow screens; without
+                  tabIndex a keyboard or switch-access user has no way to
+                  reach the content past the visible edge. */}
+              <div
+                role="region"
+                aria-label="Status colour legend"
+                tabIndex={0}
+                className="flex items-center gap-3 px-4 md:px-6 py-2 border-b border-gold/10 bg-linen/40 text-xs font-dm flex-shrink-0 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest"
+              >
                 {pipelineStages.map(s => (
                   <div key={s.key} className="flex items-center gap-1.5 flex-shrink-0">
                     <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: s.swatch }} />
@@ -10455,8 +10469,10 @@ export default function Dashboard() {
           { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
           { id: "settings", label: "More", icon: <Settings className="w-5 h-5" /> },
         ]).map(item => {
+          // gray-400 measured at 2.5–2.8:1 against this white bar — well
+          // under the 4.5:1 small-text minimum. gray-500 clears it.
           const baseClass = `flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
-            tab === item.id ? "text-sage-dark" : "text-gray-400"
+            tab === item.id ? "text-sage-dark" : "text-gray-500"
           }`;
           if ((item as any).href) {
             return (
