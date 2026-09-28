@@ -2264,6 +2264,9 @@ export default function Dashboard() {
   // the legacy hand-pasted <iframe> stays available for existing customers.
   const [embedSnippetTab, setEmbedSnippetTab] = useState<"script" | "iframe">("script");
   const [embedLayout, setEmbedLayout] = useState<"" | "compact">("");
+  // Script-tag only — the legacy <iframe> fallback has no loader JS to build
+  // a bubble launcher, so it can only ever sit inline where it's pasted.
+  const [embedPlacement, setEmbedPlacement] = useState<"" | "floating">("");
   const [embedPrefillEventType, setEmbedPrefillEventType] = useState("");
   const [embedGadsLabel, setEmbedGadsLabel] = useState("");   // "AW-XXXXXXX/yyyy"
   const [formFields, setFormFields] = useState<FormFieldDef[] | null>(null);
@@ -6203,6 +6206,7 @@ export default function Dashboard() {
                   if (embedFont.trim()) scriptAttrs.push(`data-font="${esc(embedFont.trim())}"`);
                   if (h !== 640) scriptAttrs.push(`data-height="${h}"`);
                   if (embedLayout) scriptAttrs.push(`data-layout="${embedLayout}"`);
+                  if (embedPlacement) scriptAttrs.push(`data-placement="${embedPlacement}"`);
                   if (embedPrefillEventType.trim()) scriptAttrs.push(`data-event-type="${esc(embedPrefillEventType.trim())}"`);
                   if (embedGadsLabel.trim()) scriptAttrs.push(`data-gads-label="${esc(embedGadsLabel.trim())}"`);
                   const scriptCode = `<script src="${window.location.origin}/embed.js"\n  ${scriptAttrs.join('\n  ')}></script>`;
@@ -6261,13 +6265,21 @@ export default function Dashboard() {
                       </div>
 
                       {embedSnippetTab === "script" && (
-                        <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                           <div>
                             <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">LAYOUT</label>
                             <select value={embedLayout} onChange={e => setEmbedLayout(e.target.value as "" | "compact")}
                               className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
                               <option value="">3 steps (default)</option>
                               <option value="compact">Compact — one scrolling form</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">PLACEMENT</label>
+                            <select value={embedPlacement} onChange={e => setEmbedPlacement(e.target.value as "" | "floating")}
+                              className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
+                              <option value="">Inline (default)</option>
+                              <option value="floating">Floating bubble</option>
                             </select>
                           </div>
                           <div>

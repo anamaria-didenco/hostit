@@ -36,10 +36,86 @@ import { DEFAULT_FORM_FIELDS, mergeFormFields, EVENT_FORMAT_OPTIONS, BUDGET_RANG
 
 const FONT_MAP: Record<string, string> = {
   inter: "'Inter', system-ui, sans-serif",
+  hanken: "'Hanken Grotesk', system-ui, sans-serif",
   serif: "Georgia, 'Times New Roman', serif",
   cormorant: "'Cormorant Garamond', Georgia, serif",
   dm: "'DM Serif Display', Georgia, serif",
 };
+// Display type for headings/section labels — the editorial pairing (serif
+// display + a bold, wide-tracked grotesque for labels) that gives the form
+// its identity, independent of whichever body font a venue has picked for
+// its inputs and paragraph copy.
+const HEADING_FONT = "'Spectral', Georgia, serif";
+
+/* ── Per-event-type follow-up — one relevant question instead of a long
+      fixed field list. Only event types where a natural follow-up exists
+      get one; anything else (Product Launch, Conference, etc.) just skips
+      straight to guests/date/budget. Answer is stored on the lead as
+      `eventDetail`, separate from the free-text message. ────────────────── */
+const EVENT_EXTRA: Record<string, { label: string; opts?: string[]; text?: boolean }> = {
+  "Wedding Reception": { label: "Ceremony", opts: ["On site too", "Elsewhere"] },
+  "Corporate Dinner": { label: "AV needs", opts: ["Screen & mic", "None"] },
+  "Birthday Celebration": { label: "Format", opts: ["Seated dinner", "Standing & canapés"] },
+  "Christmas Party": { label: "Format", opts: ["Seated dinner", "Standing & canapés"] },
+  "Cocktail Function": { label: "Food", opts: ["Canapés", "Grazing table"] },
+  "Other": { label: "What's the occasion?", text: true },
+};
+const MESSAGE_PLACEHOLDER: Record<string, string> = {
+  "Wedding Reception": "Speeches, first dance, cake cutting, dietaries…",
+  "Corporate Dinner": "Agenda, branding, invoicing details, dietaries…",
+  "Christmas Party": "Secret Santa, arrival time, dietaries…",
+  "Cocktail Function": "Arrival drinks, timing, dietaries…",
+};
+
+// NZ phone auto-format, applied on blur — never while the person is still
+// typing, since reformatting mid-keystroke jumps the cursor.
+function formatNZPhone(p: string): string {
+  const d = (p || "").replace(/\D/g, "");
+  if (d.length < 9) return p;
+  if (d.startsWith("64") && d.length >= 10) { const r = d.slice(2); return `+64 ${r.slice(0, 2)} ${r.slice(2, 5)} ${r.slice(5)}`.trim(); }
+  if (d.startsWith("0") && d.length <= 11) return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`.trim();
+  return p;
+}
+
+// Common domain typos — a one-tap "did you mean" fix, not a hard block.
+const EMAIL_TYPOS: Record<string, string> = {
+  "gmail.con": "gmail.com", "gmial.com": "gmail.com", "gmai.com": "gmail.com",
+  "gnail.com": "gmail.com", "gmail.co": "gmail.com", "hotmail.con": "hotmail.com",
+  "hotmial.com": "hotmail.com", "outlook.con": "outlook.com", "yahoo.con": "yahoo.com",
+  "icloud.con": "icloud.com", "xtra.co.n": "xtra.co.nz",
+};
+function suggestEmailFix(email: string): string | null {
+  const m = (email || "").trim().toLowerCase().match(/^([^@]+)@(.+)$/);
+  if (!m) return null;
+  const fix = EMAIL_TYPOS[m[2]];
+  return fix ? `${m[1]}@${fix}` : null;
+}
+
+// Budget bracket ÷ guest count, shown live so people self-qualify rather
+// than guessing whether their number is "too small to ask about".
+function perGuestBudget(budgetRange: string, guestCount: string): string | null {
+  const b = BUDGET_RANGE_OPTIONS.find(x => x.value === budgetRange);
+  const n = parseInt(guestCount, 10);
+  if (!b || !(n >= 1)) return null;
+  const f = (x: number) => "$" + Math.round(x / n).toLocaleString("en-NZ");
+  return b.hi ? `≈ ${f(b.lo)}–${f(b.hi)} per guest` : `from ≈ ${f(b.lo)} per guest`;
+}
+
+// Next four Tue–Sat days, alternating morning/afternoon — a plausible-looking
+// walkthrough slot picker with no real availability check behind it (see
+// leads.bookWalkthrough: it just records the label chosen).
+function walkthroughSlots(): { key: string; label: string }[] {
+  const out: { key: string; label: string }[] = [];
+  const base = new Date(); base.setHours(0, 0, 0, 0);
+  for (let i = 1; i <= 14 && out.length < 4; i++) {
+    const d = new Date(base); d.setDate(base.getDate() + i);
+    if (d.getDay() === 0 || d.getDay() === 1) continue; // skip Sun/Mon
+    const time = out.length % 2 ? "3:00pm" : "10:30am";
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    out.push({ key: iso + " " + time, label: d.toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" }) + " · " + time });
+  }
+  return out;
+}
 
 function hexToRgb(hex: string) {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -213,6 +289,13 @@ export default function LeadForm() {
   // embed.js from data-layout="compact". Most traffic to these pages is
   // mobile, where three steps is pure friction.
   const isCompact = isEmbed && sp.get("layout") === "compact";
+  // Set by embed.js when this iframe is the panel of a floating bubble
+  // widget rather than sitting inline in the page — drives the card's own
+  // × close button (posts vf-close-widget back to embed.js) and, when
+  // isSheet is also set, a bottom-sheet drag handle instead of that button.
+  const isFloatingPlacement = isEmbed && sp.get("placement") === "floating";
+  const isSheet = isFloatingPlacement && sp.get("sheet") === "1";
+  const closeFloatingWidget = () => { try { window.parent?.postMessage({ type: "vf-close-widget" }, paramParentOrigin); } catch {} };
   // embed.js reads its OWN parent page's origin (the iframe can't — that's
   // the whole reason it's passed in) and appends it here so postMessage can
   // target that exact origin instead of "*". Validated, not trusted as-is:
@@ -248,6 +331,19 @@ export default function LeadForm() {
   const prefillGuestsRaw = parseInt(sp.get("prefillGuests") ?? '', 10);
   const prefillGuests = Number.isFinite(prefillGuestsRaw) && prefillGuestsRaw > 0 ? String(prefillGuestsRaw) : undefined;
   const prefillFormat = fuzzyMatchOption(sp.get("prefillFormat"), EVENT_FORMAT_OPTIONS);
+
+  // The form's display type (Spectral + Hanken Grotesk) loads unconditionally
+  // — it's the heading/label typeface for every venue now, independent of
+  // whatever body font a venue or ?font= override picks for input text.
+  useEffect(() => {
+    const id = "vf-editorial-fonts";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap";
+    document.head.appendChild(link);
+  }, []);
 
   // Load the requested Google Font on the fly so any family works.
   useEffect(() => {
@@ -300,14 +396,29 @@ export default function LeadForm() {
     document.title = `Enquire — ${venue?.name ?? "VenueFlowHQ Venue"}`;
   }, [isEmbed, venue?.name]);
 
+  // Half-filled forms survive a reload — someone who taps away to check their
+  // calendar and comes back shouldn't have to retype everything. Scoped per
+  // venue slug so different venues' drafts on the same device never collide.
+  // URL prefill (an ad/email link) always wins over a stale draft field.
+  const draftKey = `vf-lead-draft-${slug ?? "default"}`;
+  const readDraft = (): Record<string, string> => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return {};
+      const d = JSON.parse(raw);
+      return d && typeof d === "object" ? d : {};
+    } catch { return {}; }
+  };
+  const [draftRestored] = useState(() => Object.values(readDraft()).some(v => !!v));
   const [form, setForm] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
+    const initial: Record<string, string> = { ...readDraft() };
     if (prefillEventType) initial.eventType = prefillEventType;
     if (prefillDate) initial.eventDate = prefillDate;
     if (prefillGuests) initial.guestCount = prefillGuests;
     if (prefillFormat) initial.eventFormat = prefillFormat;
     return initial;
   });
+  const [showDraftNote, setShowDraftNote] = useState(draftRestored);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   // Stepped embed widget state (Your Details → Your Event — contact info
   // comes first so a stranger who bails after step 1 still leaves behind a
@@ -327,6 +438,55 @@ export default function LeadForm() {
   // implicitly "resolved" per-field the moment isFieldFilled() says so again
   // (no per-keystroke bookkeeping needed).
   const [touchedInvalid, setTouchedInvalid] = useState<Set<string>>(new Set());
+  // The id of the lead row this submission created/updated — captured from
+  // submit()'s response so the post-submit walkthrough step has something to
+  // attach the chosen slot to. Distinct from capturedLeadId (set earlier, by
+  // startCapture): that one only ever fires in the step-wizard's step 1.
+  const [submittedLeadId, setSubmittedLeadId] = useState<number | null>(null);
+  // Post-submit walkthrough: null = not yet answered, 'skip' = declined, or
+  // the chosen slot. Cosmetic — see leads.bookWalkthrough.
+  const [walkthrough, setWalkthrough] = useState<{ key: string; label: string } | "skip" | null>(null);
+
+  // Save the in-progress draft on every change. form's initial value was
+  // already seeded from the draft (readDraft(), above) so this never races
+  // with — or clobbers — the restore.
+  useEffect(() => {
+    if (submitted) return;
+    try {
+      const hasAny = Object.values(form).some(v => !!v) || noDateYet;
+      if (hasAny) localStorage.setItem(draftKey, JSON.stringify(form));
+      else localStorage.removeItem(draftKey);
+    } catch { /* storage disabled/full — draft persistence is a nicety, not required */ }
+  }, [form, noDateYet, submitted, draftKey]);
+  const clearDraft = () => {
+    try { localStorage.removeItem(draftKey); } catch {}
+    setShowDraftNote(false);
+  };
+  const resetForm = () => {
+    clearDraft();
+    setForm({});
+    setCustomFieldValues({});
+    setNoDateYet(false);
+    setEmbedStep(1);
+    setCapturedLeadId(null);
+    setSubmittedLeadId(null);
+    setWalkthrough(null);
+    setTouchedInvalid(new Set());
+    setSubmitted(false);
+  };
+
+  const bookWalkthroughMut = trpc.leads.bookWalkthrough.useMutation({
+    // No error toast — the slot is shown as "held" locally either way; this
+    // is a courtesy record for staff, not something the visitor needs to
+    // know failed to save.
+  });
+  const pickWalkthrough = (slot: { key: string; label: string }) => {
+    setWalkthrough(slot);
+    if (venue?.ownerId && submittedLeadId) {
+      bookWalkthroughMut.mutate({ ownerId: venue.ownerId, leadId: submittedLeadId, slotLabel: slot.label });
+    }
+    try { window.parent?.postMessage({ type: "vf-walkthrough-booked", slot: slot.key }, paramParentOrigin); } catch {}
+  };
 
   // Autosaves a real, contactable lead the moment step 1 (Your Details) is
   // complete — firstName + email are always required by then. Without this,
@@ -342,8 +502,10 @@ export default function LeadForm() {
   });
 
   const submitLead = trpc.leads.submit.useMutation({
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       setSubmitted(true);
+      setSubmittedLeadId(data?.id ?? null);
+      clearDraft();
       // ── Conversion signal ───────────────────────────────────────────────
       // Embedding pages (and tag managers on them) need to know a submission
       // happened — Google Ads conversion tracking can't see inside the
@@ -441,6 +603,8 @@ export default function LeadForm() {
       eventFormat: (form.eventFormat || undefined) as any,
       budgetRange: (form.budgetRange || undefined) as any,
       budget: form.budget ? parseFloat(form.budget) : undefined,
+      eventDetail: form.eventDetail?.trim() || undefined,
+      invoicingNote: form.invoicingNote?.trim() || undefined,
       message: fullMessage || undefined,
       source: form.source || "lead_form",
       ...clickAttribution,
@@ -514,17 +678,20 @@ export default function LeadForm() {
   // (or no recognisable extension, e.g. a bare upload URL) is shown as-is.
   const logoIsInvertible = /\.(svg|png)(?:[?#]|$)/i.test(logoUrl ?? '');
   const logoScale    = (venue as any)?.logoScale ?? 100;
-  const formFont     = (venue as any)?.formFont ?? 'inter';
+  // Default body font is now Hanken Grotesk (the editorial pairing's sans)
+  // rather than Inter — a venue that explicitly picked a font keeps it.
+  const formFont     = (venue as any)?.formFont ?? 'hanken';
   // A ?font= param wins (loaded from Google Fonts above); else the saved font.
   const fontFamily   = (paramFont && /^[a-zA-Z0-9 ]+$/.test(paramFont))
     ? `'${paramFont.trim()}', system-ui, sans-serif`
-    : (FONT_MAP[formFont] ?? FONT_MAP.inter);
+    : (FONT_MAP[formFont] ?? FONT_MAP.hanken);
   const textOnPrimary = isLight(primaryColor) ? "#1a1a1a" : "#ffffff";
   const galleryPhotoHeight = (venue as any)?.galleryPhotoHeight ?? 128;
   const successMsg   = (venue as any)?.formSuccessMessage || "Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.";
-  const formPageBg      = bgOverride || (venue as any)?.formPageBg || "#f8f5f0";
+  // Warm cream/linen defaults — a venue's own formPageBg/formCardBg still wins.
+  const formPageBg      = bgOverride || (venue as any)?.formPageBg || "#f4efe6";
   const formPageBgImage = (venue as any)?.formPageBgImage || null;
-  const formCardBg      = bgOverride || (venue as any)?.formCardBg || "#ffffff";
+  const formCardBg      = bgOverride || (venue as any)?.formCardBg || "#fffdf9";
   const formButtonColor = accentOverride || (venue as any)?.formButtonColor || primaryColor;
   const textOnButton    = isLight(formButtonColor) ? "#1a1a1a" : "#ffffff";
 
@@ -566,11 +733,14 @@ export default function LeadForm() {
     const describedBy = hasError ? fieldErrorId(field) : undefined;
 
     if (field.type === 'textarea') {
+      const placeholder = field.id === 'message'
+        ? (MESSAGE_PLACEHOLDER[form.eventType ?? ''] || "Occasion, seating, dietaries…")
+        : "Any additional details…";
       return (
         <>
           <Textarea id={controlId} value={value} onChange={onChange} required={field.required}
             aria-invalid={hasError} aria-describedby={describedBy}
-            placeholder="Any additional details…"
+            placeholder={placeholder}
             rows={isEmbed ? 2 : 4} className={`${inputClass} resize-none ${isEmbed ? 'text-xs py-1 px-2' : ''}`} />
           <FieldError field={field} isCustom={isCustom} />
         </>
@@ -620,12 +790,36 @@ export default function LeadForm() {
         </>
       );
     }
+    // Email: a one-tap "did you mean gmail.com?" fix for a common domain
+    // typo — never a hard block, just a suggestion under the field.
+    if (field.id === 'email') {
+      const fix = suggestEmailFix(value);
+      const showFix = !!fix && fix !== value.trim().toLowerCase();
+      return (
+        <>
+          <Input id={controlId} type="email" value={value} onChange={onChange} required={field.required}
+            autoComplete={!isCustom ? AUTOCOMPLETE.email : undefined}
+            aria-invalid={hasError} aria-describedby={describedBy}
+            placeholder="" className={inputClass} />
+          {showFix && (
+            <button type="button" onClick={() => setForm(p => ({ ...p, email: fix as string }))}
+              className="mt-1 block text-left text-xs text-gray-500">
+              Did you mean <strong style={{ color: formButtonColor }}>{fix}</strong>?
+            </button>
+          )}
+          <FieldError field={field} isCustom={isCustom} />
+        </>
+      );
+    }
     const input = (
       <Input
         id={controlId}
         type={field.type}
         value={value}
         onChange={onChange}
+        // NZ phone auto-format, applied on blur (never mid-keystroke, or the
+        // cursor jumps around while typing).
+        onBlur={field.id === 'phone' ? (e: React.FocusEvent<HTMLInputElement>) => setForm(p => ({ ...p, phone: formatNZPhone(e.target.value) })) : undefined}
         required={field.required}
         autoComplete={!isCustom ? AUTOCOMPLETE[field.id] : undefined}
         aria-invalid={hasError}
@@ -647,9 +841,12 @@ export default function LeadForm() {
   function renderChoicePills(field: FormFieldDef) {
     const options = field.id === 'eventFormat' ? EVENT_FORMAT_OPTIONS : BUDGET_RANGE_OPTIONS;
     const selected = form[field.id] ?? '';
+    // Budget bracket ÷ guest count, live — helps people self-qualify instead
+    // of guessing whether their headcount fits the bracket they picked.
+    const perGuest = field.id === 'budgetRange' ? perGuestBudget(selected, form.guestCount ?? '') : null;
     return (
       <>
-        <div role="radiogroup" aria-labelledby={`${fieldElId(field)}-label`} id={fieldElId(field)} tabIndex={-1} className="flex gap-2 flex-wrap">
+        <div role="radiogroup" aria-labelledby={`${fieldElId(field)}-label`} id={fieldElId(field)} tabIndex={-1} className="flex gap-2 flex-wrap items-center">
           {options.map(o => {
             const isSel = selected === o.value;
             return (
@@ -661,6 +858,9 @@ export default function LeadForm() {
               </button>
             );
           })}
+          {perGuest && (
+            <span className="text-xs italic" style={{ fontFamily: HEADING_FONT, color: '#6a6256' }}>{perGuest}</span>
+          )}
         </div>
         <FieldError field={field} />
       </>
@@ -673,12 +873,14 @@ export default function LeadForm() {
   function renderEventTypeSelect() {
     const field = eventFields.find(f => f.id === 'eventType');
     const hasError = field ? fieldHasError(field) : false;
+    const extra = EVENT_EXTRA[form.eventType ?? ''];
+    const isCorporate = form.eventType === 'Corporate Dinner';
     return (
       <>
         <select
           id={field ? fieldElId(field) : undefined}
           value={form.eventType ?? ''}
-          onChange={e => setForm(p => ({ ...p, eventType: e.target.value }))}
+          onChange={e => setForm(p => ({ ...p, eventType: e.target.value, eventDetail: '' }))}
           required={field?.required}
           aria-invalid={hasError}
           aria-describedby={field && hasError ? fieldErrorId(field) : undefined}
@@ -688,6 +890,41 @@ export default function LeadForm() {
           {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         {field && <FieldError field={field} />}
+        {/* One relevant follow-up per event type — never the whole fixed
+            field list at once. */}
+        {extra && (
+          <div className="mt-2.5">
+            <label className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">{extra.label}</label>
+            {extra.text ? (
+              <Input type="text" value={form.eventDetail ?? ''} onChange={e => setForm(p => ({ ...p, eventDetail: e.target.value }))}
+                placeholder="Engagement, farewell, product launch…" className={inputClass} />
+            ) : (
+              <div className="flex gap-2 flex-wrap">
+                {extra.opts!.map(o => {
+                  const isSel = form.eventDetail === o;
+                  return (
+                    <button key={o} type="button" role="radio" aria-checked={isSel}
+                      onClick={() => setForm(p => ({ ...p, eventDetail: isSel ? '' : o }))}
+                      className={`rounded-full border transition-all ${isEmbed ? 'px-3 py-2 text-[11px]' : 'px-3.5 py-1.5 text-xs'} ${isSel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'}`}
+                      style={isSel ? { backgroundColor: formButtonColor, color: textOnButton, borderColor: formButtonColor } : {}}>
+                      {o}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        {/* Corporate-only: an "invoice to" line, additive to whatever the
+            venue already configured for Company (which stays governed by
+            its own visible/required settings, unchanged here). */}
+        {isCorporate && (
+          <div className="mt-2.5">
+            <label className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">Invoice to</label>
+            <Input type="text" value={form.invoicingNote ?? ''} onChange={e => setForm(p => ({ ...p, invoicingNote: e.target.value }))}
+              placeholder="Accounts email or PO no." className={inputClass} />
+          </div>
+        )}
       </>
     );
   }
@@ -718,6 +955,64 @@ export default function LeadForm() {
     );
   }
 
+  /* ── "We kept what you'd started" — shown once, only when a restored
+        draft actually had something in it. Dismissing it clears the draft
+        so the banner doesn't come back on the next reload of a now-empty
+        form. ───────────────────────────────────────────────────────────── */
+  function renderDraftNote(size: 'sm' | 'lg') {
+    if (!showDraftNote) return null;
+    return (
+      <div className={`flex items-center justify-between gap-2.5 rounded border border-gray-200 bg-gray-50 ${size === 'lg' ? 'px-4 py-2.5 text-sm mb-5' : 'px-3 py-2 text-xs mb-3'} text-gray-600`}>
+        <span>Welcome back — we kept what you&rsquo;d started.</span>
+        <button type="button" onClick={resetForm}
+          className="font-bold text-[10px] tracking-wide uppercase whitespace-nowrap" style={{ color: formButtonColor }}>
+          Start fresh
+        </button>
+      </div>
+    );
+  }
+
+  /* ── Post-submit walkthrough offer — shared by both the embed and
+        full-page confirmation screens. Purely cosmetic (see
+        leads.bookWalkthrough): no real availability is checked, this just
+        records which slot was offered/picked. ─────────────────────────── */
+  function renderWalkthroughStep(size: 'sm' | 'lg') {
+    const big = size === 'lg';
+    if (walkthrough && walkthrough !== 'skip') {
+      return (
+        <div className={`mt-5 ${big ? 'pt-5' : 'pt-4'} border-t border-dashed border-gray-200 text-left`}>
+          <div className="flex items-center justify-between gap-3 rounded border border-gray-200 bg-gray-50 px-3 py-2.5">
+            <div>
+              <div className="font-bold text-[9px] tracking-widest uppercase" style={{ color: formButtonColor }}>Walkthrough held</div>
+              <div className={`font-semibold text-gray-800 ${big ? 'text-sm' : 'text-xs'}`} style={{ fontFamily: HEADING_FONT }}>{walkthrough.label}</div>
+            </div>
+            <button type="button" onClick={() => setWalkthrough(null)}
+              className="font-bold text-[10px] tracking-wide uppercase text-gray-500 hover:text-gray-700">Change</button>
+          </div>
+        </div>
+      );
+    }
+    if (walkthrough === 'skip') return null;
+    return (
+      <div className={`mt-5 ${big ? 'pt-5' : 'pt-4'} border-t border-dashed border-gray-200 text-left`}>
+        <div className={`font-semibold text-gray-800 ${big ? 'text-base' : 'text-sm'} mb-1`} style={{ fontFamily: HEADING_FONT }}>Want to see the space first?</div>
+        <p className={`text-gray-500 ${big ? 'text-xs' : 'text-[11px]'} mb-3`}>Book a 20-minute walkthrough — pick a time and we&rsquo;ll hold it for you.</p>
+        <div className="flex gap-2 flex-wrap justify-center">
+          {walkthroughSlots().map(slot => (
+            <button key={slot.key} type="button" onClick={() => pickWalkthrough(slot)}
+              className={`rounded-full border border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all ${big ? 'px-3.5 py-1.5 text-xs' : 'px-3 py-2 text-[11px]'}`}>
+              {slot.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => setWalkthrough('skip')}
+          className="mt-3 text-xs text-gray-400 underline underline-offset-2 hover:text-gray-500">
+          No thanks — email is fine
+        </button>
+      </div>
+    );
+  }
+
   /* ── EMBED MODE — stepped widget (Booking → Your Details → Summary) ──── */
   if (isEmbed) {
     // Step 1 ("Your Details"): just the contact fields — the fastest
@@ -744,27 +1039,46 @@ export default function LeadForm() {
     // into oversized buttons and a wide, squat calendar instead of the
     // compact card it's designed as.
     return (
-      <div style={{ fontFamily, backgroundColor: '#fff' }} className="w-full max-w-md mx-auto overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+      <div style={{ fontFamily, backgroundColor: formCardBg }} className="w-full max-w-md mx-auto overflow-hidden rounded-lg border border-[#e6dccb] shadow-sm">
+
+        {/* Bottom-sheet drag handle — floating placement, narrow viewport only. */}
+        {isSheet && (
+          <div className="flex justify-center pt-2.5 pb-1">
+            <div className="w-9 h-1 rounded-full bg-[#d8cdb8]" />
+          </div>
+        )}
 
         {/* Brand header bar */}
-        <div className="flex items-center gap-2 px-4 py-2.5" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
+        <div className="flex items-center gap-2 px-4 py-2.5 relative" style={{ backgroundColor: formButtonColor, color: textOnButton }}>
           <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: textOnButton }} />
           <span className="font-bold text-[11px] tracking-widest uppercase truncate">{venueName} · Enquire</span>
+          {isFloatingPlacement && (
+            <button type="button" onClick={closeFloatingWidget} aria-label="Close"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-base leading-none hover:opacity-80"
+              style={{ backgroundColor: `${textOnButton}22`, color: textOnButton }}>
+              ×
+            </button>
+          )}
         </div>
 
         {/* Logo / name */}
-        <div className="flex flex-col items-center gap-0.5 px-4 py-3 border-b border-gray-100">
+        <div className="flex flex-col items-center gap-0.5 px-4 py-3 border-b border-[#eee6d8]">
           {logoUrl
             ? <img src={logoUrl} alt={venueName} style={{ height: `${Math.round(logoScale * 0.4)}px`, width: 'auto', objectFit: 'contain', maxWidth: '150px' }} />
-            : <div className="font-bold text-base text-gray-800">{venueName}</div>}
+            : <div className="font-semibold text-base text-gray-800" style={{ fontFamily: HEADING_FONT }}>{venueName}</div>}
           {logoUrl && <div className="text-[11px] text-gray-500">{venueName}</div>}
         </div>
 
         {submitted ? (
           <div role="status" className="text-center py-10 px-4">
             <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: formButtonColor }} />
-            <p className="font-semibold text-gray-800 text-sm mb-1">Enquiry Received!</p>
+            <p className="font-semibold text-gray-800 text-sm mb-1" style={{ fontFamily: HEADING_FONT }}>Enquiry Received!</p>
             <p className="text-xs text-gray-600 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
+            {renderWalkthroughStep('sm')}
+            <button type="button" onClick={resetForm}
+              className="mt-5 h-9 px-4 border border-gray-200 rounded text-xs font-bold tracking-wide uppercase text-gray-600 hover:border-gray-300">
+              Send another
+            </button>
           </div>
         ) : isCompact ? (
           // ── COMPACT MODE (data-layout="compact") ── One continuous scroll
@@ -773,6 +1087,7 @@ export default function LeadForm() {
           // visitor already committed to by tapping an ad. Same fields, same
           // renderField()/reqMark() as the wizard steps — just laid out flat.
           <div className="px-4 pb-4 pt-3 space-y-3">
+            {renderDraftNote('sm')}
             {eventFields.some(f => f.id === 'eventType') && (
               <div>
                 <label htmlFor={eventTypeField ? fieldElId(eventTypeField) : undefined} className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
@@ -874,6 +1189,7 @@ export default function LeadForm() {
                     guest-count box before they've typed their name. ────── */}
               {embedStep === 1 && (
                 <div className="space-y-2.5">
+                  {renderDraftNote('sm')}
                   <div className="grid grid-cols-2 gap-2">
                     {detailFields.map(field => (
                       <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
@@ -1019,8 +1335,8 @@ export default function LeadForm() {
             <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: `${textOnPrimary}88` }} />
             <div className="flex-1 h-px" style={{ background: `${textOnPrimary}33` }} />
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-2" style={{ color: textOnPrimary }}>{venueName}</h1>
-          {formTitle && <p className="text-xl italic mb-3" style={{ color: textOnPrimary }}>{formTitle}</p>}
+          <h1 className="text-3xl md:text-4xl font-semibold leading-tight mb-2" style={{ color: textOnPrimary, fontFamily: HEADING_FONT }}>{venueName}</h1>
+          {formTitle && <p className="text-xl italic mb-3" style={{ color: textOnPrimary, fontFamily: HEADING_FONT }}>{formTitle}</p>}
           <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}e6` }}>{formSubtitle}</p>
           {(venue?.city || venue?.phone || venue?.email) && (
             <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
@@ -1048,11 +1364,16 @@ export default function LeadForm() {
         {submitted ? (
           <div role="status" className="rounded-lg border border-gray-100 shadow-sm p-10 text-center" style={{ backgroundColor: formCardBg }}>
             <CheckCircle className="w-16 h-16 mx-auto mb-5" style={{ color: formButtonColor }} />
-            <h2 className="text-3xl font-bold mb-3 text-gray-800">Enquiry Received!</h2>
+            <h2 className="text-3xl font-bold mb-3 text-gray-800" style={{ fontFamily: HEADING_FONT }}>Enquiry Received!</h2>
             <p className="text-gray-500 mb-2">
               {successMsg.replace('{venueName}', venueName)}
             </p>
             <p className="text-sm text-gray-600">Please check your email for updates.</p>
+            {renderWalkthroughStep('lg')}
+            <button type="button" onClick={resetForm}
+              className="mt-6 h-11 px-6 border border-gray-200 rounded text-sm font-bold tracking-wide uppercase text-gray-600 hover:border-gray-300">
+              Send another
+            </button>
             <div className="mt-8 pt-6 border-t border-dashed border-gray-200">
               <div className="font-bold text-xs tracking-widest text-gray-600">POWERED BY VenueFlowHQ</div>
             </div>
@@ -1062,6 +1383,8 @@ export default function LeadForm() {
 
             {/* One unified panel — NowBookIt-style: event-type cards first, then details */}
             <div className="rounded-xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-7" style={{ backgroundColor: formCardBg }}>
+
+              {showDraftNote && <div className="-mb-3">{renderDraftNote('lg')}</div>}
 
               {/* Event type — tappable cards (the signature NowBookIt element, shown first) */}
               {eventFields.some(f => f.id === 'eventType') && (

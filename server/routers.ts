@@ -583,6 +583,11 @@ export const appRouter = router({
         eventFormat: z.enum(['seated', 'cocktail', 'both']).optional(),
         budgetRange: z.enum(['under_5k', '5_10k', '10_20k', '20k_plus']).optional(),
         budget: z.number().min(0).max(10_000_000).optional(),
+        // Event-type-specific follow-up answer (e.g. ceremony/AV/format) and,
+        // for corporate enquiries only, where to send the invoice — both kept
+        // separate from `message` so they stay queryable per type.
+        eventDetail: z.string().max(255).optional(),
+        invoicingNote: z.string().max(255).optional(),
         message: z.string().max(5000).optional(),
         source: z.string().max(120).optional(),
         // Ad-click attribution, read by the embed loader from the parent
@@ -613,6 +618,8 @@ export const appRouter = router({
           dateFlexible: input.dateFlexible ?? false,
           eventFormat: input.eventFormat,
           budgetRange: input.budgetRange,
+          eventDetail: input.eventDetail,
+          invoicingNote: input.invoicingNote,
           guestCount: input.guestCount,
           budget: input.budget?.toString() as any,
           message: input.message,
@@ -826,6 +833,26 @@ export const appRouter = router({
         }
 
         return lead;
+      }),
+
+    // Public: after a successful submit, the confirmation screen offers a
+    // 20-minute walkthrough slot (computed client-side — next few Tue–Sat
+    // days, no real availability check). Picking one just records the label
+    // on the lead so staff can see what was offered; it is not a calendar
+    // booking. Rate-limited the same as submit/startCapture since it's a
+    // public write keyed by a client-supplied ownerId.
+    bookWalkthrough: publicProcedure
+      .input(z.object({
+        ownerId: z.number(),
+        leadId: z.number(),
+        slotLabel: z.string().min(1).max(60),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await enforceLeadRateLimit(ctx, input.ownerId);
+        const existing = await getLeadById(input.leadId, input.ownerId);
+        if (!existing) throw new Error("Enquiry not found.");
+        await updateLead(input.leadId, input.ownerId, { walkthroughSlot: input.slotLabel });
+        return { ok: true };
       }),
 
     updateStatus: protectedProcedure

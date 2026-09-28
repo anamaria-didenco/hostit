@@ -220,6 +220,18 @@ export const leads = pgTable("leads", {
   // self-select out — while the legacy free-number `budget` stays for old data.
   eventFormat: varchar("eventFormat", { length: 20 }),
   budgetRange: varchar("budgetRange", { length: 20 }),
+  // The enquiry form's event-type-specific follow-up answer (e.g. "On site
+  // too" for a wedding's ceremony question, or free text for "Something
+  // else") — kept separate from `message` so it stays queryable per type.
+  eventDetail: varchar("eventDetail", { length: 255 }),
+  // Corporate enquiries only: where to send the invoice (accounts email or
+  // PO number), separate from `message` for the same reason as eventDetail.
+  invoicingNote: varchar("invoicingNote", { length: 255 }),
+  // Label of the post-submit walkthrough slot the enquirer picked (e.g.
+  // "Tue 3 Mar · 10:30am") — cosmetic scheduling, not a real calendar
+  // booking: no availability is checked, this just records the hold so
+  // staff know what was offered.
+  walkthroughSlot: varchar("walkthroughSlot", { length: 60 }),
   spaceId: integer("spaceId"),
   spaceName: varchar("spaceName", { length: 255 }),
   budget: decimal("budget", { precision: 10, scale: 2 }),

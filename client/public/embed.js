@@ -12,6 +12,10 @@
  *     it specifically instead of "*")
  *   - mounts the iframe (at data-mount, or a div it creates right after the
  *     script tag if data-mount is absent) and auto-resizes it
+ *   - data-placement="floating" instead builds a corner bubble launcher (a
+ *     full-height bottom sheet on narrow screens) that toggles the iframe
+ *     open/closed — data-mount is ignored in this mode, since a floating
+ *     widget is a fixed overlay, not something placed in the page flow
  *   - on a successful submit, pushes a dataLayer event, calls gtag() if
  *     present (including an optional Google Ads conversion), and calls
  *     window.VenueFlow.onSubmit if the venue defined one
@@ -30,6 +34,9 @@
 
   // iframe.contentWindow -> { iframe: HTMLIFrameElement, venue: string, gadsLabel: string|null }
   var instances = [];
+  // Floating widgets only: how to collapse each one back to its bubble when
+  // its own iframe posts vf-close-widget (the card's × button).
+  var closers = [];
 
   function originOf(url) {
     try { return new URL(url, window.location.href).origin; } catch (e) { return null; }
@@ -47,6 +54,13 @@
     var baseOrigin = originOf(script.src);
     if (!baseOrigin) {
       console.error("[VenueFlow embed.js] couldn't determine the loader's own origin from its src — skipping.");
+      return;
+    }
+
+    // A floating widget is a fixed overlay anchored to the viewport, not
+    // something placed in the page's normal flow — data-mount doesn't apply.
+    if (script.getAttribute("data-placement") === "floating") {
+      mountFloating(script, venue, baseOrigin);
       return;
     }
 
@@ -76,10 +90,8 @@
     }
   }
 
-  function mountAndBuild(script, mount, venue, baseOrigin) {
-    // ── Click-id / UTM capture — read off THIS (parent) page's URL. The
-    //    iframe is cross-origin and can never see this, which is the whole
-    //    reason the loader has to do it and pass the values through. ───────
+  // ── Shared iframe-src / query-string building for both placements. ──────
+  function buildIframeParams(script) {
     var parentParams = new URLSearchParams(window.location.search);
     var iframeParams = new URLSearchParams();
     iframeParams.set("embed", "1");
@@ -102,9 +114,6 @@
       if (v) iframeParams.set(p, v);
     });
 
-    // ── Prefill — e.g. a Christmas landing page opening the form already on
-    //    "Christmas Party". The form does its own loose matching against the
-    //    real option list, so exact spelling/casing here doesn't matter. ───
     var prefillEventType = script.getAttribute("data-event-type");
     var prefillDate = script.getAttribute("data-date");
     var prefillGuests = script.getAttribute("data-guests");
@@ -114,10 +123,102 @@
     if (prefillGuests) iframeParams.set("prefillGuests", prefillGuests);
     if (prefillFormat) iframeParams.set("prefillFormat", prefillFormat);
 
-    // Lets the form's postMessage calls target this exact origin instead of
-    // "*" — see LeadForm.tsx's paramParentOrigin.
     iframeParams.set("parentOrigin", window.location.origin);
+    return iframeParams;
+  }
 
+  var NARROW_QUERY = "(max-width: 560px)";
+
+  // ── data-placement="floating" — a corner bubble launcher that opens the
+  //    same enquire page in a fixed-position panel (or, on a narrow
+  //    viewport, a full-height bottom sheet). Nothing here talks to a real
+  //    calendar/availability backend; the panel is just the same iframe used
+  //    for inline embeds, sized and positioned differently. ────────────────
+  function mountFloating(script, venue, baseOrigin) {
+    var iframeParams = buildIframeParams(script);
+    iframeParams.set("layout", iframeParams.get("layout") || "compact");
+    iframeParams.set("placement", "floating");
+
+    var accent = script.getAttribute("data-accent");
+    var accentCss = accent ? "#" + accent.replace(/^#/, "") : "#2f5488";
+
+    var bubble = document.createElement("button");
+    bubble.type = "button";
+    bubble.setAttribute("aria-label", "Open enquiry form");
+    bubble.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483000;" +
+      "display:flex;align-items:center;justify-content:center;width:56px;height:56px;" +
+      "border-radius:50%;border:none;background:" + accentCss + ";color:#fff;cursor:pointer;" +
+      "box-shadow:0 12px 28px -8px rgba(0,0,0,.35);font:0/0 sans-serif;";
+    bubble.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+
+    var backdrop = document.createElement("div");
+    backdrop.style.cssText = "position:fixed;inset:0;z-index:2147482998;background:rgba(22,20,15,.38);display:none;";
+
+    var panel = document.createElement("div");
+    panel.style.cssText = "position:fixed;z-index:2147482999;display:none;" +
+      "border-radius:12px;overflow:hidden;box-shadow:0 18px 44px -20px rgba(0,0,0,.45);";
+
+    var iframe = document.createElement("iframe");
+    iframe.title = "Event enquiry form";
+    iframe.style.cssText = "width:100%;height:100%;border:none;display:block;";
+    iframe.setAttribute("frameborder", "0");
+    panel.appendChild(iframe);
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(panel);
+    document.body.appendChild(bubble);
+
+    var isOpen = false;
+    var srcBuilt = false;
+
+    function layoutPanel() {
+      var narrow = window.matchMedia(NARROW_QUERY).matches;
+      // display is always reset to none here — layoutPanel() only ever runs
+      // while closed (see open()/the resize listener's isOpen guard), and
+      // cssText replaces the whole style attribute, so leaving it out would
+      // fall back to the browser default (visible) instead of staying hidden.
+      if (narrow) {
+        panel.style.cssText = "position:fixed;z-index:2147482999;left:0;right:0;bottom:0;display:none;" +
+          "width:100%;max-height:88vh;border-radius:16px 16px 0 0;overflow-y:auto;overflow-x:hidden;" +
+          "box-shadow:0 -8px 32px -8px rgba(0,0,0,.4);";
+      } else {
+        panel.style.cssText = "position:fixed;z-index:2147482999;right:20px;bottom:88px;display:none;" +
+          "width:376px;max-height:640px;border-radius:12px;overflow-y:auto;overflow-x:hidden;" +
+          "box-shadow:0 18px 44px -20px rgba(0,0,0,.45);";
+      }
+      iframeParams.set("sheet", narrow ? "1" : "0");
+    }
+
+    function open() {
+      layoutPanel();
+      if (!srcBuilt) {
+        iframe.src = baseOrigin + "/enquire/" + encodeURIComponent(venue) + "?" + iframeParams.toString();
+        srcBuilt = true;
+        instances.push({ iframe: iframe, venue: venue, gadsLabel: script.getAttribute("data-gads-label") || null, origin: baseOrigin });
+      }
+      var narrow = window.matchMedia(NARROW_QUERY).matches;
+      backdrop.style.display = narrow ? "block" : "none";
+      panel.style.display = "block";
+      bubble.style.display = "none";
+      isOpen = true;
+    }
+    function close() {
+      panel.style.display = "none";
+      backdrop.style.display = "none";
+      bubble.style.display = "flex";
+      isOpen = false;
+    }
+    bubble.addEventListener("click", function () { isOpen ? close() : open(); });
+    backdrop.addEventListener("click", close);
+    // Re-decide corner-panel vs. bottom-sheet only while closed — resizing
+    // mid-conversation out from under someone would be jarring.
+    window.addEventListener("resize", function () { if (!isOpen) layoutPanel(); });
+
+    closers.push({ iframeWindowOf: function () { return iframe.contentWindow; }, close: close });
+  }
+
+  function mountAndBuild(script, mount, venue, baseOrigin) {
+    var iframeParams = buildIframeParams(script);
     var height = script.getAttribute("data-height") || "640";
     var iframe = document.createElement("iframe");
     iframe.src = baseOrigin + "/enquire/" + encodeURIComponent(venue) + "?" + iframeParams.toString();
@@ -151,6 +252,15 @@
 
     if (data.type === "vf-embed-height" && data.height) {
       inst.iframe.style.height = data.height + "px";
+      return;
+    }
+
+    if (data.type === "vf-close-widget") {
+      // The card's own × button (floating placement only) — collapse this
+      // widget back to its bubble.
+      for (var c = 0; c < closers.length; c++) {
+        if (closers[c].iframeWindowOf() === event.source) { closers[c].close(); break; }
+      }
       return;
     }
 
