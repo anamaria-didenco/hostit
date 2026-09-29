@@ -24,13 +24,17 @@ export default function StaffChecklist() {
   );
 
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  // Which single item is in flight — disables only that row's button instead
+  // of freezing the whole list for the round-trip.
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
 
   const toggleMutation = trpc.checklists.toggleItemByToken.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: () => { refetch(); setPendingItemId(null); },
     // Roll the optimistic tick back immediately on failure instead of waiting
     // up to 10s for the refetch to correct it.
     onError: (_e, vars) => {
       setOptimistic(prev => { const n = { ...prev }; delete n[vars.itemId]; return n; });
+      setPendingItemId(null);
       toast.error("Couldn't update — please try again");
     },
   });
@@ -73,12 +77,13 @@ export default function StaffChecklist() {
 
   function toggle(itemId: string, currentChecked: boolean) {
     setOptimistic(prev => ({ ...prev, [itemId]: !currentChecked }));
+    setPendingItemId(itemId);
     toggleMutation.mutate({ token, itemId, checked: !currentChecked });
   }
 
   return (
     <div className="min-h-screen bg-linen">
-      <div className="max-w-lg mx-auto px-4 py-8">
+      <main className="max-w-lg mx-auto px-4 py-8">
         <div className="mb-6 text-center">
           <div className="inline-flex items-center mb-1">
             <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
@@ -87,7 +92,14 @@ export default function StaffChecklist() {
           <p className="font-dm text-sm text-ink/70 mt-1">{checkedCount} of {total} complete</p>
         </div>
 
-        <div className="h-1.5 bg-gold/20 rounded-full mb-6 overflow-hidden">
+        <div
+          role="progressbar"
+          aria-valuenow={checkedCount}
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-label={`${checkedCount} of ${total} checklist items complete`}
+          className="h-1.5 bg-gold/20 rounded-full mb-6 overflow-hidden"
+        >
           <div
             className="h-full bg-forest transition-all duration-500 rounded-full"
             style={{ width: total > 0 ? `${(checkedCount / total) * 100}%` : "0%" }}
@@ -106,8 +118,10 @@ export default function StaffChecklist() {
             <div key={item.id}>
               <button
                 onClick={() => toggle(item.id, item.checked)}
-                disabled={toggleMutation.isPending}
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-linen/60 transition-colors"
+                disabled={pendingItemId === item.id}
+                role="checkbox"
+                aria-checked={item.checked}
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-linen/60 transition-colors disabled:opacity-60"
               >
                 <span className={`flex-shrink-0 transition-colors ${item.checked ? "text-forest" : "text-ink/25"}`}>
                   {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
@@ -138,7 +152,7 @@ export default function StaffChecklist() {
         <p className="text-center font-dm text-xs text-ink/25 mt-6">
           Tap any item to mark it complete. Progress saves automatically.
         </p>
-      </div>
+      </main>
     </div>
   );
 }

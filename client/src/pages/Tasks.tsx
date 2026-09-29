@@ -14,10 +14,12 @@ const FILTERS = [
   { key: "completed", label: "Completed" },
 ];
 
+// text-red-600 measured at ~4.2:1 on bg-red-50 in this condensed font —
+// under the 4.5:1 minimum. Bumped a shade darker across the set.
 const PRIORITY_COLORS: Record<string, string> = {
-  high: "text-red-600 bg-red-50 border-red-200",
-  normal: "text-blue-600 bg-blue-50 border-blue-200",
-  low: "text-gray-500 bg-gray-50 border-gray-200",
+  high: "text-red-700 bg-red-50 border-red-200",
+  normal: "text-blue-700 bg-blue-50 border-blue-200",
+  low: "text-gray-600 bg-gray-50 border-gray-200",
 };
 
 export default function Tasks() {

@@ -220,6 +220,18 @@ export const leads = pgTable("leads", {
   // self-select out — while the legacy free-number `budget` stays for old data.
   eventFormat: varchar("eventFormat", { length: 20 }),
   budgetRange: varchar("budgetRange", { length: 20 }),
+  // The enquiry form's event-type-specific follow-up answer (e.g. "On site
+  // too" for a wedding's ceremony question, or free text for "Something
+  // else") — kept separate from `message` so it stays queryable per type.
+  eventDetail: varchar("eventDetail", { length: 255 }),
+  // Corporate enquiries only: where to send the invoice (accounts email or
+  // PO number), separate from `message` for the same reason as eventDetail.
+  invoicingNote: varchar("invoicingNote", { length: 255 }),
+  // Label of the post-submit walkthrough slot the enquirer picked (e.g.
+  // "Tue 3 Mar · 10:30am") — cosmetic scheduling, not a real calendar
+  // booking: no availability is checked, this just records the hold so
+  // staff know what was offered.
+  walkthroughSlot: varchar("walkthroughSlot", { length: 60 }),
   spaceId: integer("spaceId"),
   spaceName: varchar("spaceName", { length: 255 }),
   budget: decimal("budget", { precision: 10, scale: 2 }),
@@ -457,6 +469,13 @@ export const runsheets = pgTable("runsheets", {
   venueArea: varchar("venueArea", { length: 50 }),
   eventStartTime: varchar("eventStartTime", { length: 10 }),
   eventEndTime: varchar("eventEndTime", { length: 10 }),
+  // Client contact shown in the builder's Event Details. These were UI-only
+  // state: the inputs were editable and the header said "All changes saved",
+  // but nothing was written anywhere and a reload emptied them. Null = fall
+  // back to the linked lead / booking's contact.
+  contactName: varchar("contactName", { length: 255 }),
+  contactEmail: varchar("contactEmail", { length: 320 }),
+  contactPhone: varchar("contactPhone", { length: 50 }),
   publicToken: varchar("publicToken", { length: 64 }).unique(),
   attachments: json("attachments").$type<{ id: string; name: string; url: string; size: number; contentType: string; uploadedAt: number }[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

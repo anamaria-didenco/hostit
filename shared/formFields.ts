@@ -32,10 +32,10 @@ export const EVENT_FORMAT_OPTIONS = [
  * hidden by default (still in the editor to re-enable).
  */
 export const BUDGET_RANGE_OPTIONS = [
-  { value: 'under_5k', label: 'Under $5k' },
-  { value: '5_10k', label: '$5–10k' },
-  { value: '10_20k', label: '$10–20k' },
-  { value: '20k_plus', label: '$20k+' },
+  { value: 'under_5k', label: 'Under $5k', lo: 2000, hi: 5000 as number | null },
+  { value: '5_10k', label: '$5–10k', lo: 5000, hi: 10000 as number | null },
+  { value: '10_20k', label: '$10–20k', lo: 10000, hi: 20000 as number | null },
+  { value: '20k_plus', label: '$20k+', lo: 20000, hi: null as number | null },
 ] as const;
 
 export function eventFormatLabel(v: string | null | undefined): string | null {

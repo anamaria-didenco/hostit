@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import { CheckSquare, Square, Loader2, RefreshCw, CheckCircle2, Pencil, Plus, Trash2, X, Check, Wifi, WifiOff } from "lucide-react";
 
 const LS_KEY = "vf_staff_name";
@@ -29,8 +30,21 @@ export default function DailyChecklistLive() {
     { enabled: !!token, refetchInterval: 20000 }
   );
 
+  // Which single item's tick is in flight — disables only that row instead of
+  // freezing the whole checklist for the round-trip.
+  const [pendingItemId, setPendingItemId] = useState<number | null>(null);
   const toggleMutation = trpc.dailyChecklists.toggleItemByToken.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: () => { refetch(); setPendingItemId(null); },
+    // Previously there was no onError at all here: on a dropped connection —
+    // exactly the case the Wifi/WifiOff indicator exists to warn about — the
+    // optimistic tick stayed showing "done" forever with nothing rolled back
+    // and no one told. Someone could tick off a task, believe it saved, and
+    // it silently never reached the server.
+    onError: (_e, vars) => {
+      setOptimistic(prev => { const n = { ...prev }; delete n[vars.itemId]; return n; });
+      setPendingItemId(null);
+      toast.error("Couldn't save — check your connection and try again");
+    },
   });
 
   const resetMutation = trpc.dailyChecklists.resetByToken.useMutation({
@@ -126,6 +140,7 @@ export default function DailyChecklistLive() {
   function handleToggle(itemId: number, currentChecked: boolean) {
     const newChecked = !currentChecked;
     setOptimistic(prev => ({ ...prev, [itemId]: newChecked }));
+    setPendingItemId(itemId);
     toggleMutation.mutate({ token, itemId, checked: newChecked, checkedBy: newChecked ? (staffName || undefined) : undefined });
   }
 
@@ -189,13 +204,13 @@ export default function DailyChecklistLive() {
 
   return (
     <div className="min-h-screen bg-linen pb-32">
+      <header>
       {venueLogoUrl && (
         <div className="bg-white border-b border-stone-100 px-4 py-3 flex items-center justify-center">
           <img src={venueLogoUrl} alt={venueName ?? "Venue logo"} className="h-10 w-auto max-w-[160px] object-contain" />
         </div>
       )}
 
-      {/* Header */}
       <div className="bg-white border-b border-stone-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -213,14 +228,23 @@ export default function DailyChecklistLive() {
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
             <div className="flex items-center gap-2">
+              {/* Being offline means taps may not be saving — critical
+                  enough that it needs a real accessible name, not a bare
+                  icon nobody using a screen reader (or just not looking at
+                  this exact corner of the screen) would ever notice. */}
               {isOnline
-                ? <Wifi className="w-3.5 h-3.5 text-forest/50" />
-                : <WifiOff className="w-3.5 h-3.5 text-red-400 animate-pulse" />
+                ? <Wifi className="w-3.5 h-3.5 text-forest/50" aria-label="Online" role="img" />
+                : <WifiOff className="w-3.5 h-3.5 text-red-400 animate-pulse" aria-label="Offline — changes may not save" role="img" />
               }
               <div className="font-bebas tracking-widest text-lg text-forest leading-none">
                 {checkedCount} / {total}
               </div>
             </div>
+            {!isOnline && (
+              <div role="status" className="text-[10px] font-dm text-red-600 bg-red-50 border border-red-200 px-2 py-1 rounded">
+                Offline — taps may not save until back online
+              </div>
+            )}
             <button
               onClick={handleReset}
               className="font-bebas tracking-widest text-[10px] text-ink/65 hover:text-red-500 flex items-center gap-1 transition-colors"
@@ -236,7 +260,9 @@ export default function DailyChecklistLive() {
           />
         </div>
       </div>
+      </header>
 
+      <main>
       {allDone && (
         <div className="max-w-2xl mx-auto px-4 pt-4">
           <div className="bg-forest/10 border border-forest/20 px-4 py-3 flex items-center gap-3">
@@ -267,7 +293,7 @@ export default function DailyChecklistLive() {
                   onChange={e => setEditText(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }}
                   className="w-full border border-stone-200 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest rounded"
-                  placeholder="Item text"
+                  aria-label="Item text" placeholder="Item text"
                 />
                 <input
                   type="text"
@@ -275,7 +301,7 @@ export default function DailyChecklistLive() {
                   onChange={e => setEditNote(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }}
                   className="w-full border border-stone-200 px-3 py-2 font-dm text-xs text-ink/60 focus:outline-none focus:border-forest rounded"
-                  placeholder="Note (optional)"
+                  aria-label="Note (optional)" placeholder="Note (optional)"
                 />
                 <div className="flex gap-2">
                   <button
@@ -307,8 +333,10 @@ export default function DailyChecklistLive() {
                 {/* Checkbox area */}
                 <button
                   onClick={() => handleToggle(item.id, isChecked)}
-                  disabled={toggleMutation.isPending}
-                  className={`flex-1 text-left flex items-start gap-3 px-4 py-3.5 transition-colors ${
+                  disabled={pendingItemId === item.id}
+                  role="checkbox"
+                  aria-checked={isChecked}
+                  className={`flex-1 text-left flex items-start gap-3 px-4 py-3.5 transition-colors disabled:opacity-60 ${
                     isChecked ? "active:bg-forest/10" : "hover:bg-stone-50 active:bg-stone-100"
                   }`}
                 >
@@ -334,31 +362,35 @@ export default function DailyChecklistLive() {
                   </div>
                 </button>
 
-                {/* Action buttons */}
+                {/* Action buttons — 44px square minimum: a bar/kitchen tap
+                    target used with wet or gloved hands, not a mouse pointer. */}
                 <div className="flex flex-col border-l border-stone-100 flex-shrink-0">
                   <button
                     onClick={() => { setConfirmDeleteId(null); startEdit(item); }}
-                    className="px-3 py-3 text-stone-300 hover:text-forest hover:bg-forest/5 active:bg-forest/10 transition-colors border-b border-stone-100"
+                    className="w-11 h-11 flex items-center justify-center text-stone-300 hover:text-forest hover:bg-forest/5 active:bg-forest/10 transition-colors border-b border-stone-100"
+                    aria-label="Edit item"
                     title="Edit item"
                   >
-                    <Pencil className="w-3.5 h-3.5" />
+                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
                   {isConfirmDelete ? (
                     <button
                       onClick={() => { deleteItemMutation.mutate({ token, itemId: item.id }); setConfirmDeleteId(null); }}
                       disabled={deleteItemMutation.isPending}
-                      className="px-3 py-3 text-white bg-red-500 hover:bg-red-600 active:bg-red-700 transition-colors"
+                      className="w-11 h-11 flex items-center justify-center text-white bg-red-500 hover:bg-red-600 active:bg-red-700 transition-colors"
+                      aria-label="Confirm delete — tap again to permanently remove this item"
                       title="Confirm delete"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                   ) : (
                     <button
                       onClick={() => setConfirmDeleteId(item.id)}
-                      className="px-3 py-3 text-stone-300 hover:text-red-400 hover:bg-red-50 active:bg-red-100 transition-colors"
+                      className="w-11 h-11 flex items-center justify-center text-stone-300 hover:text-red-400 hover:bg-red-50 active:bg-red-100 transition-colors"
+                      aria-label="Delete item"
                       title="Delete item"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -382,7 +414,7 @@ export default function DailyChecklistLive() {
               onChange={e => setNewText(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleAddItem(); if (e.key === "Escape") { setShowAddForm(false); setNewText(""); setNewNote(""); } }}
               className="w-full border border-stone-200 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest rounded"
-              placeholder="Item text e.g. Wipe down bar tops"
+              aria-label="Item text" placeholder="Item text e.g. Wipe down bar tops"
             />
             <input
               type="text"
@@ -390,7 +422,7 @@ export default function DailyChecklistLive() {
               onChange={e => setNewNote(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleAddItem(); if (e.key === "Escape") { setShowAddForm(false); setNewText(""); setNewNote(""); } }}
               className="w-full border border-stone-200 px-3 py-2 font-dm text-xs text-ink/60 focus:outline-none focus:border-forest rounded"
-              placeholder="Note (optional)"
+              aria-label="Note (optional)" placeholder="Note (optional)"
             />
             <div className="flex gap-2">
               <button
@@ -411,21 +443,22 @@ export default function DailyChecklistLive() {
         ) : (
           <button
             onClick={() => { setShowAddForm(true); setConfirmDeleteId(null); setEditingId(null); }}
-            className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-stone-200 py-3 rounded text-stone-400 hover:border-forest/30 hover:text-forest hover:bg-forest/5 active:bg-forest/10 transition-colors"
+            className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-stone-300 py-3 rounded text-stone-600 hover:border-forest/30 hover:text-forest hover:bg-forest/5 active:bg-forest/10 transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span className="font-bebas tracking-widest text-sm">ADD ITEM</span>
           </button>
         )}
       </div>
+      </main>
 
       {/* Staff name footer */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg safe-area-inset-bottom">
+      <footer className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg safe-area-inset-bottom">
         <div className="max-w-2xl mx-auto px-4 py-3">
           {editingName ? (
             <div className="flex items-center gap-2">
               <div className="flex-1">
-                <p className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1">YOUR NAME (so we know who ticked what)</p>
+                <p id="vf-staff-name-label" className="font-bebas tracking-widest text-[10px] text-ink/65 mb-1">YOUR NAME (so we know who ticked what)</p>
                 <input
                   ref={nameInputRef}
                   type="text"
@@ -433,6 +466,7 @@ export default function DailyChecklistLive() {
                   onChange={e => setNameInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") saveName(); }}
                   placeholder="e.g. Sarah"
+                  aria-labelledby="vf-staff-name-label"
                   className="w-full border border-stone-300 px-3 py-2 font-dm text-sm focus:outline-none focus:border-forest"
                 />
               </div>
@@ -459,7 +493,7 @@ export default function DailyChecklistLive() {
             </div>
           )}
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

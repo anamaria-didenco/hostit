@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import {
   Loader2, CheckSquare, Square, RefreshCw, CheckCircle2, Pencil,
   Users, Utensils, Wine, Star, Fish, Megaphone, Wifi, WifiOff, MapPin, Clock, Printer,
@@ -66,7 +67,21 @@ export default function ShiftRunsheetLive() {
     { enabled: !!token, refetchInterval: 30000 }
   );
 
-  const toggleMut = trpc.dailyChecklists.toggleItemByToken.useMutation({ onSuccess: () => refetch() });
+  // Which single item's tick is in flight — disables only that row instead of
+  // freezing every checklist on the shift for the round-trip.
+  const [pendingItemId, setPendingItemId] = useState<number | null>(null);
+  const toggleMut = trpc.dailyChecklists.toggleItemByToken.useMutation({
+    onSuccess: () => { refetch(); setPendingItemId(null); },
+    // No onError previously: on a dropped connection the optimistic tick
+    // stayed showing "done" forever, nothing rolled back, no one told —
+    // exactly the failure mode the Wifi/WifiOff indicator exists to warn
+    // about, just not wired into the action that actually needs it.
+    onError: (_e, vars) => {
+      setOptimistic(prev => { const n = { ...prev }; delete n[vars.itemId]; return n; });
+      setPendingItemId(null);
+      toast.error("Couldn't save — check your connection and try again");
+    },
+  });
   const resetMut = trpc.dailyChecklists.resetByToken.useMutation({ onSuccess: () => refetch() });
 
   const [optimistic, setOptimistic] = useState<Record<number, boolean>>({});
@@ -115,6 +130,7 @@ export default function ShiftRunsheetLive() {
   function handleToggle(clToken: string, itemId: number, currentChecked: boolean) {
     const next = !currentChecked;
     setOptimistic(p => ({ ...p, [itemId]: next }));
+    setPendingItemId(itemId);
     toggleMut.mutate({ token: clToken, itemId, checked: next, checkedBy: next ? (staffName || undefined) : undefined });
   }
 
@@ -130,8 +146,8 @@ export default function ShiftRunsheetLive() {
     return (
       <div className="min-h-screen bg-linen flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-bebas tracking-widest text-2xl text-stone-400">SHIFT RUNSHEET NOT FOUND</p>
-          <p className="font-dm text-sm text-stone-400 mt-2">This link may be invalid or has been removed.</p>
+          <p className="font-bebas tracking-widest text-2xl text-stone-600">SHIFT RUNSHEET NOT FOUND</p>
+          <p className="font-dm text-sm text-stone-600 mt-2">This link may be invalid or has been removed.</p>
         </div>
       </div>
     );
@@ -175,6 +191,24 @@ export default function ShiftRunsheetLive() {
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
   })();
 
+  // The sticky header's background is the venue's own brand colour, which can
+  // be anything a venue picks in Settings — fixed white-at-N%-opacity text
+  // reads fine against the default blue but measured as low as 2.58:1
+  // against darker brand colours in testing, and could invert entirely
+  // against a light one. Derive the header's relative luminance (WCAG
+  // formula) and switch to solid ink text on a light brand colour instead of
+  // guessing a single opacity that only works for some venues.
+  const headerIsLight = (() => {
+    const m = /^#([0-9a-f]{6})$/i.exec(venuePrimaryColor);
+    if (!m) return false;
+    const n = parseInt(m[1], 16);
+    const toLin = (c: number) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+    const r = toLin((n >> 16) & 0xff), g = toLin((n >> 8) & 0xff), b = toLin(n & 0xff);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5;
+  })();
+  const headerText = headerIsLight ? "text-ink" : "text-white";
+  const headerTextMuted = headerIsLight ? "text-ink/80" : "text-white/85";
+
   const dateDisplay = sr.date
     ? new Date(sr.date + "T00:00:00").toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
     : null;
@@ -199,46 +233,45 @@ export default function ShiftRunsheetLive() {
 
   return (
     <div className="min-h-screen bg-linen pb-32" style={{ ['--brand' as any]: venuePrimaryColor, ['--brand-dark' as any]: brandDark }}>
-      {/* Venue logo */}
+      <header>
       {venueLogoUrl && (
         <div className="bg-white border-b border-stone-100 px-4 py-3 flex items-center justify-center">
           <img src={venueLogoUrl} alt={venueName ?? "Venue logo"} className="h-10 w-auto max-w-[160px] object-contain" />
         </div>
       )}
 
-      {/* Sticky header */}
       <div className="bg-[var(--brand)] sticky top-0 z-10 shadow-md">
         <div className="max-w-2xl mx-auto px-5 py-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="font-bebas tracking-widest text-[10px] text-white/60 mb-0.5">DAILY SHIFT RUNSHEET</div>
-            <h1 className="font-bebas text-xl tracking-wider text-white leading-tight">
+            <div className={`font-bebas tracking-widest text-[10px] ${headerTextMuted} mb-0.5`}>DAILY SHIFT RUNSHEET</div>
+            <h1 className={`font-bebas text-xl tracking-wider ${headerText} leading-tight`}>
               {dateDisplay ?? "Shift Runsheet"}
             </h1>
             {sr.dutyManager && (
-              <p className="font-dm text-xs text-white/75 mt-0.5">
-                Manager: <span className="text-white font-medium">{sr.dutyManager}</span>
+              <p className={`font-dm text-xs ${headerTextMuted} mt-0.5`}>
+                Manager: <span className={`${headerText} font-medium`}>{sr.dutyManager}</span>
               </p>
             )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 pt-1">
             <button
               onClick={() => window.print()}
-              className="print:hidden flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-sm transition-colors"
+              className={`print:hidden flex items-center gap-1.5 ${headerIsLight ? "bg-ink/10 hover:bg-ink/15" : "bg-white/15 hover:bg-white/25"} px-2.5 py-1 rounded-sm transition-colors`}
               title="Print or save as PDF"
             >
-              <Printer className="w-3.5 h-3.5 text-white/90" />
-              <span className="font-bebas tracking-widest text-white/90 text-[11px]">PRINT</span>
+              <Printer className={`w-3.5 h-3.5 ${headerText}`} aria-hidden="true" />
+              <span className={`font-bebas tracking-widest ${headerText} text-[11px]`}>PRINT</span>
             </button>
             {isOnline
-              ? <Wifi className="w-4 h-4 text-white/40" />
-              : <WifiOff className="w-4 h-4 text-yellow-300 animate-pulse" />
+              ? <Wifi className={`w-4 h-4 ${headerIsLight ? "text-ink/50" : "text-white/60"}`} aria-label="Online" role="img" />
+              : <WifiOff className={`w-4 h-4 animate-pulse ${headerIsLight ? "text-red-700" : "text-yellow-300"}`} aria-label="Offline — changes may not save" role="img" />
             }
             {hasChecklists && (
               <div className="text-right">
-                <div className="font-bebas tracking-widest text-sm text-white leading-none">
+                <div className={`font-bebas tracking-widest text-sm ${headerText} leading-none`}>
                   {totalChecked}/{totalChecklistItems}
                 </div>
-                <div className="font-dm text-[10px] text-white/60">tasks</div>
+                <div className={`font-dm text-[10px] ${headerTextMuted}`}>tasks</div>
               </div>
             )}
           </div>
@@ -252,7 +285,15 @@ export default function ShiftRunsheetLive() {
           </div>
         )}
       </div>
-
+      </header>
+      <main>
+      {!isOnline && (
+        <div className="max-w-2xl mx-auto px-4 pt-4">
+          <div role="status" className="text-xs font-dm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded text-center">
+            Offline — taps may not save until back online
+          </div>
+        </div>
+      )}
       {allChecklistsDone && (
         <div className="max-w-2xl mx-auto px-4 pt-4">
           <div className="bg-green-50 border border-green-200 px-4 py-3 flex items-center gap-3 rounded">
@@ -268,8 +309,8 @@ export default function ShiftRunsheetLive() {
         {activeSections.length > 0 && (
           <div className="bg-white border border-stone-200 rounded overflow-hidden">
             <div className="bg-[var(--brand)] border-b border-[var(--brand)] px-4 py-2.5 flex items-center gap-2">
-              <Users className="w-3.5 h-3.5 text-white" />
-              <span className="font-bebas tracking-widest text-xs text-white">SECTIONS</span>
+              <Users className={`w-3.5 h-3.5 ${headerText}`} aria-hidden="true" />
+              <h2 className={`font-bebas tracking-widest text-xs ${headerText}`}>SECTIONS</h2>
             </div>
             <div className="divide-y divide-stone-100">
               {activeSections.map(({ key, label }) => (
@@ -295,9 +336,9 @@ export default function ShiftRunsheetLive() {
         {events.length > 0 && (
           <div className="bg-white border border-stone-200 rounded overflow-hidden">
             <div className="bg-[var(--brand)] border-b border-[var(--brand)] px-4 py-2.5 flex items-center gap-2">
-              <Utensils className="w-3.5 h-3.5 text-white" />
-              <span className="font-bebas tracking-widest text-xs text-white">EVENTS TODAY</span>
-              <span className="font-dm text-xs text-white/60">· {events.length}</span>
+              <Utensils className={`w-3.5 h-3.5 ${headerText}`} aria-hidden="true" />
+              <h2 className={`font-bebas tracking-widest text-xs ${headerText}`}>EVENTS TODAY</h2>
+              <span className={`font-dm text-xs ${headerTextMuted}`}>· {events.length}</span>
             </div>
             <div className="divide-y divide-stone-100">
               {events.map(ev => {
@@ -421,7 +462,7 @@ export default function ShiftRunsheetLive() {
                     )}
 
                     {ev.fnb.length === 0 && !ev.drinksData?.barNotes && (
-                      <p className="font-dm text-xs text-stone-400 italic">No F&B added yet for this event.</p>
+                      <p className="font-dm text-xs text-stone-600 italic">No F&B added yet for this event.</p>
                     )}
                   </div>
                 );
@@ -447,7 +488,7 @@ export default function ShiftRunsheetLive() {
                   <span className="font-bebas tracking-widest text-sm text-stone-700">{cl.name}</span>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className="font-dm text-xs text-stone-500">{checkedCount}/{items.length}</span>
+                  <span className="font-dm text-xs text-stone-600">{checkedCount}/{items.length}</span>
                   <button
                     onClick={() => { if (confirm("Reset all items?")) { setOptimistic(p => { const n = { ...p }; items.forEach((it: any) => delete n[it.id]); return n; }); resetMut.mutate({ token: cl.token }); } }}
                     className="font-bebas tracking-widest text-[10px] text-stone-400 hover:text-red-500 flex items-center gap-1 transition-colors"
@@ -466,7 +507,7 @@ export default function ShiftRunsheetLive() {
                 </div>
               )}
               {items.length === 0 && (
-                <p className="font-dm text-sm text-stone-400 text-center py-6">No items on this checklist.</p>
+                <p className="font-dm text-sm text-stone-600 text-center py-6">No items on this checklist.</p>
               )}
               {items.map((item: any) => {
                 const isChecked = optimistic[item.id] !== undefined ? optimistic[item.id] : (item.checked === 1);
@@ -474,7 +515,10 @@ export default function ShiftRunsheetLive() {
                   <div key={item.id}>
                   <button
                     onClick={() => handleToggle(cl.token, item.id, isChecked)}
-                    className={`w-full text-left flex items-start gap-3 px-4 py-3.5 ${item.photoUrl ? "" : "border-b border-stone-100 last:border-0"} transition-colors active:scale-[0.99] ${isChecked ? "bg-green-50/70" : "bg-white hover:bg-stone-50 active:bg-stone-100"}`}
+                    disabled={pendingItemId === item.id}
+                    role="checkbox"
+                    aria-checked={isChecked}
+                    className={`w-full text-left flex items-start gap-3 px-4 py-3.5 disabled:opacity-60 ${item.photoUrl ? "" : "border-b border-stone-100 last:border-0"} transition-colors active:scale-[0.99] ${isChecked ? "bg-green-50/70" : "bg-white hover:bg-stone-50 active:bg-stone-100"}`}
                   >
                     <div className="mt-0.5 flex-shrink-0">
                       {isChecked
@@ -507,7 +551,7 @@ export default function ShiftRunsheetLive() {
         {(dayGrand > 0 || (paymentInstructions && paymentInstructions.trim().length > 0)) && (
           <div className="bg-white border border-stone-200 rounded overflow-hidden">
             <div className="bg-[var(--brand)] border-b border-[var(--brand)] px-4 py-2.5 flex items-center gap-2">
-              <span className="font-bebas tracking-widest text-xs text-white">RUNNING TOTAL · TODAY</span>
+              <h2 className={`font-bebas tracking-widest text-xs ${headerText}`}>RUNNING TOTAL · TODAY</h2>
             </div>
             {dayGrand > 0 && (
               <div className="px-4 py-3 grid grid-cols-3 gap-3">
@@ -540,24 +584,26 @@ export default function ShiftRunsheetLive() {
 
         {!activeSections.length && infoFields.length === 0 && !hasChecklists && events.length === 0 && (
           <div className="text-center py-16">
-            <p className="font-dm text-sm text-stone-400">No details have been added to this shift runsheet yet.</p>
+            <p className="font-dm text-sm text-stone-600">No details have been added to this shift runsheet yet.</p>
           </div>
         )}
       </div>
+      </main>
 
       {/* Staff name footer */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg safe-area-inset-bottom">
+      <footer className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg safe-area-inset-bottom">
         <div className="max-w-2xl mx-auto px-4 py-3">
           {editingName ? (
             <div className="flex items-center gap-2">
               <div className="flex-1">
-                <p className="font-bebas tracking-widest text-[10px] text-stone-400 mb-1">YOUR NAME</p>
+                <p id="vf-shift-staff-name-label" className="font-bebas tracking-widest text-[10px] text-stone-600 mb-1">YOUR NAME</p>
                 <input
                   ref={nameInputRef}
                   type="text"
                   value={nameInput}
                   onChange={e => setNameInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") saveName(); }}
+                  aria-labelledby="vf-shift-staff-name-label"
                   placeholder="e.g. Sarah"
                   className="w-full border border-stone-300 px-3 py-2 font-dm text-sm focus:outline-none focus:border-[var(--brand)] rounded"
                 />
@@ -573,19 +619,19 @@ export default function ShiftRunsheetLive() {
           ) : (
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bebas tracking-widest text-[10px] text-stone-400">CHECKING IN AS</p>
+                <p className="font-bebas tracking-widest text-[10px] text-stone-600">CHECKING IN AS</p>
                 <p className="font-dm text-sm text-stone-800 font-medium">{staffName || "Anonymous"}</p>
               </div>
               <button
                 onClick={() => { setNameInput(staffName); setEditingName(true); }}
-                className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-stone-400 hover:text-[var(--brand)] transition-colors"
+                className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-stone-600 hover:text-[var(--brand)] transition-colors"
               >
                 <Pencil className="w-3 h-3" /> CHANGE
               </button>
             </div>
           )}
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

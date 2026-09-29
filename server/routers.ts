@@ -583,6 +583,11 @@ export const appRouter = router({
         eventFormat: z.enum(['seated', 'cocktail', 'both']).optional(),
         budgetRange: z.enum(['under_5k', '5_10k', '10_20k', '20k_plus']).optional(),
         budget: z.number().min(0).max(10_000_000).optional(),
+        // Event-type-specific follow-up answer (e.g. ceremony/AV/format) and,
+        // for corporate enquiries only, where to send the invoice — both kept
+        // separate from `message` so they stay queryable per type.
+        eventDetail: z.string().max(255).optional(),
+        invoicingNote: z.string().max(255).optional(),
         message: z.string().max(5000).optional(),
         source: z.string().max(120).optional(),
         // Ad-click attribution, read by the embed loader from the parent
@@ -613,6 +618,8 @@ export const appRouter = router({
           dateFlexible: input.dateFlexible ?? false,
           eventFormat: input.eventFormat,
           budgetRange: input.budgetRange,
+          eventDetail: input.eventDetail,
+          invoicingNote: input.invoicingNote,
           guestCount: input.guestCount,
           budget: input.budget?.toString() as any,
           message: input.message,
@@ -826,6 +833,26 @@ export const appRouter = router({
         }
 
         return lead;
+      }),
+
+    // Public: after a successful submit, the confirmation screen offers a
+    // 20-minute walkthrough slot (computed client-side — next few Tue–Sat
+    // days, no real availability check). Picking one just records the label
+    // on the lead so staff can see what was offered; it is not a calendar
+    // booking. Rate-limited the same as submit/startCapture since it's a
+    // public write keyed by a client-supplied ownerId.
+    bookWalkthrough: publicProcedure
+      .input(z.object({
+        ownerId: z.number(),
+        leadId: z.number(),
+        slotLabel: z.string().min(1).max(60),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await enforceLeadRateLimit(ctx, input.ownerId);
+        const existing = await getLeadById(input.leadId, input.ownerId);
+        if (!existing) throw new Error("Enquiry not found.");
+        await updateLead(input.leadId, input.ownerId, { walkthroughSlot: input.slotLabel });
+        return { ok: true };
       }),
 
     updateStatus: protectedProcedure
@@ -1061,7 +1088,8 @@ export const appRouter = router({
           ne(leads.source, 'healthcheck'),
           isNotNull(leads.followUpDate),
           lte(leads.followUpDate, now),
-          notInArray(leads.status, ['booked', 'lost', 'cancelled']),
+          // 'booked' was renamed 'confirmed'; keep the old value for legacy rows.
+          notInArray(leads.status, ['booked', 'confirmed', 'finished', 'lost', 'cancelled']),
         )
       ).orderBy(leads.followUpDate);
     }),
@@ -3616,6 +3644,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         venueArea: z.string().optional().nullable(),
         eventStartTime: z.string().optional().nullable(),
         eventEndTime: z.string().optional().nullable(),
+        contactName: z.string().max(255).optional().nullable(),
+        contactEmail: z.string().max(320).optional().nullable(),
+        contactPhone: z.string().max(50).optional().nullable(),
         guestCount: z.number().optional(),
         eventType: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
@@ -3663,6 +3694,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           venueArea: input.venueArea ?? null,
           eventStartTime: input.eventStartTime ?? null,
           eventEndTime: input.eventEndTime ?? null,
+          contactName: input.contactName ?? null,
+          contactEmail: input.contactEmail ?? null,
+          contactPhone: input.contactPhone ?? null,
           guestCount: input.guestCount ?? null,
           eventType: input.eventType ?? null,
           notes: input.notes ?? null,
@@ -3713,6 +3747,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         venueArea: z.string().optional().nullable(),
         eventStartTime: z.string().optional().nullable(),
         eventEndTime: z.string().optional().nullable(),
+        contactName: z.string().max(255).optional().nullable(),
+        contactEmail: z.string().max(320).optional().nullable(),
+        contactPhone: z.string().max(50).optional().nullable(),
         guestCount: z.number().optional(),
         eventType: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
@@ -3744,6 +3781,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.venueArea !== undefined) updateData.venueArea = fields.venueArea;
         if (fields.eventStartTime !== undefined) updateData.eventStartTime = fields.eventStartTime;
         if (fields.eventEndTime !== undefined) updateData.eventEndTime = fields.eventEndTime;
+        if (fields.contactName !== undefined) updateData.contactName = fields.contactName;
+        if (fields.contactEmail !== undefined) updateData.contactEmail = fields.contactEmail;
+        if (fields.contactPhone !== undefined) updateData.contactPhone = fields.contactPhone;
         if (fields.guestCount !== undefined) updateData.guestCount = fields.guestCount;
         if (fields.eventType !== undefined) updateData.eventType = fields.eventType;
         if (fields.notes !== undefined) updateData.notes = fields.notes;
@@ -6290,17 +6330,30 @@ Return ONLY valid JSON.`;
           await db.update(checklistInstances).set({ shareToken }).where(eq(checklistInstances.id, checklistInstance.id));
           checklistInstance = { ...checklistInstance, shareToken };
         }
-        // Fetch contact info from lead if linked
-        let contactName: string | null = null;
-        let contactEmail: string | null = null;
-        let contactPhone: string | null = null;
-        if (runsheet.leadId) {
+        // Contact info: the runsheet's own saved value wins (an edit made in
+        // the Runsheet Builder must show up here, not the original lead's
+        // stale details), then the linked lead, then the linked booking —
+        // a booking-only runsheet (no leadId) has no lead to fall back to,
+        // and previously showed no contact card at all.
+        let contactName: string | null = (runsheet as any).contactName ?? null;
+        let contactEmail: string | null = (runsheet as any).contactEmail ?? null;
+        let contactPhone: string | null = (runsheet as any).contactPhone ?? null;
+        if ((contactName == null || contactEmail == null || contactPhone == null) && runsheet.leadId) {
           const { leads } = await import('../drizzle/schema');
           const [lead] = await db.select().from(leads).where(eq(leads.id, runsheet.leadId)).limit(1);
           if (lead) {
-            contactName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
-            contactEmail = lead.email;
-            contactPhone = lead.phone ?? null;
+            if (contactName == null) contactName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
+            if (contactEmail == null) contactEmail = lead.email;
+            if (contactPhone == null) contactPhone = lead.phone ?? null;
+          }
+        }
+        // Bookings have no phone column, so only name/email can fall back here.
+        if ((contactName == null || contactEmail == null) && runsheet.bookingId) {
+          const { bookings } = await import('../drizzle/schema');
+          const [linkedBooking] = await db.select().from(bookings).where(eq(bookings.id, runsheet.bookingId)).limit(1);
+          if (linkedBooking) {
+            if (contactName == null) contactName = [linkedBooking.firstName, linkedBooking.lastName].filter(Boolean).join(' ');
+            if (contactEmail == null) contactEmail = linkedBooking.email;
           }
         }
         // Fetch payment records if runsheet is linked to a booking
