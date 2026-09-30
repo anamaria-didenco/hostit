@@ -155,11 +155,18 @@ export default function PaymentsBoard() {
     return list;
   }, [all, q, filter, eventFilter]);
 
+  // Each booking counts in exactly ONE card, as a funnel: settled → to invoice
+  // → awaiting payment → on the night. So the four numbers sum to the total
+  // number of bookings instead of overlapping (a booking that both needs
+  // invoicing and has a deposit due used to be counted twice).
   const summary = useMemo(() => {
-    const toInvoice = all.filter(r => r.foodStatus === "to_invoice" || r.drinksStatus === "to_invoice").length;
-    const awaiting = all.filter(r => isDepositDue(r) || r.foodStatus === "invoiced" || r.drinksStatus === "invoiced").length;
-    const onNight = all.filter(r => (r.drinksStatus === "on_night" || r.foodStatus === "on_night") && isFuture(r)).length;
-    const settled = all.filter(isFullySettled).length;
+    let toInvoice = 0, awaiting = 0, onNight = 0, settled = 0;
+    for (const r of all) {
+      if (isFullySettled(r)) settled++;
+      else if (r.foodStatus === "to_invoice" || r.drinksStatus === "to_invoice") toInvoice++;
+      else if (isDepositDue(r) || r.foodStatus === "invoiced" || r.drinksStatus === "invoiced") awaiting++;
+      else if ((r.drinksStatus === "on_night" || r.foodStatus === "on_night") && isFuture(r)) onNight++;
+    }
     return { toInvoice, awaiting, onNight, settled };
   }, [all]);
 
@@ -183,7 +190,7 @@ export default function PaymentsBoard() {
             <DollarSign className="w-6 h-6 text-forest" /> Payments
           </h1>
           <p className="font-dm text-sm text-sage mt-0.5">
-            Deposit, food and drinks tracked per event — so the team always knows who to invoice, who's paid, and who's settling on the night.
+            Deposit, food and drinks tracked per booking — so the team always knows who to invoice, who's paid, and who's settling on the night.
           </p>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -200,10 +207,10 @@ export default function PaymentsBoard() {
         <select
           value={eventFilter}
           onChange={e => setEventFilter(Number(e.target.value))}
-          aria-label="Jump to one event"
+          aria-label="Jump to one booking"
           className="w-full sm:w-56 px-2 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
         >
-          <option value={0}>All events…</option>
+          <option value={0}>All bookings…</option>
           {[...all].sort((a, b) => (a.eventDate ? new Date(a.eventDate).getTime() : 0) - (b.eventDate ? new Date(b.eventDate).getTime() : 0)).map(r => (
             <option key={r.bookingId} value={r.bookingId}>
               {r.name}{r.eventDate ? ` — ${new Date(r.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}
@@ -225,7 +232,7 @@ export default function PaymentsBoard() {
 
       {/* View switcher */}
       <div className="flex gap-1.5 mb-4 border-b border-gold/20" role="tablist" aria-label="Payments view">
-        {([["events", "Events"], ["received", "Received"]] as const).map(([k, lbl]) => (
+        {([["events", "Bookings"], ["received", "Received"]] as const).map(([k, lbl]) => (
           <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)}
             className={`font-bebas tracking-widest text-sm px-4 py-2.5 border-b-2 -mb-px transition-colors ${
               view === k ? "border-forest text-forest" : "border-transparent text-sage hover:text-ink"}`}>
@@ -236,7 +243,11 @@ export default function PaymentsBoard() {
 
       {view === "received" ? <PaymentsReceived /> : (<>
 
-      {/* Summary strip */}
+      {/* Summary strip — a funnel across every booking (not the filtered list
+          below), so the four numbers sum to your total book. */}
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="font-bebas tracking-widest text-[10px] text-sage">ACROSS ALL {all.length} BOOKING{all.length === 1 ? "" : "S"}</span>
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <SummaryCard label="To invoice" value={String(summary.toInvoice)} tone="amber" icon={<FileText className="w-4 h-4" />} />
         <SummaryCard label="Awaiting payment" value={String(summary.awaiting)} tone="blue" icon={<Clock className="w-4 h-4" />} />
@@ -246,14 +257,14 @@ export default function PaymentsBoard() {
 
       {/* Filters */}
       <div className="flex items-center gap-1.5 mb-3">
-        {([["action", "Needs action"], ["upcoming", "Upcoming"], ["all", "All events"]] as const).map(([id, lbl]) => (
+        {([["action", "Needs action"], ["upcoming", "Upcoming"], ["all", "All"]] as const).map(([id, lbl]) => (
           <button key={id} onClick={() => setFilter(id)}
             className={`font-bebas tracking-widest text-xs px-3 py-1.5 rounded-md transition-colors ${
               filter === id ? "bg-forest text-cream" : "bg-cream text-sage hover:text-ink border border-gold/20"}`}>
             {lbl}
           </button>
         ))}
-        <span className="font-dm text-xs text-sage ml-auto">{rows.length} event{rows.length === 1 ? "" : "s"}</span>
+        <span className="font-dm text-xs text-sage ml-auto">{rows.length} booking{rows.length === 1 ? "" : "s"}</span>
       </div>
 
       {/* Legend */}
@@ -362,7 +373,7 @@ function Chip({ label, state, onClick, title, disabled, menu }: {
       <div ref={wrapRef} className="relative inline-block">
         <button onClick={() => setOpen(o => !o)} disabled={disabled} title={title}
           aria-haspopup="listbox" aria-expanded={open}
-          className="font-bebas tracking-widest text-[11px] px-2.5 py-1 rounded-md transition-transform active:scale-95 disabled:opacity-50 whitespace-nowrap inline-flex items-center gap-1"
+          className="font-bebas tracking-widest text-[11px] px-2.5 py-1 rounded-md border border-black/10 shadow-sm hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest cursor-pointer transition active:scale-95 disabled:opacity-50 whitespace-nowrap inline-flex items-center gap-1"
           style={{ background: c.bg, color: c.text }}>
           {label} <ChevronDown className="w-3 h-3 -mr-0.5" aria-hidden="true" />
         </button>
@@ -432,6 +443,11 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
     menu={{ options: DRINKS_STATES.map(o => ({ label: o.label, state: o.state, selected: row.drinksStatus === o.value, onPick: () => onDrinks(o.value) })) }} />;
 
   const settled = (!row.depositRequired || row.depositPaid) && row.foodStatus === "paid" && row.drinksStatus === "paid";
+  // Overdue = money still owed, and either the deposit is unpaid or the event
+  // has already happened. Drives the red treatment on the balance.
+  const isOverdue = (row.outstanding ?? 0) > 0 &&
+    ((row.depositRequired && !row.depositPaid) ||
+      (!!row.eventDate && new Date(row.eventDate).getTime() < new Date().setHours(0, 0, 0, 0)));
 
   return (
     <div className={`bg-white border rounded-lg px-3.5 py-3 flex flex-col lg:flex-row lg:items-center gap-3 ${settled ? "border-green-200/70" : "border-gold/20"}`}>
@@ -456,19 +472,25 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
         {depositChip}
         {foodChip}
         {drinksChip}
+      </div>
+
+      {/* Balance — the amount owed leads the row (the reason to open Payments),
+          shown at display weight and flagged red when overdue. The money is
+          recorded in this booking's payment history, Xero imports included. */}
+      <div className="flex-shrink-0 lg:w-40 flex flex-col lg:items-end" title="Recorded in this booking's payment history">
+        {(row.outstanding ?? 0) > 0 ? (
+          <>
+            <div className={`font-cormorant text-xl font-bold leading-none ${isOverdue ? "text-red-700" : "text-ink"}`}>{fmtNZD(row.outstanding ?? 0)}</div>
+            <div className={`font-bebas tracking-widest text-[10px] mt-0.5 ${isOverdue ? "text-red-700" : "text-sage"}`}>{isOverdue ? "OVERDUE" : "OWED"}</div>
+            {row.paidToDate > 0 && <div className="font-dm text-[11px] text-sage mt-0.5">{fmtNZD(row.paidToDate)} paid</div>}
+          </>
+        ) : row.paidToDate > 0 ? (
+          <div className="font-bebas tracking-widest text-[11px] text-green-700 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Paid in full</div>
+        ) : null}
         {!row.hasPrice && (
-          <span className="font-dm text-[10px] text-amber-700 flex items-center gap-0.5" title="No total set on this event">
+          <div className="font-dm text-[10px] text-amber-700 flex items-center gap-0.5 mt-0.5" title="No total set on this booking">
             <AlertCircle className="w-3 h-3" /> no total
-          </span>
-        )}
-        {/* Money actually recorded against this event — including anything
-            imported from Xero — so the ledger is visible without drilling in. */}
-        {(row.paidToDate > 0 || (row.outstanding ?? 0) > 0) && (
-          <span className="font-dm text-[11px] whitespace-nowrap" title="Recorded in this event's payment history">
-            {row.paidToDate > 0 && <span className="text-green-700 font-semibold">{fmtNZD(row.paidToDate)} paid</span>}
-            {row.paidToDate > 0 && (row.outstanding ?? 0) > 0 && <span className="text-sage"> · </span>}
-            {(row.outstanding ?? 0) > 0 && <span className="text-ink/70">{fmtNZD(row.outstanding ?? 0)} left</span>}
-          </span>
+          </div>
         )}
       </div>
 
