@@ -42,6 +42,9 @@ export default function Reports() {
   const booked = (allLeads ?? []).filter((l: any) => l.status === "booked").length;
   const conversionRate = totalLeads > 0 ? Math.round((booked / totalLeads) * 100) : 0;
 
+  // Turn raw source keys ("lead_form") into human labels ("Lead Form").
+  const fmtSource = (s: string) => (s || "—").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
   // Event type breakdown
   const eventTypeCounts: Record<string, number> = {};
   (allLeads ?? []).forEach((l: any) => {
@@ -180,7 +183,7 @@ export default function Reports() {
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={revenueData} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5ddd4" />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
                     <Bar dataKey="revenue" fill="#2f5488" radius={[2, 2, 0, 0]} />
@@ -202,10 +205,10 @@ export default function Reports() {
                 // role="img" makes the subtree a single leaf node to assistive
                 // tech, so the label below is what gets announced rather than a
                 // run of unnamed slice paths.
-                <div role="img" aria-label={`Enquiry sources: ${sourceData.map((d: any) => `${d.source}, ${d.count}`).join('; ')}`}>
+                <div role="img" aria-label={`Enquiry sources: ${sourceData.map((d: any) => `${fmtSource(d.source)}, ${d.count}`).join('; ')}`}>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
-                    <Pie data={sourceData} dataKey="count" nameKey="source" cx="50%" cy="50%" outerRadius={75} label={({ source, percent }) => `${source} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    <Pie data={sourceData} dataKey="count" nameKey="source" cx="50%" cy="50%" outerRadius={75} label={({ source, percent }) => `${fmtSource(source)} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                       {sourceData.map((_: any, i: number) => (
                         <Cell key={i} fill={BRAND_COLORS[i % BRAND_COLORS.length]} role="presentation" aria-hidden="true" />
                       ))}
@@ -292,7 +295,7 @@ export default function Reports() {
                             {l.status?.replace("_", " ").toUpperCase() || "—"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-dm text-xs text-sage">{l.source || "—"}</td>
+                        <td className="px-4 py-3 font-dm text-xs text-sage">{l.source ? fmtSource(l.source) : "—"}</td>
                       </tr>
                     );
                   })
@@ -461,7 +464,7 @@ export default function Reports() {
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={revenueData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5ddd4" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
                   <Bar dataKey="revenue" fill="#2f5488" radius={[2, 2, 0, 0]} />
