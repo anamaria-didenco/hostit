@@ -1147,6 +1147,14 @@ export default function Dashboard() {
   const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '' });
   const addEnquiryFormId = useId();
   const [addEnquirySpaceError, setAddEnquirySpaceError] = useState(false);
+  // Single, deterministic entry point for adding an enquiry. Always opens on a
+  // fresh "new" enquiry in Smart-paste mode, so every "Add enquiry" button
+  // behaves identically (no stale status carried over from a previous open).
+  const openAddEnquiry = React.useCallback(() => {
+    setAddEnquiryForm(f => ({ ...f, status: 'new' }));
+    setEnquiryPasteMode(true);
+    setShowAddLead(true);
+  }, []);
 
   const utils = trpc.useUtils();
 
@@ -3097,60 +3105,51 @@ export default function Dashboard() {
           {tab === "enquiries" && (
             <div className="flex h-full overflow-hidden">
 
-              {/* ── EVENTS SUB-SIDEBAR ─────────────────────────────────────── */}
-              <aside className="hidden md:flex flex-col w-48 flex-shrink-0 bg-forest-dark text-cream border-r border-forest overflow-y-auto">
-                <div className="px-4 py-3 border-b border-cream/15">
-                  <div className="font-bebas tracking-widest text-xs text-[#c49d5c]">EVENTS</div>
-                </div>
-                {([
-                  { key: 'calendar', label: 'Calendar', icon: <Calendar className="w-3.5 h-3.5" />, onClick: () => setTab('calendar' as any) },
-                  { key: 'table', label: 'View Events Table', icon: <Table2 className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter([]); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadViewMode === 'table' && leadStatusFilter.length === 0 },
-                  { key: 'add_event', label: 'Add Event', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'booked' })); setEnquiryPasteMode(false); setShowAddLead(true); } },
-                  { key: 'add_enquiry', label: 'Add Enquiry', icon: <Plus className="w-3.5 h-3.5" />, onClick: () => { setAddEnquiryForm(f => ({ ...f, status: 'new' })); setEnquiryPasteMode(true); setShowAddLead(true); } },
-                  { key: 'add_quote', label: 'Add Quote', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => setLocation('/proposals/new') },
-                  { key: 'view_enquiries', label: 'View Enquiries', icon: <MessageSquare className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter(['new']); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadStatusFilter.length === 1 && leadStatusFilter[0] === 'new' },
-                  { key: 'view_quotes', label: 'View Quotes', icon: <FileText className="w-3.5 h-3.5" />, onClick: () => { setLeadViewMode('table'); setLeadStatusFilter(['proposal_sent']); setLeadsSubTab('all'); setSelectedLead(null); }, active: leadStatusFilter.length === 1 && leadStatusFilter[0] === 'proposal_sent' },
-                ]).map((item: any) => (
-                  <button
-                    key={item.key}
-                    onClick={item.onClick}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-left font-dm text-xs border-l-2 transition-colors ${item.active ? 'bg-forest border-gold text-cream font-semibold' : 'border-transparent text-cream/85 hover:text-cream hover:bg-forest hover:border-gold/40'}`}
-                  >
-                    {item.icon}
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                ))}
-              </aside>
-
-              {/* ── MAIN EVENTS COLUMN ─────────────────────────────────────── */}
+              {/* ── MAIN ENQUIRIES COLUMN ──────────────────────────────────── */}
               <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
               {/* ── TOP TOOLBAR ──────────────────────────────────────────────── */}
               <div className="flex-shrink-0 bg-white border-b border-gold/15">
                 {/* Row 1: Sub-tabs + view modes + actions */}
                 <div className="flex items-center gap-2 px-3 md:px-4 py-3 flex-wrap gap-y-2">
-                  {/* Sub-tabs or heading */}
-                  {newEnquiries.length > 0 ? (
-                    <div className="flex bg-muted rounded-xl p-0.5 gap-0.5">
-                      <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab("new"); setSelectedLead(null); }}
-                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "new" ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`}>
-                        NEW
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
-                      </button>
-                      <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab("all"); setSelectedLead(null); }}
-                        className={`font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${leadsSubTab === "all" ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`}>
-                        ALL EVENTS
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "all" ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <h2 className="font-cormorant text-xl font-semibold text-ink">
-                        {leadViewMode === "kanban" ? "Pipeline" : "All Events"}
-                      </h2>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-gray-100 text-gray-500">{filteredLeads.length}</span>
-                    </div>
-                  )}
+                  {/* Heading + status-filter tabs. One row replaces the old
+                      NEW/ALL segmented control AND the sub-sidebar's "View
+                      Enquiries / View Quotes" presets — a single place to
+                      slice the list. */}
+                  <div className="flex items-center gap-2.5 flex-wrap gap-y-1.5">
+                    <h2 className="font-cormorant text-xl font-semibold text-ink">
+                      {leadViewMode === "kanban" ? "Pipeline" : "Enquiries"}
+                    </h2>
+                    {leadViewMode !== "kanban" && (() => {
+                      const isAll = leadsSubTab === "all" && leadStatusFilter.length === 0;
+                      const filterIs = (keys: string[]) => leadStatusFilter.length === keys.length && keys.every(k => leadStatusFilter.includes(k));
+                      const tabCls = (on: boolean) => `font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${on ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`;
+                      return (
+                        <div className="flex bg-muted rounded-xl p-0.5 gap-0.5 flex-wrap">
+                          {newEnquiries.length > 0 && (
+                            <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab("new"); setSelectedLead(null); }}
+                              className={tabCls(leadsSubTab === "new")}>
+                              NEW
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
+                            </button>
+                          )}
+                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab("all"); setSelectedLead(null); }}
+                            className={tabCls(isAll)}>
+                            ALL
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isAll ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
+                          </button>
+                          <button onClick={() => { setLeadStatusFilter(['proposal_sent']); setShowPartialOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
+                            className={tabCls(filterIs(['proposal_sent']))}>
+                            QUOTED
+                          </button>
+                          <button onClick={() => { setLeadStatusFilter(['booked','confirmed']); setShowPartialOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
+                            className={tabCls(filterIs(['booked','confirmed']))}>
+                            CONFIRMED
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
 
                   {/* View mode toggle */}
                   <div className="flex border border-gold/30 rounded-lg overflow-hidden">
@@ -3168,9 +3167,9 @@ export default function Dashboard() {
 
                   {/* Actions */}
                   <div className="ml-auto flex items-center gap-2">
-                    <button onClick={() => setShowAddLead(true)}
+                    <button onClick={openAddEnquiry}
                       className="flex items-center gap-1.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs px-3 py-2 hover:bg-forest transition-colors">
-                      <Plus className="w-3.5 h-3.5" /> ADD NEW
+                      <Plus className="w-3.5 h-3.5" /> ADD ENQUIRY
                     </button>
                     <button onClick={() => setShowCsvImport(true)} title="Import from CSV"
                       className="px-3 py-2 border border-gold/30 text-ink/60 hover:border-gold hover:text-ink hover:bg-gold/5 transition-colors text-xs font-bebas tracking-widest flex items-center gap-1.5">
@@ -4786,8 +4785,8 @@ export default function Dashboard() {
                     >
                       <Download className="w-3.5 h-3.5 text-gray-500" />
                     </button>
-                    <button onClick={() => setShowAddLead(true)} className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
-                      <Plus className="w-3.5 h-3.5" /> Add Event
+                    <button onClick={openAddEnquiry} className="flex items-center gap-1.5 font-inter text-xs font-semibold px-3 py-1.5 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">
+                      <Plus className="w-3.5 h-3.5" /> Add enquiry
                     </button>
                   </div>
                 </div>
@@ -4795,7 +4794,7 @@ export default function Dashboard() {
                   <div className="border border-dashed border-sage-green/20 rounded-xl p-8 text-center">
                     <Calendar className="w-10 h-10 text-sage-green/30 mx-auto mb-3" />
                     <p className="font-inter text-sm text-gray-400">No events this month</p>
-                    <button onClick={() => setShowAddLead(true)} className="mt-3 font-inter text-xs font-semibold px-4 py-2 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">Add Event</button>
+                    <button onClick={openAddEnquiry} className="mt-3 font-inter text-xs font-semibold px-4 py-2 bg-sage-green text-white rounded-lg hover:bg-sage-dark transition-colors">Add enquiry</button>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -9005,10 +9004,12 @@ export default function Dashboard() {
             {/* Header */}
             <div className="bg-forest-dark px-4 md:px-5 py-4 flex items-center justify-between">
               <div>
-                <div className="font-bebas tracking-widest text-xs text-cream/80 mb-0.5">EVENT DETAILS</div>
+                <div className="font-bebas tracking-widest text-xs text-cream/80 mb-0.5">
+                  {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status) ? 'ENQUIRY' : 'BOOKING'}
+                </div>
                 <h2 id="event-drawer-title" className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</h2>
               </div>
-              <button onClick={() => setSelectedBooking(null)} aria-label="Close event details"
+              <button onClick={() => setSelectedBooking(null)} aria-label="Close details"
                 className="text-cream/80 hover:text-cream rounded-sm p-1 -mr-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
                 <X className="w-5 h-5" />
               </button>
@@ -9494,15 +9495,20 @@ export default function Dashboard() {
                         </button>
                       )}
                       {!['confirmed','booked','finished'].includes(selectedBooking.status) && (
-                        <button
-                          onClick={() => {
-                            if (confirm(`Delete enquiry from ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
-                              deleteLead.mutate({ id: selectedBooking.id });
-                            }
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-400 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs">
-                          <Trash2 className="w-3 h-3" /> DELETE
-                        </button>
+                        <>
+                          {/* Destructive action sits apart from the primary
+                              actions, on its own separated row. */}
+                          <div className="col-span-2 border-t border-gold/15 mt-1" />
+                          <button
+                            onClick={() => {
+                              if (confirm(`Delete enquiry from ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
+                                deleteLead.mutate({ id: selectedBooking.id });
+                              }
+                            }}
+                            className="col-span-2 flex items-center justify-center gap-2 px-3 py-2 border border-red-200 text-red-500 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs">
+                            <Trash2 className="w-3 h-3" /> DELETE ENQUIRY
+                          </button>
+                        </>
                       )}
                     </>
                   ) : (
@@ -10381,10 +10387,23 @@ export default function Dashboard() {
         <DialogContent className="max-w-lg rounded-none border border-gold/30 max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <div className="bg-forest-dark -mx-6 -mt-6 p-5 mb-4">
-              <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add New</DialogTitle>
+              <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add enquiry</DialogTitle>
               <p className="font-dm text-white/75 text-xs mt-1">Paste an email or brief to auto-fill, or enter details manually.</p>
             </div>
           </DialogHeader>
+
+          {/* Mode switch — makes the two ways to add explicit, instead of
+              hiding "manual" behind a button inside the paste panel. */}
+          <div role="tablist" aria-label="How to add this enquiry" className="flex bg-muted rounded-lg p-0.5 gap-0.5 mb-3">
+            <button type="button" role="tab" aria-selected={enquiryPasteMode} onClick={() => setEnquiryPasteMode(true)}
+              className={`flex-1 font-bebas tracking-widest text-xs py-2 rounded-md transition-colors ${enquiryPasteMode ? "bg-white text-ink shadow-sm" : "text-ink/60 hover:text-ink"}`}>
+              SMART PASTE
+            </button>
+            <button type="button" role="tab" aria-selected={!enquiryPasteMode} onClick={() => setEnquiryPasteMode(false)}
+              className={`flex-1 font-bebas tracking-widest text-xs py-2 rounded-md transition-colors ${!enquiryPasteMode ? "bg-white text-ink shadow-sm" : "text-ink/60 hover:text-ink"}`}>
+              ENTER MANUALLY
+            </button>
+          </div>
 
           {/* ── Smart Paste panel ── */}
           {enquiryPasteMode ? (
@@ -10409,7 +10428,7 @@ export default function Dashboard() {
                   className="w-full font-dm text-sm text-ink bg-white border border-gold/30 focus:outline-none focus:border-forest resize-none p-3 placeholder:text-ink/65"
                   style={{ minHeight: 140 }}
                 />
-                <div className="flex gap-2 mt-3">
+                <div className="mt-3">
                   <button
                     type="button"
                     disabled={!enquiryPasteText.trim() || enquiryParsing}
@@ -10417,20 +10436,13 @@ export default function Dashboard() {
                       setEnquiryParsing(true);
                       parseEnquiryMutation.mutate({ text: enquiryPasteText });
                     }}
-                    className="flex-1 bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm py-2.5 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+                    className="w-full bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm py-2.5 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
                   >
                     {enquiryParsing ? (
                       <><span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" /> EXTRACTING...</>
                     ) : (
                       'EXTRACT DETAILS WITH AI'
                     )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEnquiryPasteMode(false)}
-                    className="px-4 py-2.5 border border-gold/30 font-bebas tracking-widest text-xs text-ink/70 hover:text-ink hover:border-gold transition-colors"
-                  >
-                    MANUAL
                   </button>
                 </div>
               </div>
@@ -10456,12 +10468,6 @@ export default function Dashboard() {
                 spaceName: addEnquiryForm.spaceName,
               });
             }} className="space-y-3">
-              {enquiryPasteText && (
-                <button type="button" onClick={() => setEnquiryPasteMode(true)}
-                  className="w-full text-left px-3 py-2 bg-forest/5 border border-forest/20 font-dm text-xs text-forest hover:bg-forest/10 transition-colors">
-                  ← Back to Smart Paste
-                </button>
-              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label htmlFor={`${addEnquiryFormId}-firstName`} className="font-bebas text-xs tracking-widest text-sage block mb-1">FIRST NAME *</label>
@@ -10559,7 +10565,7 @@ export default function Dashboard() {
               </div>
               <button type="submit" disabled={createEnquiry.isPending}
                 className="btn-forest w-full font-bebas tracking-widest text-sm py-3 text-cream disabled:opacity-50">
-                {createEnquiry.isPending ? 'ADDING...' : 'ADD NEW'}
+                {createEnquiry.isPending ? 'ADDING...' : 'ADD ENQUIRY'}
               </button>
             </form>
           )}
