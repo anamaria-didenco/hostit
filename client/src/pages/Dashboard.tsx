@@ -965,8 +965,13 @@ export default function Dashboard() {
   const DEFAULT_EVENT_TABLE_PREFS = {
     sortBy: "event_date" as "event_date" | "date_booked" | "status",
     sortDir: "asc" as "asc" | "desc",
-    upcomingOnly: true,
-    hideStatuses: ["lost", "finished"] as string[],
+    // List view mirrors the month grid by default: show every event in the
+    // month in view, past and finished included. Previously this hid past and
+    // finished/lost events, so a month whose events were all finished showed
+    // "No events match" while the grid clearly showed them. Filters stay
+    // available as visible, one-tap toggles.
+    upcomingOnly: false,
+    hideStatuses: [] as string[],
   };
   const [eventTablePrefs, _setEventTablePrefs] = useState<typeof DEFAULT_EVENT_TABLE_PREFS>(() => {
     try {
@@ -2738,7 +2743,7 @@ export default function Dashboard() {
                                       {l.guestCount && (
                                         <div className="opacity-95 truncate text-[9px]">{l.guestCount} pax</div>
                                       )}
-                                      <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                      <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                     </div>
                                   </button>
                                 ))}
@@ -2963,7 +2968,7 @@ export default function Dashboard() {
                   <button
                     onClick={() => { setAddEnquiryForm(f => ({ ...f })); setShowAddLead(true); }}
                     className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-2 bg-forest text-cream hover:bg-forest-dark transition-colors">
-                    <Plus className="w-3.5 h-3.5" /> ADD EVENT
+                    <Plus className="w-3.5 h-3.5" /> ADD ENQUIRY
                   </button>
                 </div>
               </div>
@@ -4286,8 +4291,8 @@ export default function Dashboard() {
                     className="hidden md:inline-flex p-1.5 hover:bg-linen border border-gold/20 text-forest transition-colors"><ChevronRight className="w-4 h-4" /></button>
                   <button onClick={navCalendarToday} title="Today (T)"
                     className="hidden md:inline-flex font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors">TODAY</button>
-                  <button onClick={() => setTab('enquiries')} className="hidden sm:flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors" title="Back to events list">
-                    <List className="w-3 h-3" /> EVENTS
+                  <button onClick={() => setTab('enquiries')} className="hidden sm:flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/70 hover:bg-linen transition-colors" title="Go to enquiries list">
+                    <List className="w-3 h-3" /> ENQUIRIES
                   </button>
                   <div className="flex-1 min-w-0 relative">
                     <Popover open={showJumpDate} onOpenChange={setShowJumpDate}>
@@ -4360,7 +4365,7 @@ export default function Dashboard() {
                   </div>
                   <button onClick={() => setShowAddLead(true)}
                     className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 md:px-4 py-2 flex items-center gap-1 flex-shrink-0">
-                    <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD EVENT</span><span className="sm:hidden">ADD</span>
+                    <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD ENQUIRY</span><span className="sm:hidden">ADD</span>
                   </button>
                 </div>
                 {/* Row 2 (mobile only): Big tap-friendly nav controls */}
@@ -4410,7 +4415,7 @@ export default function Dashboard() {
                 {/* Day headers - Mon to Sun like Function Tracker */}
                 <div className="grid grid-cols-7 border-b border-border">
                   {["MON","TUE","WED","THU","FRI","SAT","SUN"].map(d => (
-                    <div key={d} className={`text-center font-sans text-[9px] font-extrabold uppercase tracking-[0.16em] py-2.5 border-r border-border/40 last:border-r-0 ${
+                    <div key={d} className={`text-center font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] py-2.5 border-r border-border/40 last:border-r-0 ${
                       d === 'SAT' || d === 'SUN' ? 'text-muted-foreground bg-[#f4efe6]/50' : 'text-primary'
                     }`}>{d}</div>
                   ))}
@@ -4559,27 +4564,31 @@ export default function Dashboard() {
                                         </span>
                                       </div>
                                     )}
-                                    <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
+                                    <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
                                   </div>
                                 </button>
                                 {!isOverflow && (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); if (confirm(`Delete enquiry from ${l.firstName} ${l.lastName ?? ''}? This cannot be undone.`)) deleteLead.mutate({ id: l.id }); }}
-                                    className="absolute top-0.5 right-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center"
+                                    className="absolute top-0 right-0 opacity-0 group-hover/card:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center"
+                                    aria-label={`Delete enquiry from ${l.firstName} ${l.lastName ?? ''}`}
                                     title="Delete enquiry">
-                                    <X className="w-2 h-2" />
+                                    <span className="bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center"><X className="w-2 h-2" /></span>
                                   </button>
                                 )}
                               </div>
                             ))}
-                            {/* Add event button */}
+                            {/* Add enquiry on this day — opens the dated quick-create
+                                form (a plus, not a pencil), so a date-first click
+                                lands on a manual form for the day you picked rather
+                                than the paste-an-email modal. */}
                             {!isOverflow && (
                               <button
-                                onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: dateStr })); setShowAddLead(true); }}
-                                aria-label={`Add an event on ${dateStr}`}
-                                className="self-start mt-auto text-ink/30 hover:text-ink/70 transition-colors w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center"
-                                title="Add event on this day">
-                                <Edit2 className="w-2.5 h-2.5" />
+                                onClick={() => setQuickCreateDate(dateStr)}
+                                aria-label={`Add enquiry on ${dateStr}`}
+                                className="self-start mt-auto text-forest/50 hover:text-forest transition-colors w-11 h-11 -ml-2 -mb-2 inline-flex items-center justify-center"
+                                title="Add enquiry on this day">
+                                <Plus className="w-4 h-4" />
                               </button>
                             )}
                           </div>
@@ -4605,7 +4614,7 @@ export default function Dashboard() {
                         <div className="border border-dashed border-gold/30 p-8 text-center bg-white">
                           <Calendar className="w-8 h-8 text-sage/40 mx-auto mb-2" />
                           <p className="font-dm text-sm text-sage">No events in {MONTHS[month]}</p>
-                          <button onClick={() => setShowAddLead(true)} className="mt-3 font-bebas tracking-widest text-xs text-forest border border-forest/30 px-3 py-1.5">+ ADD EVENT</button>
+                          <button onClick={() => setShowAddLead(true)} className="mt-3 font-bebas tracking-widest text-xs text-forest border border-forest/30 px-3 py-1.5">+ ADD ENQUIRY</button>
                         </div>
                       );
                     }
@@ -4661,7 +4670,7 @@ export default function Dashboard() {
               {calendarView === "list" && (
               <div className="flex-1 overflow-auto p-6">
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                  <h2 className="font-inter font-semibold text-gray-900 text-lg" style={{ letterSpacing: '-0.02em' }}>All Events — {MONTHS[month]} {year}</h2>
+                  <h2 className="font-inter font-semibold text-gray-900 text-lg" style={{ letterSpacing: '-0.02em' }}>All enquiries — {MONTHS[month]} {year}</h2>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setShowWeeklyModal(true)}
@@ -5005,16 +5014,16 @@ export default function Dashboard() {
                               <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                               {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
                               {l.guestCount && <div className="opacity-95">{l.guestCount} pax</div>}
-                              <div className="opacity-95 font-bebas tracking-widest text-[8px] mt-0.5">{statusLabel(l.status)}</div>
+                              <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{statusLabel(l.status)}</div>
                             </button>
                           ))}
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
                             <button
-                              onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
-                              className="text-ink/20 hover:text-ink/70 transition-colors self-start mt-1 p-1.5 -m-1.5 rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
-                              aria-label={`Add event on ${d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
-                              title="Add event">
-                              <Edit2 className="w-3 h-3" />
+                              onClick={() => setQuickCreateDate(ds)}
+                              className="text-forest/50 hover:text-forest transition-colors self-start mt-1 p-1.5 -m-1.5 rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
+                              aria-label={`Add enquiry on ${d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`}
+                              title="Add enquiry">
+                              <Plus className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
@@ -5073,7 +5082,7 @@ export default function Dashboard() {
                         <button
                           onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
                           className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1">
-                          <Plus className="w-3.5 h-3.5" /> ADD EVENT
+                          <Plus className="w-3.5 h-3.5" /> ADD ENQUIRY
                         </button>
                       </div>
                     </div>
@@ -5084,9 +5093,9 @@ export default function Dashboard() {
                         <div className="font-cormorant text-3xl text-ink/20 mb-2">No events</div>
                         <p className="font-dm text-sm text-ink/65">Nothing scheduled for this day.</p>
                         <button
-                          onClick={() => { setAddEnquiryForm(f => ({ ...f, eventDate: ds })); setShowAddLead(true); }}
+                          onClick={() => setQuickCreateDate(ds)}
                           className="mt-4 font-bebas tracking-widest text-xs text-forest border border-forest/30 px-4 py-2 hover:bg-forest/5 transition-colors">
-                          + ADD AN EVENT
+                          + ADD AN ENQUIRY
                         </button>
                       </div>
                     ) : (
@@ -10024,7 +10033,7 @@ export default function Dashboard() {
           <DialogHeader>
             <div className="bg-sage-green -mx-6 -mt-6 px-6 py-4 mb-4 rounded-t-2xl">
               <DialogTitle className="font-inter text-lg text-white font-semibold">
-                Add Event
+                Add enquiry
               </DialogTitle>
               {quickCreateDate && (
                 <p className="font-inter text-sm text-white/80 mt-0.5">
@@ -10130,7 +10139,7 @@ export default function Dashboard() {
               </button>
               <button type="submit" disabled={createEnquiryFromCalendar.isPending}
                 className="flex-1 py-2.5 rounded-xl bg-sage-green text-white font-inter text-sm font-medium hover:bg-sage-dark transition-colors disabled:opacity-50">
-                {createEnquiryFromCalendar.isPending ? 'Adding...' : 'Add Event'}
+                {createEnquiryFromCalendar.isPending ? 'Adding...' : 'Add enquiry'}
               </button>
             </div>
           </form>
