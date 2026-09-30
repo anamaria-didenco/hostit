@@ -233,6 +233,32 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const data: Record<string, any> = { ...input };
         if (input.depositPercent !== undefined) data.depositPercent = input.depositPercent.toString();
+        // Normalise the embed slug to a URL-safe form and keep it unique across
+        // venues, so every venue owns a stable /enquire/<slug> URL that names it.
+        if (typeof input.slug === "string") {
+          const base = input.slug
+            .toLowerCase().trim()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 60) || "venue";
+          let unique = base;
+          const { getDb } = await import("./db");
+          const { venueSettings } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          const db = await getDb();
+          if (db) {
+            for (let n = 2; n < 1000; n++) {
+              const clash = await db
+                .select({ ownerId: venueSettings.ownerId })
+                .from(venueSettings)
+                .where(eq(venueSettings.slug, unique))
+                .limit(1);
+              if (!clash[0] || clash[0].ownerId === ctx.user.id) break;
+              unique = `${base}-${n}`;
+            }
+          }
+          data.slug = unique;
+        }
         return upsertVenueSettings(ctx.user.id, data);
       }),
     getOwn: protectedProcedure.query(async ({ ctx }) => {      return getVenueSettings(ctx.user.id);
