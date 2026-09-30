@@ -99,6 +99,33 @@ function categoryTone(cat?: string): string {
   return CATEGORY_TONE[cat ?? "other"] ?? "#6a6256";
 }
 
+// ── STAFF ROLE OWNERSHIP ─────────────────────────────────────────────
+// Which team a run-of-day moment belongs to, so a role-specific runsheet
+// (e.g. the kitchen's copy) can print just that team's moments. Food is
+// the kitchen's; drinks are the bar's; everything else (setup, guests,
+// speeches, entertainment, packdown) is run by the floor / front-of-house.
+type StaffRole = "kitchen" | "bar" | "floor";
+const ROLE_OWNERS: StaffRole[] = ["kitchen", "bar", "floor"];
+const CATEGORY_OWNER: Record<string, StaffRole> = {
+  food: "kitchen",
+  beverage: "bar",
+  setup: "floor",
+  guest: "floor",
+  speech: "floor",
+  entertainment: "floor",
+  packdown: "floor",
+  other: "floor",
+};
+function rodOwnerFor(cat?: string): StaffRole {
+  return CATEGORY_OWNER[cat ?? "other"] ?? "floor";
+}
+
+// Human labels for the drink "type" codes stored on each selected drink,
+// used by the print-only drinks summary.
+const DRINK_TYPE_LABEL: Record<string, string> = {
+  spark: "Bubbles", white: "White", red: "Red", beer: "Beer", other: "Other",
+};
+
 const COMMON_DIETARIES = [
   "Vegetarian", "Vegan", "Gluten Free", "Dairy Free", "Nut Allergy",
   "Shellfish Allergy", "Halal", "Kosher", "Diabetic", "Low FODMAP",
@@ -620,6 +647,8 @@ export default function RunsheetBuilder() {
     { key: 'dietary',  label: 'Dietary requirements' },
     { key: 'timeline', label: 'Event timeline' },
     { key: 'notes',    label: 'Event notes' },
+    { key: 'checklist',label: 'Event checklist' },
+    { key: 'tableplan',label: 'Table / floor plan' },
     { key: 'food',     label: 'F&B — food' },
     { key: 'kitchen',  label: 'Kitchen — prep & production', beoOnly: true },
     { key: 'drinks',   label: 'Drinks / bar' },
@@ -639,6 +668,29 @@ export default function RunsheetBuilder() {
     } catch { return new Set(); }
   });
   const [printEditorOpen, setPrintEditorOpen] = useState(false);
+  // ── ROLE-SPECIFIC PRINTS ───────────────────────────────────────────
+  // One-click "print the runsheet for the kitchen / floor / bar". Each
+  // role prints only the sections that team needs, and the run of day is
+  // filtered to that team's moments (food → kitchen, drinks → bar, the
+  // rest → floor). This is a transient print — it does NOT change the
+  // saved "Choose print sections" preferences, so the full Print is
+  // untouched. `show` lists the in-app print sections that stay visible;
+  // `owners` lists whose run-of-day rows stay visible.
+  type RolePrint = { key: StaffRole; label: string; show: string[]; owners: StaffRole[] };
+  const ROLE_PRINTS: RolePrint[] = [
+    { key: 'kitchen', label: 'Kitchen',
+      show: ['timeline', 'notes', 'food', 'dietary', 'checklist'],
+      owners: ['kitchen'] },
+    { key: 'floor', label: 'Floor (front of house)',
+      show: ['setup', 'timeline', 'notes', 'tableplan', 'food', 'dietary', 'totals', 'payment', 'drinks', 'checklist', 'footer'],
+      owners: ['kitchen', 'bar', 'floor'] },
+    { key: 'bar', label: 'Bar',
+      show: ['timeline', 'notes', 'drinks', 'checklist'],
+      owners: ['bar'] },
+  ];
+  // Non-null while a role print is on screen, so the printed page can show
+  // a "KITCHEN RUNSHEET" banner naming who the copy is for.
+  const [printRole, setPrintRole] = useState<RolePrint | null>(null);
   // ── BEO PREVIEW & PRINT MODAL ──────────────────────────────────────
   // Live, in-app preview of the EXACT BEO that prints, with the same
   // section toggles + an inline footer-note editor. previewNonce forces
@@ -657,7 +709,7 @@ export default function RunsheetBuilder() {
   // inject a <style> tag that hides every section marked
   // [data-print-section="..."] for keys in `printHide`. Cleaned up
   // afterprint so screen view is unaffected.
-  const runPrint = () => {
+  const runPrint = (role?: RolePrint) => {
     // Belt-and-braces cleanup: a previous print that was cancelled or
     // had `afterprint` swallowed can leave a stale override style in
     // the DOM, which would silently affect the next print. Remove any
@@ -667,9 +719,23 @@ export default function RunsheetBuilder() {
     document.querySelectorAll('#vf-print-overrides').forEach(n => n.remove());
     const style = document.createElement('style');
     style.id = 'vf-print-overrides';
-    const rules = Array.from(printHide)
-      .map(k => `[data-print-section="${k}"]`)
-      .join(', ');
+    // A role print hides every section that isn't the role's, plus every
+    // run-of-day row not owned by that role — WITHOUT touching the saved
+    // printHide prefs. A normal print just applies printHide.
+    let selectors: string[];
+    if (role) {
+      const showSet = new Set(role.show);
+      const ownerSet = new Set(role.owners);
+      selectors = [
+        ...PRINT_SECTIONS.filter(s => !showSet.has(s.key)).map(s => `[data-print-section="${s.key}"]`),
+        ...ROLE_OWNERS.filter(o => !ownerSet.has(o)).map(o => `[data-rod-owner="${o}"]`),
+      ];
+      setPrintRole(role);
+    } else {
+      selectors = Array.from(printHide).map(k => `[data-print-section="${k}"]`);
+      setPrintRole(null);
+    }
+    const rules = selectors.join(', ');
     style.textContent = rules ? `@media print { ${rules} { display: none !important; } }` : '';
     document.head.appendChild(style);
     const styleRef = style;
@@ -678,6 +744,7 @@ export default function RunsheetBuilder() {
       if (cleaned) return;
       cleaned = true;
       styleRef.remove();
+      setPrintRole(null);
       window.removeEventListener('afterprint', cleanup);
       mql?.removeEventListener?.('change', mqlListener);
       document.removeEventListener('visibilitychange', visListener);
@@ -2560,6 +2627,23 @@ export default function RunsheetBuilder() {
                     <span className="flex items-center gap-2.5"><Settings2 className="w-4 h-4 text-forest" /> Choose print sections</span>
                     {printHide.size > 0 && <span className="bg-forest/10 text-forest text-[10px] font-bebas px-1.5 rounded-sm">{printHide.size}</span>}
                   </button>
+                  {/* Role-specific runsheets — print just one team's copy.
+                      The kitchen gets food + dietary + their timeline; the
+                      bar gets drinks + theirs; the floor gets the full sheet. */}
+                  <div className="my-1.5 h-px bg-gold/20" />
+                  <div className="px-4 pt-1 pb-0.5 font-bebas tracking-widest text-[10px] text-ink/45">PRINT FOR A TEAM</div>
+                  {ROLE_PRINTS.map(role => (
+                    <button
+                      key={role.key}
+                      onClick={() => { setExportMenuOpen(false); runPrint(role); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
+                    >
+                      {role.key === 'kitchen' ? <ChefHat className="w-4 h-4 text-forest" />
+                        : role.key === 'bar' ? <Wine className="w-4 h-4 text-forest" />
+                        : <Users className="w-4 h-4 text-forest" />}
+                      Print for {role.label}
+                    </button>
+                  ))}
                   {effectiveBookingId && (
                     <>
                       <div className="my-1.5 h-px bg-gold/20" />
@@ -2863,6 +2947,16 @@ export default function RunsheetBuilder() {
 
         {/* ── Print Header ────────────────────────────────────────────────── */}
         <div className="hidden print:block mb-6 pb-4 border-b-2 border-ink">
+          {/* Role banner — only on a "Print for a team" copy, so the sheet
+              in someone's hand says plainly who it's for. */}
+          {printRole && (
+            <div
+              className="mb-3 px-3 py-1.5 rounded-sm font-sans text-[11px] font-extrabold uppercase tracking-[0.28em] text-white"
+              style={{ backgroundColor: printRole.key === 'kitchen' ? '#b07c25' : printRole.key === 'bar' ? '#7a2420' : '#2f5488' }}
+            >
+              {printRole.label} runsheet
+            </div>
+          )}
           <div className="flex items-start justify-between">
             <div>
               <div className="font-sans text-[10px] font-extrabold uppercase tracking-[0.32em] text-[var(--brand)] mb-1.5">RUNSHEET{sheetId ? ` · BEO #${sheetId}` : ""}</div>
@@ -3545,6 +3639,7 @@ export default function RunsheetBuilder() {
                   return (
                     <div
                       key={key}
+                      data-rod-owner={rodOwnerFor(item.category)}
                       className={`group transition-colors print:hover:bg-transparent ${
                         isNow ? 'bg-emerald-50 ring-2 ring-emerald-500 ring-inset relative z-10' :
                         isPast ? 'opacity-50 hover:opacity-100' :
@@ -3783,8 +3878,11 @@ export default function RunsheetBuilder() {
               </div>
             )}
 
-            {/* Footer / payment notes */}
-            <div className="px-5 py-4 border-t border-gold/20">
+            {/* Footer / payment notes — editor only. The note itself prints in
+                the dedicated "Print footer" at the foot of the document, so this
+                whole block is no-print (its label + hint used to leak onto the
+                page, and its echo double-printed the footer). */}
+            <div className="px-5 py-4 border-t border-gold/20 no-print">
               <label className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-1">FOOTER NOTE</label>
               <p className="font-dm text-[10px] text-ink/35 mb-2">Shown at the bottom of the runsheet — a closing note or terms. Payment terms live in Payment Notes, so they don't need repeating here.</p>
               {/* Read-only echo of the single source. Stops the same sentence
@@ -4712,7 +4810,7 @@ export default function RunsheetBuilder() {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 no-print">
                 <ColumnSwitch
                   label="Show prices"
                   checked={showDrinkPrices}
@@ -4722,7 +4820,53 @@ export default function RunsheetBuilder() {
               </div>
             </div>
 
-            <div className="px-5 py-5 space-y-6">
+            {/* Print-only drinks summary — the editor below is no-print, so the
+                printed sheet (and the bar's copy) shows a clean read-out of the
+                bar arrangement, the drinks list and the notes. */}
+            <div className="hidden print:block px-5 py-4 space-y-4">
+              {(() => {
+                const opt = BAR_OPTIONS.find(o => o.key === rsBarOption);
+                return opt ? (
+                  <div>
+                    <div className="font-bebas tracking-widest text-[10px] text-ink/60 mb-1">BAR ARRANGEMENT</div>
+                    <div className="font-dm text-sm font-semibold text-ink">
+                      {opt.label}{(rsBarOption === 'bar_tab' || rsBarOption === 'bar_tab_then_cash') && rsTabAmount ? ` — $${rsTabAmount} tab` : ''}
+                    </div>
+                    <div className="font-dm text-xs text-ink/70">{opt.description}</div>
+                  </div>
+                ) : null;
+              })()}
+              {(rsSelectedDrinks.length + rsCustomDrinks.length) > 0 && (
+                <div>
+                  <div className="font-bebas tracking-widest text-[10px] text-ink/60 mb-1">DRINKS</div>
+                  <ul className="font-dm text-sm text-ink space-y-0.5">
+                    {rsSelectedDrinks.map(k => (
+                      <li key={k} className="flex justify-between gap-3">
+                        <span>{k}{rsDrinkTypes[k] ? ` · ${DRINK_TYPE_LABEL[rsDrinkTypes[k]] ?? rsDrinkTypes[k]}` : ''}</span>
+                        {showDrinkPrices && rsDrinkPrices[k] != null && <span className="text-ink/70">${rsDrinkPrices[k]}</span>}
+                      </li>
+                    ))}
+                    {rsCustomDrinks.map((d, i) => {
+                      const price = rsDrinkPrices[d.name] ?? d.price;
+                      return (
+                        <li key={`c${i}`} className="flex justify-between gap-3">
+                          <span>{d.name}{d.description ? ` — ${d.description}` : ''}{rsDrinkTypes[d.name] ? ` · ${DRINK_TYPE_LABEL[rsDrinkTypes[d.name]] ?? rsDrinkTypes[d.name]}` : ''}</span>
+                          {showDrinkPrices && price != null && <span className="text-ink/70">${price}</span>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+              {rsBarNotes && (
+                <div>
+                  <div className="font-bebas tracking-widest text-[10px] text-ink/60 mb-1">DRINKS / BAR NOTES</div>
+                  <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{rsBarNotes}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-5 space-y-6 no-print">
               {/* Bar Arrangement */}
               <div>
                 <div className="font-bebas tracking-widest text-xs text-ink/65 mb-3">BAR ARRANGEMENT</div>
@@ -4894,14 +5038,14 @@ export default function RunsheetBuilder() {
         </section>
 
         {/* ── CHECKLIST SECTION ───────────────────────────────────────────── */}
-        <section id="rb-checklist" className="scroll-mt-[120px]">
+        <section id="rb-checklist" data-print-section="checklist" className="scroll-mt-[120px]">
           <div className="dante-card border-t-0 print:shadow-none">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-3">
                 <h2 className="font-bebas tracking-widest text-ink/60 text-sm">EVENT CHECKLIST</h2>
                 <span className="font-dm text-xs text-ink/65">{checkedCount} of {checklistItems.length} complete</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 no-print">
                 {checkedCount === checklistItems.length && checklistItems.length > 0 && (
                   <span className="font-bebas tracking-widest text-xs text-forest flex items-center gap-1">
                     <CheckSquare className="w-3.5 h-3.5" /> ALL DONE
@@ -5019,7 +5163,7 @@ export default function RunsheetBuilder() {
             />
 
             {/* Add checklist item */}
-            <div className="px-5 py-4 border-t border-gold/20 flex gap-2">
+            <div className="px-5 py-4 border-t border-gold/20 flex gap-2 no-print">
               <Input
                 value={newChecklistText}
                 onChange={e => setNewChecklistText(e.target.value)}
@@ -5038,7 +5182,7 @@ export default function RunsheetBuilder() {
         </section>
 
         {/* ── TABLE PLAN SECTION ──────────────────────────────────────────── */}
-        <section id="rb-tableplan" className="scroll-mt-[120px]">
+        <section id="rb-tableplan" data-print-section="tableplan" className={`scroll-mt-[120px] ${linkedFloorPlan ? '' : 'no-print'}`}>
           <div className="dante-card border-t-0 print:shadow-none">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gold/20">
               <div className="flex items-center gap-2">
@@ -5050,14 +5194,14 @@ export default function RunsheetBuilder() {
                   href={`/floor-plan?id=${linkedFloorPlanId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-bebas tracking-widest text-xs text-forest hover:underline flex items-center gap-1"
+                  className="font-bebas tracking-widest text-xs text-forest hover:underline flex items-center gap-1 no-print"
                 >
                   <ExternalLink className="w-3 h-3" /> OPEN EDITOR
                 </a>
               )}
             </div>
             {/* Floor plan selector */}
-            <div className="px-5 py-4 border-b border-gold/20">
+            <div className="px-5 py-4 border-b border-gold/20 no-print">
               <label htmlFor="rb-floor-plan" className="font-bebas tracking-widest text-[10px] text-ink/65 block mb-2">LINK A FLOOR PLAN</label>
               <select id="rb-floor-plan"
                 value={linkedFloorPlanId ?? ""}
@@ -5081,7 +5225,7 @@ export default function RunsheetBuilder() {
               <div className="relative" style={{ height: '520px' }}>
                 <div className="absolute inset-0 flex flex-col">
                   {/* Mini toolbar */}
-                  <div className="flex items-center justify-between px-4 py-2 bg-linen border-b border-gold/20 shrink-0">
+                  <div className="flex items-center justify-between px-4 py-2 bg-linen border-b border-gold/20 shrink-0 no-print">
                     <span className="font-bebas tracking-widest text-xs text-ink/60">{linkedFloorPlan.name}</span>
                     <div className="flex items-center gap-3">
                       {linkedFloorPlan.shareToken && (
