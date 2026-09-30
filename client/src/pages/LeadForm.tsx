@@ -264,7 +264,7 @@ function TimePickerField({ id, value, onChange, ariaInvalid, ariaDescribedby, in
         <div className="border-t border-gray-200 mt-1 pt-1 px-1">
           <input type="time" value={value} aria-label="Enter an exact time"
             onChange={e => { if (e.target.value) { onChange(e.target.value); setOpen(false); } }}
-            className="w-full text-xs border border-gray-200 rounded px-1.5 py-1" />
+            className="w-full text-base border border-gray-200 rounded px-1.5 py-1" />
         </div>
       </PopoverContent>
     </Popover>
@@ -363,17 +363,22 @@ export default function LeadForm() {
   useEffect(() => {
     if (!isEmbed) return;
     const post = () => {
-      const h = Math.ceil(document.documentElement.scrollHeight);
+      // Measure the body, not documentElement: inside an iframe the root
+      // element's scrollHeight is floored at the iframe's own height, so it can
+      // only grow. body.scrollHeight tracks the real content and lets a shorter
+      // step shrink the frame too.
+      const h = Math.ceil(document.body.scrollHeight);
       try { window.parent?.postMessage({ type: "vf-embed-height", height: h }, paramParentOrigin); } catch { /* cross-origin */ }
     };
     post();
     const ro = new ResizeObserver(() => post());
-    ro.observe(document.documentElement);
+    ro.observe(document.body);
     // Safety posts for late reflow (custom font / images loading).
     const t1 = setTimeout(post, 400);
     const t2 = setTimeout(post, 1500);
     window.addEventListener("load", post);
-    return () => { ro.disconnect(); clearTimeout(t1); clearTimeout(t2); window.removeEventListener("load", post); };
+    window.addEventListener("resize", post);
+    return () => { ro.disconnect(); clearTimeout(t1); clearTimeout(t2); window.removeEventListener("load", post); window.removeEventListener("resize", post); };
   }, [isEmbed]);
 
   const { data: venueBySlug, isLoading: loadingBySlug } = trpc.venue.getBySlug.useQuery(
@@ -387,13 +392,13 @@ export default function LeadForm() {
   const venue = slug ? venueBySlug : venueDefault;
   const isLoading = slug ? loadingBySlug : loadingDefault;
 
-  // Full-page mode is a real, standalone page a visitor navigates to
-  // directly — give it a real document title. The embed widget lives inside
-  // someone else's page/iframe, where overwriting document.title would be
-  // meaningless (or surprising), so it's skipped there.
+  // Give the document a real title in both modes. On the standalone page it's
+  // the browser-tab title; inside the embed iframe it's the frame's own
+  // accessible name (a screen reader announces it when entering the frame), so
+  // it should never be left as the generic app title.
   useEffect(() => {
-    if (isEmbed) return;
-    document.title = `Enquire — ${venue?.name ?? "VenueFlowHQ Venue"}`;
+    const name = venue?.name ?? "VenueFlowHQ Venue";
+    document.title = isEmbed ? `Enquiry form — ${name}` : `Enquire — ${name}`;
   }, [isEmbed, venue?.name]);
 
   // Half-filled forms survive a reload — someone who taps away to check their
@@ -714,9 +719,12 @@ export default function LeadForm() {
   const messageField = visibleFields.find(f => f.id === 'message');
   const customFields = visibleFields.filter(f => !f.isDefault);
 
+  // text-base (16px) on real inputs even in the compact embed: iOS Safari
+  // zooms the page when a focused field's font is under 16px, which yanks the
+  // host page around. 16px keeps the tap-to-focus steady.
   const inputClass = isEmbed
-    ? "rounded-sm border border-[#6a7282] focus-visible:ring-1 focus-visible:ring-offset-0 text-xs bg-white h-7 px-2"
-    : "rounded-sm border border-[#6a7282] focus-visible:ring-1 focus-visible:ring-offset-0 text-sm bg-white";
+    ? "rounded-sm border border-[#6a7282] focus-visible:ring-1 focus-visible:ring-offset-0 text-base bg-white min-h-[40px] px-2"
+    : "rounded-sm border border-[#6a7282] focus-visible:ring-1 focus-visible:ring-offset-0 text-base bg-white";
 
   function renderField(field: FormFieldDef, isCustom = false) {
     const value = isCustom ? (customFieldValues[field.label] ?? '') : (form[field.id] ?? '');
@@ -741,7 +749,7 @@ export default function LeadForm() {
           <Textarea id={controlId} value={value} onChange={onChange} required={field.required}
             aria-invalid={hasError} aria-describedby={describedBy}
             placeholder={placeholder}
-            rows={isEmbed ? 2 : 4} className={`${inputClass} resize-none ${isEmbed ? 'text-xs py-1 px-2' : ''}`} />
+            rows={isEmbed ? 2 : 4} className={`${inputClass} resize-none ${isEmbed ? 'py-1.5 px-2' : ''}`} />
           <FieldError field={field} isCustom={isCustom} />
         </>
       );

@@ -6215,6 +6215,42 @@ export default function Dashboard() {
                     </a>
                   </div>
                 </div>
+                {/* Form address (slug) — the venue owns this, so their embed
+                    URL names them instead of falling back to a bare
+                    /enquire?embed=1. Saved on its own so it's set before the
+                    embed code below can appear. */}
+                {settingsForm && (
+                  <div className="dante-card p-4 md:p-6 mb-6">
+                    <h2 className="font-bebas text-xs tracking-widest text-sage mb-1">FORM ADDRESS</h2>
+                    <p className="font-dm text-xs text-ink/60 mb-3">Your enquiry form's public web address. It names your venue in the link and the embed code below.</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-dm text-sm text-ink/60 whitespace-nowrap">{window.location.origin}/enquire/</span>
+                      <input
+                        value={settingsForm.slug ?? ''}
+                        onChange={e => setSettingsForm((f: any) => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+/, '') }))}
+                        aria-label="Form address slug"
+                        placeholder={(settingsForm.name || venueSettings?.name || 'your-venue').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}
+                        className="flex-1 min-w-[160px] rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm px-2 py-1.5 font-mono" />
+                      <Button
+                        type="button"
+                        disabled={updateSettings.isPending}
+                        onClick={async () => {
+                          const fallback = (settingsForm.name || venueSettings?.name || 'venue').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                          const slug = (settingsForm.slug ?? '').trim() || fallback;
+                          try {
+                            await updateSettings.mutateAsync({ slug });
+                            await refetchSettings();
+                            toast.success('Form address saved');
+                          } catch (err: any) {
+                            toast.error(err?.message ?? 'Could not save the form address');
+                          }
+                        }}
+                        className="bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-xs rounded-none px-4">
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {/* Embed code + customiser — one-line <script> (recommended) or the
                     legacy <iframe> snippet, kept working for existing customers. */}
                 {venueSettings?.slug && (() => {
