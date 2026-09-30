@@ -90,20 +90,26 @@
     }
   }
 
+  function genFrameId(script) {
+    return script.getAttribute("data-frame-id") || ("vf-" + Math.random().toString(36).slice(2, 9));
+  }
+
   // ── Shared iframe-src / query-string building for both placements. ──────
-  function buildIframeParams(script) {
+  function buildIframeParams(script, frameId) {
     var parentParams = new URLSearchParams(window.location.search);
     var iframeParams = new URLSearchParams();
     iframeParams.set("embed", "1");
 
-    var accent = script.getAttribute("data-accent");
-    var font = script.getAttribute("data-font");
-    var bg = script.getAttribute("data-bg");
     var layout = script.getAttribute("data-layout");
-    if (accent) iframeParams.set("accent", accent);
-    if (font) iframeParams.set("font", font);
-    if (bg) iframeParams.set("bg", bg);
     if (layout) iframeParams.set("layout", layout);
+
+    // Styling API — accent, font ("inherit" or a Google Font), bg (hex or
+    // "transparent"), text/label/border colours, corner radius, shadow ("off"),
+    // and button style ("outline"/"ghost"). All optional; defaults unchanged.
+    ["accent", "font", "bg", "text", "label", "border", "radius", "shadow", "button"].forEach(function (k) {
+      var v = script.getAttribute("data-" + k);
+      if (v) iframeParams.set(k, v);
+    });
 
     CLICK_ID_PARAMS.forEach(function (p) {
       var v = parentParams.get(p);
@@ -123,6 +129,20 @@
     if (prefillGuests) iframeParams.set("prefillGuests", prefillGuests);
     if (prefillFormat) iframeParams.set("prefillFormat", prefillFormat);
 
+    // Arbitrary field preselection: data-prefill='{"fieldId":"value",…}'. JSON
+    // (not per-attribute) so field ids keep their exact camelCase — the DOM
+    // lowercases attribute names, which would break e.g. eventType.
+    var prefillJson = script.getAttribute("data-prefill");
+    if (prefillJson) {
+      try {
+        var obj = JSON.parse(prefillJson);
+        Object.keys(obj).forEach(function (k) { if (obj[k] != null) iframeParams.set("prefill_" + k, String(obj[k])); });
+      } catch (e) {
+        console.error("[VenueFlow embed.js] data-prefill is not valid JSON — ignoring.");
+      }
+    }
+
+    if (frameId) iframeParams.set("frameId", frameId);
     iframeParams.set("parentOrigin", window.location.origin);
     return iframeParams;
   }
@@ -135,7 +155,8 @@
   //    calendar/availability backend; the panel is just the same iframe used
   //    for inline embeds, sized and positioned differently. ────────────────
   function mountFloating(script, venue, baseOrigin) {
-    var iframeParams = buildIframeParams(script);
+    var frameId = genFrameId(script);
+    var iframeParams = buildIframeParams(script, frameId);
     iframeParams.set("layout", iframeParams.get("layout") || "compact");
     iframeParams.set("placement", "floating");
 
@@ -194,7 +215,7 @@
       if (!srcBuilt) {
         iframe.src = baseOrigin + "/enquire/" + encodeURIComponent(venue) + "?" + iframeParams.toString();
         srcBuilt = true;
-        instances.push({ iframe: iframe, venue: venue, gadsLabel: script.getAttribute("data-gads-label") || null, origin: baseOrigin });
+        instances.push({ iframe: iframe, venue: venue, gadsLabel: script.getAttribute("data-gads-label") || null, origin: baseOrigin, frameId: frameId });
       }
       var narrow = window.matchMedia(NARROW_QUERY).matches;
       backdrop.style.display = narrow ? "block" : "none";
@@ -218,7 +239,8 @@
   }
 
   function mountAndBuild(script, mount, venue, baseOrigin) {
-    var iframeParams = buildIframeParams(script);
+    var frameId = genFrameId(script);
+    var iframeParams = buildIframeParams(script, frameId);
     var height = script.getAttribute("data-height") || "640";
     var iframe = document.createElement("iframe");
     iframe.src = baseOrigin + "/enquire/" + encodeURIComponent(venue) + "?" + iframeParams.toString();
@@ -236,6 +258,7 @@
       venue: venue,
       gadsLabel: script.getAttribute("data-gads-label") || null,
       origin: baseOrigin,
+      frameId: frameId,
     });
   }
 
@@ -264,6 +287,14 @@
       return;
     }
 
+    if (data.type === "vf-step-changed") {
+      // Funnel signal: which wizard step is showing. Host pages can use this
+      // for drop-off analytics. Never a conversion.
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({ event: "vf_step_changed", step: data.step || null, frame_id: inst.frameId || null });
+      return;
+    }
+
     if (data.type === "vf-partial-captured") {
       // A visitor gave a name + email but hasn't finished the enquiry yet.
       // Pushed under its own event name (never "generate_lead") so it can't
@@ -274,7 +305,7 @@
       // meantime (set up a secondary Google Ads conversion action off this
       // GA4/GTM event if useful).
       window.dataLayer = window.dataLayer || [];
-      window.dataLayer.push({ event: "vf_partial_captured" });
+      window.dataLayer.push({ event: "vf_partial_captured", frame_id: inst.frameId || null });
       if (typeof window.gtag === "function") {
         window.gtag("event", "generate_lead_partial");
       }
@@ -287,6 +318,8 @@
         guest_count: data.guestCount || null,
         budget_range: data.budgetRange || null,
         event_format: data.eventFormat || null,
+        source: data.source || null,
+        frame_id: inst.frameId || null,
       };
 
       // ── Conversion tracking, on by default ──────────────────────────────

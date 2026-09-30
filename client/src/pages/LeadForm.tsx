@@ -283,8 +283,24 @@ export default function LeadForm() {
   const sp = new URLSearchParams(window.location.search);
   const isEmbed = sp.get("embed") === "1";
   const paramAccent = sp.get("accent");   // hex, no leading #
-  const paramFont = sp.get("font");       // any Google Font family name
-  const paramBg = sp.get("bg");           // hex, no leading #
+  const paramFont = sp.get("font");       // any Google Font family name, or "inherit"
+  const paramBg = sp.get("bg");           // hex (no #), or "transparent"
+  // Embed styling API (all optional; defaults keep the current look):
+  //   text   — body text colour (hex, no #)
+  //   label  — field-label colour (hex, no #)
+  //   border — input border colour (hex, no #)
+  //   radius — corner radius in px (0–40)
+  //   shadow — "off" removes the card shadow
+  //   button — "outline" | "ghost" render the submit button unfilled
+  const paramText = sp.get("text");
+  const paramLabel = sp.get("label");
+  const paramBorder = sp.get("border");
+  const paramRadius = sp.get("radius");
+  const paramShadow = sp.get("shadow");
+  const paramButton = sp.get("button");
+  // A stable id for THIS frame, set by embed.js, echoed back on every message
+  // so a host page with two forms can tell which one spoke.
+  const frameId = sp.get("frameId") || null;
   // Collapses the embed's 3-step wizard into one scrolling form — set by
   // embed.js from data-layout="compact". Most traffic to these pages is
   // mobile, where three steps is pure friction.
@@ -295,7 +311,7 @@ export default function LeadForm() {
   // isSheet is also set, a bottom-sheet drag handle instead of that button.
   const isFloatingPlacement = isEmbed && sp.get("placement") === "floating";
   const isSheet = isFloatingPlacement && sp.get("sheet") === "1";
-  const closeFloatingWidget = () => { try { window.parent?.postMessage({ type: "vf-close-widget" }, paramParentOrigin); } catch {} };
+  const closeFloatingWidget = () => postToParent({ type: "vf-close-widget" });
   // embed.js reads its OWN parent page's origin (the iframe can't — that's
   // the whole reason it's passed in) and appends it here so postMessage can
   // target that exact origin instead of "*". Validated, not trusted as-is:
@@ -306,6 +322,26 @@ export default function LeadForm() {
     if (!raw) return "*";
     try { return new URL(raw).origin; } catch { return "*"; }
   })();
+  // Every message to the host page goes through here so it always carries the
+  // frameId and targets the parent's exact origin. Documented message names:
+  // vf-embed-height, vf-step-changed, vf-partial-captured, vf-enquiry-submitted,
+  // vf-walkthrough-booked, vf-close-widget.
+  const postToParent = (msg: Record<string, unknown>) => {
+    try { window.parent?.postMessage({ ...msg, frameId }, paramParentOrigin); } catch { /* no parent / cross-origin */ }
+  };
+  // Embed styling overrides, derived from URL params only, so the scoped-style
+  // effect below can run before the venue data has loaded. Validate a hex param
+  // (3–8 hex digits) → "#rrggbb", else null.
+  const hexParam = (h: string | null) => (h && /^[0-9a-fA-F]{3,8}$/.test(h)) ? `#${h}` : null;
+  const textOverride = hexParam(paramText);
+  const labelOverride = hexParam(paramLabel);
+  const borderOverride = hexParam(paramBorder);
+  const radiusPx = (() => { const n = parseInt(paramRadius ?? "", 10); return Number.isFinite(n) && n >= 0 && n <= 40 ? n : null; })();
+  const shadowOff = paramShadow === "off";
+  const buttonUnfilled = paramButton === "outline" || paramButton === "ghost";
+  // Colour for the outline/ghost button rule — param-driven so it's available
+  // this early; falls back to the brand blue when no accent is set.
+  const embedButtonColor = hexParam(paramAccent) ?? "#2f5488";
   // Ad-click attribution: embed.js reads these off the PARENT page's URL at
   // load time (the iframe can't — cross-origin) and passes them through as
   // plain query params. Captured here, carried on the submit payload below,
@@ -347,7 +383,7 @@ export default function LeadForm() {
 
   // Load the requested Google Font on the fly so any family works.
   useEffect(() => {
-    if (!paramFont || !/^[a-zA-Z0-9 ]+$/.test(paramFont)) return;
+    if (!paramFont || paramFont === 'inherit' || !/^[a-zA-Z0-9 ]+$/.test(paramFont)) return;
     const id = "vf-embed-font";
     document.getElementById(id)?.remove();
     const link = document.createElement("link");
@@ -356,6 +392,30 @@ export default function LeadForm() {
     link.href = `https://fonts.googleapis.com/css2?family=${paramFont.trim().replace(/\s+/g, "+")}:wght@400;500;600;700&display=swap`;
     document.head.appendChild(link);
   }, [paramFont]);
+
+  // Embed styling API — apply text/label/border colours, corner radius, shadow
+  // and button style as one scoped <style> so it reaches every field without
+  // threading props through the whole tree. Only overrides that are set emit a
+  // rule; absent ones keep the default look, so existing embeds don't change.
+  useEffect(() => {
+    if (!isEmbed) return;
+    const rules: string[] = [];
+    if (textOverride) rules.push(`.vf-embed-root,.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select{color:${textOverride}}`);
+    if (labelOverride) rules.push(`.vf-embed-root label{color:${labelOverride}}`);
+    if (borderOverride) rules.push(`.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select{border-color:${borderOverride}}`);
+    if (radiusPx !== null) {
+      rules.push(`.vf-card{border-radius:${radiusPx}px}`);
+      rules.push(`.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select,.vf-embed-root .vf-submit{border-radius:${radiusPx}px}`);
+    }
+    if (shadowOff) rules.push(`.vf-card{box-shadow:none}`);
+    if (buttonUnfilled) rules.push(`.vf-embed-root .vf-submit{background:transparent !important;color:${embedButtonColor} !important;border:1.5px solid ${embedButtonColor} !important}`);
+    const id = "vf-embed-style";
+    let el = document.getElementById(id) as HTMLStyleElement | null;
+    if (!rules.length) { el?.remove(); return; }
+    if (!el) { el = document.createElement("style"); el.id = id; document.head.appendChild(el); }
+    el.textContent = rules.join("");
+    return () => { document.getElementById(id)?.remove(); };
+  }, [isEmbed, textOverride, labelOverride, borderOverride, radiusPx, shadowOff, buttonUnfilled, embedButtonColor]);
 
   // Auto-resize: when embedded, post our content height to the parent page so a
   // tiny script in the embed snippet can size the <iframe> to fit — no inner
@@ -368,7 +428,7 @@ export default function LeadForm() {
       // only grow. body.scrollHeight tracks the real content and lets a shorter
       // step shrink the frame too.
       const h = Math.ceil(document.body.scrollHeight);
-      try { window.parent?.postMessage({ type: "vf-embed-height", height: h }, paramParentOrigin); } catch { /* cross-origin */ }
+      postToParent({ type: "vf-embed-height", height: h });
     };
     post();
     const ro = new ResizeObserver(() => post());
@@ -421,6 +481,14 @@ export default function LeadForm() {
     if (prefillDate) initial.eventDate = prefillDate;
     if (prefillGuests) initial.guestCount = prefillGuests;
     if (prefillFormat) initial.eventFormat = prefillFormat;
+    // Arbitrary preselection: any prefill_<fieldId> param sets that field, so a
+    // venue can open the form on a chosen package, company, etc. from a link.
+    sp.forEach((value, key) => {
+      if (key.startsWith("prefill_") && value) {
+        const fieldId = key.slice("prefill_".length);
+        if (fieldId && initial[fieldId] === undefined) initial[fieldId] = value.slice(0, 500);
+      }
+    });
     return initial;
   });
   const [showDraftNote, setShowDraftNote] = useState(draftRestored);
@@ -451,6 +519,14 @@ export default function LeadForm() {
   // Post-submit walkthrough: null = not yet answered, 'skip' = declined, or
   // the chosen slot. Cosmetic — see leads.bookWalkthrough.
   const [walkthrough, setWalkthrough] = useState<{ key: string; label: string } | "skip" | null>(null);
+
+  // Tell the host page which wizard step is showing, so it can track funnel
+  // drop-off. Fires on mount and whenever the step changes; compact/one-scroll
+  // layouts stay on step 1.
+  useEffect(() => {
+    if (!isEmbed) return;
+    postToParent({ type: "vf-step-changed", step: embedStep });
+  }, [isEmbed, embedStep]);
 
   // Save the in-progress draft on every change. form's initial value was
   // already seeded from the draft (readDraft(), above) so this never races
@@ -490,7 +566,7 @@ export default function LeadForm() {
     if (venue?.ownerId && submittedLeadId) {
       bookWalkthroughMut.mutate({ ownerId: venue.ownerId, leadId: submittedLeadId, slotLabel: slot.label });
     }
-    try { window.parent?.postMessage({ type: "vf-walkthrough-booked", slot: slot.key }, paramParentOrigin); } catch {}
+    postToParent({ type: "vf-walkthrough-booked", slot: slot.key });
   };
 
   // Autosaves a real, contactable lead the moment step 1 (Your Details) is
@@ -500,7 +576,7 @@ export default function LeadForm() {
   const startCapture = trpc.leads.startCapture.useMutation({
     onSuccess: (data) => {
       setCapturedLeadId(data.leadId);
-      try { window.parent?.postMessage({ type: 'vf-partial-captured' }, paramParentOrigin); } catch { /* no parent, or cross-origin quirk */ }
+      postToParent({ type: 'vf-partial-captured' });
     },
     // No error toast — this is a background nicety. If it fails, submit()
     // just falls back to a normal insert; the visitor never sees a hiccup.
@@ -516,15 +592,14 @@ export default function LeadForm() {
       // happened — Google Ads conversion tracking can't see inside the
       // iframe. Fired on BOTH modes; deliberately carries NO personal data,
       // only the qualifiers useful for value-based bidding.
-      try {
-        window.parent?.postMessage({
-          type: "vf-enquiry-submitted",
-          eventType: form.eventType || null,
-          guestCount: form.guestCount ? parseInt(form.guestCount) : null,
-          budgetRange: form.budgetRange || null,
-          eventFormat: form.eventFormat || null,
-        }, paramParentOrigin);
-      } catch { /* no parent, or cross-origin quirk — the thank-you still shows */ }
+      postToParent({
+        type: "vf-enquiry-submitted",
+        eventType: form.eventType || null,
+        guestCount: form.guestCount ? parseInt(form.guestCount) : null,
+        budgetRange: form.budgetRange || null,
+        eventFormat: form.eventFormat || null,
+        source: clickAttribution.utmSource || (isEmbed ? "embed" : "web"),
+      });
       // ── Optional thank-you redirect (?redirect=…) ───────────────────────
       // Full-page mode only (navigating inside the iframe helps nobody). To
       // keep this from being an open-redirect lure, the target must be https
@@ -670,10 +745,9 @@ export default function LeadForm() {
   const venueName    = venue?.name ?? "VenueFlowHQ Venue";
   const formTitle    = venue?.leadFormTitle ?? "Book Your Event";
   const formSubtitle = venue?.leadFormSubtitle ?? "Tell us about your event and we'll get back to you within 24 hours.";
-  // Validate a hex param (3–8 hex digits) → "#rrggbb", else null.
-  const hexParam = (h: string | null) => (h && /^[0-9a-fA-F]{3,8}$/.test(h)) ? `#${h}` : null;
   const accentOverride = hexParam(paramAccent);
   const bgOverride = hexParam(paramBg);
+  const bgTransparent = paramBg === "transparent";
 
   const primaryColor = accentOverride ?? venue?.primaryColor ?? "#2D4A3E";
   const logoUrl      = (venue as any)?.logoUrl;
@@ -687,16 +761,21 @@ export default function LeadForm() {
   // rather than Inter — a venue that explicitly picked a font keeps it.
   const formFont     = (venue as any)?.formFont ?? 'hanken';
   // A ?font= param wins (loaded from Google Fonts above); else the saved font.
-  const fontFamily   = (paramFont && /^[a-zA-Z0-9 ]+$/.test(paramFont))
+  // font=inherit → a neutral system stack (the viewer's OS UI font), so the
+  // form blends into most sites. A true cross-iframe inherit of the host page's
+  // font isn't possible; a venue that needs an exact match passes data-font=Name.
+  const fontFamily   = paramFont === "inherit"
+    ? 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+    : (paramFont && /^[a-zA-Z0-9 ]+$/.test(paramFont))
     ? `'${paramFont.trim()}', system-ui, sans-serif`
     : (FONT_MAP[formFont] ?? FONT_MAP.hanken);
   const textOnPrimary = isLight(primaryColor) ? "#1a1a1a" : "#ffffff";
   const galleryPhotoHeight = (venue as any)?.galleryPhotoHeight ?? 128;
   const successMsg   = (venue as any)?.formSuccessMessage || "Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.";
   // Warm cream/linen defaults — a venue's own formPageBg/formCardBg still wins.
-  const formPageBg      = bgOverride || (venue as any)?.formPageBg || "#f4efe6";
-  const formPageBgImage = (venue as any)?.formPageBgImage || null;
-  const formCardBg      = bgOverride || (venue as any)?.formCardBg || "#fffdf9";
+  const formPageBg      = bgTransparent ? "transparent" : (bgOverride || (venue as any)?.formPageBg || "#f4efe6");
+  const formPageBgImage = bgTransparent ? null : ((venue as any)?.formPageBgImage || null);
+  const formCardBg      = bgTransparent ? "transparent" : (bgOverride || (venue as any)?.formCardBg || "#fffdf9");
   const formButtonColor = accentOverride || (venue as any)?.formButtonColor || primaryColor;
   const textOnButton    = isLight(formButtonColor) ? "#1a1a1a" : "#ffffff";
 
@@ -1047,7 +1126,7 @@ export default function LeadForm() {
     // into oversized buttons and a wide, squat calendar instead of the
     // compact card it's designed as.
     return (
-      <div style={{ fontFamily, backgroundColor: formCardBg }} className="w-full max-w-md mx-auto overflow-hidden rounded-lg border border-[#e6dccb] shadow-sm">
+      <div style={{ fontFamily, backgroundColor: formCardBg }} className="vf-embed-root vf-card w-full max-w-md mx-auto overflow-hidden rounded-lg border border-[#e6dccb] shadow-sm">
 
         {/* Bottom-sheet drag handle — floating placement, narrow viewport only. */}
         {isSheet && (
@@ -1163,7 +1242,7 @@ export default function LeadForm() {
               </div>
             )}
             <button type="button" disabled={!(detailsValid && eventStepValid) || submitLead.isPending} onClick={doSubmit}
-              className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="vf-submit w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
               {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
             </button>
@@ -1223,7 +1302,7 @@ export default function LeadForm() {
                     }
                     setEmbedStep(2);
                   }}
-                    className="w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+                    className="vf-submit w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
                     style={{ backgroundColor: formButtonColor, color: textOnButton }}>NEXT →</button>
                 </div>
               )}
@@ -1299,7 +1378,7 @@ export default function LeadForm() {
                     <button type="button" onClick={() => setEmbedStep(1)}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
                     <button type="button" disabled={!eventStepValid || submitLead.isPending} onClick={doSubmit}
-                      className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+                      className="vf-submit flex-1 font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
                       style={{ backgroundColor: formButtonColor, color: textOnButton }}>
                       {submitLead.isPending ? 'SUBMITTING…' : 'SUBMIT ENQUIRY'}
                     </button>

@@ -5,6 +5,7 @@ import { Route, Switch, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import EmbedDocs from "./pages/EmbedDocs";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ProposalBuilder from "./pages/ProposalBuilder";
@@ -32,6 +33,7 @@ function Router() {
     <Switch>
       {/* Public pages */}
       <Route path="/" component={Home} />
+      <Route path="/embed-docs" component={EmbedDocs} />
       <Route path="/login" component={Login} />
       <Route path="/enquire" component={LeadForm} />
       <Route path="/enquire/:slug" component={LeadForm} />
