@@ -31,9 +31,9 @@ export const DEFAULT_STATUSES: StatusDef[] = [
   { key: "contacted",     label: "Contacted",     colorId: "sky"     },
   { key: "proposal_sent", label: "Proposal Sent", colorId: "amber"   },
   { key: "negotiating",   label: "Negotiating",   colorId: "orange"  },
-  { key: "booked",        label: "Confirmed",     colorId: "blue"    },
+  { key: "booked",        label: "Confirmed",     colorId: "forest"  },
   { key: "finished",      label: "Finished",      colorId: "gray"    },
-  { key: "lost",          label: "Lost",          colorId: "stone"   },
+  { key: "lost",          label: "Lost",          colorId: "red"     },
 ];
 
 export function getStatusClasses(colorId: string): string {
