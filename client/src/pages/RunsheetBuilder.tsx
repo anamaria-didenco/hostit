@@ -2531,7 +2531,7 @@ export default function RunsheetBuilder() {
   const readyCount = RUNSHEET_SECTIONS.filter(s => sectionReady[s.id]).length;
 
   return (
-    <div className="min-h-screen bg-cream print:bg-white" style={{ ['--brand' as any]: venuePrimaryColor }}>
+    <div className="min-h-screen bg-cream print:bg-white vf-rs-print" style={{ ['--brand' as any]: venuePrimaryColor }}>
       {/* ── Header — light cream bar (dark text reads clearly) ──────────── */}
       <nav className="no-print bg-cream sticky top-0 z-50 border-b border-gold/25 h-14 flex items-center px-4 gap-3">
         <button
@@ -4312,7 +4312,7 @@ export default function RunsheetBuilder() {
 
             {/* No proposal linked notice */}
             {!linkedProposalId && (
-              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/70 flex items-start gap-2">
+              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/70 flex items-start gap-2 no-print">
                 <LinkIcon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" aria-hidden />
                 <span className="min-w-0">Use the <strong className="text-forest/70">Linked Proposal</strong> section below to connect a proposal and auto-import F&amp;B selections.</span>
               </div>
@@ -4466,7 +4466,7 @@ export default function RunsheetBuilder() {
 
             {/* F&B items table */}
             {fnbItems.length === 0 ? (
-              <div className="text-center py-16 text-ink/65 font-dm text-sm">
+              <div className="text-center py-16 text-ink/65 font-dm text-sm no-print">
                 <UtensilsCrossed className="w-10 h-10 mx-auto mb-3 opacity-20" />
                 No items yet. Add from catalogue or use Custom Item above.
               </div>
