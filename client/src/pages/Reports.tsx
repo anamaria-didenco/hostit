@@ -33,7 +33,7 @@ export default function Reports() {
   const primaryError = leadsError || bookingsError;
 
   const confirmedBookings = (allBookings ?? []).filter((b: any) => b.status === "confirmed" || b.status === "tentative" || b.status === "finished");
-  const totalRevenue = (allBookings ?? []).reduce((sum: number, b: any) => sum + (Number(b.totalValue) || 0), 0);
+  const totalRevenue = (allBookings ?? []).reduce((sum: number, b: any) => sum + (Number(b.totalNzd) || 0), 0);
   const avgBookingValue = confirmedBookings.length > 0 ? totalRevenue / confirmedBookings.length : 0;
 
   // Lead conversion stats
@@ -476,13 +476,13 @@ export default function Reports() {
               <h2 className="font-cormorant text-lg font-semibold text-ink">Revenue by Booking</h2>
               <button
                 onClick={() => {
-                  const rows = (allBookings ?? []).filter((b: any) => b.totalValue).sort((a: any, b: any) => (b.totalValue || 0) - (a.totalValue || 0));
+                  const rows = (allBookings ?? []).filter((b: any) => b.totalNzd).sort((a: any, b: any) => (Number(b.totalNzd) || 0) - (Number(a.totalNzd) || 0));
                   const header = ['Event','Date','Guests','Value','Status'];
                   const csvRows = [header, ...rows.map((b: any) => [
                     b.eventName ?? '',
                     b.eventDate ? new Date(b.eventDate).toLocaleDateString('en-NZ') : '',
                     b.guestCount ?? '',
-                    b.totalValue ?? '',
+                    b.totalNzd ?? '',
                     b.status ?? '',
                   ])];
                   const csv = csvRows.map(r => r.map((c: any) => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -506,12 +506,12 @@ export default function Reports() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
-                {(allBookings ?? []).filter((b: any) => b.totalValue).sort((a: any, b: any) => (b.totalValue || 0) - (a.totalValue || 0)).map((b: any) => (
+                {(allBookings ?? []).filter((b: any) => b.totalNzd).sort((a: any, b: any) => (Number(b.totalNzd) || 0) - (Number(a.totalNzd) || 0)).map((b: any) => (
                   <tr key={b.id} className="hover:bg-linen/50 transition-colors">
                     <td className="px-4 py-3 font-dm text-sm text-ink">{b.eventName || "—"}</td>
                     <td className="px-4 py-3 font-dm text-xs text-sage">{b.eventDate ? new Date(b.eventDate).toLocaleDateString("en-NZ") : "—"}</td>
                     <td className="px-4 py-3 font-dm text-xs text-sage">{b.guestCount || "—"}</td>
-                    <td className="px-4 py-3 font-dm text-sm font-semibold text-ink">${Number(b.totalValue).toLocaleString()}</td>
+                    <td className="px-4 py-3 font-dm text-sm font-semibold text-ink">${Number(b.totalNzd).toLocaleString()}</td>
                     <td className="px-4 py-3">
                       <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${
                         b.status === "confirmed" ? "border-blue-400 bg-blue-50 text-forest" : "border-amber-400 bg-amber-50 text-amber-700"

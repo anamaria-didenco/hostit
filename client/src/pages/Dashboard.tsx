@@ -1270,6 +1270,28 @@ export default function Dashboard() {
   );
   const customStatusDefs = React.useMemo(() => parseCustomStatuses((venueSettings as any)?.customStatuses), [venueSettings]);
 
+  // Give each tab its own browser-tab title so history, bookmarks and screen
+  // readers can tell Payments from Settings. Without this every screen shared
+  // the generic marketing <title> from index.html.
+  useEffect(() => {
+    const TAB_TITLES: Record<DashTab, string> = {
+      overview: "Dashboard",
+      enquiries: "Enquiries",
+      pipeline: "Pipeline",
+      calendar: "Calendar",
+      contacts: "Contacts",
+      menu: "Menu",
+      settings: "Settings",
+      tasks: "Tasks",
+      reports: "Reports",
+      payments: "Payments",
+      expressbook: "Express book",
+    };
+    const label = TAB_TITLES[tab] ?? "Dashboard";
+    const venueName = (venueSettings as any)?.name;
+    document.title = venueName ? `${label} · ${venueName} · VenueFlow` : `${label} · VenueFlow`;
+  }, [tab, venueSettings]);
+
   const pipelineStages = React.useMemo(() => {
     return customStatusDefs.map(d => {
       const preset = COLOR_PRESETS.find(c => c.id === d.colorId) ?? COLOR_PRESETS[0];
@@ -3175,6 +3197,7 @@ export default function Dashboard() {
                     <div className="relative flex-1 min-w-[160px] max-w-xs">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
                       <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
+                        aria-label="Search enquiries"
                         placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
                     </div>
                     {/* Multi-select status filter — checkboxes let the user
@@ -3348,10 +3371,18 @@ export default function Dashboard() {
                                   </td>
                                 )}
                                 <td className="px-4 py-3 font-cormorant font-semibold text-base text-ink whitespace-nowrap">
-                                  <span className="inline-flex items-center gap-1.5">
+                                  {/* A real button so the enquiry is reachable and
+                                      openable from the keyboard — the row's onClick
+                                      only serves the mouse. stopPropagation avoids
+                                      firing both handlers on a pointer click. */}
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); if (!bulkSelectMode) { if (lead && !lead.readAt) markRead.mutate({ id: lead.id }); openEventDrawer({ ...lead, _isLead: true }); } }}
+                                    className="inline-flex items-center gap-1.5 text-left rounded-sm hover:underline focus-visible:underline"
+                                  >
                                     {lead.firstName} {lead.lastName}
                                     {isPartialLead(lead) && <PartialChip />}
-                                  </span>
+                                  </button>
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[200px] truncate">{lead.eventType || "—"}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}{budgetRangeLabel((lead as any).budgetRange) ? <span className="ml-1.5 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap">{budgetRangeLabel((lead as any).budgetRange)}</span> : null}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}</td>
@@ -3370,6 +3401,7 @@ export default function Dashboard() {
                                       updateStatus.mutate({ id: lead.id, status: newStatus as any });
                                     }}
                                     title="Change status"
+                                    aria-label={`Change status for ${lead.firstName} ${lead.lastName ?? ""}`.trim()}
                                     className={`font-bebas text-[10px] tracking-widest pl-2 pr-6 py-0.5 border cursor-pointer hover:opacity-80 transition-opacity appearance-none bg-no-repeat ${statusStage?.color ?? "bg-stone-100 border-stone-300 text-stone-700"}`}
                                     style={{
                                       backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
@@ -5346,18 +5378,18 @@ export default function Dashboard() {
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">INTERNAL NAME <span className="text-ink/65 font-dm normal-case text-xs">(e.g. Westside or location)</span></label>
-                        <Input value={settingsForm.internalName} onChange={e => setSettingsForm((f: any) => ({ ...f, internalName: e.target.value }))}
+                        <label htmlFor="vs-internal-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">INTERNAL NAME <span className="text-ink/65 font-dm normal-case text-xs">(e.g. Westside or location)</span></label>
+                        <Input id="vs-internal-name" value={settingsForm.internalName} onChange={e => setSettingsForm((f: any) => ({ ...f, internalName: e.target.value }))}
                           placeholder="Westside" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">WEBSITE</label>
-                        <Input value={settingsForm.website} onChange={e => setSettingsForm((f: any) => ({ ...f, website: e.target.value }))}
+                        <label htmlFor="vs-website" className="font-bebas text-xs tracking-widest text-sage block mb-1">WEBSITE</label>
+                        <Input id="vs-website" value={settingsForm.website} onChange={e => setSettingsForm((f: any) => ({ ...f, website: e.target.value }))}
                           placeholder="https://yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
-                        <Input type="text" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
+                        <label htmlFor="vs-notification-email" className="font-bebas text-xs tracking-widest text-sage block mb-1">NOTIFICATION EMAIL</label>
+                        <Input id="vs-notification-email" type="text" value={settingsForm.notificationEmail} onChange={e => setSettingsForm((f: any) => ({ ...f, notificationEmail: e.target.value }))}
                           placeholder="events@yourvenue.co.nz, manager@yourvenue.co.nz" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                         <p className="font-dm text-xs text-sage/60 mt-1">Where new enquiry notifications are sent. Add multiple addresses separated by commas — every address gets a copy. Requires SMTP configured in Settings → Email.</p>
                       </div>
@@ -5369,33 +5401,33 @@ export default function Dashboard() {
                     <h2 className="font-bebas text-xs tracking-widest text-sage mb-4">VENUE ADDRESS</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="md:col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 1</label>
-                        <Input value={settingsForm.addressLine1} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine1: e.target.value }))}
+                        <label htmlFor="vs-address1" className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 1</label>
+                        <Input id="vs-address1" value={settingsForm.addressLine1} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine1: e.target.value }))}
                           placeholder="166 Cashel Street" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 2</label>
-                        <Input value={settingsForm.addressLine2} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine2: e.target.value }))}
+                        <label htmlFor="vs-address2" className="font-bebas text-xs tracking-widest text-sage block mb-1">ADDRESS LINE 2</label>
+                        <Input id="vs-address2" value={settingsForm.addressLine2} onChange={e => setSettingsForm((f: any) => ({ ...f, addressLine2: e.target.value }))}
                           placeholder="Christchurch Central City" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBURB / CITY</label>
-                        <Input value={settingsForm.suburb} onChange={e => setSettingsForm((f: any) => ({ ...f, suburb: e.target.value }))}
+                        <label htmlFor="vs-suburb" className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBURB / CITY</label>
+                        <Input id="vs-suburb" value={settingsForm.suburb} onChange={e => setSettingsForm((f: any) => ({ ...f, suburb: e.target.value }))}
                           placeholder="Christchurch" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STATE / REGION</label>
-                        <Input value={settingsForm.state} onChange={e => setSettingsForm((f: any) => ({ ...f, state: e.target.value }))}
+                        <label htmlFor="vs-state" className="font-bebas text-xs tracking-widest text-sage block mb-1">STATE / REGION</label>
+                        <Input id="vs-state" value={settingsForm.state} onChange={e => setSettingsForm((f: any) => ({ ...f, state: e.target.value }))}
                           placeholder="Canterbury" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">POSTCODE</label>
-                        <Input value={settingsForm.postcode} onChange={e => setSettingsForm((f: any) => ({ ...f, postcode: e.target.value }))}
+                        <label htmlFor="vs-postcode" className="font-bebas text-xs tracking-widest text-sage block mb-1">POSTCODE</label>
+                        <Input id="vs-postcode" value={settingsForm.postcode} onChange={e => setSettingsForm((f: any) => ({ ...f, postcode: e.target.value }))}
                           placeholder="8011" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                       <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">COUNTRY</label>
-                        <Input value={settingsForm.country} onChange={e => setSettingsForm((f: any) => ({ ...f, country: e.target.value }))}
+                        <label htmlFor="vs-country" className="font-bebas text-xs tracking-widest text-sage block mb-1">COUNTRY</label>
+                        <Input id="vs-country" value={settingsForm.country} onChange={e => setSettingsForm((f: any) => ({ ...f, country: e.target.value }))}
                           placeholder="New Zealand" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                       </div>
                     </div>
@@ -5446,8 +5478,9 @@ export default function Dashboard() {
                         <label htmlFor="autoCancelTentative" className="font-dm text-sm text-ink">Automatically cancel tentative events after their event date</label>
                       </div>
                       <div className="md:col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PAYMENT INSTRUCTIONS</label>
+                        <label htmlFor="vs-payment-instructions" className="font-bebas text-xs tracking-widest text-sage block mb-1">PAYMENT INSTRUCTIONS</label>
                         <Textarea
+                          id="vs-payment-instructions"
                           value={settingsForm.paymentInstructions ?? ""}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, paymentInstructions: e.target.value }))}
                           placeholder={"How clients pay you. e.g.\nBank transfer to 12-3456-7890123-00\nReference: <event date + surname>\nDeposit due to confirm; balance by event day."}
@@ -5456,16 +5489,18 @@ export default function Dashboard() {
                         <p className="font-dm text-xs text-sage/60 mt-1">Shown under running totals on every runsheet, the live staff link, and the BEO PDF.</p>
                       </div>
                       <div className="md:col-span-2 border-t border-gold/20 pt-4 mt-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — SUBJECT</label>
+                        <label htmlFor="vs-staff-briefing-subject" className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — SUBJECT</label>
                         <Input
+                          id="vs-staff-briefing-subject"
                           value={settingsForm.staffBriefingSubject ?? ""}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, staffBriefingSubject: e.target.value }))}
                           placeholder="Staff Briefing — {eventTitle}"
                           className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold text-sm" />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — BODY</label>
+                        <label htmlFor="vs-staff-briefing-body" className="font-bebas text-xs tracking-widest text-sage block mb-1">STAFF BRIEFING EMAIL — BODY</label>
                         <Textarea
+                          id="vs-staff-briefing-body"
                           value={settingsForm.staffBriefingBody ?? ""}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, staffBriefingBody: e.target.value }))}
                           placeholder={"Hi team,\n\nHere's the briefing for {eventTitle} on {eventDate}.\n\nLive runsheet (updates as we edit): {runsheetUrl}\n\nFull BEO is attached for printing or offline reference.\n\nThanks!"}
@@ -9027,6 +9062,7 @@ export default function Dashboard() {
                             <span className="font-bebas text-[10px] tracking-widest text-ink/70">START</span>
                             <Input
                               type="time"
+                              aria-label="Event start time"
                               value={toTimeLocal(selectedBooking.eventDate)}
                               disabled={!selectedBooking.eventDate}
                               onChange={e => {
@@ -9040,6 +9076,7 @@ export default function Dashboard() {
                             <span className="font-bebas text-[10px] tracking-widest text-ink/70">END</span>
                             <Input
                               type="time"
+                              aria-label="Event end time"
                               value={toTimeLocal(selectedBooking.eventEndDate)}
                               disabled={!selectedBooking.eventDate}
                               onChange={e => {
