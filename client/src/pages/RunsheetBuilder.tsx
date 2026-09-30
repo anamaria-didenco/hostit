@@ -101,23 +101,24 @@ function categoryTone(cat?: string): string {
 
 // ── STAFF ROLE OWNERSHIP ─────────────────────────────────────────────
 // Which team a run-of-day moment belongs to, so a role-specific runsheet
-// (e.g. the kitchen's copy) can print just that team's moments. Food is
-// the kitchen's; drinks are the bar's; everything else (setup, guests,
-// speeches, entertainment, packdown) is run by the floor / front-of-house.
-type StaffRole = "kitchen" | "bar" | "floor";
-const ROLE_OWNERS: StaffRole[] = ["kitchen", "bar", "floor"];
+// (the kitchen's copy) can print just that team's moments. Food is the
+// kitchen's; everything else — drinks, setup, guests, speeches,
+// entertainment, packdown — is run by front of house (which covers the
+// floor and the bar).
+type StaffRole = "kitchen" | "foh";
+const ROLE_OWNERS: StaffRole[] = ["kitchen", "foh"];
 const CATEGORY_OWNER: Record<string, StaffRole> = {
   food: "kitchen",
-  beverage: "bar",
-  setup: "floor",
-  guest: "floor",
-  speech: "floor",
-  entertainment: "floor",
-  packdown: "floor",
-  other: "floor",
+  beverage: "foh",
+  setup: "foh",
+  guest: "foh",
+  speech: "foh",
+  entertainment: "foh",
+  packdown: "foh",
+  other: "foh",
 };
 function rodOwnerFor(cat?: string): StaffRole {
-  return CATEGORY_OWNER[cat ?? "other"] ?? "floor";
+  return CATEGORY_OWNER[cat ?? "other"] ?? "foh";
 }
 
 // Human labels for the drink "type" codes stored on each selected drink,
@@ -681,12 +682,9 @@ export default function RunsheetBuilder() {
     { key: 'kitchen', label: 'Kitchen',
       show: ['timeline', 'notes', 'food', 'dietary', 'checklist'],
       owners: ['kitchen'] },
-    { key: 'floor', label: 'Floor (front of house)',
+    { key: 'foh', label: 'Front of house',
       show: ['setup', 'timeline', 'notes', 'tableplan', 'food', 'dietary', 'totals', 'payment', 'drinks', 'checklist', 'footer'],
-      owners: ['kitchen', 'bar', 'floor'] },
-    { key: 'bar', label: 'Bar',
-      show: ['timeline', 'notes', 'drinks', 'checklist'],
-      owners: ['bar'] },
+      owners: ['kitchen', 'foh'] },
   ];
   // Non-null while a role print is on screen, so the printed page can show
   // a "KITCHEN RUNSHEET" banner naming who the copy is for.
@@ -2533,7 +2531,7 @@ export default function RunsheetBuilder() {
   const readyCount = RUNSHEET_SECTIONS.filter(s => sectionReady[s.id]).length;
 
   return (
-    <div className="min-h-screen bg-cream print:bg-white" style={{ ['--brand' as any]: venuePrimaryColor }}>
+    <div className="min-h-screen bg-cream print:bg-white vf-rs-print" style={{ ['--brand' as any]: venuePrimaryColor }}>
       {/* ── Header — light cream bar (dark text reads clearly) ──────────── */}
       <nav className="no-print bg-cream sticky top-0 z-50 border-b border-gold/25 h-14 flex items-center px-4 gap-3">
         <button
@@ -2639,7 +2637,6 @@ export default function RunsheetBuilder() {
                       className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
                     >
                       {role.key === 'kitchen' ? <ChefHat className="w-4 h-4 text-forest" />
-                        : role.key === 'bar' ? <Wine className="w-4 h-4 text-forest" />
                         : <Users className="w-4 h-4 text-forest" />}
                       Print for {role.label}
                     </button>
@@ -2952,7 +2949,7 @@ export default function RunsheetBuilder() {
           {printRole && (
             <div
               className="mb-3 px-3 py-1.5 rounded-sm font-sans text-[11px] font-extrabold uppercase tracking-[0.28em] text-white"
-              style={{ backgroundColor: printRole.key === 'kitchen' ? '#b07c25' : printRole.key === 'bar' ? '#7a2420' : '#2f5488' }}
+              style={{ backgroundColor: printRole.key === 'kitchen' ? '#b07c25' : '#2f5488' }}
             >
               {printRole.label} runsheet
             </div>
@@ -4315,7 +4312,7 @@ export default function RunsheetBuilder() {
 
             {/* No proposal linked notice */}
             {!linkedProposalId && (
-              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/70 flex items-start gap-2">
+              <div className="mx-5 my-3 p-3 bg-linen border border-gold/20 text-xs font-dm text-ink/70 flex items-start gap-2 no-print">
                 <LinkIcon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" aria-hidden />
                 <span className="min-w-0">Use the <strong className="text-forest/70">Linked Proposal</strong> section below to connect a proposal and auto-import F&amp;B selections.</span>
               </div>
@@ -4469,7 +4466,7 @@ export default function RunsheetBuilder() {
 
             {/* F&B items table */}
             {fnbItems.length === 0 ? (
-              <div className="text-center py-16 text-ink/65 font-dm text-sm">
+              <div className="text-center py-16 text-ink/65 font-dm text-sm no-print">
                 <UtensilsCrossed className="w-10 h-10 mx-auto mb-3 opacity-20" />
                 No items yet. Add from catalogue or use Custom Item above.
               </div>

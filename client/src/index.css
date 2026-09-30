@@ -1074,6 +1074,49 @@
   }
 }
 
+/* ── Compact, well-structured runsheet PDF (Kitchen / Front-of-house / full) ──
+   The runsheet builder prints via window.print(); these rules, scoped to the
+   builder (.vf-rs-print), fit a typical event onto ~2 pages and keep every
+   section, run-of-day row, drink line and checklist item whole across page
+   breaks. They intentionally override the "bigger fonts" staff-runsheet block
+   above (higher specificity wins) so the download reads as one tidy document. */
+@media print {
+  .vf-rs-print { font-size: 10pt !important; }
+  /* Tidy cards: no shadow, small gaps, tighter inner padding */
+  .vf-rs-print .dante-card { margin-bottom: 6px !important; box-shadow: none !important; }
+  .vf-rs-print .p-6 { padding: 12px !important; }
+  /* Slim the coloured section header bands, and never orphan one at a page foot */
+  .vf-rs-print .bg-\[var\(--brand\)\] {
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+  /* Run of day: dense rows, each kept whole, without the oversized service fonts */
+  .vf-rs-print [data-print-section="timeline"] .group { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .vf-rs-print [data-print-section="timeline"] .py-3 { padding-top: 4px !important; padding-bottom: 4px !important; }
+  .vf-rs-print [data-print-section="timeline"] .py-2 { padding-top: 3px !important; padding-bottom: 3px !important; }
+  .vf-rs-print [data-print-section="timeline"] .font-dm,
+  .vf-rs-print [data-print-section="food"] .font-dm { font-size: 10pt !important; }
+  .vf-rs-print [data-print-section="timeline"] .text-base { font-size: 11pt !important; }
+  /* Drinks summary lines and checklist rows kept whole and tight */
+  .vf-rs-print [data-print-section="drinks"] li { break-inside: avoid !important; }
+  .vf-rs-print [data-print-section="checklist"] .group {
+    break-inside: avoid !important;
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+  /* Collapse very tall empty-state placeholders so an empty section isn't a whole page */
+  .vf-rs-print .py-16, .vf-rs-print .py-20 { padding-top: 10px !important; padding-bottom: 10px !important; }
+  /* Let sections and cards flow across a page boundary instead of jumping whole
+     to the next page (which wastes half a page). Only the individual rows and
+     lines stay atomic — the more specific rules above keep their break-inside. */
+  .vf-rs-print [data-print-section],
+  .vf-rs-print .dante-card,
+  .vf-rs-print .grid,
+  .vf-rs-print section { break-inside: auto !important; page-break-inside: auto !important; }
+}
+
 /* ── Print rules for staff-facing runsheets (StaffPortal + ShiftRunsheetLive) ── */
 @media print {
   header.sticky, .sticky { position: static !important; }
