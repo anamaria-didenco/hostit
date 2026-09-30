@@ -607,7 +607,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
         </div>
       </div>
       {/* Desktop: sidebar */}
-      <aside className="hidden md:flex w-52 bg-ivory-sand border-r border-border flex-shrink-0 flex-col">
+      <aside aria-label="Settings sections" className="hidden md:flex w-52 bg-ivory-sand border-r border-border flex-shrink-0 flex-col">
         {/* Venue logo + name */}
         <div className="px-4 py-4 flex items-center gap-3 border-b border-border">
           <div className="w-10 h-10 rounded-full bg-sage-tint border border-sage-green/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -2845,7 +2845,7 @@ export default function Dashboard() {
       </nav>
 
       {/* ── DESKTOP SIDEBAR (deep-blue editorial) ───────────────────────────── */}
-      <aside className="vf-sidebar hidden md:flex w-[236px] flex-shrink-0 flex-col h-full text-[#eef2f8]" style={{ background: '#2f5488' }}>
+      <aside aria-label="Main sidebar" className="vf-sidebar hidden md:flex w-[236px] flex-shrink-0 flex-col h-full text-[#eef2f8]" style={{ background: '#2f5488' }}>
         {/* Logo */}
         <div className="h-[62px] flex items-center px-[18px] border-b" style={{ borderColor: 'rgba(255,255,255,0.10)' }}>
           <button onClick={() => setTab("overview" as any)} aria-label="VenueFlow — go to dashboard" className="flex items-center focus:outline-none">
