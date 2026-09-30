@@ -193,7 +193,7 @@ export default function Tasks() {
                 <button
                   aria-label={task.completed ? "Mark task incomplete" : "Mark task complete"}
                   onClick={() => completeTask.mutate({ id: task.id, completed: !task.completed })}
-                  className="mt-0.5 flex-shrink-0 text-sage hover:text-burgundy transition-colors"
+                  className="mt-0.5 flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-full text-sage hover:text-burgundy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
                 >
                   {task.completed
                     ? <CheckCircle2 className="w-5 h-5 text-forest" />
@@ -216,7 +216,7 @@ export default function Tasks() {
                   )}
                   {task.dueDate && (
                     <div className={`flex items-center gap-1 mt-1 font-dm text-xs ${
-                      isOverdue ? "text-red-600" : isDueToday ? "text-amber-600" : "text-sage"
+                      isOverdue ? "text-red-700" : isDueToday ? "text-amber-800" : "text-sage"
                     }`}>
                       <Calendar className="w-3 h-3" />
                       {isOverdue ? "Overdue — " : isDueToday ? "Due today — " : "Due "}
@@ -226,7 +226,7 @@ export default function Tasks() {
                 </div>
                 <button
                   onClick={() => { if (window.confirm(`Delete this task?\n\n"${task.title}"`)) deleteTask.mutate({ id: task.id }); }}
-                  className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-sage hover:text-red-500 flex-shrink-0"
+                  className="flex-shrink-0 -m-1 p-1.5 inline-flex items-center justify-center rounded-md text-sage/60 hover:text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest transition-colors"
                   title="Delete task"
                   aria-label="Delete task"
                 >
