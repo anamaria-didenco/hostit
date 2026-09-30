@@ -1340,9 +1340,9 @@ export default function LeadForm() {
           <p className="text-sm leading-relaxed max-w-md mx-auto" style={{ color: `${textOnPrimary}e6` }}>{formSubtitle}</p>
           {(venue?.city || venue?.phone || venue?.email) && (
             <div className="flex items-center justify-center gap-4 mt-5 flex-wrap">
-              {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
-              {venue.phone && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Phone className="w-3 h-3" /> {venue.phone}</div>}
-              {venue.email && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}88` }}><Mail className="w-3 h-3" /> {venue.email}</div>}
+              {venue.city && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}e6` }}><MapPin className="w-3 h-3" /> {venue.city}</div>}
+              {venue.phone && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}e6` }}><Phone className="w-3 h-3" /> {venue.phone}</div>}
+              {venue.email && <div className="flex items-center gap-1.5 text-xs" style={{ color: `${textOnPrimary}e6` }}><Mail className="w-3 h-3" /> {venue.email}</div>}
             </div>
           )}
         </div>
