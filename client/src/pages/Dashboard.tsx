@@ -2295,6 +2295,9 @@ export default function Dashboard() {
   const [embedAccent, setEmbedAccent] = useState("");   // hex w/o # — "" = use saved branding
   const [embedFont, setEmbedFont] = useState("");        // Google Font family — "" = use saved
   const [embedHeight, setEmbedHeight] = useState("640");
+  // Max width of the embedded form: "" = the default 520px cap; a number = px;
+  // "none"/"full" = full-bleed (fills the container the venue mounts it in).
+  const [embedMaxWidth, setEmbedMaxWidth] = useState("");
   // Embed SDK v1 controls — the one-line <script> snippet is the default;
   // the legacy hand-pasted <iframe> stays available for existing customers.
   const [embedSnippetTab, setEmbedSnippetTab] = useState<"script" | "iframe">("script");
@@ -6267,6 +6270,12 @@ export default function Dashboard() {
                   const accentValid = /^[0-9a-fA-F]{3,8}$/.test(cleanHex);
                   const h = parseInt(embedHeight) || 640;
                   const FONTS = ["", "Inter", "Lora", "Montserrat", "Playfair Display", "Poppins", "Roboto", "Cormorant Garamond", "DM Sans", "Open Sans"];
+                  // Max-width: raw value for the script's data-max-width, and a
+                  // resolved CSS length for the legacy iframe's inline style.
+                  const mwRaw = embedMaxWidth.trim();
+                  const mwCss = !mwRaw ? "520px"
+                    : (mwRaw === "none" || mwRaw === "full" || mwRaw === "0") ? "none"
+                    : /^\d+$/.test(mwRaw) ? `${mwRaw}px` : mwRaw;
 
                   // Legacy iframe snippet — unchanged, still works for anyone who
                   // already has it pasted in.
@@ -6274,7 +6283,7 @@ export default function Dashboard() {
                   if (accentValid) params.set("accent", cleanHex);
                   if (embedFont.trim()) params.set("font", embedFont.trim());
                   const embedUrl = `${window.location.origin}/enquire/${venueSettings.slug}?${params.toString()}`;
-                  const iframeCode = `<iframe id="vf-enquiry"\n  src="${embedUrl}"\n  width="100%"\n  height="${h}"\n  frameborder="0"\n  style="border:none;max-width:520px;"\n  title="Event Enquiry Form"></iframe>\n<script>\n  window.addEventListener('message', function (e) {\n    if (e.data && e.data.type === 'vf-embed-height' && e.data.height) {\n      var f = document.getElementById('vf-enquiry');\n      if (f) f.style.height = e.data.height + 'px';\n    }\n  });\n</script>`;
+                  const iframeCode = `<iframe id="vf-enquiry"\n  src="${embedUrl}"\n  width="100%"\n  height="${h}"\n  frameborder="0"\n  style="border:none;max-width:${mwCss};"\n  title="Event Enquiry Form"></iframe>\n<script>\n  window.addEventListener('message', function (e) {\n    if (e.data && e.data.type === 'vf-embed-height' && e.data.height) {\n      var f = document.getElementById('vf-enquiry');\n      if (f) f.style.height = e.data.height + 'px';\n    }\n  });\n</script>`;
 
                   // Recommended: one <script> tag. embed.js builds the iframe,
                   // wires resize + conversion tracking, and captures gclid/UTM
@@ -6284,6 +6293,7 @@ export default function Dashboard() {
                   if (accentValid) scriptAttrs.push(`data-accent="${cleanHex}"`);
                   if (embedFont.trim()) scriptAttrs.push(`data-font="${esc(embedFont.trim())}"`);
                   if (h !== 640) scriptAttrs.push(`data-height="${h}"`);
+                  if (mwRaw) scriptAttrs.push(`data-max-width="${esc(mwRaw)}"`);
                   if (embedLayout) scriptAttrs.push(`data-layout="${embedLayout}"`);
                   if (embedPlacement) scriptAttrs.push(`data-placement="${embedPlacement}"`);
                   if (embedPrefillEventType.trim()) scriptAttrs.push(`data-event-type="${esc(embedPrefillEventType.trim())}"`);
@@ -6343,6 +6353,13 @@ export default function Dashboard() {
                           <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">START HEIGHT</label>
                           <input type="number" value={embedHeight} onChange={e => setEmbedHeight(e.target.value)} min={300}
                             aria-label="Start height in pixels"
+                            className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
+                        </div>
+                        <div>
+                          <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">MAX WIDTH</label>
+                          <input type="text" value={embedMaxWidth} onChange={e => setEmbedMaxWidth(e.target.value.replace(/[^0-9a-z]/gi, ""))}
+                            aria-label="Maximum width in pixels, or none for full width"
+                            placeholder="520 · none = full"
                             className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                         </div>
                       </div>

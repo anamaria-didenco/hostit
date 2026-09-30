@@ -14,6 +14,8 @@ const OPTIONS: Opt[] = [
   { name: "data-layout", value: "compact", desc: 'One scrolling form instead of the 3-step wizard. Best on mobile landing pages.' },
   { name: "data-placement", value: "floating", desc: "A corner bubble that opens the form in a panel (a bottom sheet on narrow screens)." },
   { name: "data-height", value: "640", desc: "Initial iframe height in px. The frame then auto-resizes to its content." },
+  { name: "data-width", value: "100% | 400", desc: "Form width. Defaults to 100% of the space you mount it in; a bare number is px." },
+  { name: "data-max-width", value: "520 | none", desc: "Caps the width (default 520px). Use none (or full) for a full-bleed form that fills its container." },
   { name: "data-accent", value: "2f5488", desc: "Accent / button colour (hex, no #)." },
   { name: "data-bg", value: "ffffff | transparent", desc: "Form background: a hex colour, or transparent to show the host page through it." },
   { name: "data-text", value: "1a1a1e", desc: "Body text colour (hex, no #)." },
@@ -44,6 +46,7 @@ const MESSAGES: Msg[] = [
 ];
 
 const CHANGELOG: { date: string; note: string }[] = [
+  { date: "2026-09-30", note: "Width control — data-width and data-max-width (default 520px; none/full for a full-bleed form that fills its container)." },
   { date: "2026-09-30", note: "Styling API (bg/transparent, text/label/border colours, font inherit, radius, shadow, button style); data-prefill for any field; vf-step-changed; frame ids on every message; documented, origin-pinned messages." },
   { date: "earlier", note: "One-line loader, auto-resize, floating placement, accent/font, UTM & click-id capture, conversion events." },
 ];
@@ -74,6 +77,7 @@ export default function EmbedDocs() {
   const [shadowOff, setShadowOff] = useState(false);
   const [fontInherit, setFontInherit] = useState(false);
   const [compact, setCompact] = useState(true);
+  const [maxW, setMaxW] = useState("");
   const [copied, setCopied] = useState(false);
 
   const attrs = useMemo(() => {
@@ -86,8 +90,17 @@ export default function EmbedDocs() {
     if (shadowOff) a.push(`data-shadow="off"`);
     if (fontInherit) a.push(`data-font="inherit"`);
     if (compact) a.push(`data-layout="compact"`);
+    if (maxW) a.push(`data-max-width="${maxW}"`);
     return a;
-  }, [slug, accent, bg, text, border, radius, shadowOff, fontInherit, compact]);
+  }, [slug, accent, bg, text, border, radius, shadowOff, fontInherit, compact, maxW]);
+
+  // Preview mirrors data-max-width: a bare number is px; "none"/"full" removes the cap.
+  const previewMaxWidth = useMemo(() => {
+    const v = maxW.trim();
+    if (!v) return 520;
+    if (v === "none" || v === "full" || v === "0") return "none" as const;
+    return /^\d+$/.test(v) ? Number(v) : v;
+  }, [maxW]);
 
   const snippet = `<script src="${origin}/embed.js"\n  ${attrs.join("\n  ")}></script>`;
 
@@ -159,6 +172,12 @@ export default function EmbedDocs() {
                     aria-label="Corner radius in pixels"
                     className="border border-gray-300 rounded px-2 py-1.5 text-sm font-mono w-full focus:outline-none focus:border-gray-500" />
                 </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-gray-600">Max width (px, or none)</span>
+                  <input value={maxW} onChange={e => setMaxW(e.target.value.replace(/[^0-9a-z]/gi, ""))} placeholder="520"
+                    aria-label="Maximum width in pixels, or none"
+                    className="border border-gray-300 rounded px-2 py-1.5 text-sm font-mono w-full focus:outline-none focus:border-gray-500" />
+                </label>
                 <div className="flex flex-col gap-2 justify-end text-sm">
                   <label className="flex items-center gap-2"><input type="checkbox" checked={shadowOff} onChange={e => setShadowOff(e.target.checked)} /> No shadow</label>
                   <label className="flex items-center gap-2"><input type="checkbox" checked={fontInherit} onChange={e => setFontInherit(e.target.checked)} /> Inherit host font</label>
@@ -177,7 +196,7 @@ export default function EmbedDocs() {
             <div className="bg-white border border-gray-200 rounded-lg p-3">
               <div className="text-xs font-semibold text-gray-500 mb-2">Preview{slug === "your-venue" ? " (set a form address to load a real venue)" : ""}</div>
               <iframe ref={iframeRef} title="Enquiry form preview" src={previewSrc}
-                style={{ width: "100%", maxWidth: 520, height: 640, border: "none", display: "block" }} />
+                style={{ width: "100%", maxWidth: previewMaxWidth, height: 640, border: "none", display: "block" }} />
             </div>
           </div>
         </section>

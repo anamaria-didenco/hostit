@@ -245,8 +245,18 @@
     var iframe = document.createElement("iframe");
     iframe.src = baseOrigin + "/enquire/" + encodeURIComponent(venue) + "?" + iframeParams.toString();
     iframe.title = "Event enquiry form";
-    iframe.style.width = "100%";
-    iframe.style.maxWidth = "520px";
+    // Width is author-controllable so the form can be as wide or as narrow as
+    // the host layout needs. data-width sets the frame width (default 100% of
+    // the mount), data-max-width caps it (default 520px; "none"/"full" removes
+    // the cap for a full-bleed form). A bare number is treated as px.
+    var toLen = function (v, dflt) {
+      if (v == null || v === "") return dflt;
+      v = String(v).trim();
+      if (v === "none" || v === "full" || v === "0") return "none";
+      return /^\d+(\.\d+)?$/.test(v) ? v + "px" : v;
+    };
+    iframe.style.width = toLen(script.getAttribute("data-width"), "100%");
+    iframe.style.maxWidth = toLen(script.getAttribute("data-max-width"), "520px");
     iframe.style.border = "none";
     iframe.style.display = "block";
     iframe.style.height = height + "px";
