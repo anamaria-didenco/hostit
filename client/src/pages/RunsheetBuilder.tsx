@@ -101,23 +101,24 @@ function categoryTone(cat?: string): string {
 
 // ── STAFF ROLE OWNERSHIP ─────────────────────────────────────────────
 // Which team a run-of-day moment belongs to, so a role-specific runsheet
-// (e.g. the kitchen's copy) can print just that team's moments. Food is
-// the kitchen's; drinks are the bar's; everything else (setup, guests,
-// speeches, entertainment, packdown) is run by the floor / front-of-house.
-type StaffRole = "kitchen" | "bar" | "floor";
-const ROLE_OWNERS: StaffRole[] = ["kitchen", "bar", "floor"];
+// (the kitchen's copy) can print just that team's moments. Food is the
+// kitchen's; everything else — drinks, setup, guests, speeches,
+// entertainment, packdown — is run by front of house (which covers the
+// floor and the bar).
+type StaffRole = "kitchen" | "foh";
+const ROLE_OWNERS: StaffRole[] = ["kitchen", "foh"];
 const CATEGORY_OWNER: Record<string, StaffRole> = {
   food: "kitchen",
-  beverage: "bar",
-  setup: "floor",
-  guest: "floor",
-  speech: "floor",
-  entertainment: "floor",
-  packdown: "floor",
-  other: "floor",
+  beverage: "foh",
+  setup: "foh",
+  guest: "foh",
+  speech: "foh",
+  entertainment: "foh",
+  packdown: "foh",
+  other: "foh",
 };
 function rodOwnerFor(cat?: string): StaffRole {
-  return CATEGORY_OWNER[cat ?? "other"] ?? "floor";
+  return CATEGORY_OWNER[cat ?? "other"] ?? "foh";
 }
 
 // Human labels for the drink "type" codes stored on each selected drink,
@@ -681,12 +682,9 @@ export default function RunsheetBuilder() {
     { key: 'kitchen', label: 'Kitchen',
       show: ['timeline', 'notes', 'food', 'dietary', 'checklist'],
       owners: ['kitchen'] },
-    { key: 'floor', label: 'Floor (front of house)',
+    { key: 'foh', label: 'Front of house',
       show: ['setup', 'timeline', 'notes', 'tableplan', 'food', 'dietary', 'totals', 'payment', 'drinks', 'checklist', 'footer'],
-      owners: ['kitchen', 'bar', 'floor'] },
-    { key: 'bar', label: 'Bar',
-      show: ['timeline', 'notes', 'drinks', 'checklist'],
-      owners: ['bar'] },
+      owners: ['kitchen', 'foh'] },
   ];
   // Non-null while a role print is on screen, so the printed page can show
   // a "KITCHEN RUNSHEET" banner naming who the copy is for.
@@ -2639,7 +2637,6 @@ export default function RunsheetBuilder() {
                       className="w-full flex items-center gap-2.5 px-4 py-2 font-dm text-sm text-ink hover:bg-linen/60 transition-colors"
                     >
                       {role.key === 'kitchen' ? <ChefHat className="w-4 h-4 text-forest" />
-                        : role.key === 'bar' ? <Wine className="w-4 h-4 text-forest" />
                         : <Users className="w-4 h-4 text-forest" />}
                       Print for {role.label}
                     </button>
@@ -2952,7 +2949,7 @@ export default function RunsheetBuilder() {
           {printRole && (
             <div
               className="mb-3 px-3 py-1.5 rounded-sm font-sans text-[11px] font-extrabold uppercase tracking-[0.28em] text-white"
-              style={{ backgroundColor: printRole.key === 'kitchen' ? '#b07c25' : printRole.key === 'bar' ? '#7a2420' : '#2f5488' }}
+              style={{ backgroundColor: printRole.key === 'kitchen' ? '#b07c25' : '#2f5488' }}
             >
               {printRole.label} runsheet
             </div>
