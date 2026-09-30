@@ -217,9 +217,9 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
           {[...Array(daysInMonth)].map((_, i) => {
             const day = i + 1;
             const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
-            const dayBookings = (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
+            const dayBookings = (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day);
             const _bookedLeadIds = new Set((monthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
-            const dayLeads = (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !_bookedLeadIds.has(l.id) && l.status !== 'lost');
+            const dayLeads = (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !_bookedLeadIds.has(l.id) && l.status !== 'lost');
             const hasConfirmed = dayBookings.some((b: any) => b.status === 'confirmed');
             const hasFinished = dayBookings.some((b: any) => b.status === 'finished');
             const hasTentative = dayBookings.some((b: any) => b.status === 'tentative');
@@ -2514,8 +2514,8 @@ export default function Dashboard() {
   const firstDay = new Date(year, month, 1).getDay();
   const safeMonthBookings = (monthBookings ?? []).filter(Boolean).filter((b: any) => b && b.id != null && b.eventDate);
   const safeMonthLeadEvents = (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => l && l.id != null && l.eventDate);
-  const bookingDays = new Set(safeMonthBookings.map((b: any) => new Date(b.eventDate).getUTCDate()));
-  const leadEventDays = new Set((monthLeadEvents ?? []).filter(Boolean).map((l: any) => new Date(l.eventDate).getUTCDate()));
+  const bookingDays = new Set(safeMonthBookings.map((b: any) => new Date(b.eventDate).getDate()));
+  const leadEventDays = new Set((monthLeadEvents ?? []).filter(Boolean).map((l: any) => new Date(l.eventDate).getDate()));
   // Deduplicate: leads that already have a booking record should not show as separate lead cards
   const bookedLeadIds = new Set((monthBookings ?? []).filter(Boolean).map((b: any) => b.leadId).filter(Boolean));
 
@@ -2665,11 +2665,11 @@ export default function Dashboard() {
                             const isToday = new Date().getDate() === day && new Date().getMonth() === cellMonth && new Date().getFullYear() === cellYear;
                             const isWeekend = di >= 5;
                             const dayBookings = isOverflow
-                              ? (adjMonthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getUTCDate() === day)
-                              : (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getUTCDate() === day);
+                              ? (adjMonthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day)
+                              : (monthBookings ?? []).filter(Boolean).filter((b: any) => new Date(b.eventDate).getDate() === day);
                             const dayLeads = isOverflow
-                              ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
-                              : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getUTCDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
+                              ? (adjMonthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !adjBLIds.has(l.id) && l.status !== 'lost')
+                              : (monthLeadEvents ?? []).filter(Boolean).filter((l: any) => new Date(l.eventDate).getDate() === day && !bookedLeadIds.has(l.id) && l.status !== 'lost');
                             const dateStr = `${cellYear}-${String(cellMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                             return (
                               <div key={di}
