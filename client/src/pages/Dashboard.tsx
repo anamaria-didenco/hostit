@@ -6252,7 +6252,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between mb-3">
                         <div>
                           <p className="font-inter font-semibold text-sm text-gray-900">Embed on your website</p>
-                          <p className="font-inter text-xs text-gray-500 mt-0.5">Customise the look, then copy the code into your website HTML.</p>
+                          <p className="font-inter text-xs text-gray-700 mt-0.5">Customise the look, then copy the code into your website HTML.</p>
                         </div>
                         <button
                           onClick={() => { navigator.clipboard.writeText(activeCode); toast.success('Embed code copied!'); }}
@@ -6276,25 +6276,29 @@ export default function Dashboard() {
                       {/* Customiser controls */}
                       <div className="grid grid-cols-3 gap-3 mb-3">
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">ACCENT COLOUR</label>
+                          <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">ACCENT COLOUR</label>
                           <div className="flex items-center gap-1.5">
                             <input type="color" value={accentValid ? `#${cleanHex}` : (venueSettings?.primaryColor || "#2D4A3E")}
+                              aria-label="Accent colour"
                               onChange={e => setEmbedAccent(e.target.value.replace(/^#/, ""))}
                               className="w-8 h-8 border border-border rounded cursor-pointer flex-shrink-0" />
                             <input type="text" value={embedAccent} onChange={e => setEmbedAccent(e.target.value)}
+                              aria-label="Accent colour hex value"
                               placeholder="(saved)" className="w-full border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-sage-green" />
                           </div>
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">FONT</label>
+                          <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">FONT</label>
                           <select value={embedFont} onChange={e => setEmbedFont(e.target.value)}
+                            aria-label="Font"
                             className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
                             {FONTS.map(f => <option key={f} value={f}>{f || "Default (saved)"}</option>)}
                           </select>
                         </div>
                         <div>
-                          <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">START HEIGHT</label>
+                          <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">START HEIGHT</label>
                           <input type="number" value={embedHeight} onChange={e => setEmbedHeight(e.target.value)} min={300}
+                            aria-label="Start height in pixels"
                             className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                         </div>
                       </div>
@@ -6302,29 +6306,33 @@ export default function Dashboard() {
                       {embedSnippetTab === "script" && (
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">LAYOUT</label>
+                            <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">LAYOUT</label>
                             <select value={embedLayout} onChange={e => setEmbedLayout(e.target.value as "" | "compact")}
+                              aria-label="Layout"
                               className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
                               <option value="">3 steps (default)</option>
                               <option value="compact">Compact — one scrolling form</option>
                             </select>
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">PLACEMENT</label>
+                            <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">PLACEMENT</label>
                             <select value={embedPlacement} onChange={e => setEmbedPlacement(e.target.value as "" | "floating")}
+                              aria-label="Placement"
                               className="w-full border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:border-sage-green">
                               <option value="">Inline (default)</option>
                               <option value="floating">Floating bubble</option>
                             </select>
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">PREFILL EVENT TYPE</label>
+                            <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">PREFILL EVENT TYPE</label>
                             <input type="text" value={embedPrefillEventType} onChange={e => setEmbedPrefillEventType(e.target.value)}
+                              aria-label="Prefill event type"
                               placeholder="e.g. Christmas Party" className="w-full border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sage-green" />
                           </div>
                           <div>
-                            <label className="font-bebas tracking-widest text-[10px] text-gray-500 block mb-1">GOOGLE ADS LABEL</label>
+                            <label className="font-bebas tracking-widest text-[10px] text-gray-700 block mb-1">GOOGLE ADS LABEL</label>
                             <input type="text" value={embedGadsLabel} onChange={e => setEmbedGadsLabel(e.target.value)}
+                              aria-label="Google Ads conversion label"
                               placeholder="AW-XXXXXXX/yyyy" className="w-full border border-border rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-sage-green" />
                           </div>
                         </div>
@@ -6334,10 +6342,10 @@ export default function Dashboard() {
 
                       {embedSnippetTab === "script" ? (
                         <div className="mt-2 space-y-1">
-                          <p className="font-inter text-[11px] text-gray-400">
+                          <p className="font-inter text-[11px] text-gray-600">
                             This one tag builds the form, auto-resizes it, and captures which ad (Google, Facebook, or a utm_ link) sent the enquiry — stored on the lead automatically, no setup needed.
                           </p>
-                          <p className="font-inter text-[11px] text-gray-400">
+                          <p className="font-inter text-[11px] text-gray-600">
                             Run Google Ads? Paste your conversion label above (Google Ads → Goals → Conversions → your action → "Use Google tag") and every submission reports as a conversion automatically — as long as your site already has the Google tag (gtag.js) installed.
                           </p>
                         </div>
@@ -6348,7 +6356,7 @@ export default function Dashboard() {
                             <ExternalLink className="w-3 h-3" /> Preview this embed
                           </a>
                           <span className="text-gray-300">·</span>
-                          <span className="font-inter text-[11px] text-gray-400">The iframe auto-resizes to fit each step (the script below handles it). Leave colour/font blank to use saved branding.</span>
+                          <span className="font-inter text-[11px] text-gray-600">The iframe auto-resizes to fit each step (the script below handles it). Leave colour/font blank to use saved branding.</span>
                         </div>
                       )}
                     </div>
@@ -6387,12 +6395,13 @@ export default function Dashboard() {
                         {settingsForm.logoUrl ? (
                           <img src={settingsForm.logoUrl} alt="logo" style={{ width: `${settingsForm.logoScale ?? 100}%`, height: `${settingsForm.logoScale ?? 100}%`, objectFit: 'contain' }} />
                         ) : (
-                          <span className="text-[10px] text-gray-400 text-center px-1">No logo</span>
+                          <span className="text-[10px] text-gray-600 text-center px-1">No logo</span>
                         )}
                       </div>
                       <div className="flex-1">
                         <label className="font-bebas text-xs tracking-widest text-sage block mb-1">LOGO</label>
                         <input type="file" accept="image/*"
+                          aria-label="Upload logo"
                           onChange={async e => {
                             const file = e.target.files?.[0]; if (!file) return;
                             try {
@@ -6416,6 +6425,7 @@ export default function Dashboard() {
                           <span className="font-dm text-xs text-ink/70">{settingsForm.logoScale ?? 100}%</span>
                         </div>
                         <input type="range" min={30} max={200} step={5}
+                          aria-label="Logo size percentage"
                           value={settingsForm.logoScale ?? 100}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, logoScale: Number(e.target.value) }))}
                           className="w-full accent-sage-green" />
@@ -6432,10 +6442,12 @@ export default function Dashboard() {
                       <label className="font-bebas text-xs tracking-widest text-sage block mb-2">HEADER COLOUR</label>
                       <div className="flex items-center gap-2">
                         <input type="color" value={settingsForm.primaryColor ?? '#2D4A3E'}
+                          aria-label="Header colour"
                           onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
                           className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
                         <Input value={settingsForm.primaryColor ?? '#2D4A3E'}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, primaryColor: e.target.value }))}
+                          aria-label="Header colour hex value"
                           placeholder="#2D4A3E" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                       </div>
                     </div>
@@ -6463,7 +6475,7 @@ export default function Dashboard() {
                         </div>
                       )}
                       <div className="text-base font-bold text-white">{venueSettings?.name ?? 'Your Venue'}</div>
-                      <div className="text-sm text-white/80 mt-0.5">{settingsForm.leadFormTitle || 'Book Your Event'}</div>
+                      <div className="text-sm text-white mt-0.5">{settingsForm.leadFormTitle || 'Book Your Event'}</div>
                     </div>
                     <div className="bg-gray-50 py-1.5 text-center text-[10px] text-gray-400 font-bebas tracking-widest">HEADER PREVIEW</div>
                   </div>
@@ -6479,10 +6491,12 @@ export default function Dashboard() {
                       <label className="font-bebas text-xs tracking-widest text-sage block mb-2">PAGE BACKGROUND</label>
                       <div className="flex items-center gap-2">
                         <input type="color" value={settingsForm.formPageBg ?? '#f8f5f0'}
+                          aria-label="Page background colour"
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formPageBg: e.target.value }))}
                           className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
                         <Input value={settingsForm.formPageBg ?? '#f8f5f0'}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formPageBg: e.target.value }))}
+                          aria-label="Page background hex value"
                           placeholder="#f8f5f0" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                       </div>
                       <p className="font-dm text-[10px] text-ink/65 mt-1">Colour behind the form</p>
@@ -6493,10 +6507,12 @@ export default function Dashboard() {
                       <label className="font-bebas text-xs tracking-widest text-sage block mb-2">FORM CARD BACKGROUND</label>
                       <div className="flex items-center gap-2">
                         <input type="color" value={settingsForm.formCardBg ?? '#ffffff'}
+                          aria-label="Form card background colour"
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formCardBg: e.target.value }))}
                           className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
                         <Input value={settingsForm.formCardBg ?? '#ffffff'}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formCardBg: e.target.value }))}
+                          aria-label="Form card background hex value"
                           placeholder="#ffffff" className="w-28 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                       </div>
                       <p className="font-dm text-[10px] text-ink/65 mt-1">Colour of the form panels</p>
@@ -6507,10 +6523,12 @@ export default function Dashboard() {
                       <label className="font-bebas text-xs tracking-widest text-sage block mb-2">BUTTON COLOUR <span className="font-dm text-[9px] tracking-normal normal-case text-ink/65">(optional — defaults to header colour)</span></label>
                       <div className="flex items-center gap-2">
                         <input type="color" value={settingsForm.formButtonColor || settingsForm.primaryColor || '#2D4A3E'}
+                          aria-label="Button colour"
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formButtonColor: e.target.value }))}
                           className="w-10 h-10 rounded border border-gold/30 cursor-pointer p-0.5" />
                         <Input value={settingsForm.formButtonColor ?? ''}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, formButtonColor: e.target.value }))}
+                          aria-label="Button colour hex value"
                           placeholder="Same as header colour" className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-mono text-sm" />
                         {settingsForm.formButtonColor && (
                           <button type="button" onClick={() => setSettingsForm((f: any) => ({ ...f, formButtonColor: '' }))}
@@ -6582,6 +6600,7 @@ export default function Dashboard() {
                   <Textarea
                     value={settingsForm.formSuccessMessage ?? ''}
                     onChange={e => setSettingsForm((f: any) => ({ ...f, formSuccessMessage: e.target.value }))}
+                    aria-label="Success message"
                     placeholder={`Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.`}
                     rows={3}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none" />
@@ -6604,6 +6623,7 @@ export default function Dashboard() {
                       <span className="font-dm text-xs text-ink/70">{settingsForm.galleryPhotoHeight ?? 128}px</span>
                     </div>
                     <input type="range" min={60} max={320} step={8}
+                      aria-label="Photo height in pixels"
                       value={settingsForm.galleryPhotoHeight ?? 128}
                       onChange={e => setSettingsForm((f: any) => ({ ...f, galleryPhotoHeight: Number(e.target.value) }))}
                       className="w-full accent-sage-green" />
@@ -6737,6 +6757,7 @@ export default function Dashboard() {
                           {/* Label */}
                           <div className="col-span-5">
                             <input type="text" value={field.label}
+                              aria-label={`Label for the ${field.type} field`}
                               onChange={e => setFormFields(prev => prev ? prev.map((f, j) => j === i ? { ...f, label: e.target.value } : f) : prev)}
                               className="w-full text-sm font-dm text-ink bg-transparent border border-transparent hover:border-gold/40 focus:border-forest focus:outline-none px-1 py-0.5 rounded-sm" />
                           </div>
@@ -6747,11 +6768,13 @@ export default function Dashboard() {
                           {/* Actions */}
                           <div className="col-span-3 flex items-center gap-1 justify-end">
                             <button type="button" disabled={i === 0}
+                              aria-label={`Move ${field.label} up`}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })}
                               className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
                               <MoveUp className="w-3.5 h-3.5" />
                             </button>
                             <button type="button" disabled={i === formFields.length - 1}
+                              aria-label={`Move ${field.label} down`}
                               onClick={() => setFormFields(prev => { if (!prev) return prev; const a = [...prev]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })}
                               className="text-ink/65 hover:text-ink transition-colors disabled:opacity-20 disabled:cursor-not-allowed p-0.5">
                               <MoveDown className="w-3.5 h-3.5" />
@@ -6772,9 +6795,11 @@ export default function Dashboard() {
                   {/* Add custom field */}
                   <div className="flex items-center gap-2 pt-1">
                     <Input value={newCustomFieldLabel} onChange={e => setNewCustomFieldLabel(e.target.value)}
+                      aria-label="New field label"
                       placeholder="New field label..."
                       className="flex-1 rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-forest text-sm" />
                     <select value={newCustomFieldType} onChange={e => setNewCustomFieldType(e.target.value as FormFieldDef['type'])}
+                      aria-label="New field type"
                       className="border border-gold/30 text-sm font-dm px-2 py-2 focus:outline-none focus:border-forest">
                       <option value="text">Text</option>
                       <option value="number">Number</option>
@@ -7188,7 +7213,7 @@ export default function Dashboard() {
                         {settingsForm.logoUrl ? (
                           <img src={settingsForm.logoUrl} alt="logo" style={{ width: `${settingsForm.logoScale ?? 100}%`, height: `${settingsForm.logoScale ?? 100}%`, objectFit: "contain" }} />
                         ) : (
-                          <span className="text-[10px] text-gray-400 text-center px-1">No logo</span>
+                          <span className="text-[10px] text-gray-600 text-center px-1">No logo</span>
                         )}
                       </div>
                       <div className="flex-1">
@@ -7216,6 +7241,7 @@ export default function Dashboard() {
                           <span className="font-dm text-xs text-ink/70">{settingsForm.logoScale ?? 100}%</span>
                         </div>
                         <input type="range" min={30} max={200} step={5}
+                          aria-label="Logo size percentage"
                           value={settingsForm.logoScale ?? 100}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, logoScale: Number(e.target.value) }))}
                           className="w-full accent-sage-green" />
