@@ -818,6 +818,14 @@ export const appRouter = router({
                 input.budgetRange && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px;font-weight:bold;color:#2D4A3E">${esc(budgetRangeLabel(input.budgetRange) ?? input.budgetRange)}</td></tr>`,
                 input.budget && `<tr><td style="padding:4px 0;color:#666;font-size:14px">Budget</td><td style="padding:4px 0;font-size:14px">$${esc(input.budget)} NZD</td></tr>`,
                 input.message && `<tr><td style="padding:4px 0;color:#666;font-size:14px;vertical-align:top">Message</td><td style="padding:4px 0;font-size:14px">${esc(input.message)}</td></tr>`,
+                // Where the enquiry came from — the UTM trail an embedding site
+                // set (or the campaign that drove the click), so the venue can
+                // see which page/ad produced it without opening the CRM.
+                (() => {
+                  const bits = [input.utmSource, input.utmMedium, input.utmCampaign].filter(Boolean).map(v => esc(String(v)));
+                  const label = bits.join(' · ') || (input.source ? esc(String(input.source)) : (input.gclid ? 'Google Ads click' : ''));
+                  return label ? `<tr><td style="padding:4px 0;color:#666;font-size:14px">Source</td><td style="padding:4px 0;font-size:14px">${label}</td></tr>` : '';
+                })(),
               ].filter(Boolean).join('');
               const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto">
   <div style="background:#6b98e7;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
