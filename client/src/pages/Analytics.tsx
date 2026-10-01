@@ -78,13 +78,8 @@ export default function Analytics() {
     }));
   }, [analyticsData]);
 
-  const prevYearRevenue = useMemo(() => {
-    return MONTHS.map((label) => ({ label, value: 0 }));
-  }, []);
-
   const maxRevenue = Math.max(
     ...monthlyRevenue.map(d => d.value),
-    ...prevYearRevenue.map(d => d.value),
     1
   );
 
@@ -102,7 +97,7 @@ export default function Analytics() {
   return (
     <div className="min-h-screen bg-cream">
       {/* Header */}
-      <div className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between flex-wrap gap-y-2">
+      <header className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between flex-wrap gap-y-2">
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate("/dashboard")}
@@ -112,26 +107,29 @@ export default function Analytics() {
           >
             <ArrowLeft className="w-5 h-5" aria-hidden />
           </button>
-          <span className="font-bebas tracking-widest text-amber text-sm">ANALYTICS</span>
+          <h1 className="font-bebas tracking-widest text-amber text-sm m-0">ANALYTICS</h1>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSelectedYear(y => y - 1)}
+            aria-label="Previous year"
             className="text-cream/60 hover:text-cream font-bebas tracking-widest text-sm px-2"
           >
-            ‹
+            <span aria-hidden>‹</span>
           </button>
           <span className="font-bebas tracking-widest text-cream text-sm">{selectedYear}</span>
           <button
-            onClick={() => setSelectedYear(y => y + 1)}
-            className="text-cream/60 hover:text-cream font-bebas tracking-widest text-sm px-2"
+            onClick={() => setSelectedYear(y => Math.min(y + 1, new Date().getFullYear()))}
+            disabled={selectedYear >= new Date().getFullYear()}
+            aria-label="Next year"
+            className="text-cream/60 hover:text-cream font-bebas tracking-widest text-sm px-2 disabled:opacity-30"
           >
-            ›
+            <span aria-hidden>›</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 md:py-8 space-y-4 md:space-y-6">
+      <main className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 md:py-8 space-y-4 md:space-y-6">
         {/* KPI cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <StatCard
@@ -169,9 +167,9 @@ export default function Analytics() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Target className="w-4 h-4 text-burgundy" />
-              <span className="font-bebas tracking-widest text-sm text-ink">
+              <h2 className="font-bebas tracking-widest text-sm text-ink m-0">
                 {MONTHS[currentMonth].toUpperCase()} REVENUE GOAL
-              </span>
+              </h2>
             </div>
             {!editingGoal ? (
               <button
@@ -184,6 +182,7 @@ export default function Analytics() {
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
+                  aria-label="Monthly revenue goal (NZD)"
                   value={goalInput}
                   onChange={e => setGoalInput(e.target.value)}
                   placeholder="e.g. 20000"
@@ -235,30 +234,22 @@ export default function Analytics() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <BarChart2 className="w-4 h-4 text-burgundy" />
-              <span className="font-bebas tracking-widest text-sm text-ink">MONTHLY REVENUE</span>
-            </div>
-            <div className="flex items-center gap-4 text-xs font-dm">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-burgundy" />
-                <span className="text-ink/60">{selectedYear}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-ink/20" />
-                <span className="text-ink/60">{selectedYear - 1}</span>
-              </div>
+              <h2 className="font-bebas tracking-widest text-sm text-ink m-0">MONTHLY REVENUE</h2>
             </div>
           </div>
-          {/* Side-by-side bars */}
-          <div className="flex items-end gap-1 h-40">
+          {/* Bars — each month's revenue for the selected year */}
+          <div
+            className="flex items-end gap-1 h-40"
+            role="img"
+            aria-label={`Monthly revenue for ${selectedYear}: ${MONTHS.map((m, i) => `${m} ${currencyWhole(monthlyRevenue[i]?.value ?? 0)}`).join(", ")}`}
+          >
             {MONTHS.map((month, i) => {
               const curr = monthlyRevenue[i]?.value ?? 0;
-              const prev = prevYearRevenue[i]?.value ?? 0;
               const barH = (v: number) => maxRevenue > 0 ? Math.max(2, (v / maxRevenue) * 100) : 2;
               return (
                 <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full flex items-end gap-0.5" style={{ height: "100px" }}>
-                    <div className="flex-1 bg-burgundy/20 transition-all" style={{ height: `${barH(prev)}px` }} />
-                    <div className="flex-1 bg-burgundy transition-all" style={{ height: `${barH(curr)}px` }} />
+                  <div className="w-full flex items-end" style={{ height: "100px" }}>
+                    <div className="flex-1 bg-burgundy transition-all" style={{ height: `${barH(curr)}px` }} title={`${month}: ${currencyWhole(curr)}`} />
                   </div>
                   <div className="text-xs font-bebas tracking-widest text-ink/65">{month}</div>
                 </div>
@@ -273,7 +264,7 @@ export default function Analytics() {
           <div className="bg-white border border-border p-5">
             <div className="flex items-center gap-2 mb-4">
               <Users className="w-4 h-4 text-amber-700" />
-              <span className="font-bebas tracking-widest text-sm text-ink">LEAD CONVERSION FUNNEL</span>
+              <h2 className="font-bebas tracking-widest text-sm text-ink m-0">LEAD CONVERSION FUNNEL</h2>
             </div>
             <div className="space-y-2">
               {[
@@ -302,7 +293,7 @@ export default function Analytics() {
           <div className="bg-white border border-border p-5">
             <div className="flex items-center gap-2 mb-4">
               <Radio className="w-4 h-4 text-purple-700" />
-              <span className="font-bebas tracking-widest text-sm text-ink">ENQUIRY SOURCE BREAKDOWN</span>
+              <h2 className="font-bebas tracking-widest text-sm text-ink m-0">ENQUIRY SOURCE BREAKDOWN</h2>
             </div>
             {(!sourceData || sourceData.length === 0) ? (
               <div className="text-sm font-dm text-ink/65 py-4 text-center">No source data yet. Sources are tracked when enquiries are submitted.</div>
@@ -345,7 +336,7 @@ export default function Analytics() {
           <div className="bg-white border border-border p-5">
             <div className="flex items-center gap-2 mb-4">
               <Calendar className="w-4 h-4 text-blue-700" />
-              <span className="font-bebas tracking-widest text-sm text-ink">REVENUE BY EVENT TYPE</span>
+              <h2 className="font-bebas tracking-widest text-sm text-ink m-0">REVENUE BY EVENT TYPE</h2>
             </div>
             <div className="space-y-2">
               {analyticsData.byEventType.map((row: any, i: number) => {
@@ -369,7 +360,7 @@ export default function Analytics() {
             </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }
