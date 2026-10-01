@@ -12,6 +12,31 @@ const STATUS_COLORS: Record<string, string> = {
   expired: "bg-gray-100 text-gray-500",
 };
 
+const PAYMENT_STATUS: Record<string, { label: string; cls: string }> = {
+  unpaid: { label: "Awaiting Payment", cls: "bg-red-100 text-red-700" },
+  partial: { label: "Partially Paid", cls: "bg-amber-100 text-amber-700" },
+  deposit_paid: { label: "Deposit Received", cls: "bg-blue-100 text-blue-700" },
+  paid_in_full: { label: "Paid in Full", cls: "bg-green-100 text-green-700" },
+};
+
+const PAYMENT_TYPE_LABELS: Record<string, string> = {
+  deposit: "Deposit",
+  partial: "Partial payment",
+  final: "Final payment",
+  refund: "Refund",
+  other: "Payment",
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  bank_transfer: "Bank transfer",
+  eftpos: "EFTPOS",
+  cash: "Cash",
+  credit_card: "Credit card",
+  other: "Other",
+};
+
+const nzd = (n: number) => `$${Number(n ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 export default function ClientPortal() {
   const { token } = useParams<{ token: string }>();
   const { data, isLoading, error } = trpc.portal.getByToken.useQuery(
@@ -52,7 +77,7 @@ export default function ClientPortal() {
     );
   }
 
-  const { token: portalToken, permissions, booking, lead, proposal } = data;
+  const { token: portalToken, permissions, booking, lead, proposal, paymentSummary, payments } = data;
   const eventName = booking ? `${booking.firstName}${booking.lastName ? ' ' + booking.lastName : ''}'s ${booking.eventType ?? 'Event'}` : lead ? `${lead.firstName}${lead.lastName ? ' ' + lead.lastName : ''}'s ${lead.eventType ?? 'Event'}` : "Your Event";
   const eventDate = booking?.eventDate ?? lead?.eventDate;
   const guestCount = booking?.guestCount ?? lead?.guestCount;
@@ -166,6 +191,90 @@ export default function ClientPortal() {
                 <div className="text-xs text-gray-500 leading-relaxed whitespace-pre-wrap">{proposal.termsAndConditions}</div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Payments & Balance — so the client can see which deposits/payments
+            the venue has received and what is still owing. Only shows once the
+            booking is confirmed (payments hang off a booking). */}
+        {booking && paymentSummary && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-800 text-lg">Payments &amp; Balance</h3>
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wide ${(PAYMENT_STATUS[paymentSummary.status] ?? PAYMENT_STATUS.unpaid).cls}`}>
+                {(PAYMENT_STATUS[paymentSummary.status] ?? PAYMENT_STATUS.unpaid).label}
+              </span>
+            </div>
+
+            {/* Summary tiles */}
+            <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-lg bg-gray-50 px-4 py-3 text-center">
+                <div className="text-gray-400 text-xs uppercase tracking-wide mb-1">Event Total</div>
+                <div className="font-bold text-gray-900 text-lg">{nzd(paymentSummary.total)}</div>
+              </div>
+              <div className="rounded-lg bg-green-50 px-4 py-3 text-center">
+                <div className="text-green-700/70 text-xs uppercase tracking-wide mb-1">Paid to Date</div>
+                <div className="font-bold text-green-700 text-lg">{nzd(paymentSummary.totalPaid)}</div>
+              </div>
+              <div className={`rounded-lg px-4 py-3 text-center ${paymentSummary.outstanding > 0 ? "bg-red-50" : "bg-green-50"}`}>
+                <div className={`text-xs uppercase tracking-wide mb-1 ${paymentSummary.outstanding > 0 ? "text-red-700/70" : "text-green-700/70"}`}>Outstanding</div>
+                <div className={`font-bold text-lg ${paymentSummary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>{nzd(paymentSummary.outstanding)}</div>
+              </div>
+            </div>
+
+            {/* Progress */}
+            {paymentSummary.total > 0 && (
+              <div className="px-6 pb-4">
+                <div
+                  role="progressbar"
+                  aria-valuenow={Math.round(Math.min(100, (paymentSummary.totalPaid / paymentSummary.total) * 100))}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${nzd(paymentSummary.totalPaid)} of ${nzd(paymentSummary.total)} paid`}
+                  className="h-2 bg-gray-100 rounded-full overflow-hidden"
+                >
+                  <div className="h-full bg-green-500 transition-all" style={{ width: `${Math.min(100, (paymentSummary.totalPaid / paymentSummary.total) * 100)}%` }} />
+                </div>
+              </div>
+            )}
+
+            {/* Deposit-due callout */}
+            {paymentSummary.depositRequired && !paymentSummary.depositPaid && paymentSummary.depositNzd > 0 && (
+              <div className="mx-6 mb-4 rounded-lg border border-[#4f72e0]/30 bg-[#4f72e0]/5 px-4 py-3 text-sm text-[#2d4ec2]">
+                A deposit of <span className="font-bold">{nzd(paymentSummary.depositNzd)}</span> secures your booking. Once your venue receives it, it will appear below — please allow a day or two for bank transfers to clear.
+              </div>
+            )}
+
+            {/* Payment history */}
+            <div className="px-6 pb-5">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Payments Received</div>
+              {payments.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
+                  No payments recorded yet. Once your venue records a payment from you, it will show here so you always know what has been received.
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-50 border border-gray-100 rounded-lg">
+                  {payments.map(p => (
+                    <li key={p.id} className="flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${p.type === "refund" ? "bg-red-400" : "bg-green-500"}`} aria-hidden="true" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-800">
+                            {PAYMENT_TYPE_LABELS[p.type] ?? "Payment"} · {PAYMENT_METHOD_LABELS[p.method] ?? p.method}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(p.paidAt).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}
+                          </div>
+                        </div>
+                      </div>
+                      <div className={`text-sm font-semibold flex-shrink-0 ${p.type === "refund" ? "text-red-600" : "text-gray-900"}`}>
+                        {p.type === "refund" ? "−" : ""}{nzd(p.amount)}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
 

@@ -6277,8 +6277,8 @@ Return ONLY valid JSON.`;
       .query(async ({ input, ctx }) => {
         enforceRateLimit('clientPortal:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
-        const { clientPortalTokens, bookings, leads, proposals } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
+        const { clientPortalTokens, bookings, leads, proposals, payments } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const rows = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
@@ -6311,7 +6311,49 @@ Return ONLY valid JSON.`;
           const pr = await db.select().from(proposals).where(eq(proposals.leadId, row.leadId)).limit(1);
           proposal = pr[0] ?? null;
         }
-        return { token: row, permissions, booking, lead, proposal };
+        // Payments the venue has recorded against this booking, so the client
+        // can see which deposits/payments have landed and what's still owing —
+        // the whole point being "did they get my deposit?". Only meaningful once
+        // there's a confirmed booking (payments hang off a booking), and only
+        // the client's own money is exposed (sanitised fields, scoped to this
+        // booking + its owner). Null when there is no booking yet.
+        let paymentSummary: {
+          total: number; totalPaid: number; outstanding: number;
+          depositNzd: number; depositPaid: boolean; depositRequired: boolean;
+          status: 'unpaid' | 'partial' | 'deposit_paid' | 'paid_in_full';
+        } | null = null;
+        let clientPayments: Array<{ id: number; amount: number; type: string; method: string; paidAt: string; notes: string | null }> = [];
+        if (booking && row.bookingId) {
+          const pmts = await db.select().from(payments)
+            .where(and(eq(payments.bookingId, row.bookingId), eq(payments.ownerId, row.ownerId)));
+          const paid = pmts.filter(p => p.type !== 'refund').reduce((s, p) => s + Number(p.amount), 0);
+          const refunds = pmts.filter(p => p.type === 'refund').reduce((s, p) => s + Number(p.amount), 0);
+          const netPaid = paid - refunds;
+          const total = Number(booking.totalNzd ?? 0);
+          const depositNzd = Number(booking.depositNzd ?? 0);
+          const outstanding = Math.max(0, total - netPaid);
+          const status = netPaid <= 0 ? 'unpaid' as const
+            : outstanding <= 0 && total > 0 ? 'paid_in_full' as const
+            : netPaid >= depositNzd && depositNzd > 0 ? 'deposit_paid' as const
+            : 'partial' as const;
+          paymentSummary = {
+            total, totalPaid: netPaid, outstanding, depositNzd,
+            depositPaid: Boolean((booking as any).depositPaid),
+            depositRequired: (booking as any).depositRequired !== false,
+            status,
+          };
+          clientPayments = pmts
+            .sort((a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime())
+            .map(p => ({
+              id: p.id,
+              amount: Number(p.amount),
+              type: p.type,
+              method: p.method,
+              paidAt: new Date(p.paidAt).toISOString(),
+              notes: p.notes ?? null,
+            }));
+        }
+        return { token: row, permissions, booking, lead, proposal, paymentSummary, payments: clientPayments };
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
