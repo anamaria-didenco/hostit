@@ -59,7 +59,7 @@ export default function FloorPlanBuilder() {
         >
           <ChevronLeft className="w-4 h-4" /> BACK
         </button>
-        <span className="font-bold text-gray-800 text-sm">Floor Plan Builder</span>
+        <h1 className="font-bold text-gray-800 text-sm m-0">Floor Plan Builder</h1>
         <span className="text-xs text-gray-600 ml-1">Manage furniture in Settings → Floor Plans</span>
       </div>
 
