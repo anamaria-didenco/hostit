@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import { SectionHead } from "@/components/ui/section-head";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 interface ChecklistItem {
   id: string;
@@ -31,6 +32,7 @@ export default function Checklist() {
   const bookingId = parseInt(new URLSearchParams(window.location.search).get("bookingId") ?? "0") || undefined;
   const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  useEscapeKey(showAssignModal, () => setShowAssignModal(false));
 
   const { data: instances, refetch: refetchInstances } = trpc.checklists.getForBooking.useQuery(
     { bookingId: bookingId! },
@@ -109,13 +111,15 @@ export default function Checklist() {
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8 print:px-0 print:py-4">
+      <main className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8 print:px-0 print:py-4">
         {/* Instance selector */}
         {(instances ?? []).length > 1 && (
           <div className="flex gap-2 mb-6 print:hidden">
             {(instances ?? []).map((inst: any) => (
               <button
                 key={inst.id}
+                type="button"
+                aria-pressed={selectedInstanceId === inst.id}
                 onClick={() => setSelectedInstanceId(inst.id)}
                 className={`font-bebas text-xs tracking-widest px-4 py-2 border transition-colors ${
                   selectedInstanceId === inst.id
@@ -133,7 +137,7 @@ export default function Checklist() {
         {(instances ?? []).length === 0 && (
           <div className="text-center py-16">
             <CheckSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="font-cormorant text-2xl font-semibold text-ink mb-2">No Checklists Yet</h2>
+            <h1 className="font-cormorant text-2xl font-semibold text-ink mb-2">No Checklists Yet</h1>
             <p className="font-dm text-sm text-muted-foreground mb-6">
               Assign a checklist template to this event to get started.
             </p>
@@ -168,7 +172,14 @@ export default function Checklist() {
             </div>
 
             {/* Progress bar */}
-            <div className="w-full bg-border h-1.5 mb-6 print:hidden">
+            <div
+              className="w-full bg-border h-1.5 mb-6 print:hidden"
+              role="progressbar"
+              aria-valuenow={completedCount(selectedInstance)}
+              aria-valuemin={0}
+              aria-valuemax={(selectedInstance.items as ChecklistItem[]).length}
+              aria-label={`${completedCount(selectedInstance)} of ${(selectedInstance.items as ChecklistItem[]).length} tasks complete`}
+            >
               <div
                 className="bg-burgundy h-1.5 transition-all"
                 style={{ width: `${(selectedInstance.items as ChecklistItem[]).length > 0 ? (completedCount(selectedInstance) / (selectedInstance.items as ChecklistItem[]).length) * 100 : 0}%` }}
@@ -185,12 +196,16 @@ export default function Checklist() {
               {(selectedInstance.items as ChecklistItem[]).map((item) => (
                 <div
                   key={item.id}
-                  className={`flex items-center gap-3 p-3 border cursor-pointer transition-colors print:cursor-default print:border-stone-200 ${
+                  role="checkbox"
+                  aria-checked={item.checked}
+                  tabIndex={0}
+                  className={`flex items-center gap-3 p-3 border cursor-pointer transition-colors print:cursor-default print:border-stone-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-burgundy ${
                     item.checked
                       ? "bg-stone-50 border-stone-200 print:bg-white"
                       : "bg-white border-border hover:border-ink print:bg-white"
                   }`}
                   onClick={() => !loading && toggleItem(selectedInstance, item.id)}
+                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!loading) toggleItem(selectedInstance, item.id); } }}
                 >
                   {item.checked
                     ? <CheckSquare className="w-5 h-5 text-burgundy flex-shrink-0 print:text-black" />
@@ -217,13 +232,13 @@ export default function Checklist() {
             </div>
           </div>
         )}
-      </div>
+      </main>
 
       {/* Assign Template Modal */}
       {showAssignModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden">
-          <div className="bg-cream border border-border shadow-xl max-w-md w-full p-6">
-            <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Assign Checklist Template</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden" onClick={() => setShowAssignModal(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="assign-template-title" className="bg-cream border border-border shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+            <h2 id="assign-template-title" className="font-cormorant text-xl font-semibold text-ink mb-4">Assign Checklist Template</h2>
             {(templates ?? []).length === 0 ? (
               <div className="text-center py-6">
                 <p className="font-dm text-sm text-muted-foreground mb-4">No templates yet. Create one in Settings first.</p>
@@ -240,8 +255,8 @@ export default function Checklist() {
                   return (
                     <button
                       key={t.id}
-                      onClick={() => assignTemplate.mutate({ templateId: t.id, bookingId: bookingId! })}
-                      disabled={assignTemplate.isPending}
+                      onClick={() => { if (bookingId) assignTemplate.mutate({ templateId: t.id, bookingId }); }}
+                      disabled={assignTemplate.isPending || !bookingId}
                       className="w-full text-left p-3 border border-border hover:border-ink bg-white transition-colors"
                     >
                       <div className="font-cormorant font-semibold text-base text-ink">{t.name}</div>
