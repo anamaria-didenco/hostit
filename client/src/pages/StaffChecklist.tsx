@@ -39,8 +39,20 @@ export default function StaffChecklist() {
     },
   });
 
+  // Reconcile optimistic ticks against fresh server data rather than blanket-
+  // clearing on every poll: keep an optimistic entry only while the server
+  // hasn't caught up yet, so a 10s background poll that lands between a tap and
+  // its own mutation response no longer flickers the row back to the old value.
   useEffect(() => {
-    setOptimistic({});
+    if (!instance?.items) return;
+    const serverMap = new Map((instance.items as Array<{ id: string; checked: boolean }>).map(i => [i.id, i.checked]));
+    setOptimistic(prev => {
+      const next: Record<string, boolean> = {};
+      for (const [id, val] of Object.entries(prev)) {
+        if (serverMap.get(id) !== val) next[id] = val;
+      }
+      return next;
+    });
   }, [instance]);
 
   if (isLoading) {
@@ -76,6 +88,7 @@ export default function StaffChecklist() {
   const allDone = total > 0 && checkedCount === total;
 
   function toggle(itemId: string, currentChecked: boolean) {
+    if (!token) return;
     setOptimistic(prev => ({ ...prev, [itemId]: !currentChecked }));
     setPendingItemId(itemId);
     toggleMutation.mutate({ token, itemId, checked: !currentChecked });
@@ -84,13 +97,13 @@ export default function StaffChecklist() {
   return (
     <div className="min-h-screen bg-linen">
       <main className="max-w-lg mx-auto px-4 py-8">
-        <div className="mb-6 text-center">
+        <header className="mb-6 text-center">
           <div className="inline-flex items-center mb-1">
             <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
           </div>
           <h1 className="font-bebas tracking-widest text-3xl text-ink mt-2">{instance.name}</h1>
           <p className="font-dm text-sm text-ink/70 mt-1">{checkedCount} of {total} complete</p>
-        </div>
+        </header>
 
         <div
           role="progressbar"
@@ -121,7 +134,7 @@ export default function StaffChecklist() {
                 disabled={pendingItemId === item.id}
                 role="checkbox"
                 aria-checked={item.checked}
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-linen/60 transition-colors disabled:opacity-60"
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-linen/60 transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-forest"
               >
                 <span className={`flex-shrink-0 transition-colors ${item.checked ? "text-forest" : "text-ink/25"}`}>
                   {item.checked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
@@ -136,8 +149,8 @@ export default function StaffChecklist() {
                 )}
               </button>
               {item.imageUrl && (
-                <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" className="block px-4 pb-3 -mt-1" title="Tap to view full size">
-                  <img src={item.imageUrl} alt="Reference photo" className="max-h-52 w-auto rounded-lg border border-gold/20 object-contain" />
+                <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" className="block px-4 pb-3 -mt-1" title="Tap to view full size" aria-label={`View full-size reference photo for: ${item.text}`}>
+                  <img src={item.imageUrl} alt={`Reference photo for: ${item.text}`} className="max-h-52 w-auto rounded-lg border border-gold/20 object-contain" />
                 </a>
               )}
             </div>
@@ -149,10 +162,13 @@ export default function StaffChecklist() {
           )}
         </div>
 
-        <p className="text-center font-dm text-xs text-ink/25 mt-6">
+      </main>
+
+      <footer className="max-w-lg mx-auto px-4 pb-8">
+        <p className="text-center font-dm text-xs text-ink/25">
           Tap any item to mark it complete. Progress saves automatically.
         </p>
-      </main>
+      </footer>
     </div>
   );
 }

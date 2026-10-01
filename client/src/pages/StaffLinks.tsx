@@ -11,6 +11,11 @@ export default function StaffLinks() {
     // Auth errors won't recover from retrying — bounce to sign-in instead.
     retry: false,
   });
+  const deleteLink = trpc.staffPortal.deleteLink.useMutation({
+    onSuccess: () => { toast.success("Link deleted"); utils.staffPortal.listAll.invalidate(); },
+    onError: () => toast.error("Failed to delete link"),
+  });
+  const [filter, setFilter] = useState("");
 
   // If the user lands here signed out, the listAll query 401s. Redirect to
   // login rather than leaving them on an indefinite "Loading…" spinner.
@@ -20,12 +25,8 @@ export default function StaffLinks() {
   }, [isUnauthorized, setLocation]);
   // Don't render the page chrome at all while we're bouncing to /login —
   // avoids a brief flash of the empty "Staff portal links" header.
+  // NB: this early return must stay below every hook call above (Rules of Hooks).
   if (isUnauthorized) return null;
-  const deleteLink = trpc.staffPortal.deleteLink.useMutation({
-    onSuccess: () => { toast.success("Link deleted"); utils.staffPortal.listAll.invalidate(); },
-    onError: () => toast.error("Failed to delete link"),
-  });
-  const [filter, setFilter] = useState("");
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const now = Date.now();
@@ -43,6 +44,10 @@ export default function StaffLinks() {
 
   function copy(token: string) {
     const url = `${origin}/staff/${token}`;
+    if (!navigator.clipboard) {
+      toast.error("Clipboard unavailable — copy the link manually");
+      return;
+    }
     navigator.clipboard.writeText(url).then(
       () => toast.success("Link copied to clipboard"),
       () => toast.error("Couldn't copy — try again"),
@@ -60,15 +65,15 @@ export default function StaffLinks() {
 
   return (
     <div className="min-h-screen bg-cream">
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-5xl mx-auto px-4 py-8">
         <button
           onClick={() => setLocation("/dashboard")}
           className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-ink/60 hover:text-ink mb-4"
         >
-          <ArrowLeft className="w-3.5 h-3.5" /> BACK TO DASHBOARD
+          <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" /> BACK TO DASHBOARD
         </button>
 
-        <div className="flex items-center justify-between mb-6">
+        <header className="flex items-center justify-between mb-6">
           <div>
             <h1 className="font-cormorant text-3xl font-semibold text-ink">Staff portal links</h1>
             <p className="font-dm text-sm text-ink/60 mt-1">Every live link you've shared with staff. Copy, open or revoke from one place.</p>
@@ -76,13 +81,14 @@ export default function StaffLinks() {
           <div className="font-bebas tracking-widest text-xs text-ink/65">
             {links?.length ?? 0} TOTAL
           </div>
-        </div>
+        </header>
 
         <input
           value={filter}
           onChange={e => setFilter(e.target.value)}
           placeholder="Search by event, venue or label…"
-          className="w-full mb-5 rounded-sm border border-gold/20 focus:outline-none focus:border-forest text-sm h-10 px-3 bg-white font-dm"
+          aria-label="Search staff portal links by event, venue or label"
+          className="w-full mb-5 rounded-sm border border-gold/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-forest focus:border-forest text-sm h-10 px-3 bg-white font-dm"
         />
 
         {isLoading ? (
@@ -105,12 +111,18 @@ export default function StaffLinks() {
                   <div className="px-4 py-3 flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <button
-                          onClick={() => setLocation(`/runsheet?id=${l.runsheetId}`)}
-                          className="font-cormorant text-lg font-semibold text-ink hover:text-forest text-left truncate"
-                        >
-                          {l.runsheetTitle ?? "(runsheet deleted)"}
-                        </button>
+                        {l.runsheetId ? (
+                          <button
+                            onClick={() => setLocation(`/runsheet?id=${l.runsheetId}`)}
+                            className="font-cormorant text-lg font-semibold text-ink hover:text-forest text-left truncate"
+                          >
+                            {l.runsheetTitle ?? "(untitled runsheet)"}
+                          </button>
+                        ) : (
+                          <span className="font-cormorant text-lg font-semibold text-ink/50 text-left truncate italic">
+                            {l.runsheetTitle ?? "(runsheet deleted)"}
+                          </span>
+                        )}
                         {l.label && l.label !== "Staff Link" && l.label !== "Staff Portal" && (
                           <span className="font-bebas tracking-widest text-[10px] bg-cream text-ink/60 px-2 py-0.5">
                             {l.label}
@@ -141,18 +153,20 @@ export default function StaffLinks() {
                       <button
                         onClick={() => copy(l.token)}
                         title="Copy link"
+                        aria-label={`Copy staff link for ${l.runsheetTitle ?? "this runsheet"}`}
                         className="h-9 w-9 flex items-center justify-center text-ink/70 hover:text-forest hover:bg-cream"
                       >
-                        <Copy className="w-4 h-4" />
+                        <Copy className="w-4 h-4" aria-hidden="true" />
                       </button>
                       <a
                         href={`/staff/${l.token}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Open link in new tab"
+                        aria-label={`Open staff link for ${l.runsheetTitle ?? "this runsheet"} in a new tab`}
                         className="h-9 w-9 flex items-center justify-center text-ink/70 hover:text-forest hover:bg-cream"
                       >
-                        <ExternalLink className="w-4 h-4" />
+                        <ExternalLink className="w-4 h-4" aria-hidden="true" />
                       </a>
                       <button
                         onClick={() => {
@@ -161,9 +175,10 @@ export default function StaffLinks() {
                           }
                         }}
                         title="Delete link"
+                        aria-label={`Delete staff link for ${l.runsheetTitle ?? "this runsheet"}`}
                         className="h-9 w-9 flex items-center justify-center text-ink/70 hover:text-red-600 hover:bg-red-50"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -172,7 +187,7 @@ export default function StaffLinks() {
             })}
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

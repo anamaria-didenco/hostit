@@ -62,15 +62,24 @@ export default function StaffPortal() {
   // to react-query structural sharing, `data` only changes identity when the
   // content actually changed — so we reload the BEO iframe only on real edits.
   const [beoNonce, setBeoNonce] = useState(0);
-  useEffect(() => { setBeoNonce(n => n + 1); }, [data]);
   // Nothing on screen told a screen-reader user that the manager just edited
   // the runsheet mid-shift — the content silently swapped underneath them.
-  // beoNonce only advances on a REAL change (see above), so skip the initial
-  // mount (nonce 0 → 1) and announce every edit after that.
+  // `data` only changes identity on a REAL content change (structural sharing),
+  // so advance the iframe nonce then, skip the very first load (nothing was
+  // edited yet), and give each announcement a distinct string (a timestamp) so
+  // aria-live re-reads it — an identical repeated string is not re-announced.
+  const hasLoadedOnce = useRef(false);
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
   useEffect(() => {
-    if (beoNonce > 1) setLiveAnnouncement("Runsheet updated");
-  }, [beoNonce]);
+    if (!data) return;
+    setBeoNonce(n => n + 1);
+    if (!hasLoadedOnce.current) {
+      hasLoadedOnce.current = true;
+      return;
+    }
+    const at = new Date().toLocaleTimeString("en-NZ", { hour: "2-digit", minute: "2-digit" });
+    setLiveAnnouncement(`Runsheet updated at ${at}`);
+  }, [data]);
 
   const checklist: any = (data as any)?.checklist ?? null;
   const [localItems, setLocalItems] = useState<any[]>([]);
@@ -135,7 +144,7 @@ export default function StaffPortal() {
     );
   }
 
-  const { runsheet, items, fnb, contactName, contactEmail, contactPhone } = data;
+  const { runsheet, items = [], fnb = [], contactName, contactEmail, contactPhone } = data;
   const payments: any[] = (data as any).payments ?? [];
   const fnbCols = (runsheet as any).fnbColumns ?? {};
   const showDietary = fnbCols.dietary !== false;
@@ -281,7 +290,7 @@ export default function StaffPortal() {
       <main className="max-w-4xl mx-auto px-4 py-5 space-y-4">
         <div aria-live="polite" className="sr-only">{liveAnnouncement}</div>
 
-        <div id="vf-tabpanel-runsheet" role="tabpanel" aria-labelledby="vf-tab-runsheet" hidden={activePortalTab !== 'runsheet'} className={activePortalTab === 'runsheet' ? 'space-y-4' : undefined}>
+        <div id="vf-tabpanel-runsheet" role="tabpanel" tabIndex={0} aria-labelledby="vf-tab-runsheet" hidden={activePortalTab !== 'runsheet'} className={activePortalTab === 'runsheet' ? 'space-y-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest' : undefined}>
 
         {/* Booking-backed runsheets render the REAL BEO document (same HTML the
             PDF is built from) so the live link mirrors the BEO 1:1. Lead-only
@@ -417,7 +426,7 @@ export default function StaffPortal() {
           <div className="bg-white border border-gold/30 shadow-sm">
             <div className="px-5 py-3 border-b-2 border-red-400/70 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-red-500" />
-              <h2 className="font-bebas tracking-[0.2em] text-sm text-red-600">⚠ DIETARY &amp; ALLERGIES</h2>
+              <h2 className="font-bebas tracking-[0.2em] text-sm text-red-600"><span aria-hidden="true">⚠ </span>DIETARY &amp; ALLERGIES</h2>
             </div>
             <div className="px-5 py-4 flex flex-wrap gap-2">
               {runsheet.dietaries.map((d, i) => (
@@ -692,7 +701,9 @@ export default function StaffPortal() {
                   >
                     <FileText className="w-4 h-4 text-forest flex-shrink-0" />
                     <span className="flex-1 font-dm text-sm text-ink truncate">{att.name}</span>
-                    <span className="font-dm text-[11px] text-ink/65">{(att.size / 1024).toFixed(0)} KB</span>
+                    {att.size != null && (
+                      <span className="font-dm text-[11px] text-ink/65">{(att.size / 1024).toFixed(0)} KB</span>
+                    )}
                     <span className="font-bebas tracking-widest text-[11px] text-forest">OPEN</span>
                   </a>
                 ))}
@@ -727,7 +738,7 @@ export default function StaffPortal() {
         </div>
 
         {/* ── Checklist Tab ── */}
-        <div id="vf-tabpanel-checklist" role="tabpanel" aria-labelledby="vf-tab-checklist" hidden={activePortalTab !== 'checklist'}>
+        <div id="vf-tabpanel-checklist" role="tabpanel" tabIndex={0} aria-labelledby="vf-tab-checklist" hidden={activePortalTab !== 'checklist'} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest">
         {activePortalTab === 'checklist' && (
           <>
             {localItems.length > 0 ? (
@@ -783,8 +794,8 @@ export default function StaffPortal() {
                         )}
                       </button>
                       {item.imageUrl && (
-                        <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" className="block px-5 pb-3 -mt-1" title="Tap to view full size">
-                          <img src={item.imageUrl} alt="Reference photo" className="max-h-52 w-auto rounded-lg border border-gold/20 object-contain" />
+                        <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" className="block px-5 pb-3 -mt-1" title="Tap to view full size" aria-label={`View full-size reference photo for: ${item.text}`}>
+                          <img src={item.imageUrl} alt={`Reference photo for: ${item.text}`} className="max-h-52 w-auto rounded-lg border border-gold/20 object-contain" />
                         </a>
                       )}
                     </div>
@@ -802,11 +813,12 @@ export default function StaffPortal() {
         )}
         </div>
 
-        {/* ── Footer ── */}
-        <div className="text-center font-bebas tracking-widest text-xs text-ink/65 pb-8">
-          POWERED BY VENUEFLOWHQ · THIS PAGE UPDATES AUTOMATICALLY
-        </div>
       </main>
+
+      {/* ── Footer ── */}
+      <footer className="max-w-4xl mx-auto px-4 text-center font-bebas tracking-widest text-xs text-ink/65 pb-8">
+        POWERED BY VENUEFLOWHQ · THIS PAGE UPDATES AUTOMATICALLY
+      </footer>
     </div>
   );
 }
