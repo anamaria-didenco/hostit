@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type FPElement = {
@@ -272,6 +273,10 @@ export default function FloorPlanEditor({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const snap = useCallback((v: number) => snapToGrid ? Math.round(v / GRID) * GRID : v, [snapToGrid]);
+
+  // Escape closes the share dialog and the templates dropdown.
+  useEscapeKey(showShareDialog, () => setShowShareDialog(false));
+  useEscapeKey(showTemplates, () => setShowTemplates(false));
 
   // Always-current refs so the drag/resize/rotate START handlers can stay
   // referentially STABLE (deps = [readOnly] only). If they depended on
@@ -566,9 +571,12 @@ export default function FloorPlanEditor({
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    Promise.resolve(navigator.clipboard?.writeText(shareUrl))
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => toast.error("Couldn't copy automatically — select the link and copy it manually."));
   };
 
   // ── Custom item creator ──────────────────────────────────────────────────
@@ -685,6 +693,7 @@ export default function FloorPlanEditor({
                     </div>
                     <input
                       type="text"
+                      aria-label="Custom item label"
                       value={customForm.label}
                       onChange={e => setCustomForm(f => ({ ...f, label: e.target.value }))}
                       placeholder="Label (e.g. VIP Table)"
@@ -693,24 +702,24 @@ export default function FloorPlanEditor({
                     <div className="grid grid-cols-2 gap-1.5">
                       <div>
                         <label className="font-bebas text-[9px] tracking-widest text-ink/65 block">W</label>
-                        <input type="number" value={customForm.w} onChange={e => setCustomForm(f => ({ ...f, w: parseInt(e.target.value) || 80 }))}
+                        <input type="number" aria-label="Custom item width" value={customForm.w} onChange={e => setCustomForm(f => ({ ...f, w: parseInt(e.target.value) || 80 }))}
                           className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
                       </div>
                       <div>
                         <label className="font-bebas text-[9px] tracking-widest text-ink/65 block">H</label>
-                        <input type="number" value={customForm.h} onChange={e => setCustomForm(f => ({ ...f, h: parseInt(e.target.value) || 80 }))}
+                        <input type="number" aria-label="Custom item height" value={customForm.h} onChange={e => setCustomForm(f => ({ ...f, h: parseInt(e.target.value) || 80 }))}
                           className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5 items-end">
                       <div>
                         <label className="font-bebas text-[9px] tracking-widest text-ink/65 block">COLOUR</label>
-                        <input type="color" value={customForm.color} onChange={e => setCustomForm(f => ({ ...f, color: e.target.value }))}
+                        <input type="color" aria-label="Custom item colour" value={customForm.color} onChange={e => setCustomForm(f => ({ ...f, color: e.target.value }))}
                           className="w-full h-7 border border-border rounded cursor-pointer" />
                       </div>
                       <div>
                         <label className="font-bebas text-[9px] tracking-widest text-ink/65 block">SEATS</label>
-                        <input type="number" value={customForm.seats} min={0}
+                        <input type="number" aria-label="Custom item seats" value={customForm.seats} min={0}
                           onChange={e => setCustomForm(f => ({ ...f, seats: parseInt(e.target.value) || 0 }))}
                           className="w-full border border-border rounded px-1.5 py-1 text-xs font-dm focus:outline-none focus:border-gold" />
                       </div>
@@ -831,7 +840,7 @@ export default function FloorPlanEditor({
             {!readOnly && (
               <>
                 <div className="relative">
-                  <button type="button" onClick={() => setShowTemplates(s => !s)}
+                  <button type="button" aria-expanded={showTemplates} onClick={() => setShowTemplates(s => !s)}
                     className={`p-1.5 rounded text-xs font-bebas tracking-wider flex items-center gap-1 ${showTemplates ? "bg-burgundy/10 text-burgundy" : "text-ink/70 hover:text-ink"}`}
                     title="Insert a preset layout">
                     <Plus className="w-3 h-3" /> TEMPLATES
@@ -861,10 +870,10 @@ export default function FloorPlanEditor({
               </>
             )}
             {/* Grid / Snap */}
-            <button onClick={() => setShowGrid(g => !g)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${showGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/65 hover:text-ink"}`}>
+            <button type="button" aria-pressed={showGrid} onClick={() => setShowGrid(g => !g)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${showGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/65 hover:text-ink"}`}>
               GRID
             </button>
-            <button onClick={() => setSnapToGrid(s => !s)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${snapToGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/65 hover:text-ink"}`}>
+            <button type="button" aria-pressed={snapToGrid} onClick={() => setSnapToGrid(s => !s)} className={`p-1.5 rounded text-xs font-bebas tracking-wider ${snapToGrid ? "bg-burgundy/10 text-burgundy" : "text-ink/65 hover:text-ink"}`}>
               SNAP
             </button>
             <div className="h-4 w-px bg-border" />
@@ -901,8 +910,8 @@ export default function FloorPlanEditor({
               <>
                 <input type="range" min={0.1} max={1} step={0.05} value={bgOpacity}
                   onChange={e => setBgOpacity(Number(e.target.value))}
-                  className="w-16 accent-forest" title="Background opacity" />
-                <button onClick={() => setBgImageUrl("")} className="p-1 text-ink/65 hover:text-red-500 transition-colors" title="Remove background">
+                  className="w-16 accent-forest" title="Background opacity" aria-label="Background opacity" />
+                <button onClick={() => setBgImageUrl("")} aria-label="Remove background" className="p-1 text-ink/65 hover:text-red-500 transition-colors" title="Remove background">
                   <X className="w-3 h-3" />
                 </button>
               </>
@@ -1001,6 +1010,7 @@ export default function FloorPlanEditor({
                 <div>
                   <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">LABEL</label>
                   <input
+                    aria-label="Element label"
                     value={selectedEl.label ?? ""}
                     onChange={e => updateSelected({ label: e.target.value })}
                     className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
@@ -1011,6 +1021,7 @@ export default function FloorPlanEditor({
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
+                      aria-label="Element colour"
                       value={selectedEl.color ?? "#888"}
                       onChange={e => updateSelected({ color: e.target.value })}
                       className="w-8 h-8 border border-border rounded cursor-pointer"
@@ -1022,7 +1033,7 @@ export default function FloorPlanEditor({
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">SEATS</label>
                     <input
-                      type="number" min={0}
+                      type="number" min={0} aria-label="Seats"
                       value={selectedEl.seats ?? 0}
                       onChange={e => updateSelected({ seats: parseInt(e.target.value) || 0 })}
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold"
@@ -1032,13 +1043,13 @@ export default function FloorPlanEditor({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">WIDTH</label>
-                    <input type="number" value={selectedEl.width}
+                    <input type="number" aria-label="Width" value={selectedEl.width}
                       onChange={e => updateSelected({ width: parseInt(e.target.value) || 40 })}
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">HEIGHT</label>
-                    <input type="number" value={selectedEl.height}
+                    <input type="number" aria-label="Height" value={selectedEl.height}
                       onChange={e => updateSelected({ height: parseInt(e.target.value) || 40 })}
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
@@ -1046,13 +1057,13 @@ export default function FloorPlanEditor({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">X</label>
-                    <input type="number" value={Math.round(selectedEl.x)}
+                    <input type="number" aria-label="X position" value={Math.round(selectedEl.x)}
                       onChange={e => updateSelected({ x: parseInt(e.target.value) || 0 })}
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
                   <div>
                     <label className="font-bebas text-[10px] tracking-widest text-sage block mb-1">Y</label>
-                    <input type="number" value={Math.round(selectedEl.y)}
+                    <input type="number" aria-label="Y position" value={Math.round(selectedEl.y)}
                       onChange={e => updateSelected({ y: parseInt(e.target.value) || 0 })}
                       className="w-full border border-border rounded px-2 py-1 text-xs font-dm text-ink focus:outline-none focus:border-gold" />
                   </div>
@@ -1107,9 +1118,9 @@ export default function FloorPlanEditor({
       {/* ── Share dialog overlay ────────────────────────────────────────── */}
       {showShareDialog && shareUrl && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowShareDialog(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="fp-share-title" className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-cormorant text-xl font-semibold text-ink">Share Floor Plan</h3>
+              <h2 id="fp-share-title" className="font-cormorant text-xl font-semibold text-ink">Share Floor Plan</h2>
               <button aria-label="Close" onClick={() => setShowShareDialog(false)} className="text-ink/65 hover:text-ink">
                 <X className="w-5 h-5" />
               </button>
