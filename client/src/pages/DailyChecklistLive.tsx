@@ -49,18 +49,26 @@ export default function DailyChecklistLive() {
 
   const resetMutation = trpc.dailyChecklists.resetByToken.useMutation({
     onSuccess: () => refetch(),
+    // Without this, a failed reset silently kept the old ticked state on screen
+    // with no feedback — refetch to restore the true state and tell the user.
+    onError: () => { refetch(); toast.error("Couldn't reset — check your connection and try again"); },
   });
 
   const addItemMutation = trpc.dailyChecklists.addItemByToken.useMutation({
     onSuccess: () => { refetch(); setNewText(""); setNewNote(""); setShowAddForm(false); },
+    onError: () => toast.error("Couldn't add the item — check your connection and try again"),
   });
 
   const deleteItemMutation = trpc.dailyChecklists.deleteItemByToken.useMutation({
-    onSuccess: () => refetch(),
+    // Only clear the armed-delete state once the delete actually succeeded, so a
+    // failed delete doesn't look like it worked.
+    onSuccess: () => { refetch(); setConfirmDeleteId(null); },
+    onError: () => toast.error("Couldn't delete the item — check your connection and try again"),
   });
 
   const editItemMutation = trpc.dailyChecklists.editItemByToken.useMutation({
     onSuccess: () => { refetch(); setEditingId(null); setEditText(""); setEditNote(""); },
+    onError: () => toast.error("Couldn't save your changes — check your connection and try again"),
   });
 
   const [optimistic, setOptimistic] = useState<Record<number, boolean>>({});
@@ -111,7 +119,22 @@ export default function DailyChecklistLive() {
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
-  useEffect(() => { setOptimistic({}); }, [checklist]);
+  // Reconcile optimistic ticks against fresh server data instead of blanket-
+  // clearing on every 20s poll — otherwise a background poll landing between a
+  // tap and its own mutation response would flicker the row back to the old
+  // value. Keep an optimistic entry only until the server catches up.
+  useEffect(() => {
+    if (!checklist?.items) return;
+    const serverMap = new Map(checklist.items.map(it => [it.id, it.checked === 1]));
+    setOptimistic(prev => {
+      const next: Record<number, boolean> = {};
+      for (const [id, val] of Object.entries(prev)) {
+        const numId = Number(id);
+        if (serverMap.get(numId) !== val) next[numId] = val;
+      }
+      return next;
+    });
+  }, [checklist]);
 
   useEffect(() => {
     if (editingName && nameInputRef.current) nameInputRef.current.focus();
@@ -138,6 +161,7 @@ export default function DailyChecklistLive() {
   }
 
   function handleToggle(itemId: number, currentChecked: boolean) {
+    if (!token) return;
     const newChecked = !currentChecked;
     setOptimistic(prev => ({ ...prev, [itemId]: newChecked }));
     setPendingItemId(itemId);
@@ -145,6 +169,7 @@ export default function DailyChecklistLive() {
   }
 
   function handleReset() {
+    if (!token) return;
     if (!confirm("Reset all items to unchecked?")) return;
     setOptimistic({});
     resetMutation.mutate({ token });
@@ -158,12 +183,12 @@ export default function DailyChecklistLive() {
   }
 
   function saveEdit() {
-    if (!editText.trim() || editingId === null) return;
+    if (!token || !editText.trim() || editingId === null) return;
     editItemMutation.mutate({ token, itemId: editingId, text: editText.trim(), note: editNote.trim() || undefined });
   }
 
   function handleAddItem() {
-    if (!newText.trim()) return;
+    if (!token || !newText.trim()) return;
     addItemMutation.mutate({ token, text: newText.trim(), note: newNote.trim() || undefined });
   }
 
@@ -195,9 +220,14 @@ export default function DailyChecklistLive() {
   const allDone = checkedCount === total && total > 0;
   const style = categoryStyle(checklist.category);
 
-  const assignedDateDisplay = checklist.assignedDate
-    ? new Date(checklist.assignedDate + 'T00:00:00').toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
-    : new Date().toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const fmtLongDate = (d: Date) => d.toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  // Parse defensively: assignedDate is normally a bare YYYY-MM-DD, but if the
+  // backend ever returns a full ISO datetime (or the concatenation produces an
+  // invalid date) fall back to today rather than rendering "Invalid Date".
+  const assignedDate = checklist.assignedDate ? new Date(`${checklist.assignedDate}`.slice(0, 10) + 'T00:00:00') : null;
+  const assignedDateDisplay = assignedDate && !isNaN(assignedDate.getTime())
+    ? fmtLongDate(assignedDate)
+    : fmtLongDate(new Date());
 
   const venueLogoUrl = (checklist as any).venueLogoUrl as string | null | undefined;
   const venueName = (checklist as any).venueName as string | null | undefined;
@@ -253,7 +283,14 @@ export default function DailyChecklistLive() {
             </button>
           </div>
         </div>
-        <div className="h-1 bg-stone-100">
+        <div
+          role="progressbar"
+          aria-valuenow={checkedCount}
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-label={`${checkedCount} of ${total} items complete`}
+          className="h-1 bg-stone-100"
+        >
           <div
             className="h-1 bg-forest transition-all duration-500"
             style={{ width: total > 0 ? `${(checkedCount / total) * 100}%` : "0%" }}
@@ -375,7 +412,7 @@ export default function DailyChecklistLive() {
                   </button>
                   {isConfirmDelete ? (
                     <button
-                      onClick={() => { deleteItemMutation.mutate({ token, itemId: item.id }); setConfirmDeleteId(null); }}
+                      onClick={() => { if (token) deleteItemMutation.mutate({ token, itemId: item.id }); }}
                       disabled={deleteItemMutation.isPending}
                       className="w-11 h-11 flex items-center justify-center text-white bg-red-500 hover:bg-red-600 active:bg-red-700 transition-colors"
                       aria-label="Confirm delete — tap again to permanently remove this item"
@@ -396,8 +433,8 @@ export default function DailyChecklistLive() {
                 </div>
               </div>
               {item.photoUrl && (
-                <a href={item.photoUrl} target="_blank" rel="noopener noreferrer" className="block px-4 pb-3 -mt-1" title="Tap to view full size">
-                  <img src={item.photoUrl} alt="Reference photo" className="max-h-52 w-auto rounded-lg border border-stone-200 object-contain" />
+                <a href={item.photoUrl} target="_blank" rel="noopener noreferrer" className="block px-4 pb-3 -mt-1" title="Tap to view full size" aria-label={`View full-size reference photo for: ${item.text}`}>
+                  <img src={item.photoUrl} alt={`Reference photo for: ${item.text}`} className="max-h-52 w-auto rounded-lg border border-stone-200 object-contain" />
                 </a>
               )}
             </div>

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { cloneElement, useEffect, useId, useRef, useState } from "react";
+import type { ReactElement } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -22,17 +23,23 @@ type Answers = {
 
 const EMPTY: Answers = {};
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+// Associate the <label> with its control: generate an id, point htmlFor at it,
+// and inject that id (plus aria-describedby for the hint) into the single child
+// input/textarea. Without this the labels were visual-only and screen readers
+// announced every field as unlabelled.
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactElement }) {
+  const id = useId();
+  const hintId = hint ? `${id}-hint` : undefined;
   return (
     <div>
-      <label className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">{label}</label>
-      {hint && <p className="font-dm text-xs text-ink/65 mb-1.5">{hint}</p>}
-      {children}
+      <label htmlFor={id} className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">{label}</label>
+      {hint && <p id={hintId} className="font-dm text-xs text-ink/65 mb-1.5">{hint}</p>}
+      {cloneElement(children as ReactElement<any>, { id, "aria-describedby": hintId })}
     </div>
   );
 }
 
-const inputCls = "w-full border border-gold/25 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus:border-forest bg-white";
+const inputCls = "w-full border border-gold/25 rounded-sm px-3 py-2 text-sm font-dm focus:outline-none focus-visible:ring-2 focus-visible:ring-forest focus:border-forest bg-white";
 const textareaCls = inputCls + " min-h-[80px] resize-y";
 
 export default function WeddingChecklist() {
@@ -85,6 +92,17 @@ export default function WeddingChecklist() {
 
   const dietaries = answers.dietaries ?? [];
 
+  function handleSubmit() {
+    if (!token) return;
+    // Drop blank requirement rows so empty entries don't reach the kitchen.
+    const cleaned = dietaries.filter(d => d.name.trim());
+    if (cleaned.length !== dietaries.length) {
+      setAnswers(prev => ({ ...prev, dietaries: cleaned }));
+      saveMutation.mutate({ token, answers: { dietaries: cleaned } });
+    }
+    submitMutation.mutate({ token });
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-linen flex items-center justify-center">
@@ -110,9 +128,9 @@ export default function WeddingChecklist() {
 
   return (
     <div className="min-h-screen bg-linen">
-      <div className="max-w-xl mx-auto px-4 py-10">
+      <main className="max-w-xl mx-auto px-4 py-10">
         {/* Header */}
-        <div className="mb-8 text-center">
+        <header className="mb-8 text-center">
           <div className="font-bebas tracking-[0.2em] text-xs text-forest/70 mb-1">{data.venueName}</div>
           <h1 className="font-serif text-3xl font-semibold text-ink">
             {data.coupleNames ? `${data.coupleNames}'s` : "Your"} Wedding Checklist
@@ -123,7 +141,7 @@ export default function WeddingChecklist() {
           <p className="font-dm text-xs text-ink/65 mt-3 max-w-sm mx-auto leading-relaxed">
             A few details to help your venue get everything right on the day. Fill in what you can — it saves automatically as you go, and you can always come back to this link.
           </p>
-        </div>
+        </header>
 
         {data.submittedAt && (
           <div className="mb-6 flex items-center gap-2 justify-center bg-forest/10 border border-forest/20 rounded-sm px-4 py-3">
@@ -137,7 +155,7 @@ export default function WeddingChecklist() {
         <div className="bg-white border border-gold/30 shadow-sm rounded-sm divide-y divide-gold/15">
           {/* Ceremony & Timeline */}
           <div className="p-5 space-y-4">
-            <div className="font-bebas tracking-widest text-xs text-forest">CEREMONY &amp; TIMELINE</div>
+            <h2 className="font-bebas tracking-widest text-xs text-forest">CEREMONY &amp; TIMELINE</h2>
             <Field label="Anything special about the ceremony?" hint="Readings, rituals, timing changes — anything the venue should know.">
               <textarea className={textareaCls} value={answers.ceremonyNotes ?? ""} onChange={e => set("ceremonyNotes", e.target.value)} onBlur={() => saveField("ceremonyNotes")} placeholder="e.g. Unity candle ceremony, 10 min longer than usual" />
             </Field>
@@ -148,7 +166,7 @@ export default function WeddingChecklist() {
 
           {/* Music */}
           <div className="p-5 space-y-4">
-            <div className="font-bebas tracking-widest text-xs text-forest">MUSIC</div>
+            <h2 className="font-bebas tracking-widest text-xs text-forest">MUSIC</h2>
             <Field label="First dance song">
               <input className={inputCls} value={answers.firstDanceSong ?? ""} onChange={e => set("firstDanceSong", e.target.value)} onBlur={() => saveField("firstDanceSong")} placeholder="Artist — Song title" />
             </Field>
@@ -162,7 +180,7 @@ export default function WeddingChecklist() {
 
           {/* Seating & Family */}
           <div className="p-5 space-y-4">
-            <div className="font-bebas tracking-widest text-xs text-forest">SEATING &amp; FAMILY</div>
+            <h2 className="font-bebas tracking-widest text-xs text-forest">SEATING &amp; FAMILY</h2>
             <Field label="Seating notes" hint="VIP tables, anyone who needs to be seated a certain way.">
               <textarea className={textareaCls} value={answers.seatingNotes ?? ""} onChange={e => set("seatingNotes", e.target.value)} onBlur={() => saveField("seatingNotes")} />
             </Field>
@@ -173,39 +191,43 @@ export default function WeddingChecklist() {
 
           {/* Dietary & Allergies */}
           <div className="p-5 space-y-3">
-            <div className="font-bebas tracking-widest text-xs text-forest">DIETARY &amp; ALLERGIES</div>
+            <h2 className="font-bebas tracking-widest text-xs text-forest">DIETARY &amp; ALLERGIES</h2>
             <p className="font-dm text-xs text-ink/65">Please list every guest requirement, especially allergies — this goes straight to the kitchen.</p>
             <div className="space-y-2">
               {dietaries.map((d, i) => (
                 <div key={i} className="flex items-start gap-2 bg-linen/60 border border-gold/20 rounded-sm p-2.5">
                   <input
-                    className="w-full sm:w-40 border border-gold/25 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white"
+                    className="w-full sm:w-40 border border-gold/25 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus-visible:ring-2 focus-visible:ring-forest focus:border-forest bg-white"
                     value={d.name}
                     onChange={e => setAnswers(prev => ({ ...prev, dietaries: dietaries.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))}
                     onBlur={() => saveDietaries(answers.dietaries ?? [])}
                     placeholder="e.g. Vegan, Nut allergy"
+                    aria-label="Requirement or allergy"
                   />
                   <input
                     type="number"
                     min={1}
-                    className="w-16 border border-gold/25 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white"
+                    className="w-16 border border-gold/25 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus-visible:ring-2 focus-visible:ring-forest focus:border-forest bg-white"
                     value={d.count}
                     onChange={e => setAnswers(prev => ({ ...prev, dietaries: dietaries.map((x, j) => j === i ? { ...x, count: Math.max(1, parseInt(e.target.value) || 1) } : x) }))}
                     onBlur={() => saveDietaries(answers.dietaries ?? [])}
+                    aria-label="Number of guests with this requirement"
                   />
                   <input
-                    className="flex-1 border border-gold/25 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus:border-forest bg-white"
+                    className="flex-1 border border-gold/25 rounded-sm px-2 py-1.5 text-sm font-dm focus:outline-none focus-visible:ring-2 focus-visible:ring-forest focus:border-forest bg-white"
                     value={d.notes ?? ""}
                     onChange={e => setAnswers(prev => ({ ...prev, dietaries: dietaries.map((x, j) => j === i ? { ...x, notes: e.target.value } : x) }))}
                     onBlur={() => saveDietaries(answers.dietaries ?? [])}
                     placeholder="Notes (severity, table number, etc.)"
+                    aria-label="Notes for this requirement"
                   />
                   <button
                     onClick={() => saveDietaries(dietaries.filter((_, j) => j !== i))}
                     className="text-ink/65 hover:text-red-600 flex-shrink-0 p-1"
                     title="Remove"
+                    aria-label={`Remove requirement${d.name ? `: ${d.name}` : ""}`}
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
               ))}
@@ -220,7 +242,7 @@ export default function WeddingChecklist() {
 
           {/* Contact */}
           <div className="p-5 space-y-4">
-            <div className="font-bebas tracking-widest text-xs text-forest">DAY-OF CONTACT</div>
+            <h2 className="font-bebas tracking-widest text-xs text-forest">DAY-OF CONTACT</h2>
             <p className="font-dm text-xs text-ink/65">Someone the venue can reach if they can't get hold of you on the day.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Name">
@@ -234,7 +256,7 @@ export default function WeddingChecklist() {
 
           {/* Special requests */}
           <div className="p-5 space-y-4">
-            <div className="font-bebas tracking-widest text-xs text-forest">ANYTHING ELSE?</div>
+            <h2 className="font-bebas tracking-widest text-xs text-forest">ANYTHING ELSE?</h2>
             <Field label="Special requests">
               <textarea className={textareaCls} value={answers.specialRequests ?? ""} onChange={e => set("specialRequests", e.target.value)} onBlur={() => saveField("specialRequests")} />
             </Field>
@@ -243,7 +265,7 @@ export default function WeddingChecklist() {
 
         <div className="mt-6 flex flex-col items-center gap-3">
           <button
-            onClick={() => submitMutation.mutate({ token })}
+            onClick={handleSubmit}
             disabled={submitMutation.isPending}
             className="inline-flex items-center gap-2 bg-forest hover:bg-forest/90 text-white font-bebas tracking-widest text-sm rounded-sm px-6 py-3 transition-colors disabled:opacity-60"
           >
@@ -253,7 +275,7 @@ export default function WeddingChecklist() {
             {saveMutation.isPending ? "Saving…" : saved ? "Everything is saved automatically." : "Unsaved changes — click out of the field to save."}
           </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
