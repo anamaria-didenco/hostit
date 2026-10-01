@@ -181,6 +181,7 @@ export default function EventDetail() {
         </span>
       </nav>
 
+      <main>
       <div className="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Left — Event Details */}
@@ -581,6 +582,7 @@ export default function EventDetail() {
 
       {/* ─── Tabbed Modules ─────────────────────────────────────────────────── */}
       <EventModuleTabs bookingId={bookingId} booking={booking} />
+      </main>
     </div>
   );
 }
@@ -708,7 +710,7 @@ function CommsTab({ bookingId }: { bookingId: number }) {
               <p className="text-sm text-ink/80 whitespace-pre-wrap">{c.body}</p>
               {c.contactName && <p className="text-xs text-gray-400 mt-1">Contact: {c.contactName}{c.contactEmail ? ` · ${c.contactEmail}` : ''}</p>}
             </div>
-            <button onClick={() => del.mutate({ id: c.id })} className="text-red-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+            <button onClick={() => { if (confirm('Delete this logged communication? This cannot be undone.')) del.mutate({ id: c.id }); }} aria-label="Delete communication" className="text-red-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
           </div>
         ))}
       </div>
@@ -787,7 +789,7 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
                 {c.status === 'draft' && (
                   <button onClick={() => send.mutate({ id: c.id })} className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-blue-300 text-blue-600 hover:bg-blue-50">MARK SENT</button>
                 )}
-                <button onClick={() => del.mutate({ id: c.id })} className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                <button onClick={() => { if (confirm('Delete this contract? This cannot be undone.')) del.mutate({ id: c.id }); }} aria-label="Delete contract" className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
               </div>
             </div>
             {c.token && (
@@ -903,10 +905,10 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
                   </td>
                   <td className="p-3 text-right text-gray-700">${Number(item.estimatedAmount ?? 0).toFixed(2)}</td>
                   <td className="p-3 text-right">
-                    <input type="number" defaultValue={item.actualAmount ?? 0} onBlur={e => update.mutate({ id: item.id, actualAmount: Number(e.target.value) })} className="w-24 text-right border border-gray-200 rounded px-2 py-0.5 text-sm" />
+                    <input type="number" aria-label="Actual amount" defaultValue={item.actualAmount ?? 0} onBlur={e => update.mutate({ id: item.id, actualAmount: Number(e.target.value) })} className="w-24 text-right border border-gray-200 rounded px-2 py-0.5 text-sm" />
                   </td>
                   <td className="p-3 text-right">
-                    <button onClick={() => del.mutate({ id: item.id })} className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => { if (confirm('Delete this budget line? This cannot be undone.')) del.mutate({ id: item.id }); }} aria-label="Delete budget line" className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
                   </td>
                 </tr>
               ))}
@@ -985,6 +987,7 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
             </div>
             <select
               value={item.status}
+              aria-label={`Status for ${item.name}`}
               onChange={e => updateItem.mutate({ id: item.id, status: e.target.value as any })}
               className={`text-xs font-semibold px-2 py-1 rounded-full border-0 ${STATUS_COLORS[item.status] ?? 'bg-gray-100 text-gray-500'}`}
             >
@@ -993,7 +996,7 @@ function EquipmentTab({ bookingId }: { bookingId: number }) {
               <option value="delivered">Delivered</option>
               <option value="returned">Returned</option>
             </select>
-            <button onClick={() => del.mutate({ id: item.id })} className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+            <button onClick={() => { if (confirm('Delete this equipment item? This cannot be undone.')) del.mutate({ id: item.id }); }} aria-label="Delete equipment item" className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
           </div>
         ))}
       </div>
@@ -1086,8 +1089,9 @@ function SeatingTab({ bookingId, booking }: { bookingId: number; booking: any })
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => setTables(prev => prev.filter(t => t.id !== table.id))}
+              aria-label="Remove table"
               className="absolute -top-2 -right-2 w-5 h-5 bg-red-400 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-500"
-            >×</button>
+            ><span aria-hidden>×</span></button>
           </div>
         ))}
       </div>
@@ -1166,7 +1170,7 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
                     <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-bebas tracking-widest px-2 py-1 border border-forest/30 text-forest hover:bg-forest/5 flex-shrink-0">PREVIEW</a>
                   </div>
                 </div>
-                <button onClick={() => del.mutate({ id: t.id })} className="text-red-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                <button onClick={() => { if (confirm('Delete this portal link? Anyone using it will lose access. This cannot be undone.')) del.mutate({ id: t.id }); }} aria-label="Delete portal link" className="text-red-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
               </div>
             </div>
           );
