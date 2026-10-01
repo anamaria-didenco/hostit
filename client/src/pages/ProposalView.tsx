@@ -237,7 +237,7 @@ export default function ProposalView() {
       )}
 
       {/* ── Header ─────────────────────────────────────────────────── */}
-      <div style={{ backgroundColor: T.header, color: T.headerText }}>
+      <header style={{ backgroundColor: T.header, color: T.headerText }}>
         <div className="max-w-3xl mx-auto px-6 py-8">
           <div className="flex items-center gap-4 mb-3">
             {venueLogo ? (
@@ -265,12 +265,12 @@ export default function ProposalView() {
             </div>
           )}
         </div>
-      </div>
+      </header>
 
       {/* Stripe accent band */}
       <div className="h-3 stripe-pattern" />
 
-      <div className="max-w-3xl mx-auto px-6 py-8">
+      <main className="max-w-3xl mx-auto px-6 py-8">
 
         {/* Status banners */}
         {alreadyResponded === "accepted" && (
@@ -338,7 +338,7 @@ export default function ProposalView() {
         {lineItems.length > 0 && (
           <div className="mb-6 overflow-hidden rounded-sm" style={{ border: `1px solid ${T.cardBorder}` }}>
             <div className="px-6 py-3" style={{ backgroundColor: T.header }}>
-              <div className="font-bebas text-sm tracking-widest" style={{ color: T.headerText }}>PRICING BREAKDOWN</div>
+              <h2 className="font-bebas text-sm tracking-widest m-0" style={{ color: T.headerText }}>PRICING BREAKDOWN</h2>
             </div>
             <div className="p-6" style={{ backgroundColor: T.card }}>
               <div className="space-y-3 mb-4">
@@ -391,7 +391,7 @@ export default function ProposalView() {
         {drinksData && (
           <div className="mb-6 overflow-hidden rounded-sm" style={{ border: `1px solid ${T.cardBorder}` }}>
             <div className="px-6 py-3" style={{ backgroundColor: T.header }}>
-              <div className="font-bebas text-sm tracking-widest" style={{ color: T.headerText }}>DRINKS & BAR ARRANGEMENT</div>
+              <h2 className="font-bebas text-sm tracking-widest m-0" style={{ color: T.headerText }}>DRINKS & BAR ARRANGEMENT</h2>
             </div>
             <div className="p-6" style={{ backgroundColor: T.card }}>
               <div className="mb-4 p-3 rounded-sm" style={{ backgroundColor: T.bg, border: `1px solid ${T.border}` }}>
@@ -512,7 +512,7 @@ export default function ProposalView() {
         )}
 
         {/* Footer */}
-        <div className="text-center py-8 border-t-2 border-dashed" style={{ borderColor: T.border }}>
+        <footer className="text-center py-8 border-t-2 border-dashed" style={{ borderColor: T.border }}>
           <div className="flex items-center justify-center mb-1">
             {venueLogo ? (
               <img src={venueLogo} alt={venue?.name ?? "Venue"} className="h-8 w-auto object-contain" />
@@ -523,11 +523,11 @@ export default function ProposalView() {
           <div className="font-bebas text-xs tracking-widest" style={{ color: T.stone }}>POWERED BY VenueFlowHQ · EVENT CRM FOR NEW ZEALAND VENUES</div>
           {venue?.phone && <div className="font-inter text-xs mt-1" style={{ color: T.stone }}>{venue.phone}</div>}
           {venue?.email && <div className="font-inter text-xs" style={{ color: T.stone }}>{venue.email}</div>}
-        </div>
-      </div>
+        </footer>
+      </main>
 
       {/* Accept Dialog */}
-      <Dialog open={showAccept} onOpenChange={setShowAccept}>
+      <Dialog open={showAccept} onOpenChange={(o) => { setShowAccept(o); if (!o) setClientMessage(""); }}>
         <DialogContent className="max-w-md rounded-none border-2" style={{ borderColor: T.cardBorder }}>
           <DialogHeader>
             <div className="-mx-6 -mt-6 p-5 mb-4" style={{ backgroundColor: T.header }}>
@@ -539,8 +539,8 @@ export default function ProposalView() {
               By accepting, you confirm you'd like to proceed with this booking. The venue team will contact you regarding the deposit payment.
             </p>
             <div>
-              <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>MESSAGE TO VENUE (OPTIONAL)</label>
-              <Textarea value={clientMessage} onChange={e => setClientMessage(e.target.value)}
+              <label htmlFor="accept-message" className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>MESSAGE TO VENUE (OPTIONAL)</label>
+              <Textarea id="accept-message" value={clientMessage} onChange={e => setClientMessage(e.target.value)}
                 placeholder="Any questions or notes for the venue team..."
                 rows={3} className="rounded-none border-2 focus-visible:ring-0 resize-none text-sm font-inter" />
             </div>
@@ -556,7 +556,7 @@ export default function ProposalView() {
       </Dialog>
 
       {/* Decline Dialog */}
-      <Dialog open={showDecline} onOpenChange={setShowDecline}>
+      <Dialog open={showDecline} onOpenChange={(o) => { setShowDecline(o); if (!o) setClientMessage(""); }}>
         <DialogContent className="max-w-md rounded-none border-2" style={{ borderColor: T.cardBorder }}>
           <DialogHeader>
             <div className="-mx-6 -mt-6 p-5 mb-4" style={{ backgroundColor: T.accent }}>
@@ -568,8 +568,8 @@ export default function ProposalView() {
               Please let us know why you're declining so we can improve our proposals.
             </p>
             <div>
-              <label className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>REASON (OPTIONAL)</label>
-              <Textarea value={clientMessage} onChange={e => setClientMessage(e.target.value)}
+              <label htmlFor="decline-reason" className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>REASON (OPTIONAL)</label>
+              <Textarea id="decline-reason" value={clientMessage} onChange={e => setClientMessage(e.target.value)}
                 placeholder="e.g. Budget doesn't fit, found another venue, dates changed..."
                 rows={3} className="rounded-none border-2 focus-visible:ring-0 resize-none text-sm font-inter" />
             </div>
