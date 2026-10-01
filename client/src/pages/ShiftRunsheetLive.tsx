@@ -82,7 +82,12 @@ export default function ShiftRunsheetLive() {
       toast.error("Couldn't save — check your connection and try again");
     },
   });
-  const resetMut = trpc.dailyChecklists.resetByToken.useMutation({ onSuccess: () => refetch() });
+  const resetMut = trpc.dailyChecklists.resetByToken.useMutation({
+    onSuccess: () => refetch(),
+    // Without onError a failed reset silently kept the old ticked state with no
+    // feedback — refetch to restore the true state and tell the user.
+    onError: () => { refetch(); toast.error("Couldn't reset — check your connection and try again"); },
+  });
 
   const [optimistic, setOptimistic] = useState<Record<number, boolean>>({});
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -116,7 +121,23 @@ export default function ShiftRunsheetLive() {
   const [nameInput, setNameInput] = useState(staffName);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setOptimistic({}); }, [sr]);
+  // Reconcile optimistic ticks against fresh server data instead of blanket-
+  // clearing on every 30s poll, so a poll landing between a tap and its own
+  // mutation response no longer flickers the row back to the old value.
+  useEffect(() => {
+    const cls = (sr as any)?.checklists as { items?: { id: number; checked: number }[] }[] | undefined;
+    if (!cls) return;
+    const serverMap = new Map<number, boolean>();
+    for (const cl of cls) for (const it of (cl.items ?? [])) serverMap.set(it.id, it.checked === 1);
+    setOptimistic(prev => {
+      const next: Record<number, boolean> = {};
+      for (const [id, val] of Object.entries(prev)) {
+        const numId = Number(id);
+        if (serverMap.get(numId) !== val) next[numId] = val;
+      }
+      return next;
+    });
+  }, [sr]);
   useEffect(() => { if (editingName && nameInputRef.current) nameInputRef.current.focus(); }, [editingName]);
 
   function saveName() {
@@ -166,10 +187,10 @@ export default function ShiftRunsheetLive() {
   const fmtNzd = (n: number) => `$${n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   // Sum F&B (qty × unit price) across every event on this shift so duty
   // managers see the day's expected take at a glance.
-  const dayFoodTotal = events.reduce((sum, ev) => sum + ev.fnb
+  const dayFoodTotal = events.reduce((sum, ev) => sum + (ev.fnb ?? [])
     .filter(f => (f.course ?? '').toLowerCase() !== 'drinks')
     .reduce((s, f) => s + (Number(f.qty ?? 0) * Number(f.unitPrice ?? 0)), 0), 0);
-  const dayDrinkTotal = events.reduce((sum, ev) => sum + ev.fnb
+  const dayDrinkTotal = events.reduce((sum, ev) => sum + (ev.fnb ?? [])
     .filter(f => (f.course ?? '').toLowerCase() === 'drinks')
     .reduce((s, f) => s + (Number(f.qty ?? 0) * Number(f.unitPrice ?? 0)), 0), 0);
   const dayGrand = dayFoodTotal + dayDrinkTotal;
@@ -277,7 +298,14 @@ export default function ShiftRunsheetLive() {
           </div>
         </div>
         {hasChecklists && totalChecklistItems > 0 && (
-          <div className="h-1 bg-white/20">
+          <div
+            role="progressbar"
+            aria-valuenow={totalChecked}
+            aria-valuemin={0}
+            aria-valuemax={totalChecklistItems}
+            aria-label={`${totalChecked} of ${totalChecklistItems} shift tasks complete`}
+            className="h-1 bg-white/20"
+          >
             <div
               className="h-1 bg-white transition-all duration-500"
               style={{ width: `${(totalChecked / totalChecklistItems) * 100}%` }}
@@ -342,8 +370,9 @@ export default function ShiftRunsheetLive() {
             </div>
             <div className="divide-y divide-stone-100">
               {events.map(ev => {
-                const foodItems = ev.fnb.filter(f => (f.course ?? '').toLowerCase() !== 'drinks');
-                const drinkItems = ev.fnb.filter(f => (f.course ?? '').toLowerCase() === 'drinks');
+                const fnb = ev.fnb ?? [];
+                const foodItems = fnb.filter(f => (f.course ?? '').toLowerCase() !== 'drinks');
+                const drinkItems = fnb.filter(f => (f.course ?? '').toLowerCase() === 'drinks');
                 const venueAreaLabel = ev.venueArea ? (VENUE_AREA_LABELS[ev.venueArea] ?? ev.venueArea) : null;
                 const time = ev.eventStartTime
                   ? (ev.eventEndTime ? `${fmt12(ev.eventStartTime)} – ${fmt12(ev.eventEndTime)}` : fmt12(ev.eventStartTime))
@@ -461,7 +490,7 @@ export default function ShiftRunsheetLive() {
                       </div>
                     )}
 
-                    {ev.fnb.length === 0 && !ev.drinksData?.barNotes && (
+                    {fnb.length === 0 && !ev.drinksData?.barNotes && (
                       <p className="font-dm text-xs text-stone-600 italic">No F&B added yet for this event.</p>
                     )}
                   </div>
@@ -484,8 +513,8 @@ export default function ShiftRunsheetLive() {
             <div key={cl.id} className="bg-white border border-stone-200 rounded overflow-hidden">
               <div className="border-b border-stone-200 px-4 py-2.5 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Utensils className="w-3.5 h-3.5 text-[var(--brand)] flex-shrink-0" />
-                  <span className="font-bebas tracking-widest text-sm text-stone-700">{cl.name}</span>
+                  <Utensils className="w-3.5 h-3.5 text-[var(--brand)] flex-shrink-0" aria-hidden="true" />
+                  <h2 className="font-bebas tracking-widest text-sm text-stone-700">{cl.name}</h2>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
                   <span className="font-dm text-xs text-stone-600">{checkedCount}/{items.length}</span>
@@ -497,7 +526,14 @@ export default function ShiftRunsheetLive() {
                   </button>
                 </div>
               </div>
-              <div className="h-1 bg-stone-100">
+              <div
+                role="progressbar"
+                aria-valuenow={checkedCount}
+                aria-valuemin={0}
+                aria-valuemax={items.length}
+                aria-label={`${cl.name}: ${checkedCount} of ${items.length} items complete`}
+                className="h-1 bg-stone-100"
+              >
                 <div className="h-1 bg-[var(--brand)] transition-all duration-500" style={{ width: items.length > 0 ? `${(checkedCount / items.length) * 100}%` : "0%" }} />
               </div>
               {allDone && (
@@ -518,7 +554,7 @@ export default function ShiftRunsheetLive() {
                     disabled={pendingItemId === item.id}
                     role="checkbox"
                     aria-checked={isChecked}
-                    className={`w-full text-left flex items-start gap-3 px-4 py-3.5 disabled:opacity-60 ${item.photoUrl ? "" : "border-b border-stone-100 last:border-0"} transition-colors active:scale-[0.99] ${isChecked ? "bg-green-50/70" : "bg-white hover:bg-stone-50 active:bg-stone-100"}`}
+                    className={`w-full text-left flex items-start gap-3 px-4 py-3.5 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--brand)] ${item.photoUrl ? "" : "border-b border-stone-100 last:border-0"} transition-colors active:scale-[0.99] ${isChecked ? "bg-green-50/70" : "bg-white hover:bg-stone-50 active:bg-stone-100"}`}
                   >
                     <div className="mt-0.5 flex-shrink-0">
                       {isChecked
@@ -537,8 +573,8 @@ export default function ShiftRunsheetLive() {
                     </div>
                   </button>
                   {item.photoUrl && (
-                    <a href={item.photoUrl} target="_blank" rel="noopener noreferrer" className="block px-4 pb-3 bg-white border-b border-stone-100 last:border-0" title="Tap to view full size">
-                      <img src={item.photoUrl} alt="Reference photo" className="max-h-52 w-auto rounded-lg border border-stone-200 object-contain ml-8" />
+                    <a href={item.photoUrl} target="_blank" rel="noopener noreferrer" className="block px-4 pb-3 bg-white border-b border-stone-100 last:border-0" title="Tap to view full size" aria-label={`View full-size reference photo for: ${item.text}`}>
+                      <img src={item.photoUrl} alt={`Reference photo for: ${item.text}`} className="max-h-52 w-auto rounded-lg border border-stone-200 object-contain ml-8" />
                     </a>
                   )}
                   </div>
