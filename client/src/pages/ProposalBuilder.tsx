@@ -423,7 +423,7 @@ export default function ProposalBuilder() {
   return (
     <div className="min-h-screen bg-parchment font-dm">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 min-h-14 flex items-center gap-y-1 px-4 sm:px-6 sticky top-0 z-40 shadow-sm overflow-x-auto">
+      <header className="bg-white border-b border-gray-200 min-h-14 flex items-center gap-y-1 px-4 sm:px-6 sticky top-0 z-40 shadow-sm overflow-x-auto">
         <Button asChild variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900 font-inter text-xs gap-1 mr-4 min-h-[44px]">
           <Link href="/dashboard">
             <ChevronLeft className="w-4 h-4" aria-hidden /> Dashboard
@@ -435,7 +435,7 @@ export default function ProposalBuilder() {
         <div className="hidden sm:flex items-center mr-3">
           <span className="font-bold text-gray-900 text-base tracking-tight">VenueFlowHQ</span>
         </div>
-        <div className="font-inter text-sm font-medium text-gray-700 whitespace-nowrap">Proposal Builder</div>
+        <h1 className="font-inter text-sm font-medium text-gray-700 whitespace-nowrap m-0">Proposal Builder</h1>
         <div className="ml-auto flex items-center gap-2">
           {savedProposal?.publicToken && (
             <Button
@@ -465,9 +465,9 @@ export default function ProposalBuilder() {
             </div>
           )}
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-5xl mx-auto p-6 grid lg:grid-cols-3 gap-6">
+      <main className="max-w-5xl mx-auto p-6 grid lg:grid-cols-3 gap-6">
         {/* Left: Form */}
         <div className="lg:col-span-2 space-y-5">
           {/* Lead Info Banner */}
@@ -508,14 +508,14 @@ export default function ProposalBuilder() {
               </div>
               <div>
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">GUEST COUNT</label>
-                <Input type="number" value={guestCount} onChange={e => setGuestCount(e.target.value)}
+                <Input type="number" aria-label="Guest count" value={guestCount} onChange={e => setGuestCount(e.target.value)}
                   placeholder="50" className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary" />
               </div>
               <div className="sm:col-span-2">
                 <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">EVENT SPACE</label>
                 {spaces && spaces.length > 0 ? (
                   <Select value={spaceName} onValueChange={setSpaceName}>
-                    <SelectTrigger className="rounded-none border-2 focus:ring-0 focus:border-primary h-10">
+                    <SelectTrigger aria-label="Event space" className="rounded-none border-2 focus:ring-0 focus:border-primary h-10">
                       <SelectValue placeholder="Select a space…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -536,6 +536,8 @@ export default function ProposalBuilder() {
           {/* Menu Packages */}
           <div className="bg-cream-card border border-border shadow-sm">
             <button
+              type="button"
+              aria-expanded={menuSectionOpen}
               onClick={() => setMenuSectionOpen(o => !o)}
               className="w-full flex items-center justify-between p-5 hover:bg-sage-tint/50 transition-colors"
             >
@@ -764,6 +766,8 @@ export default function ProposalBuilder() {
           {/* Food Items */}
           <div className="bg-cream-card border border-border shadow-sm">
             <button
+              type="button"
+              aria-expanded={foodSectionOpen}
               onClick={() => setFoodSectionOpen(o => !o)}
               className="w-full flex items-center justify-between p-5 hover:bg-black/5 transition-colors"
             >
@@ -836,8 +840,8 @@ export default function ProposalBuilder() {
                         {item.description && <span className="font-dm text-xs text-muted-foreground ml-2">{item.description}</span>}
                         {item.pricePerHead && <span className="font-dm text-xs text-primary ml-2">${item.pricePerHead}/head</span>}
                       </div>
-                      <button onClick={() => removeFoodItem(i)} className="text-muted-foreground/40 hover:text-primary transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button onClick={() => removeFoodItem(i)} aria-label={`Remove food item ${item.name || i + 1}`} className="text-muted-foreground/40 hover:text-primary transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden />
                       </button>
                     </div>
                   ))}
@@ -862,8 +866,8 @@ export default function ProposalBuilder() {
                         placeholder="$/head"
                         className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                       />
-                      <Button size="sm" onClick={addFoodItem} className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
-                        <Plus className="w-3.5 h-3.5" />
+                      <Button size="sm" onClick={addFoodItem} aria-label="Add food item" className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
+                        <Plus className="w-3.5 h-3.5" aria-hidden />
                       </Button>
                     </div>
                   </div>
@@ -875,6 +879,8 @@ export default function ProposalBuilder() {
           {/* Drinks Selection */}
           <div className="bg-cream-card border border-border shadow-sm">
             <button
+              type="button"
+              aria-expanded={drinksSectionOpen}
               onClick={() => setDrinksSectionOpen(o => !o)}
               className="w-full flex items-center justify-between p-5 hover:bg-black/5 transition-colors"
             >
@@ -916,6 +922,7 @@ export default function ProposalBuilder() {
                       <label className="font-bebas text-xs tracking-widest text-muted-foreground">TAB AMOUNT (NZD)</label>
                       <Input
                         type="number"
+                        aria-label="Tab amount (NZD)"
                         value={tabAmount}
                         onChange={e => setTabAmount(e.target.value)}
                         placeholder="e.g. 1500"
@@ -1044,8 +1051,8 @@ export default function ProposalBuilder() {
                         {d.description && <span className="font-dm text-xs text-muted-foreground ml-2">{d.description}</span>}
                         {d.price && <span className="font-dm text-xs text-sage-green ml-2">${d.price}</span>}
                       </div>
-                      <button onClick={() => removeCustomDrink(i)} className="text-muted-foreground/40 hover:text-primary transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button onClick={() => removeCustomDrink(i)} aria-label={`Remove drink ${d.name || i + 1}`} className="text-muted-foreground/40 hover:text-primary transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden />
                       </button>
                     </div>
                   ))}
@@ -1070,7 +1077,7 @@ export default function ProposalBuilder() {
                         placeholder="Price"
                         className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                       />
-                      <Button size="sm" onClick={addCustomDrink} className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
+                      <Button size="sm" onClick={addCustomDrink} aria-label="Add drink" className="bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none px-3">
                         <Plus className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -1093,7 +1100,7 @@ export default function ProposalBuilder() {
           {/* Quote / Min-Spend Calculator */}
           <div className="bg-cream-card border border-border shadow-sm">
             <div className="w-full flex items-center gap-3 p-5">
-              <span className="font-bebas text-xs tracking-widest text-muted-foreground">PRICING &amp; MINIMUM SPEND</span>
+              <h2 className="font-bebas text-xs tracking-widest text-muted-foreground m-0">PRICING &amp; MINIMUM SPEND</h2>
               {Number(minimumSpend) > 0 && (
                 <span className="font-bebas text-xs tracking-widest bg-burgundy text-cream px-2 py-0.5">
                   MIN {currencyWhole(parseFloat(minimumSpend))}
@@ -1107,7 +1114,7 @@ export default function ProposalBuilder() {
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">MINIMUM SPEND (NZD)</label>
                     <Input
-                      type="number" min="0" placeholder="e.g. 5000"
+                      type="number" min="0" placeholder="e.g. 5000" aria-label="Minimum spend (NZD)"
                       value={minimumSpend} onChange={e => setMinimumSpend(e.target.value)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
                     />
@@ -1115,7 +1122,7 @@ export default function ProposalBuilder() {
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-muted-foreground block mb-1">FOOD TOTAL OVERRIDE (NZD)</label>
                     <Input
-                      type="number" min="0" placeholder={`Auto: ${currency(_lineSubtotal())}`}
+                      type="number" min="0" placeholder={`Auto: ${currency(_lineSubtotal())}`} aria-label="Food total override (NZD)"
                       value={foodTotalOverride} onChange={e => setFoodTotalOverride(e.target.value)}
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
                     />
@@ -1179,25 +1186,25 @@ export default function ProposalBuilder() {
                   {hireItems.map((item, i) => (
                     <div key={i} className="grid grid-cols-12 gap-2 mb-2 items-start">
                       <div className="col-span-4">
-                        <Input placeholder="Item name" value={item.name} onChange={e => updateHireItem(i, 'name', e.target.value)}
+                        <Input aria-label={`Hire item ${i + 1} name`} placeholder="Item name" value={item.name} onChange={e => updateHireItem(i, 'name', e.target.value)}
                           className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
                       </div>
                       <div className="col-span-3">
-                        <Input placeholder="Description" value={item.description} onChange={e => updateHireItem(i, 'description', e.target.value)}
+                        <Input aria-label={`Hire item ${i + 1} description`} placeholder="Description" value={item.description} onChange={e => updateHireItem(i, 'description', e.target.value)}
                           className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
                       </div>
                       <div className="col-span-2">
-                        <Input type="number" min="1" placeholder="Qty" value={item.qty} onChange={e => updateHireItem(i, 'qty', parseInt(e.target.value) || 1)}
+                        <Input type="number" min="1" aria-label={`Hire item ${i + 1} quantity`} placeholder="Qty" value={item.qty} onChange={e => updateHireItem(i, 'qty', parseInt(e.target.value) || 1)}
                           className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
                       </div>
                       <div className="col-span-2">
-                        <Input type="number" min="0" placeholder="Price" value={item.unitPrice} onChange={e => updateHireItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                        <Input type="number" min="0" aria-label={`Hire item ${i + 1} price`} placeholder="Price" value={item.unitPrice} onChange={e => updateHireItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
                           className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm h-8" />
                       </div>
                       <div className="col-span-1 flex justify-end">
-                        <button type="button" onClick={() => removeHireItem(i)}
+                        <button type="button" onClick={() => removeHireItem(i)} aria-label={`Remove hire item ${item.name || i + 1}`}
                           className="text-muted-foreground hover:text-destructive h-8 flex items-center">
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5" aria-hidden />
                         </button>
                       </div>
                     </div>
@@ -1435,7 +1442,7 @@ export default function ProposalBuilder() {
             </Button>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }
