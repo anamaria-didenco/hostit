@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { getLoginUrl } from "@/const";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -51,6 +52,12 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
   const [venueName, setVenueName] = useState("");
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+
+  // Close on Escape and focus the first field on open — basic dialog manners
+  // the modal was missing.
+  useEscapeKey(true, onClose);
+  useEffect(() => { firstFieldRef.current?.focus(); }, []);
 
   const joinMutation = trpc.waitlist.join.useMutation({
     onSuccess: () => setSubmitted(true),
@@ -67,11 +74,14 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(22,20,15,0.5)] p-4" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="waitlist-title"
         className="bg-card rounded-lg border-[1.5px] border-input w-full max-w-md p-8 relative"
         style={{ boxShadow: "0 8px 40px rgba(0,0,0,.16)" }}
         onClick={e => e.stopPropagation()}
       >
-        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
           <X className="w-5 h-5" />
         </button>
 
@@ -80,7 +90,7 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
             <div className="w-16 h-16 bg-accent rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-primary" />
             </div>
-            <h3 className="font-serif text-2xl font-semibold text-foreground mb-2 tracking-[-0.01em]">You're on the list</h3>
+            <h3 id="waitlist-title" className="font-serif text-2xl font-semibold text-foreground mb-2 tracking-[-0.01em]">You're on the list</h3>
             <p className="text-muted-foreground text-sm leading-relaxed">
               Thanks for your interest in VenueFlow. We'll be in touch as soon as your spot is ready — keep an eye on your inbox.
             </p>
@@ -90,14 +100,14 @@ function WaitlistModal({ onClose }: { onClose: () => void }) {
           <>
             <div className="mb-6">
               <Eyebrow>Limited spots · NZ venues only</Eyebrow>
-              <h3 className="font-serif text-2xl font-semibold text-foreground mt-2 mb-1 tracking-[-0.01em]">Join the waitlist</h3>
+              <h3 id="waitlist-title" className="font-serif text-2xl font-semibold text-foreground mt-2 mb-1 tracking-[-0.01em]">Join the waitlist</h3>
               <p className="text-muted-foreground text-sm">We're onboarding NZ venues in small batches. Drop your details and we'll reach out when your spot is ready.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className={fieldLabel}>Your name <span className="text-destructive">*</span></label>
-                <Input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" required />
+                <Input ref={firstFieldRef} type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" required />
               </div>
               <div>
                 <label className={fieldLabel}>Email <span className="text-destructive">*</span></label>
@@ -153,10 +163,10 @@ export default function Home() {
           <img src="/logo-full.png" alt="VenueFlow" className="h-7 w-auto" />
 
           <nav className="hidden md:flex items-center gap-7">
-            {["Features", "Pricing", "About"].map(item => (
-              <a key={item} href="#"
+            {[{ label: "Features", href: "#features" }].map(item => (
+              <a key={item.label} href={item.href}
                 className="font-sans text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground hover:text-foreground transition-colors">
-                {item}
+                {item.label}
               </a>
             ))}
           </nav>
@@ -186,6 +196,7 @@ export default function Home() {
         </div>
       </header>
 
+      <main>
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="bg-background border-b border-border px-6" style={{ padding: "88px 24px 96px" }}>
         <div className="max-w-[780px] mx-auto text-center">
@@ -228,6 +239,7 @@ export default function Home() {
       {/* ── Feature grid ─────────────────────────────────────────────────── */}
       <section id="features" className="px-6" style={{ background: "#f4efe6", padding: "76px 24px" }}>
         <div className="max-w-[1000px] mx-auto">
+          <h2 className="sr-only">Core features</h2>
           <div className="flex items-center gap-3 mb-9">
             <Eyebrow>Core features</Eyebrow>
             <span className="flex-1 rounded-full" style={{ height: 1.5, background: "#2f5488" }} />
@@ -277,6 +289,7 @@ export default function Home() {
       {/* ── FAQ ──────────────────────────────────────────────────────────── */}
       <section className="bg-background px-6" style={{ padding: "76px 24px" }}>
         <div className="max-w-[660px] mx-auto">
+          <h2 className="sr-only">Common questions</h2>
           <div className="flex items-center gap-3 mb-7">
             <Eyebrow>Common questions</Eyebrow>
             <span className="flex-1 rounded-full" style={{ height: 1.5, background: "#2f5488" }} />
@@ -286,15 +299,17 @@ export default function Home() {
               <div key={i} style={{ borderTop: "1px solid #e3ddd0", borderBottom: i === faqs.length - 1 ? "1px solid #e3ddd0" : "none" }}>
                 <button
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  aria-expanded={openFaq === i}
+                  aria-controls={`faq-panel-${i}`}
                   className="w-full text-left flex items-center justify-between font-serif text-foreground"
                   style={{ padding: "17px 4px", fontSize: 16, fontWeight: 600 }}>
                   {f.q}
-                  <span className="text-primary inline-flex transition-transform duration-150" style={{ transform: openFaq === i ? "rotate(45deg)" : "none" }}>
+                  <span aria-hidden className="text-primary inline-flex transition-transform duration-150" style={{ transform: openFaq === i ? "rotate(45deg)" : "none" }}>
                     <Plus className="w-[17px] h-[17px]" />
                   </span>
                 </button>
                 {openFaq === i && (
-                  <div className="text-muted-foreground" style={{ padding: "0 4px 18px", fontSize: 14, lineHeight: 1.6, maxWidth: "92%" }}>
+                  <div id={`faq-panel-${i}`} role="region" aria-label={f.q} className="text-muted-foreground" style={{ padding: "0 4px 18px", fontSize: 14, lineHeight: 1.6, maxWidth: "92%" }}>
                     {f.a}
                   </div>
                 )}
@@ -314,6 +329,8 @@ export default function Home() {
           Join the waitlist <ArrowRight className="w-[18px] h-[18px]" />
         </Button>
       </section>
+
+      </main>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer className="bg-background border-t border-border" style={{ padding: "34px 24px" }}>
