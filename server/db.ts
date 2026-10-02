@@ -319,7 +319,7 @@ export async function createBooking(data: InsertBooking) {
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 export async function getDashboardStats(ownerId: number) {
   const db = await getDb();
-  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0, upcomingEvents: 0, overdueTasks: 0, conversionRate: 0, totalRevenueAllTime: 0, pendingPayments: 0 };
+  if (!db) return { newLeads: 0, totalLeads: 0, proposalsSent: 0, bookingsThisMonth: 0, revenueThisMonth: 0, overdueFollowUps: 0, needsFollowUp: 0, upcomingEvents: 0, overdueTasks: 0, conversionRate: 0, totalRevenueAllTime: 0, pendingPayments: 0 };
   const { tasks, bookings: bookingsTable, payments } = await import('../drizzle/schema');
   const allLeads = await db.select().from(leads).where(and(eq(leads.ownerId, ownerId), ne(leads.source, 'healthcheck')));
   // The pipeline's "won" statuses. 'booked' was renamed to 'confirmed' app-wide
@@ -337,6 +337,10 @@ export async function getDashboardStats(ownerId: number) {
     new Date(l.followUpDate) <= now &&
     !CLOSED.includes(l.status ?? '')
   ).length;
+  // Broader "needs a follow-up" count: overdue follow-ups PLUS active leads that
+  // have gone idle in their status (shared rule, so the list and this agree).
+  const { leadNeedsFollowUp } = await import('../shared/followUp');
+  const needsFollowUp = allLeads.filter(l => leadNeedsFollowUp(l, now.getTime())).length;
   const allProposals = await db.select().from(proposals).where(eq(proposals.ownerId, ownerId));
   const proposalsSent = allProposals.filter(p => ['sent', 'viewed', 'accepted'].includes(p.status)).length;
   const monthBookings = await getBookingsByMonth(ownerId, now.getFullYear(), now.getMonth() + 1);
@@ -384,6 +388,7 @@ export async function getDashboardStats(ownerId: number) {
     bookingsThisMonth: monthBookings.length,
     revenueThisMonth,
     overdueFollowUps,
+    needsFollowUp,
     upcomingEvents,
     overdueTasks,
     conversionRate,

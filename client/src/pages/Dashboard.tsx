@@ -2932,6 +2932,7 @@ export default function Dashboard() {
               { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", icon: <TrendingUp className="w-5 h-5 text-forest" /> },
               { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-amber-600" /> },
               { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${(stats?.overdueTasks ?? 0) > 0 ? 'text-red-500' : 'text-sage/40'}`} /> },
+              { id: "needs_followup", label: "Needs Follow-up", value: stats?.needsFollowUp ?? 0, sub: (stats?.needsFollowUp ?? 0) > 0 ? "quoted or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${(stats?.needsFollowUp ?? 0) > 0 ? 'text-amber-600' : 'text-sage/40'}`} /> },
             ];
             const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
             return (
@@ -2987,6 +2988,7 @@ export default function Dashboard() {
                       s.id === 'conversion_rate' ? 'reports' :
                       s.id === 'revenue_month' ? 'reports' :
                       s.id === 'overdue_tasks' ? 'tasks' :
+                      s.id === 'needs_followup' ? 'enquiries' :
                       'overview'
                     );
                     return (

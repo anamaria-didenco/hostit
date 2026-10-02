@@ -1127,6 +1127,32 @@ export const appRouter = router({
         )
       ).orderBy(leads.followUpDate);
     }),
+    // Active leads that need a follow-up — overdue follow-up date OR gone idle in
+    // their status — each tagged with the reason, most urgent first. Powers the
+    // "needs follow-up" surface in the enquiries list.
+    needsFollowUp: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import('./db');
+      const { leads } = await import('../drizzle/schema');
+      const { eq, and, ne } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [] as Array<any>;
+      const rows = await db.select().from(leads).where(
+        and(eq(leads.ownerId, ctx.user.id), ne(leads.source, 'healthcheck')),
+      );
+      const { leadFollowUpState } = await import('../shared/followUp');
+      const nowMs = Date.now();
+      return rows
+        .map(l => ({ lead: l, fu: leadFollowUpState(l, nowMs) }))
+        .filter(x => x.fu.needs)
+        .map(x => ({ ...x.lead, followUpReason: x.fu.reason }))
+        // Overdue (has a date that passed) before idle; within each, oldest first.
+        .sort((a, b) => {
+          if (a.followUpReason !== b.followUpReason) return a.followUpReason === 'overdue' ? -1 : 1;
+          const ka = a.followUpDate ? new Date(a.followUpDate).getTime() : (a.updatedAt ? new Date(a.updatedAt).getTime() : 0);
+          const kb = b.followUpDate ? new Date(b.followUpDate).getTime() : (b.updatedAt ? new Date(b.updatedAt).getTime() : 0);
+          return ka - kb;
+        });
+    }),
     // Returns leads with a followUpDate in the given month (for calendar display)
     followUpsByMonth: protectedProcedure
       .input(z.object({ year: z.number(), month: z.number() }))
@@ -1441,6 +1467,27 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             type: "proposal_sent",
             content: `Proposal "${proposal.title}" sent to client`,
           });
+          // Set a follow-up a few days out so a quoted lead doesn't go cold —
+          // sending a quote previously set no reminder at all. Only set one if
+          // the lead doesn't already have a (future) follow-up pending.
+          try {
+            const { getDb } = await import('./db');
+            const { leads } = await import('../drizzle/schema');
+            const { eq } = await import('drizzle-orm');
+            const db = await getDb();
+            if (db) {
+              const [lead] = await db.select({ followUpDate: leads.followUpDate })
+                .from(leads).where(eq(leads.id, proposal.leadId)).limit(1);
+              const hasFutureFollowUp = lead?.followUpDate && new Date(lead.followUpDate).getTime() > Date.now();
+              if (!hasFutureFollowUp) {
+                const followUpDate = new Date();
+                followUpDate.setDate(followUpDate.getDate() + 3);
+                await db.update(leads).set({ followUpDate }).where(eq(leads.id, proposal.leadId));
+              }
+            }
+          } catch (err) {
+            console.error('[proposals.send] could not set follow-up date', err);
+          }
 
           // Attempt to send email to client if SMTP configured
           if (proposal.publicToken) {
