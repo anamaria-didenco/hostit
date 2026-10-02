@@ -221,7 +221,10 @@ export default function PaymentsBoard() {
           <Search className="w-4 h-4 text-sage absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
             value={q}
-            onChange={e => setQ(e.target.value)}
+            // Typing a search clears any "jump to one booking" selection, so the
+            // two filters don't silently fight (the dropdown used to override
+            // search with no obvious way back except reselecting "All").
+            onChange={e => { setQ(e.target.value); if (eventFilter) setEventFilter(0); }}
             aria-label="Search payments by client, event type or space"
             placeholder="Search client, type, space…"
             className="w-full pl-9 pr-3 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
@@ -299,7 +302,7 @@ export default function PaymentsBoard() {
               onDrinks={(v) => setDrinks(r, v)}
               onDeposit={(next) => setDeposit(r, next)}
               onOpen={() => navigate(`/event/${r.bookingId}`)}
-              onRecord={() => navigate(`/payments?bookingId=${r.bookingId}`)}
+              onRecord={() => navigate(`/payments?bookingId=${r.bookingId}&from=board`)}
               onXero={() => setXeroFor(r)}
               busy={update.isPending}
             />
