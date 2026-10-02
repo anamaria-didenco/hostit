@@ -13,7 +13,7 @@ import {
   Plus, Search, ExternalLink, MessageSquare, TrendingUp, CheckCircle, Clock, Copy,
   ChefHat, UtensilsCrossed, Wine, Trash2, Pencil, Mail, Send,
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
-  ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, Table2, MoveUp, MoveDown, Lock, Type,
+  ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, MoveUp, MoveDown, Lock, Type,
   SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare,
   Link as LinkIcon, LogOut
 } from "lucide-react";
@@ -923,10 +923,6 @@ export default function Dashboard() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [statusFilterOpen]);
-  const toggleLeadStatus = (key: string) => {
-    setLeadStatusFilter(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-    setLeadsSubTab("all");
-  };
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
 
   // ── Events table display prefs — persisted to localStorage ────────────────
@@ -935,29 +931,43 @@ export default function Dashboard() {
   const [leadSortBy, setLeadSortByRaw] = useState<"enquiry_date"|"event_date"|"status">(_savedLTP.sortBy ?? "event_date");
   const [leadSortDir, setLeadSortDirRaw] = useState<"asc"|"desc">(_savedLTP.sortDir ?? "asc");
   const [leadDateFilter, setLeadDateFilterRaw] = useState<"all"|"future"|"today"|"weekend"|"month"|"year"|"custom">(_savedLTP.dateFilter ?? "future");
-  const [leadStatusExclude, setLeadStatusExcludeRaw] = useState<string[]>(_savedLTP.excludeStatuses ?? ["lost", "finished"]);
+  // Closed/dead statuses are hidden from the default "All" view (no explicit
+  // status filter, no follow-up/partial focus) so the list leads with live
+  // work. Picking a status chip — including Lost — overrides this.
+  const DEFAULT_HIDDEN = React.useMemo(() => ["lost", "cancelled", "finished"], []);
 
   // Persist whenever any pref changes
   useEffect(() => {
-    try { localStorage.setItem(LEAD_TABLE_PREFS_KEY, JSON.stringify({ sortBy: leadSortBy, sortDir: leadSortDir, dateFilter: leadDateFilter, excludeStatuses: leadStatusExclude })); } catch {}
-  }, [leadSortBy, leadSortDir, leadDateFilter, leadStatusExclude]);
+    try { localStorage.setItem(LEAD_TABLE_PREFS_KEY, JSON.stringify({ sortBy: leadSortBy, sortDir: leadSortDir, dateFilter: leadDateFilter })); } catch {}
+  }, [leadSortBy, leadSortDir, leadDateFilter]);
 
   // Wrapped setters (same signature as original so all existing callsites work unchanged)
   const setLeadSortBy = (v: "enquiry_date"|"event_date"|"status") => setLeadSortByRaw(v);
   const setLeadSortDir = (fn: "asc"|"desc" | ((d: "asc"|"desc") => "asc"|"desc")) =>
     setLeadSortDirRaw(prev => typeof fn === "function" ? fn(prev) : fn);
   const setLeadDateFilter = (v: "all"|"future"|"today"|"weekend"|"month"|"year"|"custom") => setLeadDateFilterRaw(v);
-  const toggleLeadStatusExclude = (key: string) =>
-    setLeadStatusExcludeRaw(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
-  // Default to the list view on phones: the table has 7 columns and a 700px
-  // minimum width, so on a ~390px screen its Event Date / Status / Follow-up
-  // columns run off-screen and need horizontal scrolling. The list view is
-  // built to stack on narrow screens. Desktop still defaults to the table.
+  // One responsive enquiry view plus an optional Board. The user toggles only
+  // List ↔ Board; the List view renders as the full table on desktop and as a
+  // stacked card layout on phones (the 7-column table needs ~700px and would
+  // otherwise run off a ~390px screen). We track viewport width and keep
+  // leadViewMode in sync so the switch is automatic, never a manual choice.
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 768
+  );
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">(
     () => (typeof window !== "undefined" && window.innerWidth < 768) ? "list" : "table"
   );
+  // Keep the responsive view matched to the viewport unless the user is on Board.
+  useEffect(() => {
+    setLeadViewMode(prev => prev === "kanban" ? prev : (isDesktop ? "table" : "list"));
+  }, [isDesktop]);
   // "Needs follow-up" filter — leads quoted a while ago or gone quiet in-status.
   const [followUpOnly, setFollowUpOnly] = useState(false);
   const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
@@ -2514,7 +2524,7 @@ export default function Dashboard() {
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
   const followUpNowMs = Date.now();
   const filteredLeads = leadsToShow
-    .filter((l: any) => !leadStatusExclude.includes(l.status))
+    .filter((l: any) => (leadStatusFilter.length > 0 || followUpOnly || showPartialOnly) ? true : !DEFAULT_HIDDEN.includes(l.status))
     .filter((l: any) => !showPartialOnly || isPartialLead(l))
     .filter((l: any) => !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
     .filter((l: any) =>
@@ -3155,6 +3165,13 @@ export default function Dashboard() {
                       const isAll = leadsSubTab === "all" && leadStatusFilter.length === 0;
                       const filterIs = (keys: string[]) => leadStatusFilter.length === keys.length && keys.every(k => leadStatusFilter.includes(k));
                       const tabCls = (on: boolean) => `font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${on ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`;
+                      // Statuses the quick chips already cover; everything else
+                      // the venue defines (contacted, site visit, tentative,
+                      // cancelled, finished, custom stages…) lives under "More".
+                      const quickKeys = ['new', 'proposal_sent', 'booked', 'confirmed', 'lost'];
+                      const moreStages = pipelineStages.filter(s => !quickKeys.includes(s.key));
+                      const moreActive = leadStatusFilter.length === 1 && moreStages.some(s => s.key === leadStatusFilter[0]);
+                      const moreLabel = moreActive ? (pipelineStages.find(s => s.key === leadStatusFilter[0])?.label ?? leadStatusFilter[0]) : "MORE";
                       return (
                         <div className="flex bg-muted rounded-xl p-0.5 gap-0.5 flex-wrap">
                           {newEnquiries.length > 0 && (
@@ -3177,6 +3194,10 @@ export default function Dashboard() {
                             className={tabCls(filterIs(['booked','confirmed']) && !followUpOnly)}>
                             CONFIRMED
                           </button>
+                          <button onClick={() => { setLeadStatusFilter(['lost']); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
+                            className={tabCls(filterIs(['lost']) && !followUpOnly)}>
+                            LOST
+                          </button>
                           <button onClick={() => { const on = !followUpOnly; setFollowUpOnly(on); if (on) { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadsSubTab("all"); } setSelectedLead(null); }}
                             title="Quoted a while ago or gone quiet in their status"
                             className={tabCls(followUpOnly)}>
@@ -3185,23 +3206,51 @@ export default function Dashboard() {
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${followUpOnly ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700"}`}>{followUpCount}</span>
                             )}
                           </button>
+                          {moreStages.length > 0 && (
+                            <div className="relative" ref={statusFilterRef}>
+                              <button type="button" onClick={() => setStatusFilterOpen(o => !o)}
+                                title="Filter by another status"
+                                className={`${tabCls(moreActive && !followUpOnly)} max-w-[9rem]`}>
+                                <span className="truncate">{moreLabel}</span>
+                                <ChevronDown className="w-3 h-3 flex-shrink-0 opacity-60" />
+                              </button>
+                              {statusFilterOpen && (
+                                <div className="absolute z-50 mt-1 left-0 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
+                                  {moreActive && (
+                                    <button onClick={() => { setLeadStatusFilter([]); setLeadsSubTab("all"); setStatusFilterOpen(false); setSelectedLead(null); }}
+                                      className="w-full text-left px-2 py-1.5 rounded hover:bg-linen/40 text-[11px] font-bebas tracking-widest text-forest">
+                                      CLEAR
+                                    </button>
+                                  )}
+                                  {moreStages.map(s => (
+                                    <button key={s.key} onClick={() => { setLeadStatusFilter([s.key]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); setStatusFilterOpen(false); }}
+                                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 text-left ${leadStatusFilter.length === 1 && leadStatusFilter[0] === s.key ? "bg-linen/60" : ""}`}>
+                                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.swatch }} />
+                                      <span className="text-xs font-inter text-ink">{s.label}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
                   </div>
 
-                  {/* View mode toggle */}
+                  {/* View toggle: one responsive List (table on desktop, cards
+                      on mobile) ↔ Board (kanban). */}
                   <div className="flex border border-gold/30 rounded-lg overflow-hidden">
-                    {([
-                      { mode: "table" as const, icon: <Table2 className="w-3.5 h-3.5" />, title: "Table view" },
-                      { mode: "list" as const, icon: <List className="w-3.5 h-3.5" />, title: "List view" },
-                    ]).map(({ mode, icon, title }) => (
-                      <button key={mode} onClick={() => { setLeadViewMode(mode); setSelectedLead(null); }}
-                        title={title}
-                        className={`px-2.5 py-1.5 transition-colors ${leadViewMode === mode ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
-                        {icon}
-                      </button>
-                    ))}
+                    <button onClick={() => { setLeadViewMode(isDesktop ? "table" : "list"); setSelectedLead(null); }}
+                      title="List view"
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 font-bebas tracking-widest text-xs transition-colors ${leadViewMode !== "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      <List className="w-3.5 h-3.5" /> LIST
+                    </button>
+                    <button onClick={() => { setLeadViewMode("kanban"); setSelectedLead(null); }}
+                      title="Board view"
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 font-bebas tracking-widest text-xs transition-colors ${leadViewMode === "kanban" ? "bg-forest text-cream" : "text-ink/70 hover:bg-linen hover:text-ink"}`}>
+                      <Columns className="w-3.5 h-3.5" /> BOARD
+                    </button>
                   </div>
 
                   {/* Actions */}
@@ -3237,58 +3286,6 @@ export default function Dashboard() {
                       <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
                         aria-label="Search enquiries"
                         placeholder="Search enquiries..." className="pl-8 h-8 text-xs rounded-lg border border-gray-200 focus-visible:ring-0 focus-visible:border-sage-green" />
-                    </div>
-                    {/* Multi-select status filter — checkboxes let the user
-                        view multiple statuses at once or hide ones they don't
-                        care about. Empty selection means "All Statuses". */}
-                    <div className="relative" ref={statusFilterRef}>
-                      <button
-                        type="button"
-                        onClick={() => setStatusFilterOpen(o => !o)}
-                        className={`h-8 px-3 text-xs font-inter rounded-lg border flex items-center gap-2 ${(leadStatusFilter.length > 0 || leadStatusExclude.length > 0) ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
-                        <span className="truncate">
-                          {leadStatusFilter.length === 0
-                            ? leadStatusExclude.length > 0
-                              ? `${leadStatusExclude.length} hidden`
-                              : "All Statuses"
-                            : leadStatusFilter.length === 1
-                            ? (pipelineStages.find(s => s.key === leadStatusFilter[0])?.label ?? leadStatusFilter[0])
-                            : `${leadStatusFilter.length} statuses`}
-                        </span>
-                        <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
-                      </button>
-                      {statusFilterOpen && (
-                        <div className="absolute z-50 mt-1 w-60 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[70vh] overflow-y-auto">
-                          {/* Show section */}
-                          <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
-                            <span className="font-bebas tracking-widest text-[10px] text-ink/65">SHOW ONLY</span>
-                            {leadStatusFilter.length > 0 && (
-                              <button onClick={() => setLeadStatusFilter([])} className="text-[10px] font-dm text-forest hover:underline">CLEAR</button>
-                            )}
-                          </div>
-                          {pipelineStages.map(s => (
-                            <label key={s.key} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer">
-                              <input type="checkbox" checked={leadStatusFilter.includes(s.key)} onChange={() => toggleLeadStatus(s.key)} className="cursor-pointer" />
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.swatch }} />
-                              <span className="text-xs font-inter text-ink">{s.label}</span>
-                            </label>
-                          ))}
-                          {/* Hidden section */}
-                          <div className="flex items-center justify-between px-2 py-1 border-t border-gray-100 mt-1 mb-1">
-                            <span className="font-bebas tracking-widest text-[10px] text-ink/65">HIDDEN BY DEFAULT</span>
-                            {leadStatusExclude.length > 0 && (
-                              <button onClick={() => setLeadStatusExcludeRaw([])} className="text-[10px] font-dm text-forest hover:underline">SHOW ALL</button>
-                            )}
-                          </div>
-                          {[...pipelineStages, ...(["confirmed","tentative","cancelled","finished"].filter(k => !pipelineStages.find(s => s.key === k)).map(k => ({ key: k, label: k.charAt(0).toUpperCase() + k.slice(1), swatch: "#9ca3af" })))].map(s => (
-                            <label key={`excl-${s.key}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-linen/40 cursor-pointer">
-                              <input type="checkbox" checked={leadStatusExclude.includes(s.key)} onChange={() => toggleLeadStatusExclude(s.key)} className="cursor-pointer" />
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: (s as any).swatch ?? '#9ca3af' }} />
-                              <span className="text-xs font-inter text-ink/70">{s.label} <span className="text-ink/65">(hide)</span></span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
                     </div>
                     <button
                       type="button"
