@@ -718,7 +718,14 @@ export const xeroInvoices = pgTable("xero_invoices", {
   status: varchar("status", { length: 20 }), // DRAFT | AUTHORISED | PAID | VOIDED
   total: decimal("total", { precision: 10, scale: 2 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  // One tracking row per Xero invoice per owner, so a failed-then-retried push
+  // can't leave two rows for the same invoice (which the sync would then
+  // process twice).
+  xeroInvoiceUnique: uniqueIndex("xero_invoices_owner_invoice_uq")
+    .on(t.ownerId, t.xeroInvoiceId)
+    .where(sql`${t.xeroInvoiceId} IS NOT NULL`),
+}));
 
 export type XeroConnection = typeof xeroConnections.$inferSelect;
 export type XeroInvoice = typeof xeroInvoices.$inferSelect;

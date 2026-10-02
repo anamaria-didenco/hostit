@@ -4137,15 +4137,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }).optional())
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
-        const { payments, bookings } = await import('../drizzle/schema');
+        const { payments, bookings, venueSettings } = await import('../drizzle/schema');
         const { eq, and, gte, lte, desc } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return [];
         const clauses: any[] = [eq(payments.ownerId, ctx.user.id)];
-        // Local-midnight bounds so a NZ date range means the NZ day, and `to`
-        // is inclusive of the whole day.
-        if (input?.from) clauses.push(gte(payments.paidAt, new Date(`${input.from}T00:00:00`)));
-        if (input?.to) clauses.push(lte(payments.paidAt, new Date(`${input.to}T23:59:59.999`)));
+        // Bound the range by the VENUE's calendar day, not the server's. The
+        // server runs UTC, so a plain `new Date("…T00:00:00")` was a UTC midnight
+        // — 12–13h off the NZ day — and mis-included payments near midnight.
+        if (input?.from || input?.to) {
+          const [vs] = await db.select({ timezone: venueSettings.timezone }).from(venueSettings)
+            .where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+          const tz = vs?.timezone || 'Pacific/Auckland';
+          const { zonedDayBoundUtc } = await import('../shared/tz');
+          if (input?.from) clauses.push(gte(payments.paidAt, zonedDayBoundUtc(input.from, tz, 'start')));
+          if (input?.to) clauses.push(lte(payments.paidAt, zonedDayBoundUtc(input.to, tz, 'end')));
+        }
         const rows = await db.select({
           id: payments.id,
           bookingId: payments.bookingId,
@@ -4704,10 +4711,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .input(z.object({ bookingId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
-        const { bookings, xeroInvoices } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        // Throttle per booking, like syncAll does per owner: each call can spend
+        // up to ~40 Xero detail fetches, so repeated UI taps must not be able to
+        // approach the tenant rate limit.
+        const g: any = globalThis as any;
+        if (!g.__xeroSyncBookingAt) g.__xeroSyncBookingAt = new Map<string, number>();
+        const key = `${ctx.user.id}:${input.bookingId}`;
+        const last: number | undefined = g.__xeroSyncBookingAt.get(key);
+        if (last && Date.now() - last < 30_000) {
+          return { updated: 0, skipped: true as const, statusChanges: 0, paymentsImported: 0, amountImported: 0 };
+        }
+        g.__xeroSyncBookingAt.set(key, Date.now());
         const { syncXeroInvoicesForOwner } = await import('./xeroSync');
         const res = await syncXeroInvoicesForOwner(ctx.user.id, input.bookingId);
         return { updated: res.statusChanges, ...res };
