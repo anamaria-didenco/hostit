@@ -172,7 +172,7 @@ export default function EventDetail() {
     <div className="min-h-screen bg-cream">
       {/* Header */}
       <nav className="bg-forest-dark sticky top-0 z-50 border-b border-gold/20 h-14 flex items-center px-4 gap-4">
-        <button onClick={() => setLocation('/dashboard')} className="text-cream/70 hover:text-cream flex items-center gap-1.5 font-bebas tracking-widest text-xs">
+        <button onClick={() => setLocation('/dashboard')} className="text-cream hover:text-cream flex items-center gap-1.5 font-bebas tracking-widest text-xs">
           <ArrowLeft className="w-4 h-4" /> DASHBOARD
         </button>
         <div className="h-4 w-px bg-gold/20" />
@@ -646,7 +646,7 @@ function CommsTab({ bookingId }: { bookingId: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">COMMUNICATIONS LOG</h3>
+        <h2 className="font-bebas tracking-widest text-ink/70 text-sm">COMMUNICATIONS LOG</h2>
         <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> ADD ENTRY</button>
       </div>
       {showForm && (
@@ -691,9 +691,9 @@ function CommsTab({ bookingId }: { bookingId: number }) {
       )}
       {isLoading && <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>}
       {!isLoading && (!comms || comms.length === 0) && (
-        <div className="text-center py-12 text-gray-400">
-          <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No communications logged yet.</p>
+        <div className="text-center py-12">
+          <MessageSquare className="w-10 h-10 mx-auto mb-3 text-gray-300" aria-hidden="true" />
+          <p className="text-sm text-gray-500">No communications logged yet.</p>
         </div>
       )}
       <div className="space-y-2">
