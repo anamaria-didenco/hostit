@@ -46,6 +46,10 @@ export default function PaymentTracker() {
 
   const params = new URLSearchParams(window.location.search);
   const bookingId = params.get("bookingId") ? Number(params.get("bookingId")) : null;
+  // Where "back" goes: the payments board that linked here, otherwise the event.
+  const cameFromBoard = params.get("from") === "board";
+  const backTarget = cameFromBoard ? "/dashboard?tab=payments" : bookingId ? `/event/${bookingId}` : "/";
+  const backLabel = cameFromBoard ? "BACK TO PAYMENTS" : bookingId ? "BACK TO EVENT" : "BACK";
 
   const [newPayment, setNewPayment] = useState({
     amount: "",
@@ -131,13 +135,13 @@ export default function PaymentTracker() {
       <div className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4 min-w-0">
           <button
-            onClick={() => navigate(bookingId ? `/event/${bookingId}` : "/")}
+            onClick={() => navigate(backTarget)}
             className="text-cream/60 hover:text-cream transition-colors flex items-center gap-1.5"
-            title={bookingId ? "Back to event" : "Back to dashboard"}
+            title={backLabel}
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="font-bebas tracking-widest text-xs hidden sm:inline">
-              {bookingId ? "BACK TO EVENT" : "BACK"}
+              {backLabel}
             </span>
           </button>
           <div className="w-px h-4 bg-cream/20" />

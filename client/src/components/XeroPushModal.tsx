@@ -179,6 +179,38 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   }, [inclusive]);
 
   useEffect(() => { if (!open) setEditingId(null); }, [open]);
+
+  // Focus management: move focus into the dialog when it opens and restore it to
+  // whatever opened it on close, so keyboard/screen-reader users aren't left on
+  // the (now-hidden) trigger behind the overlay.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (open) {
+      prevFocusRef.current = document.activeElement as HTMLElement | null;
+      const t = setTimeout(() => {
+        const el = dialogRef.current;
+        if (!el) return;
+        const first = el.querySelector<HTMLElement>('input, select, textarea, button, [tabindex]:not([tabindex="-1"])');
+        (first ?? el).focus();
+      }, 30);
+      return () => clearTimeout(t);
+    }
+    prevFocusRef.current?.focus?.();
+  }, [open]);
+
+  // Keep Tab within the dialog while it's open.
+  const onDialogKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Tab" || !dialogRef.current) return;
+    const focusables = Array.from(
+      dialogRef.current.querySelectorAll<HTMLElement>('input, select, textarea, button, a[href], [tabindex]:not([tabindex="-1"])'),
+    ).filter(el => !el.hasAttribute("disabled") && el.offsetParent !== null);
+    if (focusables.length === 0) return;
+    const firstEl = focusables[0];
+    const lastEl = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+    else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+  };
   // The stream preselect must apply on every OPEN, not just first mount: the
   // modal stays mounted with open=false, so the useState initial value above
   // was computed once (before any booking was chosen) and never again.
@@ -245,7 +277,11 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   const send = () => {
     const parsed = lines
       .map(l => ({ description: l.description.trim(), quantity: Number(l.quantity), unitAmount: Number(l.unitAmount) }))
-      .filter(l => l.description && !isNaN(l.quantity) && l.quantity > 0 && !isNaN(l.unitAmount) && l.unitAmount !== 0);
+      // Keep $0 lines: a comped / host-covered item (common on grazing menus)
+      // is a real line on the invoice. Only drop rows with no description or a
+      // non-positive quantity. Negative unit amounts (the deposit-deduction
+      // line) stay too.
+      .filter(l => l.description && !isNaN(l.quantity) && l.quantity > 0 && !isNaN(l.unitAmount));
     if (parsed.length === 0) { toast.error("Add at least one line with an amount"); return; }
     const payload = {
       bookingId: booking.bookingId,
@@ -268,7 +304,10 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-label={`Send ${stream} invoice to Xero`}
-        className="bg-cream w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border border-gold/20"
+        ref={dialogRef}
+        tabIndex={-1}
+        onKeyDown={onDialogKeyDown}
+        className="bg-cream w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border border-gold/20 focus:outline-none"
         onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="bg-forest-dark px-5 py-3.5 flex items-center justify-between">
