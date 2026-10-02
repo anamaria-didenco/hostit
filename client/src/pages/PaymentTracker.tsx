@@ -179,7 +179,14 @@ export default function PaymentTracker() {
             </div>
 {((summary.total ?? 0) > 0) && (
               <div className="mt-4">
-                <div className="h-2 bg-cream border border-border rounded-none overflow-hidden">
+                <div
+                  role="progressbar"
+                  aria-valuenow={Math.round(Math.min(100, (summary.totalPaid / (summary.total ?? 1)) * 100))}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${Math.round(Math.min(100, (summary.totalPaid / (summary.total ?? 1)) * 100))}% paid`}
+                  className="h-2 bg-cream border border-border rounded-none overflow-hidden"
+                >
                   <div
                     className="h-full bg-green-500 transition-all"
                     style={{ width: `${Math.min(100, (summary.totalPaid / (summary.total ?? 1)) * 100)}%` }}
@@ -208,8 +215,9 @@ export default function PaymentTracker() {
             <div className="border-t border-border p-4 md:p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">AMOUNT (NZD) *</label>
+                  <label htmlFor="pay-amount" className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">AMOUNT (NZD) *</label>
                   <Input
+                    id="pay-amount"
                     type="number"
                     min={0}
                     step={0.01}
@@ -220,8 +228,9 @@ export default function PaymentTracker() {
                   />
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">DATE PAID *</label>
+                  <label htmlFor="pay-date" className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">DATE PAID *</label>
                   <Input
+                    id="pay-date"
                     type="date"
                     value={newPayment.paidAt}
                     onChange={e => setNewPayment(p => ({ ...p, paidAt: e.target.value }))}
@@ -229,8 +238,9 @@ export default function PaymentTracker() {
                   />
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">TYPE</label>
+                  <label htmlFor="pay-type" className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">TYPE</label>
                   <select
+                    id="pay-type"
                     value={newPayment.type}
                     onChange={e => setNewPayment(p => ({ ...p, type: e.target.value }))}
                     className="w-full border-2 border-border rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-burgundy bg-white"
@@ -239,8 +249,9 @@ export default function PaymentTracker() {
                   </select>
                 </div>
                 <div>
-                  <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">METHOD</label>
+                  <label htmlFor="pay-method" className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">METHOD</label>
                   <select
+                    id="pay-method"
                     value={newPayment.method}
                     onChange={e => setNewPayment(p => ({ ...p, method: e.target.value }))}
                     className="w-full border-2 border-border rounded-none px-3 py-2 text-sm font-dm focus:outline-none focus:border-burgundy bg-white"
@@ -250,8 +261,9 @@ export default function PaymentTracker() {
                 </div>
               </div>
               <div>
-                <label className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">NOTES</label>
+                <label htmlFor="pay-notes" className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">NOTES</label>
                 <Input
+                  id="pay-notes"
                   value={newPayment.notes}
                   onChange={e => setNewPayment(p => ({ ...p, notes: e.target.value }))}
                   placeholder="Reference number, notes..."
@@ -307,10 +319,11 @@ export default function PaymentTracker() {
                     </div>
                   </div>
                   <button
-                    onClick={() => deleteMutation.mutate({ id: p.id })}
+                    onClick={() => { if (confirm("Remove this payment? This can't be undone.")) deleteMutation.mutate({ id: p.id }); }}
+                    aria-label={`Remove ${fmtNZD(Number(p.amount))} ${PAYMENT_TYPES.find(t => t.value === p.type)?.label ?? "payment"}`}
                     className="text-ink/65 hover:text-red-500 transition-colors"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
               ))}

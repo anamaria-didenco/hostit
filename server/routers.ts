@@ -4045,7 +4045,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     add: protectedProcedure
       .input(z.object({
         bookingId: z.number(),
-        amount: z.number().positive(),
+        // Money to the cent, positive, with a sane upper bound — decimal(10,2)
+        // silently truncates extra precision and a typo'd amount shouldn't be
+        // able to record a multi-million-dollar payment.
+        amount: z.number().positive().multipleOf(0.01).max(1_000_000),
         type: z.enum(['deposit', 'final', 'partial', 'refund', 'other']).default('deposit'),
         method: z.enum(['bank_transfer', 'cash', 'credit_card', 'eftpos', 'other']).default('bank_transfer'),
         paidAt: z.string(), // ISO date string
@@ -4053,16 +4056,30 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
-        const { payments } = await import('../drizzle/schema');
+        const { payments, bookings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        // Reject an unparseable or implausibly-far-future date rather than
+        // inserting Invalid Date into a NOT NULL timestamp column.
+        const paidAt = new Date(input.paidAt);
+        if (isNaN(paidAt.getTime())) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid payment date' });
+        if (paidAt.getTime() > Date.now() + 365 * 24 * 60 * 60 * 1000) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Payment date is too far in the future' });
+        }
+        // The booking must belong to the caller — otherwise a payment row can be
+        // planted against another tenant's booking id (which also leaks that
+        // tenant's client name/event back through the "received" log).
+        const [owned] = await db.select({ id: bookings.id }).from(bookings)
+          .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
+        if (!owned) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
         const [result] = await db.insert(payments).values({
           bookingId: input.bookingId,
           ownerId: ctx.user.id,
           amount: String(input.amount),
           type: input.type,
           method: input.method,
-          paidAt: new Date(input.paidAt),
+          paidAt,
           notes: input.notes,
         }).returning({ id: payments.id });
         await syncDepositPaidFlag(input.bookingId, ctx.user.id);
@@ -4097,13 +4114,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!booking) return { totalPaid: 0, outstanding: 0, status: 'unpaid' as const };
         const pmts = await db.select().from(payments)
           .where(and(eq(payments.bookingId, input.bookingId), eq(payments.ownerId, ctx.user.id)));
-        const totalPaid = pmts.filter(p => p.type !== 'refund').reduce((s, p) => s + Number(p.amount), 0);
-        const refunds = pmts.filter(p => p.type === 'refund').reduce((s, p) => s + Number(p.amount), 0);
-        const netPaid = totalPaid - refunds;
+        const { netPaid, derivePaymentStatus, round2 } = await import('../shared/paymentMath');
+        const net = netPaid(pmts);
         const total = Number(booking.totalNzd ?? 0);
-        const outstanding = Math.max(0, total - netPaid);
-        const status = netPaid <= 0 ? 'unpaid' : outstanding <= 0 ? 'paid_in_full' : netPaid >= Number(booking.depositNzd ?? 0) ? 'deposit_paid' : 'partial';
-        return { totalPaid: netPaid, outstanding, status, total };
+        const outstanding = total > 0 ? round2(Math.max(0, total - net)) : 0;
+        const status = derivePaymentStatus({
+          rows: pmts,
+          total,
+          depositNzd: Number(booking.depositNzd ?? 0),
+          depositRequired: (booking as any).depositRequired !== false,
+        });
+        return { totalPaid: net, outstanding, status, total };
       }),
     /** Every payment received across all events, for month-end reconciliation.
      *  Joined to its booking so the log reads as "who paid, for which event".
@@ -4140,7 +4161,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           eventType: bookings.eventType,
         })
           .from(payments)
-          .leftJoin(bookings, eq(bookings.id, payments.bookingId))
+          // Scope the join to the caller's own bookings. Joining on booking id
+          // alone would expose another tenant's client name / event details for
+          // any payment row that happens to carry their booking id.
+          .leftJoin(bookings, and(eq(bookings.id, payments.bookingId), eq(bookings.ownerId, ctx.user.id)))
           .where(and(...clauses))
           .orderBy(desc(payments.paidAt));
         return rows.map(r => ({
@@ -4175,6 +4199,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) return [] as any[];
 
+        const { netPaid, covers, round2 } = await import('../shared/paymentMath');
         const [allBookings, allPayments, allRunsheets] = await Promise.all([
           db.select().from(bookings).where(eq(bookings.ownerId, ctx.user.id)),
           db.select().from(payments).where(eq(payments.ownerId, ctx.user.id)),
@@ -4209,14 +4234,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .filter(b => b.status !== 'cancelled')
           .map(b => {
             const pmts = payByBooking.get(b.id) ?? [];
-            const net = pmts.reduce((s, p) => s + (p.type === 'refund' ? -1 : 1) * Number(p.amount || 0), 0);
+            const net = netPaid(pmts);
             const total = Number(b.totalNzd ?? 0);
             const hasPrice = total > 0;
             // Guard the null-total case: without a price we can't say "paid in full".
-            const outstanding = hasPrice ? Math.max(0, total - net) : null;
+            const outstanding = hasPrice ? round2(Math.max(0, total - net)) : null;
             const depAmt = Number(b.depositNzd ?? 0);
-            const depositTaken = Boolean(b.depositPaid) || net > 0 || (depAmt > 0 && net >= depAmt);
-            const fullyPaid = hasPrice && net >= total - 0.01;
+            const depositTaken = Boolean(b.depositPaid) || net > 0 || covers(net, depAmt);
+            const fullyPaid = hasPrice && covers(net, total);
             const rs = rsByBooking.get(b.id) ?? {};
             const barOpt = rs.barOption ?? '';
             const onNightSignal = barOpt === 'cash_bar' || barOpt === 'bar_tab_then_cash'
@@ -4578,7 +4603,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const result = await createXeroDraftInvoice(ctx.user.id, {
           contactName: clientName,
           contactEmail: booking.email ?? undefined,
-          inclusive: input.inclusive,
+          // A deposit is a fixed gross figure ("$575 means $575"), so force
+          // GST-inclusive regardless of the venue's default — otherwise an
+          // exclusive default would add 15% and bill $661.25 for a $575 deposit.
+          inclusive: input.stream === 'deposit' ? true : input.inclusive,
           accountCode: streamAccount || undefined,
           invoiceId: targetXeroId,
           reference: `${input.stream === 'food' ? 'Food' : input.stream === 'drinks' ? 'Drinks' : 'Deposit'} — ${clientName}${evDate ? ` · ${evDate}` : ''} (VenueFlow #${booking.id})`,

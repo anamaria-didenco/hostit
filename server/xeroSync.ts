@@ -67,15 +67,10 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
     // Payments board should say "invoiced" without anyone re-marking it here.
     // Only the not-yet-invoiced states advance — a stream already marked paid
     // (or invoiced by hand) is never downgraded by a sync.
-    // Deposit invoices are their own stream. They used to be pushed as
-    // "food", so a PAID deposit wrongly marked the food bill as settled;
-    // they now touch only the deposit flag, never a food/drinks status.
-    if (r.stream === "deposit") {
-      if (s.status === "PAID") {
-        await db.update(bookings).set({ depositPaid: true } as any)
-          .where(and(eq(bookings.id, r.bookingId), eq(bookings.ownerId, ownerId)));
-      }
-    } else {
+    // Deposit invoices are their own stream — the deposit-paid flag is derived
+    // from the imported deposit-type payment + syncDepositPaidFlag below
+    // (which respects `depositRequired`), not set directly here.
+    if (r.stream !== "deposit") {
       if (s.status === "AUTHORISED" || s.status === "SUBMITTED") {
         const col = r.stream === "food" ? bookings.foodStatus : bookings.drinksStatus;
         await db.update(bookings)
@@ -86,19 +81,47 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
             inArray(col, ["to_invoice", "on_night"]),
           ));
       }
-      // Fully paid → the stream is settled on the Payments board.
+      // Fully paid → the stream is settled on the Payments board, but only once
+      // EVERY tracked invoice for this booking+stream is paid (or gone). With a
+      // split/replacement invoice, one PAID invoice must not mark the whole
+      // stream settled while a sibling still owes.
       if (s.status === "PAID") {
-        const streamUpdate = r.stream === "food" ? { foodStatus: "paid" } : { drinksStatus: "paid" };
-        await db.update(bookings).set(streamUpdate as any)
-          .where(and(eq(bookings.id, r.bookingId), eq(bookings.ownerId, ownerId)));
+        const siblings = await db.select({ status: xeroInvoices.status }).from(xeroInvoices)
+          .where(and(
+            eq(xeroInvoices.ownerId, ownerId),
+            eq(xeroInvoices.bookingId, r.bookingId),
+            eq(xeroInvoices.stream, r.stream),
+          ));
+        const allSettled = siblings.every(x => x.status === "PAID" || x.status === "VOIDED" || x.status === "DELETED");
+        if (allSettled) {
+          const streamUpdate = r.stream === "food" ? { foodStatus: "paid" } : { drinksStatus: "paid" };
+          await db.update(bookings).set(streamUpdate as any)
+            .where(and(eq(bookings.id, r.bookingId), eq(bookings.ownerId, ownerId)));
+        }
       }
     }
 
-    // Any money received (including part-payments) gets mirrored into the
-    // ledger. VOIDED/DELETED invoices carry no live payments.
-    const hasMoney = Number(s.amountPaid ?? 0) > 0;
+    // An invoice voided/deleted in Xero must unwind any payments we mirrored
+    // from it, or the app's ledger permanently overstates money vs Xero.
     const settled = s.status === "VOIDED" || s.status === "DELETED";
-    if (!hasMoney || settled || !r.xeroInvoiceId || detailBudget <= 0) continue;
+    if (settled) {
+      if (r.xeroInvoiceId) {
+        const removed = await db.delete(payments).where(and(
+          eq(payments.ownerId, ownerId),
+          eq(payments.source, "xero"),
+          eq(payments.xeroInvoiceId, r.xeroInvoiceId),
+        )).returning({ id: payments.id });
+        if (removed.length > 0) {
+          const { syncDepositPaidFlag } = await import("./db");
+          await syncDepositPaidFlag(r.bookingId, ownerId);
+        }
+      }
+      continue;
+    }
+
+    // Any money received (including part-payments) gets mirrored into the ledger.
+    const hasMoney = Number(s.amountPaid ?? 0) > 0;
+    if (!hasMoney || !r.xeroInvoiceId || detailBudget <= 0) continue;
     detailBudget--;
 
     let xeroPayments;
@@ -121,20 +144,30 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
 
     for (const p of xeroPayments) {
       if (already.has(p.paymentId) || !(p.amount > 0)) continue;
-      await db.insert(payments).values({
+      // onConflictDoNothing is the race-safety net: the pre-check above skips
+      // already-seen ids, but the hourly scheduler, the webhook and an on-board
+      // sync can run concurrently for the same owner and both pass that check.
+      // The (ownerId, xeroPaymentId) unique index makes the duplicate insert a
+      // no-op instead of double-counting the money.
+      const inserted = await db.insert(payments).values({
         bookingId: r.bookingId,
         ownerId,
         amount: String(p.amount),
         // The drinks invoice carries the balance; food is the pre-event bill.
         type: r.stream === "deposit" ? "deposit" : r.stream === "food" ? "partial" : "final",
         method: "bank_transfer", // reconciled against a bank line in Xero
-        paidAt: new Date(`${p.date}T00:00:00`),
+        // Append Z so Xero's calendar date is stored as that UTC day regardless
+        // of the server's timezone (containers run UTC).
+        paidAt: new Date(`${p.date}T00:00:00Z`),
         notes: `Reconciled in Xero · ${r.invoiceNumber ?? r.stream}${p.reference ? ` · ${p.reference}` : ""}`,
         source: "xero",
         xeroPaymentId: p.paymentId,
-      });
-      paymentsImported++;
-      amountImported += p.amount;
+        xeroInvoiceId: r.xeroInvoiceId,
+      }).onConflictDoNothing().returning({ id: payments.id });
+      if (inserted.length > 0) {
+        paymentsImported++;
+        amountImported += p.amount;
+      }
     }
     // Money imported from Xero counts toward the deposit exactly like a
     // hand-recorded payment: once the net covers the deposit amount, the

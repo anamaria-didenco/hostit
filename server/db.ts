@@ -369,7 +369,14 @@ export async function getDashboardStats(ownerId: number) {
     const sign = p.type === 'refund' ? -1 : 1;
     paidByBooking[p.bookingId] = (paidByBooking[p.bookingId] ?? 0) + sign * Number(p.amount);
   });
-  const pendingPayments = allBookings.filter(b => (b.status === 'confirmed' || b.status === 'finished') && Number(b.totalNzd ?? 0) > (paidByBooking[b.id] ?? 0)).length;
+  const { covers } = await import('../shared/paymentMath');
+  // A booking is "pending" when it has a real total that the net paid doesn't
+  // yet cover (epsilon-tolerant so a float sum doesn't read as a 1-cent debt).
+  const pendingPayments = allBookings.filter(b => {
+    if (b.status !== 'confirmed' && b.status !== 'finished') return false;
+    const total = Number(b.totalNzd ?? 0);
+    return total > 0 && !covers(paidByBooking[b.id] ?? 0, total);
+  }).length;
   return {
     newLeads,
     totalLeads: allLeads.length,
@@ -401,13 +408,17 @@ export async function syncDepositPaidFlag(bookingId: number, ownerId: number) {
     if (!booking) return;
     const pmts = await db.select().from(payments)
       .where(and(eq(payments.bookingId, bookingId), eq(payments.ownerId, ownerId)));
-    const net = pmts.reduce((s, p) => s + (p.type === 'refund' ? -1 : 1) * Number(p.amount), 0);
+    const { depositPaidAmount, covers } = await import('../shared/paymentMath');
     const depositAmount = Number(booking.depositNzd ?? 0);
     // If the venue has marked this booking as not requiring a deposit,
     // skip the auto-sync entirely — the flag is meaningless and the UI
     // shows "Not required" anyway.
     if ((booking as any).depositRequired === false) return;
-    const shouldBePaid = depositAmount > 0 && net >= depositAmount;
+    // Only deposit-type payments count toward the deposit. Summing every
+    // payment type here meant a large food/drinks payment (e.g. a balance
+    // reconciled from Xero) could exceed the deposit amount and falsely flip
+    // this flag even when no deposit was ever taken.
+    const shouldBePaid = covers(depositPaidAmount(pmts), depositAmount);
     if (Boolean(booking.depositPaid) !== shouldBePaid) {
       await db.update(bookings)
         .set({ depositPaid: shouldBePaid })
