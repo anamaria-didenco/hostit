@@ -221,46 +221,83 @@ async function getXeroAccessUncached(ownerId: number, opts: AccessOpts = {}): Pr
   // Refresh (Xero rotates the refresh token on every use — must persist it).
   // A refresh token is valid 60 days unused; past that Xero returns
   // invalid_grant and the only fix is reauthorising — never retry in a loop.
-  let tok: any;
-  try {
-    tok = await tokenRequest({ grant_type: "refresh_token", refresh_token: conn.refreshToken });
-  } catch (err: any) {
-    if (String(err?.message ?? "").includes("invalid_grant")) {
-      throw new Error("Xero disconnected — please reconnect it in Settings → Integrations.");
+  //
+  // The in-process `refreshLocks` map only serialises refreshes within ONE
+  // Node process. Xero kills the old refresh token the instant a new one is
+  // issued, so two processes (horizontal scaling, or an overlapping deploy)
+  // refreshing at once permanently break the connection. Take a row lock on
+  // the connection so the refresh is serialised across instances, and
+  // double-check validity inside the lock — a sibling that just refreshed
+  // leaves a valid token we can reuse instead of rotating again.
+  return await db.transaction(async (tx) => {
+    const [locked] = await tx.select().from(xeroConnections)
+      .where(eq(xeroConnections.ownerId, ownerId)).for("update");
+    if (!locked?.refreshToken) throw new Error("Xero is not connected");
+    const validInLock = locked.accessToken && locked.expiresAt
+      && new Date(locked.expiresAt).getTime() > Date.now() + 30_000;
+    if (validInLock) {
+      return { accessToken: locked.accessToken!, tenantId: locked.tenantId ?? "", conn: locked };
     }
-    throw err;
-  }
-  await db.update(xeroConnections).set({
-    accessToken: tok.access_token,
-    refreshToken: tok.refresh_token ?? conn.refreshToken,
-    expiresAt: new Date(Date.now() + (Number(tok.expires_in ?? 1800) - 60) * 1000),
-    updatedAt: new Date(),
-  }).where(eq(xeroConnections.ownerId, ownerId));
-  return { accessToken: tok.access_token, tenantId: conn.tenantId ?? "", conn };
+    let tok: any;
+    try {
+      tok = await tokenRequest({ grant_type: "refresh_token", refresh_token: locked.refreshToken });
+    } catch (err: any) {
+      if (String(err?.message ?? "").includes("invalid_grant")) {
+        throw new Error("Xero disconnected — please reconnect it in Settings → Integrations.");
+      }
+      throw err;
+    }
+    await tx.update(xeroConnections).set({
+      accessToken: tok.access_token,
+      refreshToken: tok.refresh_token ?? locked.refreshToken,
+      expiresAt: new Date(Date.now() + (Number(tok.expires_in ?? 1800) - 60) * 1000),
+      updatedAt: new Date(),
+    }).where(eq(xeroConnections.ownerId, ownerId));
+    return { accessToken: tok.access_token, tenantId: locked.tenantId ?? "", conn: locked };
+  });
 }
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 async function xeroApi(ownerId: number, method: "GET" | "POST" | "PUT", path: string, body?: any): Promise<any> {
   const { accessToken, tenantId } = await getXeroAccess(ownerId);
-  const res = await fetch(`${XERO_API}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "xero-tenant-id": tenantId,
-      Accept: "application/json",
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let json: any = null;
-  try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON error body */ }
-  if (!res.ok) {
-    // Surface Xero's validation messages when present (they're actually useful).
-    const detail = json?.Elements?.[0]?.ValidationErrors?.map((v: any) => v.Message).join("; ")
-      ?? json?.Detail ?? json?.Message ?? text.slice(0, 300);
-    throw new Error(`Xero API ${res.status}: ${detail}`);
+  // Xero enforces 60 requests/minute per tenant and answers an overrun with
+  // 429 + a Retry-After header. Honour it with a bounded wait-and-retry (and
+  // a short backoff on transient 5xx) so one burst degrades to a brief pause
+  // instead of aborting the whole sync run.
+  const maxAttempts = 4;
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(`${XERO_API}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "xero-tenant-id": tenantId,
+        Accept: "application/json",
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts) {
+      const retryAfter = Number(res.headers.get("Retry-After"));
+      const waitMs = res.status === 429
+        ? (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 60_000)
+        : Math.min(8_000, 500 * 2 ** (attempt - 1));
+      // Drain the body so the socket is reusable, then wait and retry.
+      await res.text().catch(() => {});
+      await sleep(Math.min(waitMs, 65_000));
+      continue;
+    }
+    const text = await res.text();
+    let json: any = null;
+    try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON error body */ }
+    if (!res.ok) {
+      // Surface Xero's validation messages when present (they're actually useful).
+      const detail = json?.Elements?.[0]?.ValidationErrors?.map((v: any) => v.Message).join("; ")
+        ?? json?.Detail ?? json?.Message ?? text.slice(0, 300);
+      throw new Error(`Xero API ${res.status}: ${detail}`);
+    }
+    return json;
   }
-  return json;
 }
 
 /** The org's GST-on-income tax type, read from Xero once and cached on the

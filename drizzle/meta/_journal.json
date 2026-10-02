@@ -455,6 +455,13 @@
       "when": 1779801508000,
       "tag": "0064_payments_xero_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1779801509000,
+      "tag": "0065_xero_invoices_unique",
+      "breakpoints": true
     }
   ]
 }

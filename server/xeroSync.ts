@@ -39,8 +39,11 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
 
   let statusChanges = 0, paymentsImported = 0, amountImported = 0;
   // Cap the per-run detail fetches so a large backlog can't blow the rate limit
-  // in one go; the next run picks up the remainder.
-  let detailBudget = 40;
+  // in one go; the next run picks up the remainder. Status-recovery lookups and
+  // payment-import fetches get SEPARATE budgets so a backlog of invoices Xero
+  // went quiet on can't starve the actual money import.
+  let statusBudget = 40;
+  let paymentBudget = 40;
 
   for (const r of rows) {
     let s = r.xeroInvoiceId ? statuses[r.xeroInvoiceId] : undefined;
@@ -49,8 +52,8 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
     // stays DRAFT forever — "check status" looked like it did nothing. A row
     // Xero went quiet on gets asked about individually (GET by ID does return
     // them), unless we already know it's gone.
-    if (!s && r.xeroInvoiceId && r.status !== "VOIDED" && r.status !== "DELETED" && detailBudget > 0) {
-      detailBudget--;
+    if (!s && r.xeroInvoiceId && r.status !== "VOIDED" && r.status !== "DELETED" && statusBudget > 0) {
+      statusBudget--;
       const solo = await getXeroInvoiceStatus(ownerId, r.xeroInvoiceId);
       if (solo) s = { status: solo, amountDue: 0, amountPaid: 0, invoiceNumber: r.invoiceNumber ?? null };
     }
@@ -121,8 +124,8 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
 
     // Any money received (including part-payments) gets mirrored into the ledger.
     const hasMoney = Number(s.amountPaid ?? 0) > 0;
-    if (!hasMoney || !r.xeroInvoiceId || detailBudget <= 0) continue;
-    detailBudget--;
+    if (!hasMoney || !r.xeroInvoiceId || paymentBudget <= 0) continue;
+    paymentBudget--;
 
     let xeroPayments;
     try {
@@ -143,7 +146,12 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
     const already = new Set(seen.map(x => x.xeroPaymentId));
 
     for (const p of xeroPayments) {
-      if (already.has(p.paymentId) || !(p.amount > 0)) continue;
+      if (already.has(p.paymentId) || p.amount === 0) continue;
+      // A negative Xero payment is a refund/credit reconciled against the bank —
+      // import it as a refund (positive amount, type 'refund') so the app's net
+      // doesn't overstate what was actually received versus Xero.
+      const isRefund = p.amount < 0;
+      const streamType = r.stream === "deposit" ? "deposit" : r.stream === "food" ? "partial" : "final";
       // onConflictDoNothing is the race-safety net: the pre-check above skips
       // already-seen ids, but the hourly scheduler, the webhook and an on-board
       // sync can run concurrently for the same owner and both pass that check.
@@ -152,14 +160,14 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
       const inserted = await db.insert(payments).values({
         bookingId: r.bookingId,
         ownerId,
-        amount: String(p.amount),
+        amount: String(Math.abs(p.amount)),
         // The drinks invoice carries the balance; food is the pre-event bill.
-        type: r.stream === "deposit" ? "deposit" : r.stream === "food" ? "partial" : "final",
+        type: isRefund ? "refund" : streamType,
         method: "bank_transfer", // reconciled against a bank line in Xero
         // Append Z so Xero's calendar date is stored as that UTC day regardless
         // of the server's timezone (containers run UTC).
         paidAt: new Date(`${p.date}T00:00:00Z`),
-        notes: `Reconciled in Xero · ${r.invoiceNumber ?? r.stream}${p.reference ? ` · ${p.reference}` : ""}`,
+        notes: `${isRefund ? "Refund reconciled" : "Reconciled"} in Xero · ${r.invoiceNumber ?? r.stream}${p.reference ? ` · ${p.reference}` : ""}`,
         source: "xero",
         xeroPaymentId: p.paymentId,
         xeroInvoiceId: r.xeroInvoiceId,
