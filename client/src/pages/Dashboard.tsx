@@ -39,6 +39,7 @@ import EventSpendSection from "@/components/EventSpendSection";
 import XeroPushModal from "@/components/XeroPushModal";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
+import { leadFollowUpState } from "@shared/followUp";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import { currency } from "@/lib/money";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
@@ -849,6 +850,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (isStaff && tab !== "calendar" && tab !== "tasks") setTab("calendar");
   }, [isStaff, tab]);
+  // The standalone Pipeline tab was folded into Enquiries (its kanban view);
+  // redirect any bookmarked ?tab=pipeline so it doesn't land on a blank screen.
+  useEffect(() => {
+    if (tab === "pipeline") setTab("enquiries");
+  }, [tab]);
   const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>(_initSubTab);
   const [venueSettingsSection, setVenueSettingsSection] = useState<"details"|"profile"|"spaces">("details");
   const [menuSettingsSection, setMenuSettingsSection] = useState<"packages"|"catalogue">("catalogue");
@@ -946,6 +952,8 @@ export default function Dashboard() {
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
   const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("table");
+  // "Needs follow-up" filter — leads quoted a while ago or gone quiet in-status.
+  const [followUpOnly, setFollowUpOnly] = useState(false);
   const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
 
   // ── Color-code calendar events by space, so it's easy to see *where* a booking
@@ -1135,7 +1143,7 @@ export default function Dashboard() {
   const quickCreateFormId = useId();
   const [quickCreateSpaceError, setQuickCreateSpaceError] = useState(false);
   const [widgetEditMode, setWidgetEditMode] = useState(false);
-  const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries", "pipeline"]);
+  const [widgetOrder, setWidgetOrder] = useState<string[]>(["stats", "calendar", "enquiries"]);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set());
   const [showStatsCustomize, setShowStatsCustomize] = useState(false);
   const [hiddenStats, setHiddenStats] = useState<Set<string>>(() => {
@@ -2498,9 +2506,11 @@ export default function Dashboard() {
   const leadsToShow = leadStatusFilter.length > 0
     ? applyDateFilter(allEnquiries).filter((l: any) => leadStatusFilter.includes(l.status))
     : leadsSubTab === "new" ? applyDateFilter(newEnquiries) : applyDateFilter(repliedLeads);
+  const followUpNowMs = Date.now();
   const filteredLeads = leadsToShow
     .filter((l: any) => !leadStatusExclude.includes(l.status))
     .filter((l: any) => !showPartialOnly || isPartialLead(l))
+    .filter((l: any) => !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
     .filter((l: any) =>
       !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
     )
@@ -2522,6 +2532,7 @@ export default function Dashboard() {
       }
       return leadSortDir === 'asc' ? cmp : -cmp;
     });
+  const followUpCount = allEnquiries.filter((l: any) => leadFollowUpState(l, followUpNowMs).needs).length;
 
   // Calendar
   const year = calDate.getFullYear();
@@ -2984,7 +2995,7 @@ export default function Dashboard() {
                     const target: DashTab = (
                       s.id === 'active_enquiries' ? 'enquiries' :
                       s.id === 'upcoming_events' ? 'calendar' :
-                      s.id === 'proposals_sent' ? 'pipeline' :
+                      s.id === 'proposals_sent' ? 'enquiries' :
                       s.id === 'conversion_rate' ? 'reports' :
                       s.id === 'revenue_month' ? 'reports' :
                       s.id === 'overdue_tasks' ? 'tasks' :
@@ -2995,7 +3006,11 @@ export default function Dashboard() {
                       <button
                         key={s.id}
                         type="button"
-                        onClick={() => { setTab(target); }}
+                        onClick={() => {
+                          if (s.id === 'needs_followup') { setFollowUpOnly(true); setLeadStatusFilter([]); setLeadsSubTab('all'); }
+                          if (s.id === 'proposals_sent') { setFollowUpOnly(false); setLeadStatusFilter(['proposal_sent']); setLeadsSubTab('all'); }
+                          setTab(target);
+                        }}
                         className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         <div className="mb-2 md:mb-3">{s.icon}</div>
@@ -3137,24 +3152,32 @@ export default function Dashboard() {
                       return (
                         <div className="flex bg-muted rounded-xl p-0.5 gap-0.5 flex-wrap">
                           {newEnquiries.length > 0 && (
-                            <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab("new"); setSelectedLead(null); }}
-                              className={tabCls(leadsSubTab === "new")}>
+                            <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadSearch(''); setLeadsSubTab("new"); setSelectedLead(null); }}
+                              className={tabCls(leadsSubTab === "new" && !followUpOnly)}>
                               NEW
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" && !followUpOnly ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
                             </button>
                           )}
-                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadSearch(''); setLeadsSubTab("all"); setSelectedLead(null); }}
-                            className={tabCls(isAll)}>
+                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadSearch(''); setLeadsSubTab("all"); setSelectedLead(null); }}
+                            className={tabCls(isAll && !followUpOnly)}>
                             ALL
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isAll ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isAll && !followUpOnly ? "bg-forest text-white" : "bg-gray-200 text-gray-600"}`}>{(allEnquiries ?? []).length}</span>
                           </button>
-                          <button onClick={() => { setLeadStatusFilter(['proposal_sent']); setShowPartialOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
-                            className={tabCls(filterIs(['proposal_sent']))}>
+                          <button onClick={() => { setLeadStatusFilter(['proposal_sent']); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
+                            className={tabCls(filterIs(['proposal_sent']) && !followUpOnly)}>
                             QUOTED
                           </button>
-                          <button onClick={() => { setLeadStatusFilter(['booked','confirmed']); setShowPartialOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
-                            className={tabCls(filterIs(['booked','confirmed']))}>
+                          <button onClick={() => { setLeadStatusFilter(['booked','confirmed']); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("all"); setSelectedLead(null); }}
+                            className={tabCls(filterIs(['booked','confirmed']) && !followUpOnly)}>
                             CONFIRMED
+                          </button>
+                          <button onClick={() => { const on = !followUpOnly; setFollowUpOnly(on); if (on) { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadsSubTab("all"); } setSelectedLead(null); }}
+                            title="Quoted a while ago or gone quiet in their status"
+                            className={tabCls(followUpOnly)}>
+                            <Bell className="w-3 h-3" /> FOLLOW-UP
+                            {followUpCount > 0 && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${followUpOnly ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700"}`}>{followUpCount}</span>
+                            )}
                           </button>
                         </div>
                       );
@@ -3348,6 +3371,7 @@ export default function Dashboard() {
                               { key: "guests", label: "Guests" },
                               { key: "status", label: "Status" },
                               { key: "enquiry_date", label: "Enquiry" },
+                              { key: "followup", label: "Follow-up" },
                             ].map(col => (
                               <th key={col.key}
                                 onClick={() => { if (["event_date","status","enquiry_date"].includes(col.key)) { setLeadSortBy(col.key === "enquiry_date" ? "enquiry_date" : col.key as any); setLeadSortDir(d => d === "asc" ? "desc" : "asc"); } }}
@@ -3423,6 +3447,21 @@ export default function Dashboard() {
                                   </select>
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/70 whitespace-nowrap">{new Date(lead.createdAt).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  {(() => {
+                                    const fu = leadFollowUpState(lead, followUpNowMs);
+                                    if (fu.needs && fu.reason === 'overdue') {
+                                      return <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">OVERDUE</span>;
+                                    }
+                                    if (fu.needs && fu.reason === 'idle') {
+                                      return <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="No activity on this lead for a while">GONE QUIET</span>;
+                                    }
+                                    if (lead.followUpDate) {
+                                      return <span className="font-dm text-[11px] text-ink/60">{new Date(lead.followUpDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</span>;
+                                    }
+                                    return <span className="text-ink/30">—</span>;
+                                  })()}
+                                </td>
                               </tr>
                             );
                           })}
@@ -4212,56 +4251,10 @@ export default function Dashboard() {
           {/* end EMAIL MODAL */}
 
           {/* ── PIPELINE ─────────────────────────────────────────────────────── */}
-          {tab === "pipeline" && (
-            <div className="p-6 overflow-x-auto">
-              <div className="gold-rule max-w-xs mb-3"><span>CRM</span></div>
-              <h1 className="font-cormorant text-3xl font-semibold text-ink mb-6">Pipeline</h1>
-              <div className="flex gap-5 min-w-max">
-                {pipelineStages.slice(0, 5).map(stage => {
-                  const stageLeads = (allLeads ?? []).filter(Boolean).filter((l: any) => l.status === stage.key);
-                  const colTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
-                  const totalLabel = colTotal >= 1000 ? `$${(colTotal / 1000).toFixed(1)}k` : colTotal > 0 ? `$${colTotal.toLocaleString()}` : '';
-                  return (
-                    <div key={stage.key} className="w-64 flex-shrink-0 min-w-0">
-                      <div className="flex items-center gap-2 pb-2.5 mb-3 border-b-2" style={{ borderColor: stage.swatch }}>
-                        <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: stage.swatch }}>{stage.label}</span>
-                        <span className="font-serif text-[13px] font-semibold text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{stageLeads.length}</span>
-                        <span className="flex-1" />
-                        {totalLabel && <span className="font-serif text-[13px] font-semibold text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{totalLabel}</span>}
-                      </div>
-                      <div className="space-y-2.5">
-                        {stageLeads.map((lead: any) => (
-                          <div key={lead.id} onClick={() => { selectLead(lead); setTab("enquiries"); }}
-                            role="button" tabIndex={0}
-                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectLead(lead); setTab("enquiries"); } }}
-                            className="dante-card p-3 cursor-grab flex flex-col gap-2 hover:shadow-md hover:border-foreground/30 transition-all">
-                            <div className="font-serif font-semibold text-base text-foreground leading-tight tracking-[-0.01em]">{lead.firstName} {lead.lastName}</div>
-                            <div className="font-sans text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">{lead.eventType || "Event"}</div>
-                            {(lead.eventDate || lead.guestCount) && (
-                              <div className="flex items-center gap-3 font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">
-                                {lead.eventDate && <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(lead.eventDate).toLocaleDateString("en-NZ", { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
-                                {lead.guestCount ? <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />{lead.guestCount}</span> : null}
-                              </div>
-                            )}
-                            {lead.budget ? (
-                              <div className="flex items-baseline justify-between border-t border-border pt-2">
-                                <span className="font-serif text-lg font-semibold text-foreground [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">${Number(lead.budget).toLocaleString()}</span>
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
-                        {stageLeads.length === 0 && (
-                          <div className="border border-dashed border-border p-4 text-center">
-                            <p className="font-sans text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground/50">No leads</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* The standalone "Pipeline" tab was a worse duplicate of the
+              Enquiries board (clicking a card just jumped to Enquiries anyway).
+              Removed — the Enquiries tab's kanban view is the single board, and
+              the stat tile / QUOTED chip link into it. */}
 
           {/* ── CALENDAR ─────────────────────────────────────────────────────── */}
           {tab === "calendar" && (
