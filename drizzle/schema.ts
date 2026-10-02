@@ -1,7 +1,8 @@
 import {
   integer, pgEnum, pgTable, text, timestamp,
-  varchar, decimal, boolean, bigint, json, jsonb, serial
+  varchar, decimal, boolean, bigint, json, jsonb, serial, uniqueIndex
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
@@ -663,8 +664,17 @@ export const payments = pgTable("payments", {
   // and is what keeps repeat syncs idempotent.
   source: varchar("source", { length: 20 }).default("manual").notNull(),
   xeroPaymentId: varchar("xeroPaymentId", { length: 64 }),
+  // Which Xero invoice this imported payment came from — lets a void/delete of
+  // that invoice in Xero reverse the mirrored payment. Null for manual rows.
+  xeroInvoiceId: varchar("xeroInvoiceId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  // One ledger row per Xero payment per owner — makes the Xero import idempotent
+  // at the DB level so concurrent syncs can't double-count the same payment.
+  xeroPaymentUnique: uniqueIndex("payments_owner_xeropayment_uq")
+    .on(t.ownerId, t.xeroPaymentId)
+    .where(sql`${t.xeroPaymentId} IS NOT NULL`),
+}));
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = typeof payments.$inferInsert;
 
