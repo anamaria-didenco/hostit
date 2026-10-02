@@ -951,7 +951,13 @@ export default function Dashboard() {
     setLeadStatusExcludeRaw(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
-  const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">("table");
+  // Default to the list view on phones: the table has 7 columns and a 700px
+  // minimum width, so on a ~390px screen its Event Date / Status / Follow-up
+  // columns run off-screen and need horizontal scrolling. The list view is
+  // built to stack on narrow screens. Desktop still defaults to the table.
+  const [leadViewMode, setLeadViewMode] = useState<"list"|"table"|"kanban">(
+    () => (typeof window !== "undefined" && window.innerWidth < 768) ? "list" : "table"
+  );
   // "Needs follow-up" filter — leads quoted a while ago or gone quiet in-status.
   const [followUpOnly, setFollowUpOnly] = useState(false);
   const [showEventsCalendar, setShowEventsCalendar] = useState<boolean>(true);
@@ -3142,9 +3148,9 @@ export default function Dashboard() {
                       Enquiries / View Quotes" presets — a single place to
                       slice the list. */}
                   <div className="flex items-center gap-2.5 flex-wrap gap-y-1.5">
-                    <h2 className="font-cormorant text-xl font-semibold text-ink">
+                    <h1 className="font-cormorant text-xl font-semibold text-ink">
                       {leadViewMode === "kanban" ? "Pipeline" : "Enquiries"}
-                    </h2>
+                    </h1>
                     {leadViewMode !== "kanban" && (() => {
                       const isAll = leadsSubTab === "all" && leadStatusFilter.length === 0;
                       const filterIs = (keys: string[]) => leadStatusFilter.length === keys.length && keys.every(k => leadStatusFilter.includes(k));
