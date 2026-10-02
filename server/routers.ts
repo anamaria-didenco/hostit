@@ -6321,7 +6321,7 @@ Return ONLY valid JSON.`;
       .query(async ({ input, ctx }) => {
         enforceRateLimit('clientPortal:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
-        const { clientPortalTokens, bookings, leads, proposals, payments } = await import('../drizzle/schema');
+        const { clientPortalTokens, bookings, leads, proposals, payments, venueSettings } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
@@ -6362,29 +6362,30 @@ Return ONLY valid JSON.`;
         // the client's own money is exposed (sanitised fields, scoped to this
         // booking + its owner). Null when there is no booking yet.
         let paymentSummary: {
-          total: number; totalPaid: number; outstanding: number;
+          total: number; totalPaid: number; outstanding: number; credit: number;
           depositNzd: number; depositPaid: boolean; depositRequired: boolean;
           status: 'unpaid' | 'partial' | 'deposit_paid' | 'paid_in_full';
         } | null = null;
         let clientPayments: Array<{ id: number; amount: number; type: string; method: string; paidAt: string; notes: string | null }> = [];
+        // How-to-pay shown to the client only while money is still owing.
+        let paymentInstructions: string | null = null;
         if (booking && row.bookingId) {
           const pmts = await db.select().from(payments)
             .where(and(eq(payments.bookingId, row.bookingId), eq(payments.ownerId, row.ownerId)));
-          const paid = pmts.filter(p => p.type !== 'refund').reduce((s, p) => s + Number(p.amount), 0);
-          const refunds = pmts.filter(p => p.type === 'refund').reduce((s, p) => s + Number(p.amount), 0);
-          const netPaid = paid - refunds;
+          const { netPaid, derivePaymentStatus, round2 } = await import('../shared/paymentMath');
+          const net = netPaid(pmts);
           const total = Number(booking.totalNzd ?? 0);
           const depositNzd = Number(booking.depositNzd ?? 0);
-          const outstanding = Math.max(0, total - netPaid);
-          const status = netPaid <= 0 ? 'unpaid' as const
-            : outstanding <= 0 && total > 0 ? 'paid_in_full' as const
-            : netPaid >= depositNzd && depositNzd > 0 ? 'deposit_paid' as const
-            : 'partial' as const;
+          const depositRequired = (booking as any).depositRequired !== false;
+          const outstanding = total > 0 ? round2(Math.max(0, total - net)) : 0;
+          // Overpayment: money received beyond a real total, so the client sees a
+          // credit rather than a silently-swallowed overpay.
+          const credit = total > 0 ? round2(Math.max(0, net - total)) : 0;
           paymentSummary = {
-            total, totalPaid: netPaid, outstanding, depositNzd,
+            total, totalPaid: net, outstanding, credit, depositNzd,
             depositPaid: Boolean((booking as any).depositPaid),
-            depositRequired: (booking as any).depositRequired !== false,
-            status,
+            depositRequired,
+            status: derivePaymentStatus({ rows: pmts, total, depositNzd, depositRequired }),
           };
           clientPayments = pmts
             .sort((a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime())
@@ -6396,8 +6397,14 @@ Return ONLY valid JSON.`;
               paidAt: new Date(p.paidAt).toISOString(),
               notes: p.notes ?? null,
             }));
+          const depositDue = depositRequired && !paymentSummary.depositPaid && depositNzd > 0;
+          if (outstanding > 0 || depositDue) {
+            const [vs] = await db.select({ pi: venueSettings.paymentInstructions }).from(venueSettings)
+              .where(eq(venueSettings.ownerId, row.ownerId)).limit(1);
+            paymentInstructions = vs?.pi?.trim() || null;
+          }
         }
-        return { token: row, permissions, booking, lead, proposal, paymentSummary, payments: clientPayments };
+        return { token: row, permissions, booking, lead, proposal, paymentSummary, payments: clientPayments, paymentInstructions };
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))

@@ -77,7 +77,7 @@ export default function ClientPortal() {
     );
   }
 
-  const { token: portalToken, permissions, booking, lead, proposal, paymentSummary, payments } = data;
+  const { token: portalToken, permissions, booking, lead, proposal, paymentSummary, payments, paymentInstructions } = data;
   const eventName = booking ? `${booking.firstName}${booking.lastName ? ' ' + booking.lastName : ''}'s ${booking.eventType ?? 'Event'}` : lead ? `${lead.firstName}${lead.lastName ? ' ' + lead.lastName : ''}'s ${lead.eventType ?? 'Event'}` : "Your Event";
   const eventDate = booking?.eventDate ?? lead?.eventDate;
   const guestCount = booking?.guestCount ?? lead?.guestCount;
@@ -242,6 +242,22 @@ export default function ClientPortal() {
             {paymentSummary.depositRequired && !paymentSummary.depositPaid && paymentSummary.depositNzd > 0 && (
               <div className="mx-6 mb-4 rounded-lg border border-[#4f72e0]/30 bg-[#4f72e0]/5 px-4 py-3 text-sm text-[#2d4ec2]">
                 A deposit of <span className="font-bold">{nzd(paymentSummary.depositNzd)}</span> secures your booking. Once your venue receives it, it will appear below — please allow a day or two for bank transfers to clear.
+              </div>
+            )}
+
+            {/* How to pay — the venue's payment instructions / bank details, shown
+                while there's still something owing so the client knows how to send it. */}
+            {paymentInstructions && (
+              <div className="mx-6 mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">How to pay</div>
+                <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{paymentInstructions}</div>
+              </div>
+            )}
+
+            {/* Overpayment / credit */}
+            {paymentSummary.credit > 0 && (
+              <div className="mx-6 mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                You've paid <span className="font-bold">{nzd(paymentSummary.credit)}</span> more than the total — your venue will be in touch about the credit.
               </div>
             )}
 
