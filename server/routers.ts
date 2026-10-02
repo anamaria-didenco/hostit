@@ -4148,6 +4148,115 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (pmt) await syncDepositPaidFlag(pmt.bookingId, ctx.user.id);
         return { success: true };
       }),
+    // Owner-triggered: email the client their deposit request (amount + how to
+    // pay + a link to track it). Sends via the venue's own SMTP; returns
+    // {sent:false} with a reason when SMTP isn't set up or the client has no
+    // email, so the UI can explain rather than silently fail.
+    requestDeposit: protectedProcedure
+      .input(z.object({ bookingId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings, payments, venueSettings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [booking] = await db.select().from(bookings)
+          .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
+        if (!booking.email) return { sent: false as const, reason: 'no_client_email' as const };
+        const depositNzd = Number(booking.depositNzd ?? 0);
+        if (depositNzd <= 0) return { sent: false as const, reason: 'no_deposit_set' as const };
+        const { buildVenueMailer, findPortalUrl, fmtNzd } = await import('./paymentsEmail');
+        const mailer = await buildVenueMailer(ctx.user.id);
+        if (!mailer) return { sent: false as const, reason: 'smtp_not_configured' as const };
+        const [vs] = await db.select({ pi: venueSettings.paymentInstructions }).from(venueSettings)
+          .where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        const portalUrl = await findPortalUrl(ctx.user.id, input.bookingId);
+        const first = booking.firstName ?? 'there';
+        const clientName = [booking.firstName, booking.lastName].filter(Boolean).join(' ') || 'Client';
+        const instr = (vs?.pi ?? '').trim();
+        const htmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const html = `<p>Hi ${htmlEsc(first)},</p>`
+          + `<p>To secure your booking${booking.eventType ? ` (${htmlEsc(booking.eventType)})` : ''}, we ask for a deposit of <strong>${fmtNzd(depositNzd)}</strong>.</p>`
+          + (instr ? `<p><strong>How to pay</strong><br>${htmlEsc(instr).replace(/\n/g, '<br>')}</p>` : '')
+          + (portalUrl ? `<p>You can see your balance and confirm payment any time here:<br><a href="${portalUrl}">${portalUrl}</a></p>` : '')
+          + `<p>Thanks so much — please reply to this email with any questions.</p>`
+          + `<p>Warm regards,<br>${htmlEsc(mailer.fromName)}</p>`;
+        const text = `Hi ${first},\n\nTo secure your booking, we ask for a deposit of ${fmtNzd(depositNzd)}.\n`
+          + (instr ? `\nHow to pay:\n${instr}\n` : '')
+          + (portalUrl ? `\nTrack your balance: ${portalUrl}\n` : '')
+          + `\nWarm regards,\n${mailer.fromName}`;
+        try {
+          await mailer.transporter.sendMail({
+            from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
+            to: `"${clientName}" <${booking.email}>`,
+            subject: `Deposit to secure your booking — ${mailer.fromName}`,
+            html, text,
+          });
+        } catch (err) {
+          console.error('[payments.requestDeposit] send failed', err);
+          return { sent: false as const, reason: 'send_failed' as const };
+        }
+        return { sent: true as const, to: booking.email };
+      }),
+    // Owner-triggered: email the client a receipt for one recorded payment,
+    // with the running balance. Same SMTP rules as above.
+    sendReceipt: protectedProcedure
+      .input(z.object({ paymentId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings, payments } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [pmt] = await db.select().from(payments)
+          .where(and(eq(payments.id, input.paymentId), eq(payments.ownerId, ctx.user.id)));
+        if (!pmt) throw new TRPCError({ code: 'NOT_FOUND', message: 'Payment not found' });
+        const [booking] = await db.select().from(bookings)
+          .where(and(eq(bookings.id, pmt.bookingId), eq(bookings.ownerId, ctx.user.id)));
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
+        if (!booking.email) return { sent: false as const, reason: 'no_client_email' as const };
+        const { buildVenueMailer, findPortalUrl, fmtNzd } = await import('./paymentsEmail');
+        const { netPaid, round2 } = await import('../shared/paymentMath');
+        const mailer = await buildVenueMailer(ctx.user.id);
+        if (!mailer) return { sent: false as const, reason: 'smtp_not_configured' as const };
+        const allPmts = await db.select().from(payments)
+          .where(and(eq(payments.bookingId, pmt.bookingId), eq(payments.ownerId, ctx.user.id)));
+        const net = netPaid(allPmts);
+        const total = Number(booking.totalNzd ?? 0);
+        const outstanding = total > 0 ? round2(Math.max(0, total - net)) : 0;
+        const portalUrl = await findPortalUrl(ctx.user.id, pmt.bookingId);
+        const first = booking.firstName ?? 'there';
+        const clientName = [booking.firstName, booking.lastName].filter(Boolean).join(' ') || 'Client';
+        const htmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const TYPE_LABEL: Record<string, string> = { deposit: 'deposit', partial: 'payment', final: 'final payment', refund: 'refund', other: 'payment' };
+        const kind = TYPE_LABEL[pmt.type] ?? 'payment';
+        const paidOn = new Date(pmt.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
+        const amountLine = pmt.type === 'refund'
+          ? `We've refunded <strong>${fmtNzd(Number(pmt.amount))}</strong> on ${paidOn}.`
+          : `We've received your ${kind} of <strong>${fmtNzd(Number(pmt.amount))}</strong> on ${paidOn}. Thank you!`;
+        const html = `<p>Hi ${htmlEsc(first)},</p>`
+          + `<p>${amountLine}</p>`
+          + (total > 0 ? `<p>Balance remaining: <strong>${fmtNzd(outstanding)}</strong>${outstanding <= 0 ? ' — you\'re all paid up.' : ''}</p>` : '')
+          + (portalUrl ? `<p>Full details are on your event page:<br><a href="${portalUrl}">${portalUrl}</a></p>` : '')
+          + `<p>Warm regards,<br>${htmlEsc(mailer.fromName)}</p>`;
+        const text = `Hi ${first},\n\n${amountLine.replace(/<[^>]+>/g, '')}\n`
+          + (total > 0 ? `\nBalance remaining: ${fmtNzd(outstanding)}\n` : '')
+          + (portalUrl ? `\nYour event page: ${portalUrl}\n` : '')
+          + `\nWarm regards,\n${mailer.fromName}`;
+        try {
+          await mailer.transporter.sendMail({
+            from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
+            to: `"${clientName}" <${booking.email}>`,
+            subject: pmt.type === 'refund' ? `Refund confirmation — ${mailer.fromName}` : `Payment received — ${mailer.fromName}`,
+            html, text,
+          });
+        } catch (err) {
+          console.error('[payments.sendReceipt] send failed', err);
+          return { sent: false as const, reason: 'send_failed' as const };
+        }
+        return { sent: true as const, to: booking.email };
+      }),
     summary: protectedProcedure
       .input(z.object({ bookingId: z.number() }))
       .query(async ({ input, ctx }) => {

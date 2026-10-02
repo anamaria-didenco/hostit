@@ -5,7 +5,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, DollarSign, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, DollarSign, CheckCircle, Clock, AlertCircle, Send, Mail } from "lucide-react";
 import { getLoginUrl } from "@/const";
 import { currency } from "@/lib/money";
 
@@ -99,6 +99,26 @@ export default function PaymentTracker() {
     onError: () => toast.error("Failed to remove payment"),
   });
 
+  // Owner-triggered client emails. Both return {sent, reason} rather than
+  // throwing when SMTP/email isn't set up, so map the reason to a clear toast.
+  const emailReason = (reason?: string) => {
+    switch (reason) {
+      case "smtp_not_configured": return "Set up email (SMTP) in Settings first";
+      case "no_client_email": return "This booking has no client email on file";
+      case "no_deposit_set": return "Set a deposit amount on the booking first";
+      case "send_failed": return "Couldn't send the email — please try again";
+      default: return "Couldn't send the email";
+    }
+  };
+  const requestDeposit = trpc.payments.requestDeposit.useMutation({
+    onSuccess: (d: any) => d?.sent ? toast.success(`Deposit request emailed to ${d.to}`) : toast.error(emailReason(d?.reason)),
+    onError: () => toast.error("Couldn't send the deposit request"),
+  });
+  const sendReceipt = trpc.payments.sendReceipt.useMutation({
+    onSuccess: (d: any) => d?.sent ? toast.success(`Receipt emailed to ${d.to}`) : toast.error(emailReason(d?.reason)),
+    onError: () => toast.error("Couldn't send the receipt"),
+  });
+
   if (authLoading) return null;
   if (!user) { window.location.href = getLoginUrl(); return null; }
   if (!bookingId) return (
@@ -159,9 +179,23 @@ export default function PaymentTracker() {
         {/* Summary */}
         {summary && (
           <div className="bg-white border border-border p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
               <h2 className="font-bebas tracking-widest text-ink text-lg">PAYMENT SUMMARY</h2>
-              <StatusBadge status={summary.status} />
+              <div className="flex items-center gap-2">
+                {booking && Number((booking as any).depositNzd ?? 0) > 0 && !(booking as any).depositPaid && (
+                  <Button
+                    onClick={() => requestDeposit.mutate({ bookingId: bookingId! })}
+                    disabled={requestDeposit.isPending}
+                    variant="outline"
+                    className="rounded-none font-bebas tracking-widest text-xs border-2 border-burgundy/40 text-burgundy hover:bg-burgundy/5 flex items-center gap-1.5"
+                    title="Email the client their deposit request with payment instructions"
+                  >
+                    <Send className="w-3.5 h-3.5" aria-hidden="true" />
+                    {requestDeposit.isPending ? "SENDING…" : "REQUEST DEPOSIT"}
+                  </Button>
+                )}
+                <StatusBadge status={summary.status} />
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="text-center p-4 bg-cream">
@@ -322,13 +356,24 @@ export default function PaymentTracker() {
                       {p.notes && <div className="text-xs text-ink/65 font-dm mt-0.5">{p.notes}</div>}
                     </div>
                   </div>
-                  <button
-                    onClick={() => { if (confirm("Remove this payment? This can't be undone.")) deleteMutation.mutate({ id: p.id }); }}
-                    aria-label={`Remove ${fmtNZD(Number(p.amount))} ${PAYMENT_TYPES.find(t => t.value === p.type)?.label ?? "payment"}`}
-                    className="text-ink/65 hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" aria-hidden="true" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => sendReceipt.mutate({ paymentId: p.id })}
+                      disabled={sendReceipt.isPending}
+                      aria-label={`Email the client a receipt for this ${PAYMENT_TYPES.find(t => t.value === p.type)?.label ?? "payment"}`}
+                      title="Email the client a receipt for this payment"
+                      className="p-1.5 text-ink/65 hover:text-forest transition-colors disabled:opacity-50"
+                    >
+                      <Mail className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={() => { if (confirm("Remove this payment? This can't be undone.")) deleteMutation.mutate({ id: p.id }); }}
+                      aria-label={`Remove ${fmtNZD(Number(p.amount))} ${PAYMENT_TYPES.find(t => t.value === p.type)?.label ?? "payment"}`}
+                      className="p-1.5 text-ink/65 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
