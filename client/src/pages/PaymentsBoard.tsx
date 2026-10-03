@@ -344,12 +344,20 @@ function SummaryCard({ label, value, tone, icon }: {
   const toneCls: Record<string, string> = {
     amber: "text-amber-700", blue: "text-blue-700", purple: "text-purple-700", green: "text-green-700",
   };
+  // Buckets with something in them get a soft tint + matching left accent so
+  // the eye lands on where the work is; empty (0) buckets stay quiet.
+  const tint: Record<string, { bg: string; bar: string }> = {
+    amber: { bg: "#fffbeb", bar: "#f59e0b" }, blue: { bg: "#eff6ff", bar: "#3b82f6" },
+    purple: { bg: "#faf5ff", bar: "#a855f7" }, green: { bg: "#f0fdf4", bar: "#22c55e" },
+  };
+  const active = value !== "0";
   return (
-    <div className="bg-white border border-gold/20 rounded-lg p-3.5">
+    <div className="bg-white border border-gold/20 rounded-lg p-3.5"
+      style={active ? { backgroundColor: tint[tone].bg, borderLeft: `4px solid ${tint[tone].bar}` } : undefined}>
       <div className="flex items-center gap-1.5 font-bebas tracking-widest text-[11px] text-sage mb-1">
-        <span className={toneCls[tone]}>{icon}</span> {label}
+        <span className={active ? toneCls[tone] : "text-sage/40"}>{icon}</span> {label}
       </div>
-      <div className={`font-cormorant text-3xl font-semibold ${toneCls[tone]} leading-none`}>{value}</div>
+      <div className={`font-cormorant text-3xl font-semibold leading-none ${active ? toneCls[tone] : "text-ink/60"}`}>{value}</div>
     </div>
   );
 }
