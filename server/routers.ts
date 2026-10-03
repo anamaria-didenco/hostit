@@ -207,6 +207,8 @@ export const appRouter = router({
         formCardBg: z.string().optional(),
         formButtonColor: z.string().optional(),
         formSuccessMessage: z.string().optional(),
+        enquiryAutoReplyEnabled: z.coerce.number().optional(),
+        enquiryAutoReplyMessage: z.string().optional(),
         nbiApiKey: z.string().optional(),
         nbiVenueId: z.string().optional(),
         nbiAccountId: z.string().optional(),
@@ -864,6 +866,74 @@ export const appRouter = router({
           }
         } catch (notifyErr: any) {
           console.error('[LeadSubmit] Notification email error:', notifyErr?.message ?? notifyErr);
+        }
+
+        // Auto-reply to the enquirer — a branded "we've got it" confirmation so
+        // they're not left wondering whether the form worked. This is a
+        // transactional confirmation the enquirer initiated by submitting (like
+        // a receipt), on by default and switchable in Settings; it never blocks
+        // the submit if SMTP is down.
+        try {
+          const { getDb } = await import('./db');
+          const { venueSettings } = await import('../drizzle/schema');
+          const { eq } = await import('drizzle-orm');
+          const db = await getDb();
+          if (db && input.email) {
+            const [vs] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId)).limit(1);
+            const autoReplyOn = (vs?.enquiryAutoReplyEnabled ?? 1) !== 0;
+            if (autoReplyOn && vs?.smtpHost && vs?.smtpUser && vs?.smtpPass) {
+              const { buildVenueMailer } = await import('./paymentsEmail');
+              const mailer = await buildVenueMailer(input.ownerId);
+              if (mailer) {
+                const { escapeHtml: esc } = await import('./sanitizeHtml');
+                const venueName = String(vs.name ?? mailer.fromName ?? 'our venue');
+                const accent = (vs.primaryColor && /^#[0-9a-fA-F]{6}$/.test(vs.primaryColor)) ? vs.primaryColor : '#2D4A3E';
+                const firstName = esc(input.firstName);
+                const introRaw = vs.enquiryAutoReplyMessage?.trim();
+                const intro = introRaw
+                  ? esc(introRaw)
+                  : `Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch within one business day.`;
+                const fmtDate = input.eventDate
+                  ? (() => {
+                      const raw = String(input.eventDate);
+                      const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(raw + 'T00:00:00') : new Date(raw);
+                      return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                    })()
+                  : null;
+                const details = [
+                  input.eventType && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px;width:120px">Event</td><td style="padding:3px 0;font-size:14px">${esc(input.eventType)}</td></tr>`,
+                  fmtDate && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px">Date</td><td style="padding:3px 0;font-size:14px;font-weight:600">${esc(fmtDate)}${input.dateFlexible ? ' (flexible)' : ''}</td></tr>`,
+                  input.guestCount && `<tr><td style="padding:3px 0;color:#6b7280;font-size:14px">Guests</td><td style="padding:3px 0;font-size:14px">${esc(input.guestCount)}</td></tr>`,
+                ].filter(Boolean).join('');
+                const contactBits = [vs.phone && esc(vs.phone), esc(mailer.fromEmail)].filter(Boolean).join(' · ');
+                const html = `<div style="font-family:Georgia,'Times New Roman',serif;max-width:520px;margin:0 auto;color:#1f2430">
+  <div style="background:${accent};color:#fff;padding:22px 26px;border-radius:10px 10px 0 0">
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;font-family:Arial,sans-serif">${esc(venueName)}</div>
+    <div style="font-size:23px;font-weight:bold;margin-top:4px">We've got your enquiry</div>
+  </div>
+  <div style="background:#fffdf9;border:1px solid #ece3d2;border-top:none;padding:22px 26px;border-radius:0 0 10px 10px">
+    <p style="font-size:16px;margin:0 0 12px">Hi ${firstName},</p>
+    <p style="font-size:15px;line-height:1.6;margin:0 0 ${details ? '16px' : '18px'}">${intro}</p>
+    ${details ? `<table style="width:100%;border-collapse:collapse;background:#f7f2e9;border-radius:8px;padding:6px 12px"><tbody>${details}</tbody></table>` : ''}
+    <p style="font-size:14px;line-height:1.6;color:#4b5563;margin:18px 0 0">If anything's changed in the meantime, just reply to this email${contactBits ? ` or reach us on ${contactBits}` : ''}.</p>
+    <p style="font-size:15px;margin:16px 0 0">Warm regards,<br/><strong>${esc(venueName)}</strong></p>
+  </div>
+</div>`;
+                const text = `Hi ${input.firstName},\n\n${introRaw ?? "Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch within one business day."}\n\n${[input.eventType && `Event: ${input.eventType}`, fmtDate && `Date: ${fmtDate}`, input.guestCount && `Guests: ${input.guestCount}`].filter(Boolean).join('\n')}\n\nWarm regards,\n${venueName}`;
+                await mailer.transporter.sendMail({
+                  from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
+                  to: input.email,
+                  replyTo: mailer.fromEmail,
+                  subject: `We've received your enquiry — ${venueName}`,
+                  html,
+                  text,
+                });
+                console.log(`[LeadSubmit] Auto-reply sent to ${input.email}`);
+              }
+            }
+          }
+        } catch (autoErr: any) {
+          console.error('[LeadSubmit] Auto-reply error:', autoErr?.message ?? autoErr);
         }
 
         return lead;
