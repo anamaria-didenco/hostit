@@ -547,9 +547,12 @@ export default function EventDetail() {
             </div>
           </div>
 
-          {/* Event Summary Card */}
-          <div className="dante-card p-5 bg-forest-dark text-cream">
-            <div className="font-bebas tracking-widest text-xs text-gold mb-3">EVENT SUMMARY</div>
+          {/* Event Summary Card — a dark navy accent card. Uses rounded-lg +
+              border directly instead of .dante-card, because that class forces
+              a cream background that would otherwise override bg-forest-dark
+              (same specificity, defined later) and leave cream text unreadable. */}
+          <div className="rounded-lg border border-gold/20 p-5 bg-forest-dark text-cream">
+            <div className="font-bebas tracking-widest text-xs text-gold-bright mb-3">EVENT SUMMARY</div>
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="font-dm text-xs text-cream/60">Type</span>
@@ -570,8 +573,8 @@ export default function EventDetail() {
                 <span className="font-dm text-xs text-cream">{booking.spaceName || "—"}</span>
               </div>
               <div className="border-t border-gold/20 pt-2 flex justify-between">
-                <span className="font-bebas text-xs tracking-widest text-gold">TOTAL</span>
-                <span className="font-cormorant text-lg font-semibold text-gold">
+                <span className="font-bebas text-xs tracking-widest text-gold-bright">TOTAL</span>
+                <span className="font-cormorant text-lg font-semibold text-gold-bright">
                   {currency(Number(booking.totalNzd ?? 0))}
                 </span>
               </div>

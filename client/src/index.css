@@ -293,6 +293,9 @@
   .bg-gold-deep   { background-color: #8a5f18; }
   .text-gold-deep { color: #8a5f18; }              /* 6.2:1 on cream/linen */
   .bg-gold-soft   { background-color: #f7efdb; }   /* chip fill for gold-deep text */
+  /* Brighter brand gold for accents on the DARK (forest-dark/navy) cards:
+     #b07c25 is only ~3.1:1 on #1f3a63, but #d4a843 is ~5.1:1 — passes AA. */
+  .text-gold-bright { color: #d4a843; }            /* 5.1:1 on forest-dark */
 
   /* ── iOS safe area ──────────────────────────────────────────────────────
      `safe-area-inset-bottom` was used on the mobile tab bar but never defined,
