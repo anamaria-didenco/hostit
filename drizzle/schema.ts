@@ -123,6 +123,11 @@ export const venueSettings = pgTable("venue_settings", {
   formCardBg: varchar("formCardBg", { length: 20 }).default("#ffffff"),
   formButtonColor: varchar("formButtonColor", { length: 20 }),
   formSuccessMessage: text("formSuccessMessage"),
+  // Auto-reply sent to the enquirer the moment they submit the form (needs
+  // SMTP configured). On by default; the message is an optional custom intro
+  // line that replaces the default "thanks, we'll be in touch" copy.
+  enquiryAutoReplyEnabled: integer("enquiryAutoReplyEnabled").default(1),
+  enquiryAutoReplyMessage: text("enquiryAutoReplyMessage"),
   nbiApiKey: text("nbiApiKey"),
   nbiVenueId: varchar("nbiVenueId", { length: 100 }),
   nbiAccountId: varchar("nbiAccountId", { length: 100 }),

@@ -2423,6 +2423,8 @@ export default function Dashboard() {
         formCardBg: (vs as any)?.formCardBg ?? "#ffffff",
         formButtonColor: (vs as any)?.formButtonColor ?? "",
         formSuccessMessage: (vs as any)?.formSuccessMessage ?? "",
+        enquiryAutoReplyEnabled: ((vs as any)?.enquiryAutoReplyEnabled ?? 1) !== 0,
+        enquiryAutoReplyMessage: (vs as any)?.enquiryAutoReplyMessage ?? "",
         operatingHours: vs?.operatingHours ?? JSON.stringify([
           { day: "Sunday", enabled: true, start: "08:00", end: "22:00" },
           { day: "Monday", enabled: true, start: "08:00", end: "22:00" },
@@ -6493,6 +6495,8 @@ export default function Dashboard() {
                   formCardBg: settingsForm.formCardBg,
                   formButtonColor: settingsForm.formButtonColor || undefined,
                   formSuccessMessage: settingsForm.formSuccessMessage || undefined,
+                  enquiryAutoReplyEnabled: settingsForm.enquiryAutoReplyEnabled ? 1 : 0,
+                  enquiryAutoReplyMessage: settingsForm.enquiryAutoReplyMessage || undefined,
                   ...(formFields ? { customFormFields: JSON.stringify(formFields) } : {}),
                 });
               }} className="space-y-4">
@@ -6717,6 +6721,31 @@ export default function Dashboard() {
                     placeholder={`Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.`}
                     rows={3}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none" />
+                </div>
+
+                {/* ── AUTO-REPLY TO ENQUIRER ── */}
+                <div className="dante-card p-5 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-bebas text-xs tracking-widest text-sage">AUTO-REPLY TO ENQUIRER</h2>
+                      <p className="font-dm text-xs text-ink/70 mt-1">Email the enquirer a branded “we’ve got it” confirmation the moment they submit, so they’re not left wondering. Needs your SMTP set up above.</p>
+                    </div>
+                    <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                      <input type="checkbox" checked={!!settingsForm.enquiryAutoReplyEnabled}
+                        onChange={e => setSettingsForm((f: any) => ({ ...f, enquiryAutoReplyEnabled: e.target.checked }))}
+                        className="w-4 h-4 accent-forest" />
+                      <span className="font-bebas text-xs tracking-widest text-ink/70">{settingsForm.enquiryAutoReplyEnabled ? 'ON' : 'OFF'}</span>
+                    </label>
+                  </div>
+                  {settingsForm.enquiryAutoReplyEnabled && (
+                    <Textarea
+                      value={settingsForm.enquiryAutoReplyMessage ?? ''}
+                      onChange={e => setSettingsForm((f: any) => ({ ...f, enquiryAutoReplyMessage: e.target.value }))}
+                      aria-label="Auto-reply message"
+                      placeholder={`Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch within one business day.`}
+                      rows={3}
+                      className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none" />
+                  )}
                 </div>
 
                 {/* ── PHOTOS ── */}
