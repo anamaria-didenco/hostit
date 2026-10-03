@@ -400,6 +400,15 @@ export default function LeadForm() {
   useEffect(() => {
     if (!isEmbed) return;
     const rules: string[] = [];
+    // Blend into the host page: the iframe's own body/root must not paint a
+    // background over the host's (that was the white frame around the form).
+    rules.push(`html,body{background:transparent !important}`);
+    // A clean, intentional disabled state for the primary button. A faded brand
+    // colour reads as broken (the washed-out pink); a warm neutral reads as
+    // "not ready yet" and matches the cream aesthetic.
+    rules.push(`.vf-embed-root .vf-submit:disabled{opacity:1 !important;background:#e7e2d6 !important;color:#8f8676 !important;border-color:#e7e2d6 !important;box-shadow:none !important}`);
+    // Soft, warm input borders unless the embed sets its own border colour.
+    if (!borderOverride) rules.push(`.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select{border-color:#cdbfa4}`);
     if (textOverride) rules.push(`.vf-embed-root,.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select{color:${textOverride}}`);
     if (labelOverride) rules.push(`.vf-embed-root label{color:${labelOverride}}`);
     if (borderOverride) rules.push(`.vf-embed-root input,.vf-embed-root textarea,.vf-embed-root select{border-color:${borderOverride}}`);
@@ -775,7 +784,11 @@ export default function LeadForm() {
   // Warm cream/linen defaults — a venue's own formPageBg/formCardBg still wins.
   const formPageBg      = bgTransparent ? "transparent" : (bgOverride || (venue as any)?.formPageBg || "#f4efe6");
   const formPageBgImage = bgTransparent ? null : ((venue as any)?.formPageBgImage || null);
-  const formCardBg      = bgTransparent ? "transparent" : (bgOverride || (venue as any)?.formCardBg || "#fffdf9");
+  // Embedded forms blend into the host page by default (transparent card, no
+  // frame) so they look native wherever they're dropped in; a venue that wants
+  // a solid card can still set formCardBg or pass ?bg=<hex>. The full-page form
+  // keeps its cream card.
+  const formCardBg      = bgTransparent ? "transparent" : (bgOverride || (isEmbed ? "transparent" : ((venue as any)?.formCardBg || "#fffdf9")));
   const formButtonColor = accentOverride || (venue as any)?.formButtonColor || primaryColor;
   const textOnButton    = isLight(formButtonColor) ? "#1a1a1a" : "#ffffff";
 
@@ -1126,7 +1139,7 @@ export default function LeadForm() {
     // into oversized buttons and a wide, squat calendar instead of the
     // compact card it's designed as.
     return (
-      <div style={{ fontFamily, backgroundColor: formCardBg }} className="vf-embed-root vf-card w-full max-w-md mx-auto overflow-hidden rounded-lg border border-[#e6dccb] shadow-sm">
+      <div style={{ fontFamily, backgroundColor: formCardBg }} className={cn("vf-embed-root vf-card w-full max-w-md mx-auto overflow-hidden rounded-lg", bgOverride && !bgTransparent ? "border border-[#e6dccb] shadow-sm" : "")}>
 
         {/* Bottom-sheet drag handle — floating placement, narrow viewport only. */}
         {isSheet && (
