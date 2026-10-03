@@ -3563,7 +3563,13 @@ export default function Dashboard() {
                   <div className="flex-1 overflow-x-auto px-6 py-5 bg-background">
                     <div className="flex gap-5 min-w-max h-full">
                       {kanbanStages.map(stage => {
-                        const stageLeads = filteredLeads.filter((l: any) => l.status === stage.key);
+                        // The board shows the WHOLE pipeline grouped by stage —
+                        // not the list view's new/all subtab, search, partial,
+                        // follow-up or date filters (none of which have a
+                        // control in board mode). Using filteredLeads here left
+                        // the board showing only the active subset (e.g. just
+                        // "new" leads), so most columns looked empty.
+                        const stageLeads = allEnquiries.filter((l: any) => l.status === stage.key);
                         const tone = (stage as any).swatch ?? '#2f5488';
                         const stageTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
                         const stageTotalLabel = stageTotal > 0 ? `$${(stageTotal / 1000).toFixed(1)}k` : null;
@@ -3586,7 +3592,7 @@ export default function Dashboard() {
                                 return (
                                   <button key={lead.id}
                                     onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
-                                    className="group w-full text-left bg-cream rounded-lg p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] hover:border-[#6e665c] hover:shadow-[0_6px_18px_rgba(22,20,15,0.09)] transition-all">
+                                    className="group w-full shrink-0 text-left bg-cream rounded-lg p-[13px] flex flex-col gap-[9px] border-[1.5px] border-[#e6dccb] hover:border-[#6e665c] hover:shadow-[0_6px_18px_rgba(22,20,15,0.09)] transition-all">
                                     {/* Name + type + BEO */}
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
@@ -3631,13 +3637,13 @@ export default function Dashboard() {
                                 );
                               })}
                               {stageLeads.length === 0 && (
-                                <div className="rounded-lg border border-dashed border-[#e6dccb] p-5 text-center">
+                                <div className="shrink-0 rounded-lg border border-dashed border-[#e6dccb] p-5 text-center">
                                   <p className="font-sans text-[12px]" style={{ color: '#7e7466' }}>No leads</p>
                                 </div>
                               )}
                               <button
                                 onClick={() => setShowAddLead(true)}
-                                className="w-full py-2 rounded-lg border border-dashed border-[#e6dccb] text-[12px] text-[#7e7466] hover:border-sage-green hover:text-sage-green transition-colors flex items-center justify-center gap-1">
+                                className="w-full shrink-0 py-2 rounded-lg border border-dashed border-[#e6dccb] text-[12px] text-[#7e7466] hover:border-sage-green hover:text-sage-green transition-colors flex items-center justify-center gap-1">
                                 <Plus className="w-3 h-3" /> Add
                               </button>
                             </div>
