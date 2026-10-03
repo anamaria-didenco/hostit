@@ -59,7 +59,7 @@ export default function ClientPortal() {
       <div className="min-h-screen bg-[#f8f6f1] flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-[#4f72e0] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">Loading your event details…</p>
+          <p className="text-gray-600 font-medium">Loading your event details…</p>
         </div>
       </div>
     );
@@ -71,7 +71,7 @@ export default function ClientPortal() {
         <div className="text-center max-w-md mx-auto px-6">
           <div className="text-6xl mb-4">🔒</div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Link Not Found</h1>
-          <p className="text-gray-500">This portal link may have expired or been removed. Please contact your venue coordinator.</p>
+          <p className="text-gray-600">This portal link may have expired or been removed. Please contact your venue coordinator.</p>
         </div>
       </div>
     );
@@ -92,7 +92,10 @@ export default function ClientPortal() {
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div>
             <div className="text-xs font-bold tracking-[0.2em] text-[#c9a84c] uppercase mb-1">Client Portal</div>
-            <h1 className="text-2xl font-bold">{venueName}</h1>
+            {/* Explicit text-white: the global `h1 { color: var(--foreground) }`
+                rule overrides the header's inherited white, which otherwise
+                renders the venue name as near-black on this dark-green header. */}
+            <h1 className="text-2xl font-bold text-white">{venueName}</h1>
           </div>
           <div className="text-right text-sm text-white/60">
             <div>Prepared for</div>
@@ -104,9 +107,9 @@ export default function ClientPortal() {
       <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Event Summary Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="bg-[#4f72e0] text-white px-6 py-4">
-            <h2 className="text-xl font-bold">{eventName}</h2>
-            <div className="flex gap-4 mt-2 text-sm text-white/80">
+          <div className="bg-[#3f5ec9] text-white px-6 py-4">
+            <h2 className="text-xl font-bold text-white">{eventName}</h2>
+            <div className="flex gap-4 mt-2 text-sm text-white">
               {eventDate && <span>📅 {new Date(eventDate).toLocaleDateString("en-NZ", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>}
               {guestCount && <span>👥 {guestCount} guests</span>}
             </div>
@@ -114,13 +117,13 @@ export default function ClientPortal() {
           <div className="px-6 py-4 grid grid-cols-2 gap-4 text-sm">
             {(booking?.spaceName ?? lead?.spaceId) && (
               <div>
-                <div className="text-gray-400 text-xs uppercase tracking-wide mb-1">Venue Space</div>
+                <div className="text-gray-600 text-xs uppercase tracking-wide mb-1">Venue Space</div>
                 <div className="font-medium text-gray-800">{booking?.spaceName ?? "Main Hall"}</div>
               </div>
             )}
             {(booking?.eventType ?? lead?.eventType) && (
               <div>
-                <div className="text-gray-400 text-xs uppercase tracking-wide mb-1">Event Type</div>
+                <div className="text-gray-600 text-xs uppercase tracking-wide mb-1">Event Type</div>
                 <div className="font-medium text-gray-800">{booking?.eventType ?? lead?.eventType}</div>
               </div>
             )}
@@ -187,7 +190,7 @@ export default function ClientPortal() {
             )}
             {proposal.termsAndConditions && (
               <div className="px-6 py-4 border-t border-gray-100">
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Terms &amp; Conditions</div>
+                <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Terms &amp; Conditions</div>
                 <div className="text-xs text-gray-500 leading-relaxed whitespace-pre-wrap">{proposal.termsAndConditions}</div>
               </div>
             )}
@@ -209,15 +212,15 @@ export default function ClientPortal() {
             {/* Summary tiles */}
             <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="rounded-lg bg-gray-50 px-4 py-3 text-center">
-                <div className="text-gray-400 text-xs uppercase tracking-wide mb-1">Event Total</div>
+                <div className="text-gray-600 text-xs uppercase tracking-wide mb-1">Event Total</div>
                 <div className="font-bold text-gray-900 text-lg">{nzd(paymentSummary.total)}</div>
               </div>
               <div className="rounded-lg bg-green-50 px-4 py-3 text-center">
-                <div className="text-green-700/70 text-xs uppercase tracking-wide mb-1">Paid to Date</div>
+                <div className="text-green-700 text-xs uppercase tracking-wide mb-1">Paid to Date</div>
                 <div className="font-bold text-green-700 text-lg">{nzd(paymentSummary.totalPaid)}</div>
               </div>
               <div className={`rounded-lg px-4 py-3 text-center ${paymentSummary.outstanding > 0 ? "bg-red-50" : "bg-green-50"}`}>
-                <div className={`text-xs uppercase tracking-wide mb-1 ${paymentSummary.outstanding > 0 ? "text-red-700/70" : "text-green-700/70"}`}>Outstanding</div>
+                <div className={`text-xs uppercase tracking-wide mb-1 ${paymentSummary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>Outstanding</div>
                 <div className={`font-bold text-lg ${paymentSummary.outstanding > 0 ? "text-red-700" : "text-green-700"}`}>{nzd(paymentSummary.outstanding)}</div>
               </div>
             </div>
@@ -249,7 +252,7 @@ export default function ClientPortal() {
                 while there's still something owing so the client knows how to send it. */}
             {paymentInstructions && (
               <div className="mx-6 mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">How to pay</div>
+                <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">How to pay</div>
                 <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{paymentInstructions}</div>
               </div>
             )}
@@ -263,7 +266,7 @@ export default function ClientPortal() {
 
             {/* Payment history */}
             <div className="px-6 pb-5">
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Payments Received</div>
+              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Payments Received</div>
               {payments.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
                   No payments recorded yet. Once your venue records a payment from you, it will show here so you always know what has been received.
@@ -321,7 +324,7 @@ export default function ClientPortal() {
                   placeholder="Type your name as your electronic signature"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#4f72e0] font-serif italic text-lg"
                 />
-                <p className="text-xs text-gray-400 mt-1">By typing your name above, you agree this constitutes your legal electronic signature.</p>
+                <p className="text-xs text-gray-600 mt-1">By typing your name above, you agree this constitutes your legal electronic signature.</p>
               </div>
               <button
                 disabled={!signerName || !signatureData || signing}
@@ -354,8 +357,8 @@ export default function ClientPortal() {
         )}
 
         {/* Footer */}
-        <div className="text-center text-xs text-gray-400 py-4">
-          Powered by <span className="font-semibold text-[#4f72e0]">VenueFlowHQ</span> · New Zealand Venue Management
+        <div className="text-center text-xs text-gray-600 py-4">
+          Powered by <span className="font-semibold text-[#2d4ec2]">VenueFlowHQ</span> · New Zealand Venue Management
         </div>
       </div>
     </div>
