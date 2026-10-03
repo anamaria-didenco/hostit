@@ -15,7 +15,7 @@ import {
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, MoveUp, MoveDown, Lock, Type,
   SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare,
-  Link as LinkIcon, LogOut
+  Link as LinkIcon, LogOut, MoreHorizontal
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
@@ -923,6 +923,20 @@ export default function Dashboard() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [statusFilterOpen]);
+  // Secondary enquiry actions (CSV import, bulk select) live in a "⋯" menu so
+  // "Add enquiry" reads as the single primary action in the toolbar.
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!actionsMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setActionsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [actionsMenuOpen]);
   const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
 
   // ── Events table display prefs — persisted to localStorage ────────────────
@@ -3253,27 +3267,47 @@ export default function Dashboard() {
                     </button>
                   </div>
 
-                  {/* Actions */}
+                  {/* Actions — one primary (Add enquiry); secondary actions
+                      (CSV import, bulk select) tucked into a "⋯" menu so the
+                      toolbar reads clearly. */}
                   <div className="ml-auto flex items-center gap-2">
                     <button onClick={openAddEnquiry}
                       className="flex items-center gap-1.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs px-3 py-2 hover:bg-forest transition-colors">
                       <Plus className="w-3.5 h-3.5" /> ADD ENQUIRY
                     </button>
-                    <button onClick={() => setShowCsvImport(true)} title="Import from CSV"
-                      className="px-3 py-2 border border-gold/30 text-ink/60 hover:border-gold hover:text-ink hover:bg-gold/5 transition-colors text-xs font-bebas tracking-widest flex items-center gap-1.5">
-                      <Upload className="w-3.5 h-3.5" /> CSV
-                    </button>
-                    {leadViewMode !== "kanban" && (
-                      <button onClick={() => { setBulkSelectMode(m => !m); setSelectedLeadIds(new Set()); }}
-                        className={`font-bebas text-xs tracking-widest px-2.5 py-1.5 border rounded-lg transition-colors ${bulkSelectMode ? 'bg-forest text-cream border-forest' : 'border-gold/40 text-ink/60 hover:border-gold hover:text-ink'}`}>
-                        {bulkSelectMode ? 'CANCEL' : 'SELECT'}
-                      </button>
-                    )}
                     {leadViewMode === "kanban" && (
                       <button onClick={() => setKanbanSettingsOpen(true)}
                         className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/60 hover:bg-linen transition-colors">
                         <SlidersHorizontal className="w-3.5 h-3.5" /> CUSTOMISE
                       </button>
+                    )}
+                    {bulkSelectMode && leadViewMode !== "kanban" ? (
+                      <button onClick={() => { setBulkSelectMode(false); setSelectedLeadIds(new Set()); }}
+                        className="font-bebas text-xs tracking-widest px-2.5 py-1.5 border rounded-lg transition-colors bg-forest text-cream border-forest">
+                        CANCEL
+                      </button>
+                    ) : (
+                      <div className="relative" ref={actionsMenuRef}>
+                        <button onClick={() => setActionsMenuOpen(o => !o)}
+                          title="More actions" aria-label="More actions"
+                          className={`h-8 w-8 flex items-center justify-center border rounded-lg transition-colors ${actionsMenuOpen ? 'border-gold text-ink bg-gold/5' : 'border-gold/30 text-ink/60 hover:border-gold hover:text-ink'}`}>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                        {actionsMenuOpen && (
+                          <div className="absolute right-0 z-50 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5">
+                            <button onClick={() => { setShowCsvImport(true); setActionsMenuOpen(false); }}
+                              className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
+                              <Upload className="w-3.5 h-3.5 text-ink/60" /> Import from CSV
+                            </button>
+                            {leadViewMode !== "kanban" && (
+                              <button onClick={() => { setBulkSelectMode(true); setSelectedLeadIds(new Set()); setActionsMenuOpen(false); }}
+                                className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-linen/50 text-left text-xs font-inter text-ink">
+                                <CheckSquare className="w-3.5 h-3.5 text-ink/60" /> Select multiple
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -3577,7 +3611,12 @@ export default function Dashboard() {
                           <div key={stage.key} className="w-72 flex-shrink-0 flex flex-col min-w-0">
                             {/* Column header — tracked title, colored rule, serif total */}
                             <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0" style={{ borderBottom: `2px solid ${tone}` }}>
-                              <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: tone }}>{stage.label}</span>
+                              {/* Stage colour shown as a dot + the underline, so the
+                                  label text can stay dark and readable — the raw
+                                  swatch colours (sky/amber/orange) only hit ~2:1 as
+                                  text on cream. */}
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: tone }} />
+                              <span className="font-sans text-[11px] font-extrabold uppercase tracking-[0.16em] text-ink">{stage.label}</span>
                               <span className="font-sans text-[11px] font-bold" style={{ color: '#6e665c' }}>{stageLeads.length}</span>
                               <span className="flex-1" />
                               {stageTotalLabel && (
