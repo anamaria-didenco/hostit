@@ -2972,8 +2972,8 @@ export default function Dashboard() {
               { id: "proposals_sent", label: "Proposals Sent", value: stats?.proposalsSent ?? 0, sub: "this period", icon: <FileText className="w-5 h-5 text-forest" /> },
               { id: "conversion_rate", label: "Conversion Rate", value: `${stats?.conversionRate ?? 0}%`, sub: "leads → booked", icon: <TrendingUp className="w-5 h-5 text-forest" /> },
               { id: "revenue_month", label: "Revenue This Month", value: `$${Math.round(stats?.revenueThisMonth ?? 0).toLocaleString()}`, sub: "confirmed bookings", icon: <DollarSign className="w-5 h-5 text-amber-600" /> },
-              { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${(stats?.overdueTasks ?? 0) > 0 ? 'text-red-500' : 'text-sage/40'}`} /> },
-              { id: "needs_followup", label: "Needs Follow-up", value: stats?.needsFollowUp ?? 0, sub: (stats?.needsFollowUp ?? 0) > 0 ? "quoted or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${(stats?.needsFollowUp ?? 0) > 0 ? 'text-amber-600' : 'text-sage/40'}`} /> },
+              { id: "overdue_tasks", label: "Overdue Tasks", value: stats?.overdueTasks ?? 0, sub: (stats?.overdueTasks ?? 0) > 0 ? "action required" : "all clear", icon: <AlertCircle className={`w-5 h-5 ${(stats?.overdueTasks ?? 0) > 0 ? 'text-red-500' : 'text-sage/40'}`} />, alert: (stats?.overdueTasks ?? 0) > 0 ? 'danger' as const : undefined },
+              { id: "needs_followup", label: "Needs Follow-up", value: stats?.needsFollowUp ?? 0, sub: (stats?.needsFollowUp ?? 0) > 0 ? "quoted or gone quiet" : "all caught up", icon: <Bell className={`w-5 h-5 ${(stats?.needsFollowUp ?? 0) > 0 ? 'text-amber-600' : 'text-sage/40'}`} />, alert: (stats?.needsFollowUp ?? 0) > 0 ? 'warn' as const : undefined },
             ];
             const visibleStats = allStats.filter(s => !hiddenStats.has(s.id));
             return (
@@ -3032,6 +3032,14 @@ export default function Dashboard() {
                       s.id === 'needs_followup' ? 'enquiries' :
                       'overview'
                     );
+                    // When an action tile has a non-zero count, give it a
+                    // coloured left accent + tint + coloured number so the eye
+                    // lands on what needs doing, not the informational metrics.
+                    // Inline styles so they reliably win over .dante-card.
+                    const alert = (s as any).alert as 'danger' | 'warn' | undefined;
+                    const alertStyle = alert === 'danger' ? { borderLeft: '4px solid #ef4444', backgroundColor: '#fef2f2' }
+                      : alert === 'warn' ? { borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' } : undefined;
+                    const numClass = alert === 'danger' ? 'text-red-700' : alert === 'warn' ? 'text-amber-700' : 'text-foreground';
                     return (
                       <button
                         key={s.id}
@@ -3041,10 +3049,11 @@ export default function Dashboard() {
                           if (s.id === 'proposals_sent') { setFollowUpOnly(false); setLeadStatusFilter(['proposal_sent']); setLeadsSubTab('all'); }
                           setTab(target);
                         }}
+                        style={alertStyle}
                         className="dante-card p-3 md:p-5 text-left hover:shadow-md hover:border-forest/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         <div className="mb-2 md:mb-3">{s.icon}</div>
-                        <div className="font-serif text-2xl md:text-4xl font-semibold text-foreground mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{s.value}</div>
+                        <div className={`font-serif text-2xl md:text-4xl font-semibold mb-1 leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${numClass}`}>{s.value}</div>
                         <div className="font-sans text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground leading-snug">{s.label}</div>
                         <div className="font-sans text-[10px] md:text-xs text-muted-foreground mt-0.5 leading-tight">{s.sub}</div>
                       </button>
