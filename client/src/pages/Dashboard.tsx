@@ -4598,82 +4598,62 @@ export default function Dashboard() {
                                 </div>
                               );
                             })()}
-                            {/* Booking cards */}
-                            {dayBookings.map((b: any) => (
-                              <div key={b.id} className="relative group/card w-full">
-                                <button
-                                  draggable
-                                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: b.id, type: 'booking', eventDate: b.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
-                                  onClick={() => setSelectedBooking(b)}
-                                  style={spaceColor(b.spaceName) ? { borderLeft: `4px solid ${spaceColor(b.spaceName)}` } : undefined}
-                                  className={`w-full text-left rounded font-dm ${statusCard(b.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
-                                  title={`${b.firstName} ${b.lastName ?? ''} — ${b.eventType ?? 'Event'} — ${b.guestCount ?? '?'} guests${b.spaceName ? ` — ${b.spaceName}` : ''}`}>
-                                  <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{b.firstName} {b.lastName}</div>
-                                  <div className="hidden sm:block">
-                                    <div className="font-semibold truncate">{b.firstName} {b.lastName}</div>
-                                    {b.eventType && <div className="opacity-95 truncate">{b.eventType}</div>}
-                                    {b.startTime && <div className="opacity-95">{b.startTime}{b.endTime ? ` – ${b.endTime}` : ''}</div>}
-                                    {b.guestCount ? <div className="opacity-95 truncate">{b.guestCount} guests</div> : null}
-                                    {b.spaceName && (
-                                      <div className="mt-0.5">
-                                        <span
-                                          className="inline-block px-1 py-px rounded text-[9px] font-bebas tracking-wider text-white truncate max-w-full"
-                                          style={{ background: spaceColor(b.spaceName) ?? '#8b6914' }}>
-                                          {b.spaceName.toUpperCase()}
-                                        </span>
+                            {/* Event chips — bookings + live enquiries, merged and
+                                sorted by start time. A month cell shows at most
+                                MONTH_CHIP_CAP compact one-line chips (time + name,
+                                status as the chip colour, space as the left stripe);
+                                the rest collapse into a "+N more" that opens the Day
+                                view. The full detail (type, guests, space, status
+                                label) lives on hover and in the Week/Day views, so a
+                                busy Friday no longer blows the whole row to full height. */}
+                            {(() => {
+                              const MONTH_CHIP_CAP = 3;
+                              const dayEvents = [
+                                ...dayBookings.map((b: any) => ({ ...b, _kind: 'booking' as const })),
+                                ...dayLeads.map((l: any) => ({ ...l, _kind: 'lead' as const })),
+                              ].sort((a: any, z: any) => String(a.startTime ?? a.eventTime ?? '').localeCompare(String(z.startTime ?? z.eventTime ?? '')));
+                              const shown = dayEvents.slice(0, MONTH_CHIP_CAP);
+                              const extra = dayEvents.length - shown.length;
+                              return (
+                                <>
+                                  {shown.map((ev: any) => {
+                                    const isLead = ev._kind === 'lead';
+                                    const time = ev.startTime ?? ev.eventTime ?? null;
+                                    return (
+                                      <div key={`${ev._kind}-${ev.id}`} className="relative group/card w-full">
+                                        <button
+                                          draggable
+                                          onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
+                                          onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
+                                          style={spaceColor(ev.spaceName) ? { borderLeft: `3px solid ${spaceColor(ev.spaceName)}` } : undefined}
+                                          className={`w-full text-left rounded font-dm ${statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1.5 py-0.5 flex items-baseline gap-1`}
+                                          title={`${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
+                                          {time && <span className="shrink-0 text-[9px] tabular-nums opacity-70 leading-snug">{time}</span>}
+                                          <span className="truncate font-semibold text-[10px] leading-snug">{ev.firstName} {ev.lastName ? ev.lastName[0] + '.' : ''}</span>
+                                        </button>
+                                        {!isOverflow && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (isLead ? confirm(`Delete enquiry from ${ev.firstName} ${ev.lastName ?? ''}? This cannot be undone.`) : confirm(`Delete ${ev.eventType || 'event'} for ${ev.firstName}?`)) (isLead ? deleteLead : deleteBooking).mutate({ id: ev.id }); }}
+                                            className="absolute top-0.5 right-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center"
+                                            aria-label={isLead ? `Delete enquiry from ${ev.firstName} ${ev.lastName ?? ''}` : `Delete event for ${ev.firstName}`}
+                                            title={isLead ? 'Delete enquiry' : 'Delete event'}>
+                                            <X className="w-2 h-2" />
+                                          </button>
+                                        )}
                                       </div>
-                                    )}
-                                    <div className="opacity-95 font-bebas tracking-widest text-[9px] mt-0.5">{getStatusInfo(b.status).label.toUpperCase()}</div>
-                                  </div>
-                                </button>
-                                {!isOverflow && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); if (confirm(`Delete ${b.eventType || 'event'} for ${b.firstName}?`)) deleteBooking.mutate({ id: b.id }); }}
-                                    className="absolute top-0.5 right-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center"
-                                    title="Delete event">
-                                    <X className="w-2 h-2" />
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                            {/* Lead/enquiry cards */}
-                            {dayLeads.map((l: any) => (
-                              <div key={l.id} className="relative group/card w-full">
-                                <button
-                                  draggable
-                                  onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: l.id, type: 'lead', eventDate: l.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
-                                  onClick={() => openEventDrawer({ ...l, _isLead: true })}
-                                  style={spaceColor(l.spaceName) ? { borderLeft: `4px solid ${spaceColor(l.spaceName)}` } : undefined}
-                                  className={`w-full text-left rounded font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity cursor-move min-h-[18px] px-1 py-0.5 sm:px-1.5 sm:py-1 sm:text-[10px] sm:leading-snug`}
-                                  title={`${l.firstName} ${l.lastName ?? ''} — ${l.eventType ?? 'Enquiry'} — ${l.guestCount ?? '?'} guests`}>
-                                  <div className="sm:hidden truncate font-semibold text-[9px] leading-snug">{l.firstName} {l.lastName}</div>
-                                  <div className="hidden sm:block">
-                                    <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
-                                    {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
-                                    {l.guestCount ? <div className="opacity-95 truncate">{l.guestCount} guests</div> : null}
-                                    {l.spaceName && (
-                                      <div className="mt-0.5">
-                                        <span
-                                          className="inline-block px-1 py-px rounded text-[9px] font-bebas tracking-wider text-white truncate max-w-full"
-                                          style={{ background: spaceColor(l.spaceName) ?? '#8b6914' }}>
-                                          {l.spaceName.toUpperCase()}
-                                        </span>
-                                      </div>
-                                    )}
-                                    <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{getStatusInfo(l.status).label.toUpperCase()}</div>
-                                  </div>
-                                </button>
-                                {!isOverflow && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); if (confirm(`Delete enquiry from ${l.firstName} ${l.lastName ?? ''}? This cannot be undone.`)) deleteLead.mutate({ id: l.id }); }}
-                                    className="absolute top-0 right-0 opacity-0 group-hover/card:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center"
-                                    aria-label={`Delete enquiry from ${l.firstName} ${l.lastName ?? ''}`}
-                                    title="Delete enquiry">
-                                    <span className="bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center"><X className="w-2 h-2" /></span>
-                                  </button>
-                                )}
-                              </div>
-                            ))}
+                                    );
+                                  })}
+                                  {extra > 0 && (
+                                    <button
+                                      onClick={() => { setCalDate(new Date(cellYear, cellMonth, day)); setCalendarView('day'); }}
+                                      className="w-full text-left font-dm font-semibold text-[10px] text-primary hover:underline px-1.5 py-0.5 transition-colors"
+                                      title={`View all ${dayEvents.length} events on this day`}>
+                                      +{extra} more
+                                    </button>
+                                  )}
+                                </>
+                              );
+                            })()}
                             {/* Add enquiry on this day — opens the dated quick-create
                                 form (a plus, not a pencil), so a date-first click
                                 lands on a manual form for the day you picked rather
