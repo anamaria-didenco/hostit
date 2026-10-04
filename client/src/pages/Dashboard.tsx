@@ -1208,6 +1208,25 @@ export default function Dashboard() {
     { enabled: !!user?.id, refetchInterval: 30_000 }
   );
 
+  // One-tap follow-up: email the enquirer a nudge and push the next follow-up
+  // out a week (so the lead leaves the "needs follow-up" list).
+  const sendFollowUp = trpc.leads.sendFollowUp.useMutation({
+    onSuccess: (res: any) => {
+      if (res?.sent) {
+        toast.success(`Follow-up sent to ${res.to}`);
+        refetchLeads();
+        utils.dashboard.invalidate();
+      } else {
+        toast.error(
+          res?.reason === 'smtp_not_configured' ? 'Set up your email (SMTP) in Settings first, then you can send follow-ups.'
+          : res?.reason === 'no_client_email' ? 'This enquiry has no email address on file.'
+          : 'Could not send the follow-up — please try again.'
+        );
+      }
+    },
+    onError: () => toast.error('Could not send the follow-up — please try again.'),
+  });
+
   // ── In-app new enquiry notifications ──────────────────────────────────────
   const knownMaxLeadId = useRef<number | null>(null);
   const notifPermission = useRef<string>("default");
@@ -3498,11 +3517,23 @@ export default function Dashboard() {
                                 <td className="px-4 py-3 whitespace-nowrap">
                                   {(() => {
                                     const fu = leadFollowUpState(lead, followUpNowMs);
-                                    if (fu.needs && fu.reason === 'overdue') {
-                                      return <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">OVERDUE</span>;
-                                    }
-                                    if (fu.needs && fu.reason === 'idle') {
-                                      return <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="No activity on this lead for a while">GONE QUIET</span>;
+                                    const sendingThis = sendFollowUp.isPending && sendFollowUp.variables?.leadId === lead.id;
+                                    if (fu.needs) {
+                                      const badge = fu.reason === 'overdue'
+                                        ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">OVERDUE</span>
+                                        : <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="No activity on this lead for a while">GONE QUIET</span>;
+                                      return (
+                                        <div className="flex items-center gap-1.5">
+                                          {badge}
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (!sendFollowUp.isPending) sendFollowUp.mutate({ leadId: lead.id }); }}
+                                            disabled={sendFollowUp.isPending}
+                                            title="Email this enquirer a follow-up now"
+                                            className="inline-flex items-center gap-1 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded border border-forest/30 text-forest hover:bg-forest hover:text-cream transition-colors disabled:opacity-50">
+                                            <Send className="w-3 h-3" /> {sendingThis ? '…' : 'SEND'}
+                                          </button>
+                                        </div>
+                                      );
                                     }
                                     if (lead.followUpDate) {
                                       return <span className="font-dm text-[11px] text-ink/60">{new Date(lead.followUpDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short" })}</span>;
@@ -3726,6 +3757,14 @@ export default function Dashboard() {
                         }}
                           className="border border-forest/30 text-forest font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-forest/10 transition-all">
                           <Mail className="w-3.5 h-3.5" /> EMAIL
+                        </button>
+                      )}
+                      {selectedLead.email && !isTeamMember && leadFollowUpState(selectedLead, followUpNowMs).needs && (
+                        <button onClick={() => { if (!sendFollowUp.isPending) sendFollowUp.mutate({ leadId: selectedLead.id }); }}
+                          disabled={sendFollowUp.isPending}
+                          title="Email this enquirer a follow-up now"
+                          className="border border-amber-500/50 text-amber-700 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1.5 hover:bg-amber-50 transition-all disabled:opacity-50">
+                          <Send className="w-3.5 h-3.5" /> {sendFollowUp.isPending ? 'SENDING…' : 'FOLLOW UP'}
                         </button>
                       )}
                       <button onClick={() => setLocation(`/proposals/new?leadId=${selectedLead.id}`)}
