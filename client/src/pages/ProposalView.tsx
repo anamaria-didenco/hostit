@@ -30,57 +30,62 @@ interface ThemeTokens {
 }
 
 function getThemeTokens(themeKey: string | null | undefined): ThemeTokens {
+  // `accent` (used for the total + highlights, and as a filled button bg),
+  // `stone` (muted body text) and `headerMuted` (subtitle on the coloured
+  // header) are tuned to meet WCAG AA: accent darkened so it reads on white
+  // AND carries white text; stone darkened where it was too light on white;
+  // headerMuted lightened so it reads on its header. Hues are preserved.
   const map: Record<string, ThemeTokens> = {
     sage: {
-      header: '#5a6b52', headerText: '#f5f2eb', headerMuted: '#b0bfa6',
+      header: '#5a6b52', headerText: '#f5f2eb', headerMuted: '#e3e8df',
       bg: '#f5f2eb', card: '#ffffff', cardBorder: '#ddd8ce',
-      accent: '#c9a84c', accentText: '#ffffff',
-      ink: '#2d3520', stone: '#7a8a72', border: '#ddd8ce',
+      accent: '#7d682f', accentText: '#ffffff',
+      ink: '#2d3520', stone: '#64715d', border: '#ddd8ce',
     },
     forest: {
-      header: '#4f72e0', headerText: '#FBF7E8', headerMuted: '#8fa5e8',
+      header: '#4f72e0', headerText: '#FBF7E8', headerMuted: '#ffffff',
       bg: '#FBF7E8', card: '#ffffff', cardBorder: '#d0cbb8',
-      accent: '#c9a84c', accentText: '#ffffff',
+      accent: '#816c31', accentText: '#ffffff',
       ink: '#2d4ec2', stone: '#4a6645', border: '#d0cbb8',
     },
     'dusty-merlot': {
-      header: '#62202F', headerText: '#FBF7E8', headerMuted: '#c49090',
+      header: '#62202F', headerText: '#FBF7E8', headerMuted: '#c89797',
       bg: '#FBF7E8', card: '#ffffff', cardBorder: '#d8cec8',
-      accent: '#BFAD0E', accentText: '#ffffff',
+      accent: '#7a6f09', accentText: '#ffffff',
       ink: '#2d0d14', stone: '#7a5060', border: '#d8cec8',
     },
     brique: {
-      header: '#741D28', headerText: '#FFF0F3', headerMuted: '#c49090',
+      header: '#741D28', headerText: '#FFF0F3', headerMuted: '#cca0a0',
       bg: '#FFF0F3', card: '#ffffff', cardBorder: '#e0d0d5',
-      accent: '#B9AC39', accentText: '#ffffff',
+      accent: '#766e24', accentText: '#ffffff',
       ink: '#3d0d14', stone: '#7a5060', border: '#e0d0d5',
     },
     charcoal: {
       header: '#1a1a2e', headerText: '#f0ede8', headerMuted: '#9090a8',
       bg: '#f0ede8', card: '#ffffff', cardBorder: '#d8d5d0',
-      accent: '#d4a843', accentText: '#ffffff',
+      accent: '#7f6528', accentText: '#ffffff',
       ink: '#1a1a2e', stone: '#4a4a5a', border: '#d8d5d0',
     },
     olivie: {
-      header: '#1a5c5c', headerText: '#edf5f5', headerMuted: '#80b0b0',
+      header: '#1a5c5c', headerText: '#edf5f5', headerMuted: '#b0cece',
       bg: '#edf5f5', card: '#ffffff', cardBorder: '#c8dede',
-      accent: '#e8734a', accentText: '#ffffff',
+      accent: '#ac5537', accentText: '#ffffff',
       ink: '#0d2e2e', stone: '#3a6060', border: '#c8dede',
     },
     seafoam: {
-      header: '#4a6b3a', headerText: '#FBF7E8', headerMuted: '#9abf8a',
+      header: '#4a6b3a', headerText: '#FBF7E8', headerMuted: '#d7e5d0',
       bg: '#FBF7E8', card: '#ffffff', cardBorder: '#d5e0cc',
       accent: '#62202F', accentText: '#ffffff',
-      ink: '#2d3a20', stone: '#6a7860', border: '#d5e0cc',
+      ink: '#2d3a20', stone: '#66735c', border: '#d5e0cc',
     },
     'retro-warm': {
-      header: '#3d3d1a', headerText: '#ede8c0', headerMuted: '#9a9a70',
+      header: '#3d3d1a', headerText: '#ede8c0', headerMuted: '#aaaa87',
       bg: '#faf5e8', card: '#ffffff', cardBorder: '#e0d8b8',
-      accent: '#f94e19', accentText: '#ffffff',
+      accent: '#c73e14', accentText: '#ffffff',
       ink: '#3d3d1a', stone: '#6a6a3a', border: '#e0d8b8',
     },
     claret: {
-      header: '#6b2338', headerText: '#f0e8d8', headerMuted: '#c090a0',
+      header: '#6b2338', headerText: '#f0e8d8', headerMuted: '#c89dab',
       bg: '#f0e8d8', card: '#ffffff', cardBorder: '#d8c8c0',
       accent: '#2d6a9a', accentText: '#ffffff',
       ink: '#2d0d18', stone: '#6a4050', border: '#d8c8c0',
@@ -88,19 +93,19 @@ function getThemeTokens(themeKey: string | null | undefined): ThemeTokens {
     'midnight-rose': {
       header: '#1a1a3e', headerText: '#f5f0ea', headerMuted: '#a0a0c8',
       bg: '#f5f0ea', card: '#ffffff', cardBorder: '#d8d0e0',
-      accent: '#e8b4c0', accentText: '#1a1a3e',
+      accent: '#82656c', accentText: '#ffffff',
       ink: '#1a1a3e', stone: '#4a4a6a', border: '#d8d0e0',
     },
     matcha: {
-      header: '#5a7a4a', headerText: '#f5f0e8', headerMuted: '#90b880',
+      header: '#5a7a4a', headerText: '#f5f0e8', headerMuted: '#f8fbf7',
       bg: '#f5f0e8', card: '#ffffff', cardBorder: '#d0d8c0',
-      accent: '#c87941', accentText: '#ffffff',
-      ink: '#2d3d20', stone: '#6a7a60', border: '#d0d8c0',
+      accent: '#985c31', accentText: '#ffffff',
+      ink: '#2d3d20', stone: '#627058', border: '#d0d8c0',
     },
     champagne: {
-      header: '#3d1a3d', headerText: '#f0d8a8', headerMuted: '#a880a8',
+      header: '#3d1a3d', headerText: '#f0d8a8', headerMuted: '#aa83aa',
       bg: '#faf5e8', card: '#ffffff', cardBorder: '#e0d5b8',
-      accent: '#c9a84c', accentText: '#ffffff',
+      accent: '#816c31', accentText: '#ffffff',
       ink: '#3d1a3d', stone: '#7a6050', border: '#e0d5b8',
     },
   };
@@ -496,9 +501,9 @@ export default function ProposalView() {
             <p className="font-inter text-sm mb-5" style={{ color: T.stone }}>
               Accept this proposal to confirm your booking. A deposit of {currency(Number(proposal.depositNzd ?? 0))} NZD will be required to secure your date.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Button onClick={() => setShowAccept(true)}
-                className="flex-1 font-bebas tracking-widest rounded-none h-12 text-base gap-2"
+                className="flex-1 min-w-0 font-bebas tracking-widest rounded-none h-12 text-base gap-2"
                 style={{ backgroundColor: T.header, color: T.headerText }}>
                 <CheckCircle className="w-5 h-5" /> ACCEPT & BOOK
               </Button>
