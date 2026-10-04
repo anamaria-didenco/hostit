@@ -1223,6 +1223,73 @@ export const appRouter = router({
           return ka - kb;
         });
     }),
+    // Owner-triggered one-tap follow-up: email the enquirer a friendly nudge
+    // (status-aware default, or a custom message) via the venue's own SMTP, and
+    // schedule the next follow-up a week out so this lead leaves the
+    // "needs follow-up" list. Same SMTP rules as the payment emails.
+    sendFollowUp: protectedProcedure
+      .input(z.object({ leadId: z.number(), message: z.string().max(2000).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { leads, venueSettings } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB not available' });
+        const [lead] = await db.select().from(leads)
+          .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
+        if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'Enquiry not found' });
+        if (!lead.email) return { sent: false as const, reason: 'no_client_email' as const };
+        const { buildVenueMailer } = await import('./paymentsEmail');
+        const mailer = await buildVenueMailer(ctx.user.id);
+        if (!mailer) return { sent: false as const, reason: 'smtp_not_configured' as const };
+        const { escapeHtml: esc } = await import('./sanitizeHtml');
+        const [vs] = await db.select({ name: venueSettings.name, primaryColor: venueSettings.primaryColor })
+          .from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        const venueName = String(vs?.name ?? mailer.fromName);
+        const accent = (vs?.primaryColor && /^#[0-9a-fA-F]{6}$/.test(vs.primaryColor)) ? vs.primaryColor : '#2D4A3E';
+        const first = esc(lead.firstName ?? 'there');
+        const clientName = [lead.firstName, lead.lastName].filter(Boolean).join(' ') || 'there';
+        const quoted = lead.status === 'proposal_sent';
+        const bodyHtml = input.message?.trim()
+          ? esc(input.message.trim()).replace(/\n/g, '<br>')
+          : quoted
+            ? `I just wanted to follow up on the proposal we sent through${lead.eventType ? ` for your ${esc(lead.eventType)}` : ''} — have you had a chance to take a look? I'm happy to tweak anything or answer any questions.`
+            : `I just wanted to check in on your enquiry${lead.eventType ? ` about a ${esc(lead.eventType)}` : ''} with us. We'd love to help make it happen — is there anything I can help with or any details you'd like to talk through?`;
+        const bodyText = input.message?.trim()
+          ? input.message.trim()
+          : quoted
+            ? `I just wanted to follow up on the proposal we sent through${lead.eventType ? ` for your ${lead.eventType}` : ''} — have you had a chance to take a look? I'm happy to tweak anything or answer any questions.`
+            : `I just wanted to check in on your enquiry${lead.eventType ? ` about a ${lead.eventType}` : ''} with us. We'd love to help make it happen — is there anything I can help with?`;
+        const subject = quoted ? `Following up on your proposal — ${venueName}` : `Following up on your enquiry — ${venueName}`;
+        const html = `<div style="font-family:Georgia,'Times New Roman',serif;max-width:520px;margin:0 auto;color:#1f2430">
+  <div style="background:${accent};color:#fff;padding:22px 26px;border-radius:10px 10px 0 0">
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;font-family:Arial,sans-serif">${esc(venueName)}</div>
+    <div style="font-size:22px;font-weight:bold;margin-top:4px">Just checking in</div>
+  </div>
+  <div style="background:#fffdf9;border:1px solid #ece3d2;border-top:none;padding:22px 26px;border-radius:0 0 10px 10px">
+    <p style="font-size:16px;margin:0 0 12px">Hi ${first},</p>
+    <p style="font-size:15px;line-height:1.6;margin:0 0 16px">${bodyHtml}</p>
+    <p style="font-size:15px;margin:16px 0 0">Warm regards,<br/><strong>${esc(venueName)}</strong></p>
+  </div>
+</div>`;
+        const text = `Hi ${lead.firstName ?? 'there'},\n\n${bodyText}\n\nWarm regards,\n${venueName}`;
+        try {
+          await mailer.transporter.sendMail({
+            from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
+            to: `"${clientName}" <${lead.email}>`,
+            replyTo: mailer.fromEmail,
+            subject, html, text,
+          });
+        } catch (err) {
+          console.error('[leads.sendFollowUp] send failed', err);
+          return { sent: false as const, reason: 'send_failed' as const };
+        }
+        // Push the next follow-up out a week so this lead clears the list.
+        await db.update(leads)
+          .set({ followUpDate: new Date(Date.now() + 7 * 86_400_000), updatedAt: new Date() })
+          .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
+        return { sent: true as const, to: lead.email };
+      }),
     // Returns leads with a followUpDate in the given month (for calendar display)
     followUpsByMonth: protectedProcedure
       .input(z.object({ year: z.number(), month: z.number() }))
