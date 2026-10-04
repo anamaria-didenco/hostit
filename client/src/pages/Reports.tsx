@@ -237,7 +237,7 @@ export default function Reports() {
               { label: "Negotiating", bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-700" },
               { label: "Booked", bg: "bg-blue-50", border: "border-blue-400", text: "text-forest" },
               { label: "Lost", bg: "bg-gray-50", border: "border-gray-300", text: "text-gray-500" },
-              { label: "Cancelled", bg: "bg-red-50", border: "border-red-300", text: "text-red-600" },
+              { label: "Cancelled", bg: "bg-red-50", border: "border-red-300", text: "text-red-700" },
             ].map(s => (
               <span key={s.label} className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${s.bg} ${s.border} ${s.text}`}>{s.label}</span>
             ))}
@@ -281,7 +281,7 @@ export default function Reports() {
                       l.status === "contacted" ? "border-blue-400 bg-blue-100 text-blue-700" :
                       l.status === "new" ? "border-sky-400 bg-sky-100 text-sky-700" :
                       l.status === "lost" ? "border-gray-300 bg-gray-100 text-gray-500" :
-                      "border-red-400 bg-red-100 text-red-600";
+                      "border-red-400 bg-red-100 text-red-700";
                     return (
                       <tr key={l.id} className={`transition-colors cursor-pointer ${rowBg}`}>
                         <td className="px-4 py-3 font-dm text-sm text-ink font-medium">{l.firstName} {l.lastName || ""}</td>
