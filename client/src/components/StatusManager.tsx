@@ -52,6 +52,39 @@ export function getStatusDayClasses(colorId: string): string {
   return COLOR_PRESETS.find(c => c.id === colorId)?.dayClasses ?? "border-l-4 border-gray-400 bg-gray-50";
 }
 
+// ── Canonical status → colour resolution ─────────────────────────────────
+// One source of truth so the board, calendar and reports speak the same
+// colour language. Resolves a status KEY (lead status, booking status, or an
+// alias) to the venue's configured colour, falling back to DEFAULT_STATUSES.
+//
+// Aliases map statuses that aren't first-class pipeline stages onto one that
+// is: a booking's `confirmed` reads as `booked` (the lead equivalent),
+// `tentative` borrows the amber "in progress" of `proposal_sent`, and a
+// `cancelled` booking takes the neutral grey of `finished` — distinct from a
+// `lost` enquiry (red), since one is called off and the other never landed.
+const STATUS_ALIASES: Record<string, string> = {
+  confirmed: "booked",
+  tentative: "proposal_sent",
+  cancelled: "finished",
+};
+
+export function resolveStatusColorId(statusKey: string | null | undefined, statuses: StatusDef[] = DEFAULT_STATUSES): string {
+  const key = STATUS_ALIASES[statusKey ?? ""] ?? statusKey ?? "";
+  const def = statuses.find(s => s.key === key) ?? DEFAULT_STATUSES.find(s => s.key === key);
+  return def?.colorId ?? "gray";
+}
+
+/** Border + soft bg + text classes for a status badge/chip. */
+export function statusChipClasses(statusKey: string | null | undefined, statuses?: StatusDef[]): string {
+  return getStatusClasses(resolveStatusColorId(statusKey, statuses));
+}
+
+/** The status's swatch hex — for bars, dots, row tints and chart series. */
+export function statusSwatch(statusKey: string | null | undefined, statuses?: StatusDef[]): string {
+  const id = resolveStatusColorId(statusKey, statuses);
+  return COLOR_PRESETS.find(c => c.id === id)?.swatch ?? "#9ca3af";
+}
+
 export function parseCustomStatuses(raw: string | null | undefined): StatusDef[] {
   if (!raw) return DEFAULT_STATUSES;
   try {

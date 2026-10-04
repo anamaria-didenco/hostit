@@ -7,6 +7,15 @@ import {
   LineChart, Line, PieChart, Pie, Cell, Legend
 } from "recharts";
 import { FileText, TrendingUp, DollarSign, Users, Calendar, ArrowUpRight, Settings, Download, AlertCircle } from "lucide-react";
+import { parseCustomStatuses, statusChipClasses, statusSwatch } from "@/components/StatusManager";
+
+// Soft row/background wash from a status swatch, so a table row's tint matches
+// its badge exactly. Low alpha keeps text comfortably above AA on the wash.
+const tint = (hex: string, a: number) => {
+  const h = (hex || "#9ca3af").replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+};
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -19,7 +28,15 @@ const TABS = [
 const BRAND_COLORS = ["#2f5488", "#4a7dd4", "#8ab2ee", "#2d5fa8", "#b8ccf4"];
 
 export default function Reports() {
+  const { user } = useAuth();
   const [tab, setTab] = useState("overview");
+  // The venue's own status palette (same source the board and calendar use),
+  // so every status reads in one colour language across the whole app.
+  const { data: venueSettings } = trpc.venue.get.useQuery(
+    { ownerId: user?.id },
+    { enabled: !!user?.id }
+  );
+  const statuses = React.useMemo(() => parseCustomStatuses((venueSettings as any)?.customStatuses), [venueSettings]);
   const [showCustomize, setShowCustomize] = useState(false);
   const [hiddenCards, setHiddenCards] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('vfhq_hidden_report_cards') ?? '[]')); }
@@ -228,18 +245,19 @@ export default function Reports() {
       {/* ── EVENTS ── */}
       {tab === "events" && (
         <div className="space-y-4">
-          {/* Legend */}
+          {/* Legend — driven off the venue's own status palette so it matches
+              the board and calendar exactly. */}
           <div className="flex items-center gap-4 flex-wrap">
             {[
-              { label: "New", bg: "bg-sky-50", border: "border-sky-300", text: "text-sky-700" },
-              { label: "Contacted", bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-700" },
-              { label: "Proposal Sent", bg: "bg-violet-50", border: "border-violet-300", text: "text-violet-700" },
-              { label: "Negotiating", bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-700" },
-              { label: "Booked", bg: "bg-blue-50", border: "border-blue-400", text: "text-forest" },
-              { label: "Lost", bg: "bg-gray-50", border: "border-gray-300", text: "text-gray-500" },
-              { label: "Cancelled", bg: "bg-red-50", border: "border-red-300", text: "text-red-700" },
+              { key: "new", label: "New" },
+              { key: "contacted", label: "Contacted" },
+              { key: "proposal_sent", label: "Proposal Sent" },
+              { key: "negotiating", label: "Negotiating" },
+              { key: "booked", label: "Booked" },
+              { key: "lost", label: "Lost" },
+              { key: "cancelled", label: "Cancelled" },
             ].map(s => (
-              <span key={s.label} className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${s.bg} ${s.border} ${s.text}`}>{s.label}</span>
+              <span key={s.key} className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${statusChipClasses(s.key, statuses)}`}>{s.label}</span>
             ))}
             <span className="font-dm text-xs text-sage ml-auto">{(allLeads ?? []).length} enquiries · {(allBookings ?? []).length} bookings</span>
           </div>
@@ -266,24 +284,9 @@ export default function Reports() {
                     const order: Record<string, number> = { booked: 0, negotiating: 1, proposal_sent: 2, contacted: 3, new: 4, lost: 5, cancelled: 6 };
                     return (order[a.status] ?? 9) - (order[b.status] ?? 9);
                   }).map((l: any) => {
-                    const rowBg =
-                      l.status === "booked" ? "bg-blue-50/60 hover:bg-blue-50" :
-                      l.status === "negotiating" ? "bg-amber-50/60 hover:bg-amber-50" :
-                      l.status === "proposal_sent" ? "bg-violet-50/60 hover:bg-violet-50" :
-                      l.status === "contacted" ? "bg-blue-50/60 hover:bg-blue-50" :
-                      l.status === "new" ? "bg-sky-50/60 hover:bg-sky-50" :
-                      l.status === "lost" ? "bg-gray-50/60 hover:bg-gray-50" :
-                      "bg-red-50/60 hover:bg-red-50";
-                    const badgeClass =
-                      l.status === "booked" ? "border-blue-400 bg-blue-100 text-forest" :
-                      l.status === "negotiating" ? "border-amber-400 bg-amber-100 text-amber-700" :
-                      l.status === "proposal_sent" ? "border-violet-400 bg-violet-100 text-violet-700" :
-                      l.status === "contacted" ? "border-blue-400 bg-blue-100 text-blue-700" :
-                      l.status === "new" ? "border-sky-400 bg-sky-100 text-sky-700" :
-                      l.status === "lost" ? "border-gray-300 bg-gray-100 text-gray-500" :
-                      "border-red-400 bg-red-100 text-red-700";
+                    const badgeClass = statusChipClasses(l.status, statuses);
                     return (
-                      <tr key={l.id} className={`transition-colors cursor-pointer ${rowBg}`}>
+                      <tr key={l.id} className="transition-colors" style={{ backgroundColor: tint(statusSwatch(l.status, statuses), 0.06) }}>
                         <td className="px-4 py-3 font-dm text-sm text-ink font-medium">{l.firstName} {l.lastName || ""}</td>
                         <td className="px-4 py-3 font-dm text-sm text-ink">{l.eventName || "—"}</td>
                         <td className="px-4 py-3 font-dm text-xs text-sage whitespace-nowrap">{l.eventDate ? new Date(l.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
@@ -322,18 +325,9 @@ export default function Reports() {
                 </thead>
                 <tbody className="divide-y divide-border/40">
                   {(allBookings ?? []).map((b: any) => {
-                    const rowBg =
-                      b.status === "confirmed" ? "bg-blue-50/60 hover:bg-blue-50" :
-                      b.status === "tentative" ? "bg-amber-50/60 hover:bg-amber-50" :
-                      b.status === "cancelled" ? "bg-gray-50/60 hover:bg-gray-50" :
-                      "bg-blue-50/60 hover:bg-blue-50";
-                    const badgeClass =
-                      b.status === "confirmed" ? "border-blue-400 bg-blue-100 text-forest" :
-                      b.status === "tentative" ? "border-amber-400 bg-amber-100 text-amber-700" :
-                      b.status === "cancelled" ? "border-gray-300 bg-gray-100 text-gray-500" :
-                      "border-blue-300 bg-blue-100 text-blue-700";
+                    const badgeClass = statusChipClasses(b.status, statuses);
                     return (
-                      <tr key={b.id} className={`transition-colors ${rowBg}`}>
+                      <tr key={b.id} className="transition-colors" style={{ backgroundColor: tint(statusSwatch(b.status, statuses), 0.06) }}>
                         <td className="px-4 py-3 font-dm text-sm text-ink font-medium">{b.eventName || `${b.firstName} ${b.lastName || ""}`.trim() || "—"}</td>
                         <td className="px-4 py-3 font-dm text-xs text-sage whitespace-nowrap">{b.eventDate ? new Date(b.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
                         <td className="px-4 py-3 font-dm text-xs text-sage">{b.eventType || "—"}</td>
@@ -516,9 +510,7 @@ export default function Reports() {
                     <td className="px-4 py-3 font-dm text-xs text-sage">{b.guestCount || "—"}</td>
                     <td className="px-4 py-3 font-dm text-sm font-semibold text-ink">${Number(b.totalNzd).toLocaleString()}</td>
                     <td className="px-4 py-3">
-                      <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${
-                        b.status === "confirmed" ? "border-blue-400 bg-blue-50 text-forest" : "border-amber-400 bg-amber-50 text-amber-700"
-                      }`}>{b.status?.toUpperCase()}</span>
+                      <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${statusChipClasses(b.status, statuses)}`}>{b.status?.toUpperCase()}</span>
                     </td>
                   </tr>
                 ))}
@@ -535,14 +527,14 @@ export default function Reports() {
         const proposalLeads = (allLeads ?? []).filter((l: any) =>
           ["proposal_sent", "negotiating", "booked", "lost"].includes(l.status)
         ).sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        // Pipeline funnel data
+        // Pipeline funnel data — bar colours come from the venue's status palette.
         const funnelData = [
-          { stage: "New Enquiry", count: (allLeads ?? []).filter((l: any) => l.status === "new").length, color: "#94a3b8" },
-          { stage: "Contacted", count: (allLeads ?? []).filter((l: any) => l.status === "contacted").length, color: "#2f5488" },
-          { stage: "Proposal Sent", count: (allLeads ?? []).filter((l: any) => l.status === "proposal_sent").length, color: "#8b5cf6" },
-          { stage: "Negotiating", count: inNegotiation, color: "#f59e0b" },
-          { stage: "Booked", count: booked, color: "#10b981" },
-          { stage: "Lost", count: lost, color: "#ef4444" },
+          { stage: "New Enquiry", count: (allLeads ?? []).filter((l: any) => l.status === "new").length, color: statusSwatch("new", statuses) },
+          { stage: "Contacted", count: (allLeads ?? []).filter((l: any) => l.status === "contacted").length, color: statusSwatch("contacted", statuses) },
+          { stage: "Proposal Sent", count: (allLeads ?? []).filter((l: any) => l.status === "proposal_sent").length, color: statusSwatch("proposal_sent", statuses) },
+          { stage: "Negotiating", count: inNegotiation, color: statusSwatch("negotiating", statuses) },
+          { stage: "Booked", count: booked, color: statusSwatch("booked", statuses) },
+          { stage: "Lost", count: lost, color: statusSwatch("lost", statuses) },
         ];
         const maxCount = Math.max(...funnelData.map(f => f.count), 1);
         return (
@@ -598,12 +590,7 @@ export default function Reports() {
                       <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventDate ? new Date(l.eventDate).toLocaleDateString("en-NZ") : "—"}</td>
                       <td className="px-4 py-3 font-dm text-xs text-sage">{l.guestCount || "—"}</td>
                       <td className="px-4 py-3">
-                        <span className={`font-bebas text-[10px] tracking-widest px-2 py-0.5 border ${
-                          l.status === "booked" ? "border-emerald-400 bg-emerald-50 text-emerald-700" :
-                          l.status === "proposal_sent" ? "border-violet-400 bg-violet-50 text-violet-700" :
-                          l.status === "negotiating" ? "border-amber-400 bg-amber-50 text-amber-700" :
-                          "border-stone-300 bg-stone-50 text-stone-500"
-                        }`}>
+                        <span className={`font-bebas text-[10px] tracking-widest px-2 py-0.5 border ${statusChipClasses(l.status, statuses)}`}>
                           {l.status === "proposal_sent" ? "PROPOSAL SENT" :
                            l.status === "negotiating" ? "NEGOTIATING" :
                            l.status === "booked" ? "BOOKED" :
