@@ -1313,6 +1313,13 @@ export default function Dashboard() {
   );
   // Inline payments sub-view state (for bookings only — not leads)
   const [drawerPaymentsOpen, setDrawerPaymentsOpen] = React.useState(false);
+  // Two-tier event drawer: the quick view (details + Edit/Cancel/Delete) is
+  // always shown; the heavier management blocks (financials, billing terms,
+  // the document/plan launchpad, spend) live behind a "More" disclosure so the
+  // panel isn't a 3-screen wall on open. Reset to collapsed each time a
+  // different event opens.
+  const [drawerMoreOpen, setDrawerMoreOpen] = React.useState(false);
+  React.useEffect(() => { setDrawerMoreOpen(false); setDrawerPaymentsOpen(false); }, [selectedBooking?.id, selectedBooking?._isLead]);
   const drawerBookingId = !selectedBooking?._isLead ? selectedBooking?.id ?? null : null;
   const { data: drawerPayments, refetch: refetchDrawerPayments } = trpc.payments.list.useQuery(
     { bookingId: drawerBookingId! },
@@ -9198,21 +9205,9 @@ export default function Dashboard() {
                   </button>
                 )}
               </div>
-              {/* Status + Type */}
-              {(() => {
-                const stage = pipelineStages.find(s => s.key === selectedBooking.status);
-                return (
-                  <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
-                    <span className={`font-bebas text-xs tracking-widest px-2 py-1 border ${stage?.color ?? 'border-gray-400 bg-gray-100 text-gray-700'}`}>
-                      {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status)
-                        ? (stage?.label ?? 'ENQUIRY').toUpperCase()
-                        : (stage?.label ?? selectedBooking.status ?? 'EVENT').toUpperCase()}
-                    </span>
-                    {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60">{selectedBooking.eventType}</span>}
-                  </div>
-                );
-              })()}
-              {/* Quick Status Changer — works for both leads and bookings */}
+              {/* Status control + event type on one line. The coloured status
+                  already shows as the dropdown's value, so the old standalone
+                  status badge was redundant and has been removed. */}
               <div className="flex items-center gap-2">
                 <label htmlFor="drawer-status" className="font-bebas text-[10px] tracking-widest text-ink/70 flex-shrink-0">STATUS</label>
                 <Select
@@ -9261,6 +9256,7 @@ export default function Dashboard() {
                       )}
                   </SelectContent>
                 </Select>
+                {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60 flex-shrink-0 truncate max-w-[9rem]">{selectedBooking.eventType}</span>}
               </div>
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
@@ -9452,9 +9448,22 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+              {/* "More" disclosure (bookings only). Everything below — financials,
+                  billing terms, the document/plan launchpad and spend — lives in
+                  the full event page too, so it starts collapsed to keep the
+                  drawer a quick view rather than a 3-screen wall. */}
+              {!selectedBooking._isLead && (
+                <button
+                  onClick={() => setDrawerMoreOpen(v => !v)}
+                  aria-expanded={drawerMoreOpen}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm border border-gold/30 text-ink/70 hover:bg-linen hover:text-ink transition-colors font-bebas tracking-widest text-xs">
+                  {drawerMoreOpen ? 'LESS' : 'MORE'} — FINANCIALS, BILLING, DOCUMENTS & SPEND
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${drawerMoreOpen ? 'rotate-180' : ''}`} />
+                </button>
+              )}
               {/* Financials — bookings only. Total/Deposit are click-to-edit;
                   the deposit-paid badge toggles on click. */}
-              {!selectedBooking._isLead && !isStaff && (
+              {!selectedBooking._isLead && !isStaff && drawerMoreOpen && (
                 <div className="bg-forest-dark/5 border border-gold/20 p-4">
                   <div className="font-bebas text-xs tracking-widest text-ink/70 mb-3">FINANCIALS</div>
                   <div className="grid grid-cols-2 gap-3">
@@ -9564,7 +9573,7 @@ export default function Dashboard() {
                   know whether to charge food on the night, which is the whole
                   point of the block. Staff see it read-only: their mutations are
                   refused server-side, so an editable control would just fail. */}
-              {!selectedBooking._isLead && (
+              {!selectedBooking._isLead && drawerMoreOpen && (
                 <div>
                   <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">HOW THIS EVENT IS BILLED</div>
                   <div className="space-y-2">
@@ -9606,7 +9615,10 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Quick Actions */}
+              {/* Quick Actions — a lead's actions (open enquiry, create proposal)
+                  are primary, so they always show; a booking's launchpad is
+                  secondary and lives behind the "More" disclosure. */}
+              {(selectedBooking._isLead || drawerMoreOpen) && (
               <div>
                 <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">QUICK ACTIONS</div>
                 <div className="grid grid-cols-2 gap-2">
@@ -9676,31 +9688,16 @@ export default function Dashboard() {
                           <Mail className="w-3 h-3" /> EMAIL
                         </button>
                       )}
-                      {!['confirmed','booked','finished'].includes(selectedBooking.status) && (
-                        <>
-                          {/* Destructive action sits apart from the primary
-                              actions, on its own separated row. */}
-                          <div className="col-span-2 border-t border-gold/15 mt-1" />
-                          <button
-                            onClick={() => {
-                              if (confirm(`Delete enquiry from ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
-                                deleteLead.mutate({ id: selectedBooking.id });
-                              }
-                            }}
-                            className="col-span-2 flex items-center justify-center gap-2 px-3 py-2 border border-red-200 text-red-500 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs">
-                            <Trash2 className="w-3 h-3" /> DELETE ENQUIRY
-                          </button>
-                        </>
-                      )}
+                      {/* The "DELETE ENQUIRY" button that used to sit here was
+                          removed — the DELETE button in the top action row
+                          replaces it. */}
                     </>
                   ) : (
                     <>
-                      {/* Primary — the one filled action */}
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}`); }}
-                        className="col-span-2 flex items-center justify-center gap-2 px-3 py-2 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                        <FileText className="w-3 h-3" /> OPEN EVENT
-                      </button>
-
+                      {/* The old "OPEN EVENT" primary lived here, but the EDIT
+                          button at the top of the drawer already opens the full
+                          event page — so it was dropped to avoid two buttons for
+                          one action. */}
                       {/* Plan */}
                       <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">PLAN</div>
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
@@ -9810,22 +9807,14 @@ export default function Dashboard() {
                         </>
                       )}
 
-                      {/* Delete — low-emphasis text link. Never for staff. */}
-                      <div className={`col-span-2 pt-2 text-center ${isStaff ? "hidden" : ""}`}>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Delete event for ${selectedBooking.firstName} ${selectedBooking.lastName ?? ''}? This cannot be undone.`)) {
-                              deleteBooking.mutate({ id: selectedBooking.id });
-                            }
-                          }}
-                          className="inline-flex items-center gap-1 text-[11px] font-dm text-red-500/70 hover:text-red-700 underline underline-offset-2">
-                          <Trash2 className="w-3 h-3" /> Delete event
-                        </button>
-                      </div>
+                      {/* The low-emphasis "Delete event" link that used to sit
+                          here was removed — the DELETE button in the top action
+                          row replaces it. */}
                     </>
                   )}
                 </div>
               </div>
+              )}
               {/* ── Inline Payments Panel (bookings only) ─────────────────── */}
               {drawerPaymentsOpen && !selectedBooking._isLead && (
                 <div className="border border-gold/30 bg-linen/30 overflow-hidden">
@@ -10057,7 +10046,7 @@ export default function Dashboard() {
                 </div>
               )}
               {/* Event Spend — bookings only */}
-              {!selectedBooking._isLead && <EventSpendSection bookingId={selectedBooking.id} />}
+              {!selectedBooking._isLead && drawerMoreOpen && <EventSpendSection bookingId={selectedBooking.id} />}
             </div>
           </div>
         </div>
