@@ -15,7 +15,7 @@ import {
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, MoveUp, MoveDown, Lock, Type,
   SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare,
-  Link as LinkIcon, LogOut, MoreHorizontal
+  Link as LinkIcon, LogOut, MoreHorizontal, Ban
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
@@ -9142,6 +9142,62 @@ export default function Dashboard() {
             </div>
             {/* Body */}
             <div className="p-4 md:p-5 space-y-3.5 flex-1">
+              {/* Primary actions — Edit / Cancel / Delete, right at the top so
+                  they're reachable the instant the event opens. Editing used to
+                  mean hunting for tiny pencil icons and cancelling was hidden
+                  inside the Status dropdown, with Delete buried below a long
+                  scroll. Cancel is non-destructive (marks the event Cancelled /
+                  the enquiry Lost and frees the date, keeping the record);
+                  Delete still removes it for good. */}
+              <div className="flex items-stretch gap-2">
+                {!selectedBooking._isLead && (
+                  <button
+                    onClick={() => { const id = selectedBooking.id; setSelectedBooking(null); setLocation(`/event/${id}`); }}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                    <Edit2 className="w-3.5 h-3.5" /> EDIT
+                  </button>
+                )}
+                {!isStaff && (
+                  <button
+                    onClick={() => {
+                      const name = `${selectedBooking.firstName ?? ''} ${selectedBooking.lastName ?? ''}`.trim() || 'this event';
+                      if (selectedBooking._isLead) {
+                        if (confirm(`Cancel the enquiry from ${name}? It'll be marked Lost and leave the calendar — you can set it back from the status dropdown anytime.`)) {
+                          updateStatus.mutate({ id: selectedBooking.id, status: 'lost' as any });
+                          setSelectedBooking((prev: any) => prev ? { ...prev, status: 'lost' } : prev);
+                          utils.leads.eventsByMonth.invalidate();
+                        }
+                      } else {
+                        if (selectedBooking.status === 'cancelled') { toast('This event is already cancelled.'); return; }
+                        if (confirm(`Cancel the event for ${name}? It'll be marked Cancelled and the date freed, but kept in your records. You can restore it from the status dropdown.`)) {
+                          rescheduleBooking.mutate({ id: selectedBooking.id, status: 'cancelled' as any });
+                          setSelectedBooking((prev: any) => prev ? { ...prev, status: 'cancelled' } : prev);
+                          utils.bookings.byMonth.invalidate();
+                          utils.bookings.list.invalidate();
+                        }
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm border border-amber-400 text-amber-800 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs">
+                    <Ban className="w-3.5 h-3.5" /> CANCEL
+                  </button>
+                )}
+                {!isStaff && (
+                  <button
+                    onClick={() => {
+                      const name = `${selectedBooking.firstName ?? ''} ${selectedBooking.lastName ?? ''}`.trim() || 'this event';
+                      if (selectedBooking._isLead) {
+                        if (confirm(`Delete enquiry from ${name}? This cannot be undone.`)) deleteLead.mutate({ id: selectedBooking.id });
+                      } else {
+                        if (confirm(`Delete event for ${name}? This cannot be undone.`)) deleteBooking.mutate({ id: selectedBooking.id });
+                      }
+                    }}
+                    aria-label="Delete permanently"
+                    title="Delete permanently"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm border border-red-300 text-red-600 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs">
+                    <Trash2 className="w-3.5 h-3.5" /> DELETE
+                  </button>
+                )}
+              </div>
               {/* Status + Type */}
               {(() => {
                 const stage = pipelineStages.find(s => s.key === selectedBooking.status);
