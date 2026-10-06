@@ -2578,9 +2578,13 @@ export default function Dashboard() {
       if (leadSortBy === 'enquiry_date') {
         cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       } else if (leadSortBy === 'event_date') {
-        const aDate = a.eventDate ? new Date(a.eventDate).getTime() : 0;
-        const bDate = b.eventDate ? new Date(b.eventDate).getTime() : 0;
-        cmp = aDate - bDate;
+        // An enquiry with no event date yet has nothing to sort on. It used to
+        // count as 1970, so ascending order floated every undated lead to the
+        // TOP of an "Upcoming" list. Park them last in either direction.
+        if (!a.eventDate && !b.eventDate) return 0;
+        if (!a.eventDate) return 1;
+        if (!b.eventDate) return -1;
+        cmp = new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime();
       } else if (leadSortBy === 'status') {
         const order = ['new','contacted','proposal_sent','site_visit','negotiating','function_pack_sent','booked','confirmed','lost','cancelled'];
         // indexOf returns -1 (not undefined) for unknown/custom statuses, so
@@ -2845,7 +2849,7 @@ export default function Dashboard() {
         <div className="hidden md:flex items-center">
           {[
             { id: "overview", label: "Home" },
-            { id: "enquiries", label: "Events" },
+            { id: "enquiries", label: "Enquiries" },
             { id: "tasks", label: "Tasks" },
             { id: "reports", label: "Reports" },
           ].map(item => (
@@ -2881,7 +2885,7 @@ export default function Dashboard() {
         {/* Mobile: current tab label */}
         <div className="md:hidden flex-1 text-center">
           <span className="font-inter text-sm font-semibold text-sage-dark">
-            {tab === "overview" ? "Home" : tab === "enquiries" ? "Events" : tab === "calendar" ? "Calendar" : tab === "payments" ? "Payments" : tab === "tasks" ? "Tasks" : tab === "reports" ? "Reports" : "Settings"}
+            {tab === "overview" ? "Home" : tab === "enquiries" ? "Enquiries" : tab === "calendar" ? "Calendar" : tab === "payments" ? "Payments" : tab === "tasks" ? "Tasks" : tab === "reports" ? "Reports" : "Settings"}
           </span>
         </div>
         {/* Spacer (desktop only) */}
@@ -3209,13 +3213,24 @@ export default function Dashboard() {
                       Enquiries / View Quotes" presets — a single place to
                       slice the list. */}
                   <div className="flex items-center gap-2.5 flex-wrap gap-y-1.5">
-                    <h1 className="font-cormorant text-xl font-semibold text-ink">
-                      {leadViewMode === "kanban" ? "Pipeline" : "Enquiries"}
-                    </h1>
+                    {/* One name for the screen whichever view is on — it used to
+                        flip to "Pipeline" on the board while the nav still said
+                        "Events"/"Enquiries". The List/Board toggle says which
+                        view this is. */}
+                    <h1 className="font-cormorant text-xl font-semibold text-ink">Enquiries</h1>
                     {leadViewMode !== "kanban" && (() => {
                       const isAll = leadsSubTab === "all" && leadStatusFilter.length === 0;
                       const filterIs = (keys: string[]) => leadStatusFilter.length === keys.length && keys.every(k => leadStatusFilter.includes(k));
-                      const tabCls = (on: boolean) => `font-bebas tracking-widest text-xs px-3 py-1.5 flex items-center gap-1.5 transition-colors ${on ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`;
+                      // flex-shrink-0 + nowrap: on a phone the tabs scroll sideways
+                      // in ONE row instead of wrapping into three.
+                      const tabCls = (on: boolean) => `flex-shrink-0 whitespace-nowrap font-bebas tracking-wider sm:tracking-widest text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1.5 transition-colors ${on ? "bg-white text-ink shadow-sm" : "text-ink/65 hover:text-ink"}`;
+                      // Follow-ups are the one tab that means "someone is waiting
+                      // on you", so it carries the same amber as the Overview
+                      // "Needs follow-up" tile whenever there's anything to chase.
+                      const fuAlert = !followUpOnly && followUpCount > 0;
+                      const fuTabCls = fuAlert
+                        ? "flex-shrink-0 whitespace-nowrap font-bebas tracking-wider sm:tracking-widest text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1.5 transition-colors bg-amber-100 text-amber-900 hover:bg-amber-200"
+                        : tabCls(followUpOnly);
                       // Statuses the quick chips already cover; everything else
                       // the venue defines (contacted, site visit, tentative,
                       // cancelled, finished, custom stages…) lives under "More".
@@ -3224,7 +3239,9 @@ export default function Dashboard() {
                       const moreActive = leadStatusFilter.length === 1 && moreStages.some(s => s.key === leadStatusFilter[0]);
                       const moreLabel = moreActive ? (pipelineStages.find(s => s.key === leadStatusFilter[0])?.label ?? leadStatusFilter[0]) : "MORE";
                       return (
-                        <div className="flex bg-muted rounded-xl p-0.5 gap-0.5 flex-wrap">
+                        <div className="flex bg-muted rounded-xl p-0.5 gap-0.5 max-w-full min-w-0">
+                          <div className="relative flex min-w-0">
+                          <div className="flex gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                           {newEnquiries.length > 0 && (
                             <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadSearch(''); setLeadsSubTab("new"); setSelectedLead(null); }}
                               className={tabCls(leadsSubTab === "new" && !followUpOnly)}>
@@ -3232,6 +3249,18 @@ export default function Dashboard() {
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${leadsSubTab === "new" && !followUpOnly ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-700"}`}>{newEnquiries.length}</span>
                             </button>
                           )}
+                          {/* Action tabs (NEW, FOLLOW-UP) come before the pure status
+                              filters, so on a phone — where the row scrolls — the
+                              one that means "someone is waiting on you" is never
+                              the tab that's off-screen. */}
+                          <button onClick={() => { const on = !followUpOnly; setFollowUpOnly(on); if (on) { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadsSubTab("all"); } setSelectedLead(null); }}
+                            title="Quoted a while ago or gone quiet in their status"
+                            className={fuTabCls}>
+                            <Bell className="w-3 h-3" /> FOLLOW-UP
+                            {followUpCount > 0 && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${followUpOnly ? "bg-amber-500 text-white" : "bg-amber-800 text-white"}`}>{followUpCount}</span>
+                            )}
+                          </button>
                           <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadSearch(''); setLeadsSubTab("all"); setSelectedLead(null); }}
                             className={tabCls(isAll && !followUpOnly)}>
                             ALL
@@ -3249,16 +3278,12 @@ export default function Dashboard() {
                             className={tabCls(filterIs(['lost']) && !followUpOnly)}>
                             LOST
                           </button>
-                          <button onClick={() => { const on = !followUpOnly; setFollowUpOnly(on); if (on) { setLeadStatusFilter([]); setShowPartialOnly(false); setLeadsSubTab("all"); } setSelectedLead(null); }}
-                            title="Quoted a while ago or gone quiet in their status"
-                            className={tabCls(followUpOnly)}>
-                            <Bell className="w-3 h-3" /> FOLLOW-UP
-                            {followUpCount > 0 && (
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${followUpOnly ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700"}`}>{followUpCount}</span>
-                            )}
-                          </button>
+                          </div>
+                          {/* Phone-only fade: tells you the row scrolls sideways. */}
+                          <div aria-hidden="true" className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-0 w-6 rounded-r-xl bg-gradient-to-l from-muted to-transparent" />
+                          </div>
                           {moreStages.length > 0 && (
-                            <div className="relative" ref={statusFilterRef}>
+                            <div className="relative flex-shrink-0" ref={statusFilterRef}>
                               <button type="button" onClick={() => setStatusFilterOpen(o => !o)}
                                 title="Filter by another status"
                                 className={`${tabCls(moreActive && !followUpOnly)} max-w-[9rem]`}>
@@ -3266,7 +3291,7 @@ export default function Dashboard() {
                                 <ChevronDown className="w-3 h-3 flex-shrink-0 opacity-60" />
                               </button>
                               {statusFilterOpen && (
-                                <div className="absolute z-50 mt-1 left-0 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
+                                <div className="absolute z-50 mt-1 right-0 sm:right-auto sm:left-0 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-[60vh] overflow-y-auto">
                                   {moreActive && (
                                     <button onClick={() => { setLeadStatusFilter([]); setLeadsSubTab("all"); setStatusFilterOpen(false); setSelectedLead(null); }}
                                       className="w-full text-left px-2 py-1.5 rounded hover:bg-linen/40 text-[11px] font-bebas tracking-widest text-forest">
@@ -3308,9 +3333,11 @@ export default function Dashboard() {
                       (CSV import, bulk select) tucked into a "⋯" menu so the
                       toolbar reads clearly. */}
                   <div className="ml-auto flex items-center gap-2">
-                    <button onClick={openAddEnquiry}
+                    <button onClick={openAddEnquiry} aria-label="Add enquiry"
                       className="flex items-center gap-1.5 bg-forest-dark text-cream font-bebas tracking-widest text-xs px-3 py-2 hover:bg-forest transition-colors">
-                      <Plus className="w-3.5 h-3.5" /> ADD ENQUIRY
+                      {/* Short label on phones so the view toggle and the
+                          primary action share one row instead of two. */}
+                      <Plus className="w-3.5 h-3.5" /> <span className="sm:hidden">ADD</span><span className="hidden sm:inline">ADD ENQUIRY</span>
                     </button>
                     {leadViewMode === "kanban" && (
                       <button onClick={() => setKanbanSettingsOpen(true)}
@@ -3352,7 +3379,7 @@ export default function Dashboard() {
                 {/* Row 2: Search + Filters (hidden in kanban) */}
                 {leadViewMode !== "kanban" && (
                   <div className="flex items-center gap-2 px-4 pb-3 flex-wrap gap-y-2">
-                    <div className="relative flex-1 min-w-[160px] max-w-xs">
+                    <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
                       <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)}
                         aria-label="Search enquiries"
@@ -3367,7 +3394,7 @@ export default function Dashboard() {
                       Partial{leadsToShow.filter(isPartialLead).length > 0 ? ` (${leadsToShow.filter(isPartialLead).length})` : ""}
                     </button>
                     <Select value={leadDateFilter} onValueChange={(v: any) => { setLeadDateFilter(v); if (v !== "custom") { setCustomDateFrom(""); setCustomDateTo(""); } }}>
-                      <SelectTrigger aria-label="Filter events by date" title="Filter events by date" className={`h-8 w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadDateFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
+                      <SelectTrigger aria-label="Filter events by date" title="Filter events by date" className={`h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border focus:ring-1 focus:ring-sage-green/40 ${leadDateFilter !== "all" ? "border-sage-green bg-sage-green/10 text-sage-dark" : "border-gray-200 bg-white text-ink"}`}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -3389,7 +3416,7 @@ export default function Dashboard() {
                       </>
                     )}
                     <Select value={leadSortBy} onValueChange={(v: any) => setLeadSortBy(v)}>
-                      <SelectTrigger aria-label="Sort events" title="Sort events" className="h-8 w-36 text-xs font-inter rounded-lg border border-gray-200 bg-white">
+                      <SelectTrigger aria-label="Sort events" title="Sort events" className="h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border border-gray-200 bg-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -3643,6 +3670,11 @@ export default function Dashboard() {
 
                 {/* ── KANBAN VIEW ──────────────────────────────────────── */}
                 {leadViewMode === "kanban" && (
+                  <div className="relative flex-1 min-h-0 flex flex-col">
+                  {/* Edge fade: with 7 stages only ~4 fit on a laptop, and
+                      Confirmed/Lost sat off-screen with nothing hinting they
+                      exist. The fade sits over the 24px right padding. */}
+                  <div aria-hidden="true" className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 z-10 bg-gradient-to-l from-background to-transparent" />
                   <div className="flex-1 overflow-x-auto px-6 py-5 bg-background">
                     <div className="flex gap-5 min-w-max h-full">
                       {kanbanStages.map(stage => {
@@ -3659,7 +3691,10 @@ export default function Dashboard() {
                         return (
                           <div key={stage.key} className="w-72 flex-shrink-0 flex flex-col min-w-0">
                             {/* Column header — tracked title, colored rule, serif total */}
-                            <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0" style={{ borderBottom: `2px solid ${tone}` }}>
+                            {/* min-h keeps every header the same height — a column
+                                with no total yet (e.g. New Enquiry) used to sit a
+                                couple of px higher than its neighbours. */}
+                            <div className="flex items-center gap-2 pb-2.5 mb-3 flex-shrink-0 min-h-[34px]" style={{ borderBottom: `2px solid ${tone}` }}>
                               {/* Stage colour shown as a dot + the underline, so the
                                   label text can stay dark and readable — the raw
                                   swatch colours (sky/amber/orange) only hit ~2:1 as
@@ -3739,6 +3774,7 @@ export default function Dashboard() {
                         );
                       })}
                     </div>
+                  </div>
                   </div>
                 )}
 
@@ -10750,7 +10786,7 @@ export default function Dashboard() {
           { id: "tasks", label: "Tasks", icon: <CheckCircle className="w-5 h-5" /> },
         ] : [
           { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
-          { id: "enquiries", label: "Events", icon: <MessageSquare className="w-5 h-5" /> },
+          { id: "enquiries", label: "Enquiries", icon: <MessageSquare className="w-5 h-5" /> },
           // Daily Checklists is a separate route, not a tab — rendered as an
           // anchor below so mobile users can reach it without diving into More.
           { id: "checklists", label: "Checklists", icon: <CheckSquare className="w-5 h-5" />, href: "/daily-checklists" },
