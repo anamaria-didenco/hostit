@@ -21,9 +21,13 @@ interface Props {
   // cost lines — i.e. what the customer pays) are folded in as revenue so this
   // section shows true profitability without re-entering the charge total.
   revenueFromCharges?: number;
+  // When the section sits inside something that already titles it (the
+  // dashboard side panel's collapsible block), drop the duplicate heading and
+  // keep just the Add-expense control.
+  hideHeading?: boolean;
 }
 
-export default function EventSpendSection({ bookingId, revenueFromCharges }: Props) {
+export default function EventSpendSection({ bookingId, revenueFromCharges, hideHeading }: Props) {
   const utils = trpc.useUtils();
 
   const { data: items = [] } = trpc.budgets.list.useQuery(
@@ -115,8 +119,8 @@ export default function EventSpendSection({ bookingId, revenueFromCharges }: Pro
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-bebas text-xs tracking-widest text-ink/65">{hasCharges ? "COSTS & PROFIT" : "EVENT SPEND"}</div>
+      <div className={`flex items-center mb-2 ${hideHeading ? "justify-end" : "justify-between"}`}>
+        {!hideHeading && <div className="font-bebas text-xs tracking-widest text-ink/65">{hasCharges ? "COSTS & PROFIT" : "EVENT SPEND"}</div>}
         <button
           onClick={() => setShowAdd((v) => !v)}
           className="flex items-center gap-1 font-bebas text-xs tracking-widest text-forest hover:text-forest-dark transition-colors"

@@ -701,6 +701,102 @@ async function compressToDataUrl(file: File, maxW: number, maxH: number, quality
   });
 }
 
+/**
+ * One collapsible block of the event side panel. The header is a single
+ * full-width button (title + a one-line summary shown only while collapsed +
+ * chevron), so a closed section still tells you what's in it. `action` is an
+ * optional small control that sits to the right of the header, outside the
+ * toggle, so it doesn't open/close the section.
+ */
+function DrawerSection({ id, title, icon, summary, open, onToggle, action, children }: {
+  id: string;
+  title: string;
+  icon?: React.ReactNode;
+  summary?: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const panelId = `drawer-sec-${id}`;
+  return (
+    <section className="border border-gold/25 bg-white rounded-md overflow-hidden">
+      <div className="flex items-center">
+        <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={panelId}
+          className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 text-left hover:bg-linen/60 transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest">
+          {icon && <span className="text-forest flex-shrink-0 [&>svg]:w-3.5 [&>svg]:h-3.5">{icon}</span>}
+          <span className="font-bebas tracking-widest text-xs text-ink flex-shrink-0">{title}</span>
+          {!open && summary ? <span className="font-dm text-xs text-ink/70 truncate min-w-0">{summary}</span> : null}
+          <ChevronDown className={`ml-auto w-4 h-4 flex-shrink-0 text-ink/70 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {action ? <div className="pr-3 flex-shrink-0">{action}</div> : null}
+      </div>
+      {open && <div id={panelId} className="px-3 pb-3 pt-2 border-t border-gold/15">{children}</div>}
+    </section>
+  );
+}
+
+/** A DrawerSection for bookings; a plain headed block for enquiries, whose
+ *  actions are the main thing you came for and shouldn't be tucked away. */
+function SectionOrPlain({ asSection, heading, ...rest }: Omit<React.ComponentProps<typeof DrawerSection>, 'title'> & { asSection: boolean; heading: string }) {
+  if (asSection) return <DrawerSection {...rest} title={heading} />;
+  return (
+    <div>
+      <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">{heading}</div>
+      {rest.children}
+    </div>
+  );
+}
+
+/**
+ * In-app BEO preview: the same HTML the Runsheet Builder shows, opened over the
+ * side panel so the run sheet, menu and dietaries are one tap away instead of
+ * Open event → Runsheet → Print. Esc closes just this layer, not the panel.
+ */
+function BeoPreviewOverlay({ bookingId, name, onClose }: { bookingId: number; name: string; onClose: () => void }) {
+  const [nonce] = React.useState(() => Date.now());
+  const [loaded, setLoaded] = React.useState(false);
+  const closeRef = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); onClose(); }
+    };
+    // Capture phase so we win over the side panel's own Escape handler.
+    window.addEventListener('keydown', onKey, true);
+    closeRef.current?.focus();
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+  const btn = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-cream/40 text-cream hover:bg-cream/10 transition-colors font-bebas tracking-widest text-xs";
+  return (
+    <div className="fixed inset-0 z-[10001] flex items-stretch md:items-center justify-center bg-black/60 md:p-6" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={`BEO preview for ${name}`}
+        className="bg-cream w-full md:max-w-5xl h-full md:h-[92vh] flex flex-col shadow-2xl overflow-hidden md:rounded-md"
+        onClick={e => e.stopPropagation()}>
+        <div className="bg-forest-dark px-4 py-3 flex items-center gap-2 flex-wrap">
+          <div className="min-w-0 mr-auto">
+            <div className="font-bebas tracking-widest text-[10px] text-cream">BEO PREVIEW</div>
+            <div className="font-cormorant text-cream font-semibold text-lg leading-tight truncate">{name}</div>
+          </div>
+          <a className={btn} href={beoUrl(bookingId)} download>
+            <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PDF</span><span className="sr-only sm:hidden">Download PDF</span>
+          </a>
+          <a className={btn} href={beoUrl(bookingId, { format: 'html' })} target="_blank" rel="noreferrer">
+            <ExternalLink className="w-3.5 h-3.5" /> <span className="hidden sm:inline">NEW TAB</span><span className="sr-only sm:hidden">Open in new tab</span>
+          </a>
+          <button ref={closeRef} onClick={onClose} className={btn} aria-label="Close BEO preview">
+            <X className="w-3.5 h-3.5" /> <span className="hidden sm:inline">CLOSE</span>
+          </button>
+        </div>
+        <div className="relative flex-1 min-h-0 bg-white">
+          {!loaded && <div className="absolute inset-0 flex items-center justify-center font-dm text-sm text-ink/70">Loading BEO…</div>}
+          <iframe title={`BEO for ${name}`} src={beoUrl(bookingId, { format: 'html', nonce })}
+            onLoad={() => setLoaded(true)} className="absolute inset-0 w-full h-full border-0" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PostEventSpendPrompt() {
   const utils = trpc.useUtils();
   const { data: pending } = trpc.bookings.pendingSpend.useQuery();
@@ -1318,8 +1414,29 @@ export default function Dashboard() {
   // the document/plan launchpad, spend) live behind a "More" disclosure so the
   // panel isn't a 3-screen wall on open. Reset to collapsed each time a
   // different event opens.
-  const [drawerMoreOpen, setDrawerMoreOpen] = React.useState(false);
-  React.useEffect(() => { setDrawerMoreOpen(false); setDrawerPaymentsOpen(false); }, [selectedBooking?.id, selectedBooking?._isLead]);
+  // Which blocks of the panel are expanded. Remembered between events and
+  // visits, so if you only ever want Details + the run of day, that's what
+  // opens every time. Details is open on first use.
+  const DRAWER_SECTIONS_KEY = 'vf:drawerSections:v1';
+  const [drawerSections, setDrawerSections] = React.useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('vf:drawerSections:v1');
+      if (raw) { const p = JSON.parse(raw); if (p && typeof p === 'object') return p; }
+    } catch { /* fall through to defaults */ }
+    return { details: true };
+  });
+  const DRAWER_SECTION_IDS = ['details', 'overview', 'money', 'plan', 'notes', 'spend'];
+  const saveDrawerSections = (next: Record<string, boolean>) => {
+    try { localStorage.setItem(DRAWER_SECTIONS_KEY, JSON.stringify(next)); } catch { /* private mode etc. */ }
+    return next;
+  };
+  const toggleDrawerSection = (id: string) => setDrawerSections(prev => saveDrawerSections({ ...prev, [id]: !prev[id] }));
+  const secOpen = (id: string) => !!drawerSections[id];
+  const allDrawerSectionsOpen = DRAWER_SECTION_IDS.every(id => !!drawerSections[id]);
+  const setAllDrawerSections = (open: boolean) => setDrawerSections(saveDrawerSections(Object.fromEntries(DRAWER_SECTION_IDS.map(id => [id, open]))));
+  // Fullscreen-ish BEO preview layered over the side panel.
+  const [beoPreview, setBeoPreview] = React.useState<{ id: number; name: string } | null>(null);
+  React.useEffect(() => { setDrawerPaymentsOpen(false); }, [selectedBooking?.id, selectedBooking?._isLead]);
   const drawerBookingId = !selectedBooking?._isLead ? selectedBooking?.id ?? null : null;
   const { data: drawerPayments, refetch: refetchDrawerPayments } = trpc.payments.list.useQuery(
     { bookingId: drawerBookingId! },
@@ -2835,7 +2952,38 @@ export default function Dashboard() {
                   </div>
                 </div>
     );
-  
+
+  // Side-panel Cancel / Delete. Cancel is non-destructive (booking → Cancelled,
+  // enquiry → Lost; the record is kept and the date freed); Delete is for good.
+  const cancelSelectedEvent = () => {
+    if (!selectedBooking) return;
+    const name = `${selectedBooking.firstName ?? ''} ${selectedBooking.lastName ?? ''}`.trim() || 'this event';
+    if (selectedBooking._isLead) {
+      if (confirm(`Cancel the enquiry from ${name}? It'll be marked Lost and leave the calendar — you can set it back from the status dropdown anytime.`)) {
+        updateStatus.mutate({ id: selectedBooking.id, status: 'lost' as any });
+        setSelectedBooking((prev: any) => prev ? { ...prev, status: 'lost' } : prev);
+        utils.leads.eventsByMonth.invalidate();
+      }
+    } else {
+      if (selectedBooking.status === 'cancelled') { toast('This event is already cancelled.'); return; }
+      if (confirm(`Cancel the event for ${name}? It'll be marked Cancelled and the date freed, but kept in your records. You can restore it from the status dropdown.`)) {
+        rescheduleBooking.mutate({ id: selectedBooking.id, status: 'cancelled' as any });
+        setSelectedBooking((prev: any) => prev ? { ...prev, status: 'cancelled' } : prev);
+        utils.bookings.byMonth.invalidate();
+        utils.bookings.list.invalidate();
+      }
+    }
+  };
+  const deleteSelectedEvent = () => {
+    if (!selectedBooking) return;
+    const name = `${selectedBooking.firstName ?? ''} ${selectedBooking.lastName ?? ''}`.trim() || 'this event';
+    if (selectedBooking._isLead) {
+      if (confirm(`Delete enquiry from ${name}? This cannot be undone.`)) deleteLead.mutate({ id: selectedBooking.id });
+    } else {
+      if (confirm(`Delete event for ${name}? This cannot be undone.`)) deleteBooking.mutate({ id: selectedBooking.id });
+    }
+  };
+
   return (
     <div className="h-screen bg-background font-inter flex flex-col md:flex-row overflow-hidden">
       <a href="#vf-main" className="skip-link">Skip to content</a>
@@ -9173,7 +9321,7 @@ export default function Dashboard() {
             {/* Header */}
             <div className="bg-forest-dark px-4 md:px-5 py-4 flex items-center justify-between">
               <div>
-                <div className="font-bebas tracking-widest text-xs text-cream/80 mb-0.5">
+                <div className="font-bebas tracking-widest text-xs text-cream mb-0.5">
                   {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status) ? 'ENQUIRY' : 'BOOKING'}
                 </div>
                 <h2 id="event-drawer-title" className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</h2>
@@ -9185,62 +9333,31 @@ export default function Dashboard() {
             </div>
             {/* Body */}
             <div className="p-4 md:p-5 space-y-3.5 flex-1">
-              {/* Primary actions — Edit / Cancel / Delete, right at the top so
-                  they're reachable the instant the event opens. Editing used to
-                  mean hunting for tiny pencil icons and cancelling was hidden
-                  inside the Status dropdown, with Delete buried below a long
-                  scroll. Cancel is non-destructive (marks the event Cancelled /
-                  the enquiry Lost and frees the date, keeping the record);
-                  Delete still removes it for good. */}
-              <div className="flex items-stretch gap-2">
-                {!selectedBooking._isLead && (
+              {/* Quick access (bookings): the three things you actually open an
+                  event for — read the BEO, see the run sheet, edit it all —
+                  one tap each, without going into the event first. Cancel and
+                  Delete live in the "⋯" menu beside the status. */}
+              {!selectedBooking._isLead && (
+                <div className="flex items-stretch gap-2 flex-wrap">
+                  <button
+                    onClick={() => setBeoPreview({ id: selectedBooking.id, name: `${selectedBooking.firstName ?? ''} ${selectedBooking.lastName ?? ''}`.trim() || 'Event' })}
+                    title="Read the full BEO (run of day, menu, dietaries) without leaving the dashboard"
+                    className="flex-[2] min-w-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-wider sm:tracking-widest text-xs">
+                    <Eye className="w-3.5 h-3.5" /> PREVIEW BEO
+                  </button>
+                  <button
+                    onClick={() => { const id = selectedBooking.id; setSelectedBooking(null); setLocation(`/runsheet?bookingId=${id}`); }}
+                    className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                    <Clock className="w-3.5 h-3.5" /> RUNSHEET
+                  </button>
                   <button
                     onClick={() => { const id = selectedBooking.id; setSelectedBooking(null); setLocation(`/event/${id}`); }}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                    title="Open the full event page to edit everything"
+                    className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                     <Edit2 className="w-3.5 h-3.5" /> EDIT
                   </button>
-                )}
-                {!isStaff && (
-                  <button
-                    onClick={() => {
-                      const name = `${selectedBooking.firstName ?? ''} ${selectedBooking.lastName ?? ''}`.trim() || 'this event';
-                      if (selectedBooking._isLead) {
-                        if (confirm(`Cancel the enquiry from ${name}? It'll be marked Lost and leave the calendar — you can set it back from the status dropdown anytime.`)) {
-                          updateStatus.mutate({ id: selectedBooking.id, status: 'lost' as any });
-                          setSelectedBooking((prev: any) => prev ? { ...prev, status: 'lost' } : prev);
-                          utils.leads.eventsByMonth.invalidate();
-                        }
-                      } else {
-                        if (selectedBooking.status === 'cancelled') { toast('This event is already cancelled.'); return; }
-                        if (confirm(`Cancel the event for ${name}? It'll be marked Cancelled and the date freed, but kept in your records. You can restore it from the status dropdown.`)) {
-                          rescheduleBooking.mutate({ id: selectedBooking.id, status: 'cancelled' as any });
-                          setSelectedBooking((prev: any) => prev ? { ...prev, status: 'cancelled' } : prev);
-                          utils.bookings.byMonth.invalidate();
-                          utils.bookings.list.invalidate();
-                        }
-                      }
-                    }}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm border border-amber-400 text-amber-800 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs">
-                    <Ban className="w-3.5 h-3.5" /> CANCEL
-                  </button>
-                )}
-                {!isStaff && (
-                  <button
-                    onClick={() => {
-                      const name = `${selectedBooking.firstName ?? ''} ${selectedBooking.lastName ?? ''}`.trim() || 'this event';
-                      if (selectedBooking._isLead) {
-                        if (confirm(`Delete enquiry from ${name}? This cannot be undone.`)) deleteLead.mutate({ id: selectedBooking.id });
-                      } else {
-                        if (confirm(`Delete event for ${name}? This cannot be undone.`)) deleteBooking.mutate({ id: selectedBooking.id });
-                      }
-                    }}
-                    aria-label="Delete permanently"
-                    title="Delete permanently"
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm border border-red-300 text-red-600 hover:bg-red-50 transition-colors font-bebas tracking-widest text-xs">
-                    <Trash2 className="w-3.5 h-3.5" /> DELETE
-                  </button>
-                )}
-              </div>
+                </div>
+              )}
               {/* Status control + event type on one line. The coloured status
                   already shows as the dropdown's value, so the old standalone
                   status badge was redundant and has been removed. */}
@@ -9292,7 +9409,35 @@ export default function Dashboard() {
                       )}
                   </SelectContent>
                 </Select>
-                {selectedBooking.eventType && <span className="font-dm text-xs text-ink/60 flex-shrink-0 truncate max-w-[9rem]">{selectedBooking.eventType}</span>}
+                {selectedBooking.eventType && <span className="font-dm text-xs text-ink/70 flex-shrink-0 truncate max-w-[9rem]">{selectedBooking.eventType}</span>}
+                {!isStaff && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button aria-label="More actions: cancel or delete" title="Cancel or delete"
+                        className="h-8 w-8 flex-shrink-0 flex items-center justify-center border border-gold/30 rounded-sm text-ink/70 hover:bg-linen hover:text-ink transition-colors">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" sideOffset={4} className="z-[10001] w-60 bg-white border border-border shadow-lg p-1.5">
+                      <button onClick={cancelSelectedEvent}
+                        className="w-full flex items-start gap-2 px-2 py-2 rounded hover:bg-amber-50 text-left">
+                        <Ban className="w-3.5 h-3.5 mt-0.5 text-amber-800 flex-shrink-0" />
+                        <span>
+                          <span className="block font-bebas tracking-widest text-xs text-amber-900">{selectedBooking._isLead ? 'CANCEL ENQUIRY' : 'CANCEL EVENT'}</span>
+                          <span className="block font-dm text-[11px] text-ink/70 leading-snug">{selectedBooking._isLead ? 'Marks it Lost. Keeps the record.' : 'Frees the date. Keeps the record.'}</span>
+                        </span>
+                      </button>
+                      <button onClick={deleteSelectedEvent}
+                        className="w-full flex items-start gap-2 px-2 py-2 rounded hover:bg-red-50 text-left">
+                        <Trash2 className="w-3.5 h-3.5 mt-0.5 text-red-700 flex-shrink-0" />
+                        <span>
+                          <span className="block font-bebas tracking-widest text-xs text-red-700">DELETE PERMANENTLY</span>
+                          <span className="block font-dm text-[11px] text-ink/70 leading-snug">Removes it for good.</span>
+                        </span>
+                      </button>
+                    </PopoverContent>
+                  </Popover>
+                )}
               </div>
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
@@ -9300,7 +9445,22 @@ export default function Dashboard() {
                   Laid out two-up: as a single full-width stack every field cost
                   a whole row, so the panel needed scrolling before you reached
                   anything useful. */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 border border-gold/20 bg-cream/60 rounded-md p-3">
+              {/* Expand/collapse every block at once. */}
+              <div className="flex justify-end">
+                <button onClick={() => setAllDrawerSections(!allDrawerSectionsOpen)}
+                  className="font-bebas tracking-widest text-[10px] text-ink/70 hover:text-ink hover:underline underline-offset-2">
+                  {allDrawerSectionsOpen ? 'COLLAPSE ALL' : 'EXPAND ALL'}
+                </button>
+              </div>
+              <DrawerSection id="details" title="DETAILS" icon={<Calendar />}
+                summary={[
+                  selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }) : null,
+                  selectedBooking.startTime ?? selectedBooking.eventTime ?? null,
+                  selectedBooking.guestCount ? `${selectedBooking.guestCount} guests` : null,
+                  selectedBooking.spaceName ?? null,
+                ].filter(Boolean).join(' · ')}
+                open={secOpen('details')} onToggle={() => toggleDrawerSection('details')}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                 {/* DATE */}
                 <div className="flex items-start gap-3">
                   <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
@@ -9484,23 +9644,17 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-              {/* "More" disclosure (bookings only). Everything below — financials,
-                  billing terms, the document/plan launchpad and spend — lives in
-                  the full event page too, so it starts collapsed to keep the
-                  drawer a quick view rather than a 3-screen wall. */}
+              </DrawerSection>
+              {/* Financials + billing terms — bookings only, one collapsible block. */}
               {!selectedBooking._isLead && (
-                <button
-                  onClick={() => setDrawerMoreOpen(v => !v)}
-                  aria-expanded={drawerMoreOpen}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm border border-gold/30 text-ink/70 hover:bg-linen hover:text-ink transition-colors font-bebas tracking-widest text-xs">
-                  {drawerMoreOpen ? 'LESS' : 'MORE'} — FINANCIALS, BILLING, DOCUMENTS & SPEND
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${drawerMoreOpen ? 'rotate-180' : ''}`} />
-                </button>
-              )}
+              <DrawerSection id="money" title="FINANCIALS & BILLING" icon={<DollarSign />}
+                summary={isStaff ? undefined : `Total $${Number(selectedBooking.totalNzd ?? 0).toLocaleString()} · Deposit ${selectedBooking.depositPaid ? 'paid' : 'pending'}`}
+                open={secOpen('money')} onToggle={() => toggleDrawerSection('money')}>
+              <div className="space-y-3">
               {/* Financials — bookings only. Total/Deposit are click-to-edit;
                   the deposit-paid badge toggles on click. */}
-              {!selectedBooking._isLead && !isStaff && drawerMoreOpen && (
-                <div className="bg-forest-dark/5 border border-gold/20 p-4">
+              {!selectedBooking._isLead && !isStaff && (
+                <div className="bg-forest-dark/5 p-3 rounded-sm">
                   <div className="font-bebas text-xs tracking-widest text-ink/70 mb-3">FINANCIALS</div>
                   <div className="grid grid-cols-2 gap-3">
                     {/* TOTAL */}
@@ -9609,7 +9763,7 @@ export default function Dashboard() {
                   know whether to charge food on the night, which is the whole
                   point of the block. Staff see it read-only: their mutations are
                   refused server-side, so an editable control would just fail. */}
-              {!selectedBooking._isLead && drawerMoreOpen && (
+              {!selectedBooking._isLead && (
                 <div>
                   <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">HOW THIS EVENT IS BILLED</div>
                   <div className="space-y-2">
@@ -9651,12 +9805,16 @@ export default function Dashboard() {
                 </div>
               )}
 
+              </div>
+              </DrawerSection>
+              )}
+
               {/* Quick Actions — a lead's actions (open enquiry, create proposal)
                   are primary, so they always show; a booking's launchpad is
                   secondary and lives behind the "More" disclosure. */}
-              {(selectedBooking._isLead || drawerMoreOpen) && (
-              <div>
-                <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">QUICK ACTIONS</div>
+              <SectionOrPlain asSection={!selectedBooking._isLead} id="plan"
+                heading={selectedBooking._isLead ? 'QUICK ACTIONS' : 'PLAN, DOCUMENTS & PAYMENTS'} icon={<FileText />}
+                open={secOpen('plan')} onToggle={() => toggleDrawerSection('plan')}>
                 <div className="grid grid-cols-2 gap-2">
                   {selectedBooking._isLead ? (
                     <>
@@ -9735,22 +9893,18 @@ export default function Dashboard() {
                           event page — so it was dropped to avoid two buttons for
                           one action. */}
                       {/* Plan */}
-                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">PLAN</div>
-                      <button onClick={() => { setSelectedBooking(null); setLocation(`/runsheet?bookingId=${selectedBooking.id}`); }}
-                        className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                        <Clock className="w-3 h-3" /> RUNSHEET
-                      </button>
+                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1">PLAN</div>
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/floor-plan?bookingId=${selectedBooking.id}`); }}
                         className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <LayoutGrid className="w-3 h-3" /> FLOOR PLAN
                       </button>
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/checklist?bookingId=${selectedBooking.id}`); }}
-                        className="col-span-2 flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <CheckCircle className="w-3 h-3" /> CHECKLIST
                       </button>
 
                       {/* Documents */}
-                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">DOCUMENTS</div>
+                      <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1">DOCUMENTS</div>
                       <button onClick={() => {
                           const a = document.createElement('a');
                           a.href = beoUrl(selectedBooking.id);
@@ -9775,7 +9929,7 @@ export default function Dashboard() {
                       </button>
 
                       {/* Money */}
-                      <div className={`col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1 ${isStaff ? "hidden" : ""}`}>MONEY</div>
+                      <div className={`col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1 ${isStaff ? "hidden" : ""}`}>MONEY</div>
                       <button onClick={() => { setSelectedBooking(null); setLocation(`/event/${selectedBooking.id}?tab=budget`); }}
                         className={`flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs ${isStaff ? "hidden" : ""}`}>
                         <TrendingUp className="w-3 h-3" /> SPEND
@@ -9802,7 +9956,7 @@ export default function Dashboard() {
                       {/* Sync */}
                       {(venueSettings as any)?.nbiAccountId && (venueSettings as any)?.nbiVenueId && (
                         <>
-                          <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/35 mt-1">SYNC</div>
+                          <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1">SYNC</div>
                           <button
                             onClick={() => pushToNbiMutation.mutate({ id: selectedBooking.id, force: !!selectedBooking.nbiBookingId })}
                             disabled={pushToNbiMutation.isPending}
@@ -9843,14 +9997,10 @@ export default function Dashboard() {
                         </>
                       )}
 
-                      {/* The low-emphasis "Delete event" link that used to sit
-                          here was removed — the DELETE button in the top action
-                          row replaces it. */}
                     </>
                   )}
                 </div>
-              </div>
-              )}
+              </SectionOrPlain>
               {/* ── Inline Payments Panel (bookings only) ─────────────────── */}
               {drawerPaymentsOpen && !selectedBooking._isLead && (
                 <div className="border border-gold/30 bg-linen/30 overflow-hidden">
@@ -9988,15 +10138,16 @@ export default function Dashboard() {
                   ? `/runsheet?id=${drawerRunsheetId}&leadId=${selectedBooking.id}`
                   : `/runsheet?id=${drawerRunsheetId}&bookingId=${selectedBooking.id}`;
                 return (
-                  <div className="border border-gold/20 overflow-hidden bg-white">
-                    <div className="px-4 py-2.5 flex items-center justify-between border-b border-gold/20 bg-forest/5">
-                      <div className="flex items-center gap-2">
-                        <UtensilsCrossed className="w-3.5 h-3.5 text-forest" />
-                        <span className="font-bebas tracking-widest text-xs text-forest">EVENT OVERVIEW</span>
-                      </div>
-                      <button onClick={() => setLocation(editHref)} className="font-bebas tracking-widest text-[10px] text-forest/70 hover:text-forest">EDIT →</button>
-                    </div>
-                    <div className="divide-y divide-gold/10">
+                  <DrawerSection id="overview" title="EVENT OVERVIEW" icon={<UtensilsCrossed />}
+                    summary={[
+                      timeline.length ? `${timeline.length} run of day` : null,
+                      foodItems.length ? `${foodItems.length} dishes` : null,
+                      dietaries.length ? `${dietaries.length} dietary` : null,
+                      setupText ? 'set-up' : null,
+                    ].filter(Boolean).join(' · ')}
+                    open={secOpen('overview')} onToggle={() => toggleDrawerSection('overview')}
+                    action={<button onClick={() => setLocation(editHref)} className="font-bebas tracking-widest text-[10px] text-forest hover:underline">EDIT →</button>}>
+                    <div className="divide-y divide-gold/10 -mx-3 -mt-2">
                       {/* Run of day */}
                       {timeline.length > 0 && (
                         <div className="px-4 py-2">
@@ -10071,22 +10222,33 @@ export default function Dashboard() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </DrawerSection>
                 );
               })()}
 
               {selectedBooking.notes && (
-                <div>
-                  <div className="font-bebas text-xs tracking-widest text-ink/70 mb-1">NOTES</div>
-                  <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap bg-cream border border-gold/20 p-3">{selectedBooking.notes}</div>
-                </div>
+                <DrawerSection id="notes" title="NOTES" icon={<FileText />}
+                  summary={String(selectedBooking.notes).replace(/\s+/g, ' ').trim().slice(0, 80)}
+                  open={secOpen('notes')} onToggle={() => toggleDrawerSection('notes')}>
+                  <div className="font-dm text-sm text-ink/80 whitespace-pre-wrap">{selectedBooking.notes}</div>
+                </DrawerSection>
               )}
               {/* Event Spend — bookings only */}
-              {!selectedBooking._isLead && drawerMoreOpen && <EventSpendSection bookingId={selectedBooking.id} />}
+              {!selectedBooking._isLead && (
+                <DrawerSection id="spend" title="EVENT SPEND" icon={<TrendingUp />}
+                  open={secOpen('spend')} onToggle={() => toggleDrawerSection('spend')}>
+                  <EventSpendSection bookingId={selectedBooking.id} hideHeading />
+                </DrawerSection>
+              )}
             </div>
           </div>
         </div>
       , document.body)}
+
+      {/* BEO preview — layered over the side panel (z above it). */}
+      {beoPreview && createPortal(
+        <BeoPreviewOverlay bookingId={beoPreview.id} name={beoPreview.name} onClose={() => setBeoPreview(null)} />,
+        document.body)}
 
       {/* Add Task Rule Modal */}
       <Dialog open={showAddTaskRule} onOpenChange={setShowAddTaskRule}>
