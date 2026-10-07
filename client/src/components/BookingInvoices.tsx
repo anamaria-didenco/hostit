@@ -19,7 +19,7 @@ export default function BookingInvoices({ bookingId }: { bookingId: number }) {
               <FileText className="w-4 h-4 text-ink/50 flex-shrink-0" aria-hidden />
               <div className="min-w-0 flex-1 font-dm text-sm text-ink truncate" style={{ textDecoration: st.strike ? "line-through" : undefined }}>
                 <span className="font-semibold">{inv.invoiceNumber ?? "Invoice"}</span>
-                <span className="text-ink/60"> · {STREAM_LABEL[inv.stream] ?? inv.stream}</span>
+                <span className="text-ink/60"> · {STREAM_LABEL[inv.stream] ?? inv.stream}{inv.sentBy ? ` · sent by ${inv.sentBy}` : ""}</span>
               </div>
               <span className="font-bebas tracking-widest text-[11px] px-2 py-0.5 rounded whitespace-nowrap" style={{ background: st.bg, color: st.text }}>{st.label.toUpperCase()}</span>
               <span className="font-cormorant text-base font-semibold text-ink tabular-nums w-20 text-right">{currency(Number(inv.total ?? 0))}</span>

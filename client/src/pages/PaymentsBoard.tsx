@@ -42,6 +42,7 @@ interface SentInvoice {
   invoiceNumber: string | null;
   status: string; // DRAFT | SUBMITTED | AUTHORISED | PAID | VOIDED
   total: number;
+  sentBy: string | null;
   createdAt: string;
 }
 
@@ -411,7 +412,7 @@ function SentInvoices({ rows, loading, onOpen }: { rows: Row[]; loading: boolean
                     {inv.invoiceNumber ?? "Invoice"} <span className="font-dm text-xs font-normal text-sage">· {STREAM_LABEL[inv.stream] ?? inv.stream}</span>
                   </div>
                   <div className="font-dm text-[11px] text-sage truncate">
-                    {row.name} · {fmtDate(row.eventDate)} · sent {new Date(inv.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}
+                    {row.name} · {fmtDate(row.eventDate)} · sent {new Date(inv.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}{inv.sentBy ? ` by ${inv.sentBy}` : ""}
                   </div>
                 </div>
                 <span className="font-bebas tracking-widest text-[11px] px-2.5 py-1 rounded-md whitespace-nowrap" title={st.hint} style={{ background: st.bg, color: st.text }}>{st.label.toUpperCase()}</span>
@@ -587,7 +588,7 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
             {row.invoices.map(inv => {
               const st = invoiceState(inv.status);
               return (
-                <button key={inv.id} onClick={onXero} title={`${st.hint} — click to manage`}
+                <button key={inv.id} onClick={onXero} title={`${st.hint}${inv.sentBy ? ` · sent by ${inv.sentBy}` : ""} — click to manage`}
                   className="inline-flex items-center gap-1.5 font-dm text-[11px] rounded-md border px-2 py-0.5 hover:opacity-80 transition-opacity"
                   style={{ background: st.bg, color: st.text, borderColor: `${st.text}33`, textDecoration: st.strike ? "line-through" : undefined }}>
                   <FileText className="w-3 h-3 flex-shrink-0" aria-hidden />

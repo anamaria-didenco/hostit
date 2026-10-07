@@ -401,6 +401,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                   <FileText className="w-3 h-3 text-ink/50" aria-hidden="true" />
                   <span className="uppercase font-semibold">{inv.stream}</span>
                   <span>{inv.invoiceNumber ?? "(no number yet)"}</span>
+                  {inv.sentBy && <span className="text-ink/55">· sent by {inv.sentBy}</span>}
                   <span className="ml-auto">{inv.total != null ? fmtNZD(Number(inv.total)) : ""}</span>
                   <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded ${
                     isGone(inv.status) ? "bg-ink/10 text-ink/50 line-through"

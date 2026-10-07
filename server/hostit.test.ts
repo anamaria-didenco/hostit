@@ -51,6 +51,15 @@ describe("auth.me", () => {
     expect(result.user).not.toBeNull();
     expect(result.user?.email).toBe("owner@venue.co.nz");
   });
+
+  it("never sends the password hash to the browser", async () => {
+    const { ctx } = createAuthContext();
+    (ctx.user as any).passwordHash = "$2b$10$secret";
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.auth.me();
+    expect((result.user as any)?.passwordHash).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain("secret");
+  });
 });
 
 describe("auth.logout", () => {
