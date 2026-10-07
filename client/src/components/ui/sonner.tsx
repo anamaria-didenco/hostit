@@ -15,8 +15,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
+          // Sonner's default toast width is 356px. Cap it to the screen so a long
+          // unbreakable message (a raw server error, a URL) can't stretch the
+          // toast past a phone's edge and drag the whole page layout wider.
+          "--width": "min(356px, calc(100vw - 32px))",
         } as React.CSSProperties
       }
+      toastOptions={{ style: { overflowWrap: "anywhere" } }}
       {...props}
     />
   );
