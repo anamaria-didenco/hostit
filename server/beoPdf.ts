@@ -801,11 +801,29 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         const mins = (grouped[c] ?? []).map((i: any) => toMins(i.serviceTime)).filter((n): n is number => n != null);
         return mins.length ? Math.min(...mins) : null;
       };
-      const orderIdx = (c: string) => { const i = COURSE_ORDER.indexOf(c); return i === -1 ? 999 : i; };
+      // Venues name courses their own way ("Starters", "Mains", "Sides"), which
+      // never matched the exact names in COURSE_ORDER — so a menu of Starters /
+      // Mains / Dessert printed Dessert FIRST (the only name it recognised) and
+      // the rest after. Match on a normalised name with common aliases, and if
+      // ANY course is still unrecognised, trust the order the operator arranged
+      // the sheet in rather than guess.
+      const courseRank = (c: string): number | null => {
+        const k = String(c).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, "");
+        if (/^sides?$/.test(k)) return COURSE_ORDER.indexOf("Main") + 0.5; // sides ride with the mains
+        const alias: Record<string, string> = {
+          canape: "canapes", starter: "entree", starters: "entree", entrees: "entree",
+          mains: "main", desserts: "dessert", sweets: "dessert", sweet: "dessert",
+        };
+        const key = alias[k] ?? k;
+        const i = COURSE_ORDER.findIndex(x => x.toLowerCase().replace(/[^a-z]/g, "") === key);
+        return i === -1 ? null : i;
+      };
       const courses = Object.keys(grouped);
       const allTimed = courses.length > 0 && courses.every(c => courseTime(c) != null);
-      if (allTimed) courses.sort((a, b) => (courseTime(a)! - courseTime(b)!) || (orderIdx(a) - orderIdx(b)));
-      else courses.sort((a, b) => orderIdx(a) - orderIdx(b));
+      const allRanked = courses.every(c => courseRank(c) != null);
+      if (allTimed) courses.sort((a, b) => (courseTime(a)! - courseTime(b)!) || ((courseRank(a) ?? 999) - (courseRank(b) ?? 999)));
+      else if (allRanked) courses.sort((a, b) => courseRank(a)! - courseRank(b)!);
+      // else: keep the operator's own sheet order (insertion order of `grouped`)
       return courses;
     };
     const foodItems = fohItems.filter((i: any) => (i.course ?? "") !== "Drinks");
@@ -1212,8 +1230,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       const h = opts?.red ? "2px" : "1.5px";
       return `<div class="sec-label" style="display:flex;align-items:center;gap:9px;margin-bottom:4px"><span style="font-size:10px;letter-spacing:.2em;font-weight:800;color:${c};text-transform:uppercase;flex:none">${title}</span><span style="flex:1;height:${h};background:${c}"></span>${opts?.metaRight ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">${opts.metaRight}</span>` : ""}</div>`;
     };
-    const pageHeadR = (title: string, meta: string) =>
-      `<header class="pagehead" style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:12px;margin-top:10px"><div style="font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink)">${title}</div><div style="font-size:11.5px;color:var(--gray);font-weight:600">${meta}</div></header>`;
+    const pageHeadR = (title: string, meta: string, anchorId?: string) =>
+      `<header class="pagehead"${anchorId ? ` id="${anchorId}"` : ""} style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:12px;margin-top:10px"><div style="font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink)">${title}</div><div style="font-size:11.5px;color:var(--gray);font-weight:600">${meta}</div></header>`;
 
     // ── PAGE 1 — masthead, booking band, client details, run of day, sig ──
     const statusPillHtml = isConfirmed
@@ -1267,9 +1285,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const rodItem = (item: any, last: boolean) => {
       const flag = TL_FLAG_RE.test(String(item.title || ""));
       const dot = flag ? "var(--red)" : "var(--green)";
-      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:14px;padding-bottom:${last ? 0 : 6}px"><div style="width:80px;flex:none;text-align:right"><div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1">${fmt12(item.time) || "&mdash;"}</div>${item.duration ? `<div style="font-size:10px;color:var(--faint);font-weight:600;margin-top:3px">${escHtml(String(item.duration))} min</div>` : ""}</div><div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:11px;height:11px;border-radius:50%;background:${dot};border:2px solid var(--cream);box-shadow:0 0 0 1.5px ${dot};margin-top:4px;flex:none"></span>${!last ? `<span style="width:2px;flex:1;background:var(--line);margin-top:3px;min-height:12px"></span>` : ""}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:14.5px;font-weight:700;color:var(--ink)">${escHtml(item.title || "&mdash;")}</span>${flag ? `<span style="display:inline-flex;color:var(--red)">&#9888;</span>` : ""}</div>${item.description ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.description)}</div>` : ""}${item.assignedTo ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.assignedTo)}</div>` : ""}</div></div>`;
+      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:14px;padding-bottom:${last ? 0 : 6}px"><div style="width:80px;flex:none;text-align:right"><div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1">${fmt12(item.time) || "&mdash;"}</div>${item.duration ? `<div style="font-size:10px;color:var(--faint);font-weight:600;margin-top:3px">${escHtml(String(item.duration))} min</div>` : ""}</div><div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:11px;height:11px;border-radius:50%;background:${dot};border:2px solid var(--cream);box-shadow:0 0 0 1.5px ${dot};margin-top:4px;flex:none"></span>${!last ? `<span style="width:2px;flex:1;background:var(--line);margin-top:3px;min-height:12px"></span>` : ""}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:14.5px;font-weight:700;color:var(--ink)">${escHtml(item.title || "&mdash;")}</span></div>${item.description ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.description)}</div>` : ""}${item.assignedTo ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.assignedTo)}</div>` : ""}</div></div>`;
     };
-    const runOfDaySection = healedTimeline.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Run of Day", { metaRight: (timeRange && timeRange !== "—") ? escHtml(timeRange) : undefined })}
+    const runOfDaySection = healedTimeline.length > 0 ? `<div id="beo-run" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Run of Day", { metaRight: (timeRange && timeRange !== "—") ? escHtml(timeRange) : undefined })}
       <div>${healedTimeline.map((it: any, i: number) => rodItem(it, i === healedTimeline.length - 1)).join("")}</div></div>` : "";
 
     const sigStrip = (top: boolean) => `<div class="sig-grid" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:8px;border-top:1px solid var(--line)">${["Name", "Signature", "Date"].map(l => top
@@ -1277,15 +1295,21 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       : `<div><div style="border-bottom:1.5px solid var(--gray2)"></div><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-top:6px">${l}</div></div>`).join("")}</div>`;
 
     // ── PAGE 2 — food (cover-count cards), dietary, beverage ──
+    const foodQtyList = foodItems.map((i: any) => (Number(i.qty) > 0 ? Number(i.qty) : (Number(guestCount) || 0)));
+    const foodQtyUniform = !embeddedMenu && foodQtyList.length > 0 && foodQtyList.every(q => q === foodQtyList[0]);
+    const foodQtyNote = (foodQtyUniform && foodQtyList[0] > 0) ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">${escHtml(String(foodQtyList[0]))} of each</span>` : "";
     const foodCardHtml = (title: string, its: any[]) => {
       // Plain course title, then each dish on its own line prefixed with its
       // own ×N quantity (e.g. "×54 Crudo"). The ×N sits in a small serif column
       // so the quantities line up down the list.
       const dishRow = (f: any) => {
         const q = Number(f.qty) > 0 ? Number(f.qty) : (Number(guestCount) || 0);
-        const qHtml = q > 0
+        // "×120" on every line of a menu where every dish is ×120 is just the
+        // guest count repeated; it's stated once in the Food heading instead
+        // (see foodQtyNote) and only shown per dish when quantities differ.
+        const qHtml = (q > 0 && !foodQtyUniform)
           ? `<span style="font-family:var(--serif);font-size:11.5px;font-weight:600;color:var(--green);min-width:30px;text-align:right;flex:none;line-height:1.35">&times;${escHtml(String(q))}</span>`
-          : `<span style="min-width:38px;flex:none"></span>`;
+          : "";
         // Price column (internal copies): line total in serif with the unit
         // price beneath, so the kitchen can see both "what this dish costs"
         // and "what the whole line is worth".
@@ -1302,7 +1326,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const foodCards = (embeddedMenu
       ? embeddedMenu.map(c => foodCardHtml(c.label, c.dishes.map(d => ({ dishName: d.name, description: d.det }))))
       : foodCourses.map(course => foodCardHtml(course, foodGrouped[course] ?? []))).join("");
-    const foodSection = foodItems.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><span style="font-size:10px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span></div><div style="display:grid;grid-template-columns:1fr;gap:8px">${foodCards}</div></div>` : "";
+    const foodSection = foodItems.length > 0 ? `<div id="beo-food" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><span style="font-size:10px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span>${foodQtyNote}</div><div style="display:grid;grid-template-columns:1fr;gap:8px">${foodCards}</div></div>` : "";
 
     // Tally-ledger: one sorted list (severe/allergy first via orderedDiet), a
     // big serif ×N count column and a severity dot (red = severe allergy,
@@ -1320,7 +1344,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         + `${(Array.isArray(d.names) && d.names.length) ? `<div style="font-size:11px;color:var(--gray);margin-top:1px">${d.names.map((nm: any) => escHtml(String(nm))).join(" &middot; ")}</div>` : ""}</span>`
         + `</div>`;
     };
-    const dietarySectionNew = dietaries.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">${orderedDiet.map((d, i) => dietRow(d, i === 0)).join("")}</div></div>` : "";
+    const dietarySectionNew = dietaries.length > 0 ? `<div id="beo-dietary" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">${orderedDiet.map((d, i) => dietRow(d, i === 0)).join("")}</div></div>` : "";
 
     const bevItems2: Array<{ name: string; desc?: string; price?: any }> = hasDrinkSelection
       ? [
@@ -1341,10 +1365,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       const unit = (it.price === null || it.price === undefined || it.price === "") ? null : Number(it.price);
       const priceHtml = (showDrinkPrice && unit !== null && !isNaN(unit) && unit > 0)
         ? `<span style="flex:none;margin-left:8px;font-weight:700;font-size:11.5px;color:var(--ink);white-space:nowrap">${fmtCurrency(unit)}</span>` : "";
-      return `<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;font-weight:600;color:var(--ink);margin-top:3px;line-height:1.3"><span>${escHtml(it.name)}${it.desc ? ` <span style="font-weight:400;font-size:11.5px;color:var(--gray)">&mdash; ${escHtml(it.desc)}</span>` : ""}</span>${priceHtml}</div>`;
+      return `<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;font-weight:600;color:var(--ink);margin-top:1px;line-height:1.35"><span>${escHtml(it.name)}${it.desc ? ` <span style="font-weight:400;font-size:11.5px;color:var(--gray)">&mdash; ${escHtml(it.desc)}</span>` : ""}</span>${priceHtml}</div>`;
     };
+    // One row per drink type — type on the left, the drinks on the right. The
+    // old two-column flow stacked uneven groups ("Sparkling" over "Beer & Cider"
+    // on the left, "Other" alone on the right) and read as lopsided.
     const bevGroupBlock = (label: string, items: Array<{ name: string; desc?: string }>) => items.length
-      ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:4px"><div style="font-family:var(--serif);font-style:italic;font-size:11.5px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:4px">${label}</div>${items.map(bevGroupRow).join("")}</div>` : "";
+      ? `<div class="bev-row" style="display:flex;gap:14px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);break-inside:avoid;page-break-inside:avoid"><div style="width:96px;flex:none;font-family:var(--serif);font-style:italic;font-size:12.5px;font-weight:500;color:var(--green)">${label}</div><div style="flex:1;min-width:0">${items.map(bevGroupRow).join("")}</div></div>` : "";
     // Bar arrangement callout — bar option, tab limit and billing notes. The
     // legacy barArrangementSection stopped rendering in the condensed layout,
     // which silently dropped the Tab $X limit from the PDF; it lives here now.
@@ -1356,7 +1383,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const bevBillingCallout = bevCalloutBits.length ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px;background:var(--change-fill);border:1.5px solid var(--change-line);border-radius:6px;padding:9px 13px;font-size:11.5px;color:#5b4a2b;line-height:1.5"><b style="font-weight:700;color:var(--amber)">Bar &mdash;</b> ${bevCalloutBits.join(" &middot; ")}</div>` : "";
     // Render whenever there are drinks OR a bar arrangement (option/tab/notes),
     // so a tab limit still prints when no drink list was selected.
-    const beverageSectionNew = (bevItems2.length > 0 || bevBillingCallout) ? `${bevItems2.length > 0 ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Beverage")}<div class="bev-cols" style="column-count:2;column-gap:26px">${BEV_GROUPS.map(([k, lbl]) => bevGroupBlock(lbl, bevItems2.filter(it => drinkType(it.name) === k))).join("")}</div></div>` : `<div style="margin-top:5px">${secLabel("Beverage")}</div>`}${bevBillingCallout}` : "";
+    const beverageSectionNew = (bevItems2.length > 0 || bevBillingCallout) ? `${bevItems2.length > 0 ? `<div id="beo-bev" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Beverage")}<div class="bev-cols" style="border-top:1px solid var(--line)">${BEV_GROUPS.map(([k, lbl]) => bevGroupBlock(lbl, bevItems2.filter(it => drinkType(it.name) === k))).join("")}</div></div>` : `<div style="margin-top:5px">${secLabel("Beverage")}</div>`}${bevBillingCallout}` : "";
 
     // ── PAGE 3 — billing instructions, onsite contact, set-up ──
     const noFinancials = hideSet.has('financials');
@@ -1414,7 +1441,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         steps.push(step(++n, "Also for this event", escHtml(termsNote).replace(/\n/g, "<br>"), ""));
       }
       if (!hideSet.has("payment") && paymentNotesTxt.trim()) {
-        steps.push(step(++n, "Notes for this event", escHtml(paymentNotesTxt).replace(/\n/g, "<br>"), ""));
+        steps.push(step(++n, "Payment notes", escHtml(paymentNotesTxt).replace(/\n/g, "<br>"), ""));
       }
       return steps.join("");
     })();
@@ -1503,7 +1530,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       ? `<div style="margin-top:9px">${secLabel("How This Event Is Billed")}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden;background:var(--cream)">${billingCard}</div></div>`
       : "";
     const page4Inner = `${billingSection}${closingNote}${acceptanceBlk}`;
-    const page4Content = (statCards.length > 0 || billingCard.trim()) ? `${pageHeadR("Event Summary", escHtml(eventDate))}${page4Inner}` : "";
+    const page4Content = (statCards.length > 0 || billingCard.trim()) ? `${pageHeadR("Event Summary", escHtml(eventDate), "beo-billing")}${page4Inner}` : "";
 
     // ── Assemble pages; collapse empties; number "Page N of N" dynamically ──
     const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
@@ -1730,6 +1757,15 @@ ${pageContents.join("\n")}
   @media screen{
     html,body{background:var(--paper-edge);}
     .doc{margin:10mm auto;padding:14mm 15mm 12mm;box-shadow:0 8px 40px rgba(0,0,0,.16);}
+    /* The sheet is packed tight so it fits its printed pages. On screen there is
+       no page to fit, so give each section room to breathe and drop the running
+       page-header meta (venue · date), which only exists to label printed pages
+       and just repeats itself when the pages scroll as one. Screen only. */
+    .doc .sec-label{margin-top:20px;margin-bottom:10px !important;}
+    .doc .pagehead{margin-top:44px !important;padding-bottom:10px !important;scroll-margin-top:12px;}
+    .doc .pagehead > div:last-child{display:none;}
+    .doc [id^="beo-"]{scroll-margin-top:12px;}
+    .doc .bev-row:last-child{border-bottom:0 !important;}
   }
   /* ── Phones / narrow embeds ────────────────────────────────────────────────
      The document is authored at A4 (210mm ≈ 794px). On a phone that overflows
