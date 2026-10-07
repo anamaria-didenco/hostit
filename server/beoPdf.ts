@@ -1284,10 +1284,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
 
     const rodItem = (item: any, last: boolean) => {
       const flag = TL_FLAG_RE.test(String(item.title || ""));
-      const dot = flag ? "var(--red)" : "var(--green)";
-      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:14px;padding-bottom:${last ? 0 : 6}px"><div style="width:80px;flex:none;text-align:right"><div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1">${fmt12(item.time) || "&mdash;"}</div>${item.duration ? `<div style="font-size:10px;color:var(--faint);font-weight:600;margin-top:3px">${escHtml(String(item.duration))} min</div>` : ""}</div><div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:11px;height:11px;border-radius:50%;background:${dot};border:2px solid var(--cream);box-shadow:0 0 0 1.5px ${dot};margin-top:4px;flex:none"></span>${!last ? `<span style="width:2px;flex:1;background:var(--line);margin-top:3px;min-height:12px"></span>` : ""}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:14.5px;font-weight:700;color:var(--ink)">${escHtml(item.title || "&mdash;")}</span></div>${item.description ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.description)}</div>` : ""}${item.assignedTo ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.assignedTo)}</div>` : ""}</div></div>`;
+      // Red is reserved for severe allergies (dietary section), so the key
+      // moments (arrival, dinner service…) are marked with a solid green dot and
+      // everything else with a hollow ring — explained by the section legend.
+      const dot = "var(--green)";
+      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:14px;padding-bottom:${last ? 0 : 6}px"><div style="width:80px;flex:none;text-align:right"><div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1">${fmt12(item.time) || "&mdash;"}</div>${item.duration ? `<div style="font-size:10px;color:var(--faint);font-weight:600;margin-top:3px">${escHtml(String(item.duration))} min</div>` : ""}</div><div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:11px;height:11px;border-radius:50%;background:${flag ? dot : "var(--cream)"};border:2px solid ${flag ? "var(--cream)" : dot};box-shadow:${flag ? `0 0 0 1.5px ${dot}` : "none"};margin-top:4px;flex:none"></span>${!last ? `<span style="width:2px;flex:1;background:var(--line);margin-top:3px;min-height:12px"></span>` : ""}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:14.5px;font-weight:700;color:var(--ink)">${escHtml(item.title || "&mdash;")}</span></div>${item.description ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.description)}</div>` : ""}${item.assignedTo ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.assignedTo)}</div>` : ""}</div></div>`;
     };
-    const runOfDaySection = healedTimeline.length > 0 ? `<div id="beo-run" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Run of Day", { metaRight: (timeRange && timeRange !== "—") ? escHtml(timeRange) : undefined })}
+    const runOfDaySection = healedTimeline.length > 0 ? `<div id="beo-run" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Run of Day", { metaRight: [healedTimeline.some((it: any) => TL_FLAG_RE.test(String(it.title || ""))) ? `<span style="color:var(--green)">&#9679;</span> key moment` : "", (timeRange && timeRange !== "—") ? escHtml(timeRange) : ""].filter(Boolean).join(" &nbsp;&middot;&nbsp; ") || undefined })}
       <div>${healedTimeline.map((it: any, i: number) => rodItem(it, i === healedTimeline.length - 1)).join("")}</div></div>` : "";
 
     const sigStrip = (top: boolean) => `<div class="sig-grid" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:8px;border-top:1px solid var(--line)">${["Name", "Signature", "Date"].map(l => top
@@ -1677,7 +1680,7 @@ ${pageContents.join("\n")}
   .tl-dur{font-size:9.5px;color:var(--faint);font-weight:600;margin-top:2px;}
   .tl-rail{flex:none;display:flex;flex-direction:column;align-items:center;}
   .tl-dot{width:9px;height:9px;border-radius:50%;background:var(--green);border:2px solid var(--cream);box-shadow:0 0 0 1.5px var(--green);margin-top:2px;flex:none;}
-  .tl-item.flag .tl-dot{background:var(--red);box-shadow:0 0 0 1.5px var(--red);}
+  .tl-item.flag .tl-dot{background:var(--green);box-shadow:0 0 0 1.5px var(--green);}
   .tl-line{width:2px;flex:1;background:var(--line);margin-top:2px;min-height:6px;}
   .tl-body{flex:1;padding-bottom:1px;}
   .tl-title{font-size:11.5px;font-weight:700;color:var(--ink);}

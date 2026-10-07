@@ -5133,26 +5133,41 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         }
         return byMonth;
       }),
-    pipeline: protectedProcedure.query(async ({ ctx }) => {
+    // Year-scoped funnel. Everything is counted for the ENQUIRIES received in
+    // `year` (a cohort), so each stage is a subset of the one before it and
+    // the conversion rate can never pass 100% — the old version divided
+    // all-time bookings (incl. ones that never came through the form) by
+    // enquiries and showed 139%.
+    pipeline: protectedProcedure
+      .input(z.object({ year: z.number().int() }).optional())
+      .query(async ({ input, ctx }) => {
       const { getDb } = await import('./db');
       const { leads, proposals, bookings } = await import('../drizzle/schema');
       const { eq, and, ne } = await import('drizzle-orm');
       const db = await getDb();
-      if (!db) return { enquiries: 0, proposals: 0, confirmed: 0, pipeline: 0, confirmed_revenue: 0 };
+      const empty = { enquiries: 0, proposals: 0, confirmed: 0, pipeline: 0, confirmed_revenue: 0 };
+      if (!db) return empty;
+      const year = input?.year;
       const allLeads = await db.select().from(leads).where(and(eq(leads.ownerId, ctx.user.id), ne(leads.source, 'healthcheck')));
+      const cohort = year == null ? allLeads : allLeads.filter(l => new Date(l.createdAt).getFullYear() === year);
+      const ids = new Set(cohort.map(l => l.id));
       const allProposals = await db.select().from(proposals).where(eq(proposals.ownerId, ctx.user.id));
       const allBookings = await db.select().from(bookings).where(eq(bookings.ownerId, ctx.user.id));
-      const confirmedRevenue = allBookings.filter(b => b.status !== 'cancelled').reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);
-      const pipelineRevenue = allProposals.filter(p => p.status === 'sent' || p.status === 'viewed').reduce((s, p) => s + Number(p.totalNzd ?? 0), 0);
+      const proposalLeads = new Set(allProposals.filter(p => p.status !== 'draft' && ids.has(p.leadId)).map(p => p.leadId));
+      const bookedLeads = new Set(allBookings.filter(b => b.status !== 'cancelled' && b.leadId != null && ids.has(b.leadId)).map(b => b.leadId as number));
+      const confirmedRevenue = allBookings.filter(b => b.status !== 'cancelled' && b.leadId != null && ids.has(b.leadId)).reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);
+      const pipelineRevenue = allProposals.filter(p => (p.status === 'sent' || p.status === 'viewed') && ids.has(p.leadId)).reduce((s, p) => s + Number(p.totalNzd ?? 0), 0);
       return {
-        enquiries: allLeads.length,
-        proposals: allProposals.filter(p => ['sent','viewed'].includes(p.status)).length,
-        confirmed: allBookings.filter(b => b.status !== 'cancelled').length,
+        enquiries: cohort.length,
+        proposals: proposalLeads.size,
+        confirmed: bookedLeads.size,
         pipeline: pipelineRevenue,
         confirmed_revenue: confirmedRevenue,
       };
     }),
-    topEventTypes: protectedProcedure.query(async ({ ctx }) => {
+    topEventTypes: protectedProcedure
+      .input(z.object({ year: z.number().int() }).optional())
+      .query(async ({ input, ctx }) => {
       const { getDb } = await import('./db');
       const { bookings } = await import('../drizzle/schema');
       const { eq } = await import('drizzle-orm');
@@ -5162,6 +5177,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       const map: Record<string, { count: number; revenue: number }> = {};
       for (const b of rows) {
         if (b.status === 'cancelled') continue;
+        if (input?.year != null && new Date(b.eventDate).getFullYear() !== input.year) continue;
         const k = b.eventType ?? 'Other';
         if (!map[k]) map[k] = { count: 0, revenue: 0 };
         map[k].count += 1;
@@ -5198,7 +5214,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         return db.select().from(analyticsGoals)
           .where(and(eq(analyticsGoals.ownerId, ctx.user.id), eq(analyticsGoals.year, input.year)));
       }),
-    sourceBreakdown: protectedProcedure.query(async ({ ctx }) => {
+    sourceBreakdown: protectedProcedure
+      .input(z.object({ year: z.number().int() }).optional())
+      .query(async ({ input, ctx }) => {
       const { getDb } = await import('./db');
       const { leads } = await import('../drizzle/schema');
       const { eq, and, ne } = await import('drizzle-orm');
@@ -5207,6 +5225,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       const rows = await db.select().from(leads).where(and(eq(leads.ownerId, ctx.user.id), ne(leads.source, 'healthcheck')));
       const map: Record<string, number> = {};
       for (const lead of rows) {
+        if (input?.year != null && new Date(lead.createdAt).getFullYear() !== input.year) continue;
         const src = lead.source ?? 'Unknown';
         map[src] = (map[src] ?? 0) + 1;
       }

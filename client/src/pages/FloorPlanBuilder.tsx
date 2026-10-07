@@ -52,7 +52,7 @@ export default function FloorPlanBuilder() {
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
+      <div role="banner" className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
         <button
           onClick={() => setLocation("/dashboard")}
           className="flex items-center gap-1 text-xs font-bebas tracking-widest text-ink/70 hover:text-ink transition-colors"
@@ -64,7 +64,7 @@ export default function FloorPlanBuilder() {
       </div>
 
       {/* Unified editor fills the rest of the screen */}
-      <div className="flex-1 min-h-0">
+      <div role="main" className="flex-1 min-h-0">
         <FloorPlanEditor
           key={existingPlan?.id ?? (bookingId ? `b${bookingId}` : "new")}
           initialData={(existingPlan?.canvasData as CanvasData | undefined) ?? undefined}

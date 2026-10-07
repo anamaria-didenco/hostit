@@ -305,12 +305,8 @@ export default function DailyChecklists() {
         </div>
       </nav>
 
-      <main
-        id={`vf-tabpanel-${activeTab}`}
-        role="tabpanel"
-        aria-labelledby={`vf-tab-${activeTab}`}
-        className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8"
-      >
+      <main className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8">
+      <div id={`vf-tabpanel-${activeTab}`} role="tabpanel" aria-labelledby={`vf-tab-${activeTab}`}>
 
         {/* ── CHECKLISTS TAB ─────────────────────────────────────────────── */}
         {activeTab === "checklists" && (
@@ -519,6 +515,7 @@ export default function DailyChecklists() {
             </div>
           </>
         )}
+      </div>
       </main>
 
       {/* ── AI SMART PASTE MODAL ─────────────────────────────────────────── */}

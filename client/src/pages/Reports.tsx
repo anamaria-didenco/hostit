@@ -112,6 +112,9 @@ export default function Reports() {
         <div>
           <h1 className="font-cormorant text-3xl font-semibold text-ink">Reports</h1>
           <p className="font-dm text-sm text-sage mt-0.5">Analytics and performance insights for your venue</p>
+          <Link href="/analytics" className="inline-flex items-center gap-1 mt-2 font-bebas tracking-widest text-xs text-primary hover:underline min-h-[24px]">
+            REVENUE GOALS &amp; YEARLY FUNNEL <ArrowUpRight className="w-3 h-3" aria-hidden />
+          </Link>
         </div>
         {tab === "overview" && (
           <div className="relative">

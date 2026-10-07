@@ -122,9 +122,9 @@ export default function PaymentTracker() {
   if (authLoading) return null;
   if (!user) { window.location.href = getLoginUrl(); return null; }
   if (!bookingId) return (
-    <div className="min-h-screen bg-cream flex items-center justify-center">
+    <div role="main" className="min-h-screen bg-cream flex items-center justify-center">
       <div className="text-center">
-        <p className="font-dm text-ink/60 mb-4">No booking selected.</p>
+        <h1 className="font-dm text-base text-ink/60 mb-4">No booking selected.</h1>
         <Button onClick={() => navigate("/dashboard")} className="bg-burgundy text-cream rounded-none font-bebas tracking-widest">
           Back to Dashboard
         </Button>
@@ -150,7 +150,7 @@ export default function PaymentTracker() {
   const fmtNZD = (n: number) => currency(n);
 
   return (
-    <div className="min-h-screen bg-cream">
+    <div role="main" className="min-h-screen bg-cream">
       {/* Header */}
       <div className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4 min-w-0">

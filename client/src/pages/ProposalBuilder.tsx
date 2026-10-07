@@ -1345,31 +1345,31 @@ export default function ProposalBuilder() {
           </div>
 
           {/* Summary */}
-          <div className="bg-ink text-cream p-5 shadow-sm">
-            <div className="font-bebas text-xs tracking-widest text-[#c9a84c] mb-3">PROPOSAL SUMMARY</div>
+          <div className="bg-cream-card border border-border border-t-2 border-t-primary p-5 shadow-sm">
+            <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-3">PROPOSAL SUMMARY</div>
             <div className="space-y-2 font-dm text-sm">
               <div className="flex justify-between">
-                <span className="text-cream/60">For</span>
-                <span>{lead ? `${lead.firstName} ${lead.lastName ?? ""}` : "—"}</span>
+                <span className="text-muted-foreground">For</span>
+                <span className="text-ink">{lead ? `${lead.firstName} ${lead.lastName ?? ""}` : "—"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-cream/60">Event</span>
+                <span className="text-muted-foreground">Event</span>
                 <span>{lead?.eventType || "—"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-cream/60">Date</span>
+                <span className="text-muted-foreground">Date</span>
                 <span>{eventDate ? new Date(eventDate).toLocaleDateString("en-NZ") : "—"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-cream/60">Guests</span>
+                <span className="text-muted-foreground">Guests</span>
                 <span>{guestCount || "—"}</span>
               </div>
-              <div className="border-t border-cream/20 pt-2 mt-2">
+              <div className="border-t border-border pt-2 mt-2">
                 <div className="flex justify-between font-alfa text-xl">
-                  <span className="text-cream/60 text-sm">TOTAL</span>
-                  <span className="text-[#c9a84c]">{currencyWhole(total)}</span>
+                  <span className="text-muted-foreground text-sm">TOTAL</span>
+                  <span className="text-primary">{currencyWhole(total)}</span>
                 </div>
-                <div className="flex justify-between text-xs text-cream/50 mt-1">
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
                   <span>Deposit ({depositPercent}%)</span>
                   <span>{currencyWhole(deposit)}</span>
                 </div>
