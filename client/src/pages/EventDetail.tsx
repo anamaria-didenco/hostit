@@ -11,13 +11,14 @@ import {
   ArrowLeft, FileText, Clock, MapPin, Users, DollarSign, CheckCircle,
   Calendar, Mail, Phone, Edit3, Save, X, ExternalLink, Printer,
   ClipboardList, LayoutGrid, ChefHat, MessageSquare, Package, Layers,
-  Link2, PenLine, Plus, Trash2,
+  Link2, PenLine, Plus, Trash2, Eye,
   Link as LinkIcon
 } from "lucide-react";
 import { COLOR_PRESETS, parseCustomStatuses } from "@/components/StatusManager";
 import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput, combineLocalDateTime } from "@/lib/dateTime";
 import EventSpendSection from "@/components/EventSpendSection";
 import { beoUrl } from "@/lib/beoUrl";
+import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 
 const EVENT_TYPES = [
@@ -34,6 +35,7 @@ export default function EventDetail() {
   const bookingId = params?.id ? parseInt(params.id) : 0;
 
   const [editing, setEditing] = useState(false);
+  const [beoPreviewOpen, setBeoPreviewOpen] = useState(false);
   const [form, setForm] = useState<any>({});
 
   const utils = trpc.useUtils();
@@ -170,6 +172,9 @@ export default function EventDetail() {
 
   return (
     <div className="min-h-screen bg-cream">
+      {beoPreviewOpen && (
+        <BeoPreviewOverlay bookingId={booking.id} name={`${booking.firstName ?? ''} ${booking.lastName ?? ''}`.trim() || 'Event'} onClose={() => setBeoPreviewOpen(false)} />
+      )}
       {/* Header */}
       <nav className="bg-forest-dark sticky top-0 z-50 border-b border-gold/20 h-14 flex items-center px-4 gap-4">
         <button onClick={() => setLocation('/dashboard')} className="text-cream hover:text-cream flex items-center gap-1.5 font-bebas tracking-widest text-xs">
@@ -189,15 +194,15 @@ export default function EventDetail() {
 
           {/* Status + Quick Info */}
           <div className="dante-card p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+              <div className="min-w-0">
                 <div className="gold-rule max-w-xs mb-2"><span>EVENT DETAILS</span></div>
                 <h1 className="font-cormorant text-ink font-semibold" style={{ fontSize: '1.8rem' }}>
                   {booking.firstName} {booking.lastName}
                 </h1>
-                <div className="font-dm text-sm text-ink/60 mt-1">{booking.email}</div>
+                <div className="font-dm text-sm text-ink/70 mt-1 break-words">{booking.email}</div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`font-bebas text-xs tracking-widest px-3 py-1 border ${statusColor}`}>
                   {getStatusInfo(booking.status).label.toUpperCase()}
                 </span>
@@ -454,14 +459,6 @@ export default function EventDetail() {
                   {existingRunsheet ? 'EDIT RUNSHEET' : 'CREATE RUNSHEET'}
                 </button>
               </Link>
-              {booking.proposalId && (
-                <Link href={`/proposals/new?proposalId=${booking.proposalId}`}>
-                  <button className="w-full flex items-center gap-3 px-4 py-3 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
-                    <FileText className="w-4 h-4 text-gold" />
-                    VIEW PROPOSAL
-                  </button>
-                </Link>
-              )}
               <Link href={`/floor-plan?bookingId=${bookingId}`}>
                 <button className="w-full flex items-center gap-3 px-4 py-3 border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                   <LayoutGrid className="w-4 h-4" />
@@ -510,6 +507,13 @@ export default function EventDetail() {
                 {booking.proposalId ? 'OPEN PROPOSAL BUILDER' : 'START PROPOSAL'}
               </button>
               <button
+                onClick={() => setBeoPreviewOpen(true)}
+                title="Read the full BEO (run of day, menu, dietaries) without downloading anything"
+                className="w-full flex items-center gap-3 px-4 py-3 bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-xs">
+                <Eye className="w-4 h-4 text-gold" />
+                PREVIEW BEO
+              </button>
+              <button
                 onClick={() => {
                   const a = document.createElement('a');
                   a.href = beoUrl(booking.id);
@@ -519,9 +523,9 @@ export default function EventDetail() {
                   document.body.removeChild(a);
                   toast.success('Generating BEO PDF...');
                 }}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-amber-700 text-white hover:bg-amber-800 transition-colors font-bebas tracking-widest text-xs">
+                className="w-full flex items-center gap-3 px-4 py-3 border border-amber-700 text-amber-700 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs">
                 <Printer className="w-4 h-4" />
-                GENERATE BEO PDF
+                DOWNLOAD BEO PDF
               </button>
               <button
                 onClick={() => getBeoToken.mutate({ id: booking.id })}

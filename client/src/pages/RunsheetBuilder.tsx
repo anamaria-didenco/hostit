@@ -207,6 +207,7 @@ function SpacePicker({ value, onChange }: { value: string; onChange: (v: string)
   }
   return (
     <select
+      aria-label="Venue / space"
       value={value}
       onChange={e => onChange(e.target.value)}
       className="w-full rounded-sm border border-gold/20 focus:outline-none focus:border-forest text-sm h-9 px-2 bg-white font-dm no-print"
@@ -1417,7 +1418,16 @@ export default function RunsheetBuilder() {
   }
 
   function removeFnbItem(idx: number) {
+    // Deleting a dish used to be instant and silent, one mis-tap from losing a
+    // menu line. Keep what was removed and offer Undo (restores it in place).
+    const removed = fnbItems[idx];
     setFnbItems(prev => prev.filter((_, i) => i !== idx));
+    if (removed) {
+      toast(`Removed "${(removed as any).dishName || 'item'}"`, {
+        duration: 8000,
+        action: { label: 'Undo', onClick: () => setFnbItems(prev => { const next = [...prev]; next.splice(Math.min(idx, next.length), 0, removed); return next; }) },
+      });
+    }
     setExpandedFnbIdx(null);
   }
 
@@ -2533,7 +2543,7 @@ export default function RunsheetBuilder() {
   return (
     <div className="min-h-screen bg-cream print:bg-white vf-rs-print" style={{ ['--brand' as any]: venuePrimaryColor }}>
       {/* ── Header — light cream bar (dark text reads clearly) ──────────── */}
-      <nav className="no-print bg-cream sticky top-0 z-50 border-b border-gold/25 h-14 flex items-center px-4 gap-3">
+      <nav aria-label="Runsheet toolbar" className="no-print bg-cream sticky top-0 z-50 border-b border-gold/25 h-14 flex items-center px-4 gap-3">
         <button
           onClick={() => {
             if (bookingId) navigate(`/event/${bookingId}`);
@@ -2762,9 +2772,9 @@ export default function RunsheetBuilder() {
 
       {/* ── DocBar — document identity strip ────────────────────────────── */}
       <div className="no-print sticky top-14 z-40 bg-cream/90 backdrop-blur border-b border-gold/20 px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
-        <div className="font-serif text-base sm:text-lg font-semibold text-ink truncate max-w-[40vw]">
+        <h1 className="font-serif text-base sm:text-lg font-semibold text-ink truncate max-w-[40vw]">
           {title || 'Untitled runsheet'}
-        </div>
+        </h1>
         {(eventType || sheetId) && (
           <div className="font-dm text-xs sm:text-sm text-ink/70 truncate">
             {eventType ? <span className="capitalize">{eventType}</span> : null}
@@ -3039,7 +3049,7 @@ export default function RunsheetBuilder() {
           </nav>
 
           {/* Document column — every section in one scroll */}
-          <div className="min-w-0 space-y-6">
+          <main id="rs-main" className="min-w-0 space-y-6">
 
         {/* ── Event Details Card ──────────────────────────────────────────── */}
         <section id="rb-details" className="scroll-mt-[120px]">
@@ -3240,7 +3250,11 @@ export default function RunsheetBuilder() {
                       >
                         <Building2 className="w-4 h-4 text-forest flex-shrink-0" />
                         <span className="font-bebas tracking-widest text-sm text-forest">VENUE SETUP</span>
-                        {venueSetup && !isHidden && <span className="text-xs text-forest/50 font-dm truncate max-w-[160px]">{venueSetup.substring(0, 35)}{venueSetup.length > 35 ? "…" : ""}</span>}
+                        {venueSetup && !isHidden && (() => {
+                          // The setup note is rich text (stored as HTML); show it as plain words, not "<p>Long banquet…".
+                          const plain = String(venueSetup).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+                          return plain ? <span className="text-xs text-ink/70 font-dm truncate max-w-[180px]">{plain.substring(0, 35)}{plain.length > 35 ? "…" : ""}</span> : null;
+                        })()}
                         {isHidden && <span className="text-xs text-ink/65 font-dm italic">hidden from print</span>}
                       </button>
                       <div className="flex items-center gap-1 pr-3">
@@ -4478,7 +4492,7 @@ export default function RunsheetBuilder() {
                     prints as a structured table. */}
                 <div className="px-5 py-2 text-xs font-bebas tracking-widest text-white bg-gold-deep flex items-center justify-between no-print">
                   <span>MENU</span>
-                  <span className="opacity-70 font-dm text-[10px] tracking-normal">Tap a dish to expand its details</span>
+                  <span className="font-dm text-[11px] tracking-normal text-white">Tap a dish to expand its details</span>
                 </div>
                 <div className="hidden print:grid gap-2 px-5 py-1.5 text-xs font-bebas tracking-widest text-white bg-gold-deep" style={{ gridTemplateColumns: fnbGridCols }}>
                   <div>COURSE</div>
@@ -4551,10 +4565,10 @@ export default function RunsheetBuilder() {
                               <span className="flex-none text-xs text-forest font-semibold font-dm">${Number(item.unitPrice).toLocaleString('en-NZ', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{item.course !== 'Drinks' ? '/head' : ''}</span>
                             )}
                             {/* actions — chevron always visible */}
-                            <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="flex-none text-ink/65 hover:text-forest transition-colors" title={isExpanded ? 'Collapse' : 'Expand details'}>
+                            <button onClick={() => setExpandedFnbIdx(isExpanded ? null : originalIdx)} className="flex-none -my-1 w-7 h-7 inline-flex items-center justify-center rounded-sm text-ink/65 hover:text-forest hover:bg-linen transition-colors" title={isExpanded ? 'Collapse' : 'Expand details'} aria-label={isExpanded ? 'Collapse details' : 'Expand details'} aria-expanded={isExpanded}>
                               <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                             </button>
-                            <button onClick={() => removeFnbItem(originalIdx)} className="flex-none text-ink/25 hover:text-red-500 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100" title="Remove item"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => removeFnbItem(originalIdx)} className="flex-none -my-1 w-7 h-7 inline-flex items-center justify-center rounded-sm text-ink/55 hover:text-red-600 hover:bg-red-50 transition-colors" title="Remove item (you can undo)" aria-label="Remove item"><Trash2 className="w-4 h-4" /></button>
                           </div>
                           {/* PRINT — full static column row so the printed runsheet
                               keeps its structured table (honours the column toggles) */}
@@ -4656,6 +4670,7 @@ export default function RunsheetBuilder() {
                             onChange={e => renameCourse(course, e.target.value)}
                             className={`bg-transparent border-0 border-b border-dashed focus:outline-none focus:border-solid font-bebas tracking-widest text-xs w-full min-w-0 ${isDrinks ? 'text-blue-700 border-blue-200 focus:border-blue-500' : `${cc.text} border-current`} print:border-none`}
                             title="Click to rename this course"
+                            aria-label={`Course name: ${course}`}
                             placeholder="Course name..."
                           />
                           <span className="text-[10px] text-ink/65 flex-shrink-0 font-dm italic no-print">click to rename</span>
@@ -5952,7 +5967,7 @@ export default function RunsheetBuilder() {
                     <th className="text-center px-3 py-2.5 font-bebas tracking-widest text-[10px] text-ink/65 w-16">QTY</th>
                     <th className="text-right px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/65 w-28">UNIT PRICE</th>
                     <th className="text-right px-4 py-2.5 font-bebas tracking-widest text-[10px] text-ink/65 w-28">TOTAL</th>
-                    <th className="w-8" />
+                    <th className="w-8 relative"><span className="sr-only">Remove</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -5994,11 +6009,13 @@ export default function RunsheetBuilder() {
                           value={ci.label}
                           onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, label: e.target.value } : x))}
                           placeholder="Item description..."
+                          aria-label={`Description of cost item ${idx + 1}`}
                           className="w-full bg-transparent border-0 focus:outline-none text-ink font-dm text-sm"
                         />
                       </td>
                       <td className="px-4 py-2">
                         <select
+                          aria-label={`Category for ${ci.label || `cost item ${idx + 1}`}`}
                           value={ci.category}
                           onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, category: e.target.value } : x))}
                           className="w-full bg-transparent border-0 focus:outline-none text-ink/70 font-dm text-xs cursor-pointer"
@@ -6011,6 +6028,7 @@ export default function RunsheetBuilder() {
                       <td className="px-3 py-2">
                         <input
                           type="number" min={1}
+                          aria-label={`Quantity for ${ci.label || `cost item ${idx + 1}`}`}
                           value={ci.qty}
                           onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, qty: Number(e.target.value) || 1 } : x))}
                           className="w-full bg-transparent border-0 focus:outline-none text-ink text-center font-dm text-sm"
@@ -6021,6 +6039,7 @@ export default function RunsheetBuilder() {
                           <span className="text-ink/65 text-xs">$</span>
                           <input
                             type="number" min={0} step={0.01}
+                            aria-label={`Unit price for ${ci.label || `cost item ${idx + 1}`}`}
                             value={ci.unitPrice}
                             onChange={e => setCostItems(prev => prev.map((x, i) => i === idx ? { ...x, unitPrice: Number(e.target.value) || 0 } : x))}
                             className="w-20 bg-transparent border-0 focus:outline-none text-ink text-right font-dm text-sm"
@@ -6147,7 +6166,7 @@ export default function RunsheetBuilder() {
           </div>
         </section>
 
-          </div>{/* /document column */}
+          </main>{/* /document column */}
         </div>{/* /section grid */}
 
         {/* Print footer */}
