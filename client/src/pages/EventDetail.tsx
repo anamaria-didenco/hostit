@@ -550,40 +550,6 @@ export default function EventDetail() {
               )}
             </div>
           </div>
-
-          {/* Event Summary Card — a dark navy accent card. Uses rounded-lg +
-              border directly instead of .dante-card, because that class forces
-              a cream background that would otherwise override bg-forest-dark
-              (same specificity, defined later) and leave cream text unreadable. */}
-          <div className="rounded-lg border border-gold/20 p-5 bg-forest-dark text-cream">
-            <div className="font-bebas tracking-widest text-xs text-gold-bright mb-3">EVENT SUMMARY</div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="font-dm text-xs text-cream/60">Type</span>
-                <span className="font-dm text-xs text-cream">{booking.eventType || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-dm text-xs text-cream/60">Date</span>
-                <span className="font-dm text-xs text-cream">
-                  {new Date(booking.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-dm text-xs text-cream/60">Guests</span>
-                <span className="font-dm text-xs text-cream">{booking.guestCount ?? "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-dm text-xs text-cream/60">Space</span>
-                <span className="font-dm text-xs text-cream">{booking.spaceName || "—"}</span>
-              </div>
-              <div className="border-t border-gold/20 pt-2 flex justify-between">
-                <span className="font-bebas text-xs tracking-widest text-gold-bright">TOTAL</span>
-                <span className="font-cormorant text-lg font-semibold text-gold-bright">
-                  {currency(Number(booking.totalNzd ?? 0))}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -598,7 +564,7 @@ export default function EventDetail() {
 const MODULE_TABS = [
   { id: 'comms', label: 'COMMS', icon: MessageSquare },
   { id: 'contracts', label: 'CONTRACTS', icon: PenLine },
-  { id: 'budget', label: 'BUDGET', icon: DollarSign },
+  { id: 'budget', label: 'BUDGET PLAN', icon: DollarSign },
   { id: 'equipment', label: 'EQUIPMENT', icon: Package },
   { id: 'seating', label: 'SEATING', icon: Layers },
   { id: 'portal', label: 'CLIENT PORTAL', icon: Link2 },
@@ -836,7 +802,10 @@ function BudgetTab({ bookingId }: { bookingId: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bebas tracking-widest text-ink/70 text-sm">EVENT BUDGET</h3>
+        <div>
+          <h3 className="font-bebas tracking-widest text-ink/70 text-sm">BUDGET PLAN</h3>
+          <p className="font-dm text-xs text-ink/65 mt-0.5">Estimated vs actual lines for planning. Real supplier spend and profit are tracked under “Budget &amp; Spend” on the main page.</p>
+        </div>
         <button onClick={() => setShowForm(v => !v)} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2 flex items-center gap-1"><Plus className="w-3 h-3" /> ADD ITEM</button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

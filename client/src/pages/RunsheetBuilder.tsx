@@ -2771,7 +2771,7 @@ export default function RunsheetBuilder() {
       </nav>
 
       {/* ── DocBar — document identity strip ────────────────────────────── */}
-      <div className="no-print sticky top-14 z-40 bg-cream/90 backdrop-blur border-b border-gold/20 px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
+      <div role="region" aria-label="Document details" className="no-print sticky top-14 z-40 bg-cream/90 backdrop-blur border-b border-gold/20 px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
         <h1 className="font-serif text-base sm:text-lg font-semibold text-ink truncate max-w-[40vw]">
           {title || 'Untitled runsheet'}
         </h1>
@@ -6003,7 +6003,7 @@ export default function RunsheetBuilder() {
                     </tr>
                   ))}
                   {costItems.map((ci, idx) => (
-                    <tr key={ci._id} className="group border-b border-gold/20 hover:bg-linen/40 transition-colors">
+                    <tr key={ci._id ?? `ci-${idx}`} className="group border-b border-gold/20 hover:bg-linen/40 transition-colors">
                       <td className="px-4 py-2">
                         <input
                           value={ci.label}

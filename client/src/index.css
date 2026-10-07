@@ -497,6 +497,13 @@
   /* ── Flex defaults ── */
   .flex { min-width: 0; min-height: 0; }
 
+  /* ── Minimum text size ──
+     ~500 labels were set at 8–10px, below what's comfortably readable on a
+     phone (and on a bar-top screen across the room). Rather than touch every
+     call site, the arbitrary 8/9/10px sizes are floored at 11px. Responsive
+     variants (sm:text-[10px] …) are separate classes and unaffected. */
+  .text-\[8px\], .text-\[9px\], .text-\[10px\] { font-size: 11px; }
+
   /* ── Container ── */
   .container {
     width: 100%;

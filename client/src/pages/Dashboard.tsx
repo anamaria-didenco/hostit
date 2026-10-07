@@ -545,23 +545,33 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
   venueName?: string;
   venueLogoUrl?: string;
 }) {
-  const items = [
-    { id: "venue", label: "Venue" },
-    { id: "brand-pack", label: "Brand Pack" },
-    { id: "lead-form", label: "Contact Form" },
-    { id: "floor-plans", label: "Floor Plans" },
-    { id: "integrations", label: "Integrations" },
-    { id: "menu", label: "Menu & Catalogue" },
-    { id: "templates", label: "Templates" },
-    { id: "email", label: "Email" },
-    { id: "staff-emails", label: "BEO Email Recipients" },
-    { id: "automated-tasks", label: "Automated Tasks" },
-    { id: "taxes", label: "Taxes & Fees" },
-    { id: "team", label: "Team" },
-    { id: "billing", label: "Billing" },
-    { id: "statuses", label: "Enquiry Statuses" },
-    { id: "waitlist", label: "Waitlist" },
+  // Grouped by what you're trying to do, not in the order they were built.
+  const groups = [
+    { label: "Your venue", items: [
+      { id: "venue", label: "Venue" },
+      { id: "brand-pack", label: "Brand Pack" },
+      { id: "floor-plans", label: "Floor Plans" },
+      { id: "menu", label: "Menu & Catalogue" },
+      { id: "taxes", label: "Taxes & Fees" },
+    ]},
+    { label: "Enquiries & sales", items: [
+      { id: "lead-form", label: "Contact Form" },
+      { id: "statuses", label: "Enquiry Statuses" },
+      { id: "waitlist", label: "Waitlist" },
+      { id: "templates", label: "Templates" },
+      { id: "automated-tasks", label: "Automated Tasks" },
+    ]},
+    { label: "Email & team", items: [
+      { id: "email", label: "Email" },
+      { id: "staff-emails", label: "BEO Email Recipients" },
+      { id: "team", label: "Team" },
+    ]},
+    { label: "Account", items: [
+      { id: "integrations", label: "Integrations" },
+      { id: "billing", label: "Billing" },
+    ]},
   ];
+  const items = groups.flatMap(g => g.items);
   const currentLabel = items.find(i => i.id === settingsSubTab)?.label ?? 'Settings';
   return (
     <>
@@ -570,10 +580,13 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
         <select
           value={settingsSubTab}
           onChange={e => setSettingsSubTab(e.target.value as any)}
+          aria-label="Settings section"
           className="w-full font-inter text-sm border border-border rounded-lg px-3 py-2 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-sage-green/40"
         >
-          {items.map(item => (
-            <option key={item.id} value={item.id}>{item.label}</option>
+          {groups.map(g => (
+            <optgroup key={g.label} label={g.label}>
+              {g.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </optgroup>
           ))}
         </select>
         {/* External links — these are full-page routes, not settings sub-tabs,
@@ -622,20 +635,27 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
           <span className="font-dm text-sm font-semibold text-ink truncate">{venueName ?? 'Your Venue'}</span>
         </div>
         <div className="flex-1 overflow-auto py-2">
-          {items.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setSettingsSubTab(item.id as any)}
-              className={`w-full text-left px-4 py-2 font-dm text-sm transition-colors ${
-                settingsSubTab === item.id
-                  ? "bg-sage-tint text-sage-dark font-semibold border-l-2 border-sage-green pl-[calc(1rem-2px)]"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-l-2 border-transparent"
-              }`}
-            >
-              {item.label}
-            </button>
+          {groups.map(g => (
+            <div key={g.label} className="mb-1">
+              <div className="px-4 pt-3 pb-1 font-bebas tracking-widest text-[11px] text-ink/55">{g.label.toUpperCase()}</div>
+              {g.items.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setSettingsSubTab(item.id as any)}
+                  aria-current={settingsSubTab === item.id ? "page" : undefined}
+                  className={`w-full text-left px-4 py-1.5 font-dm text-sm transition-colors ${
+                    settingsSubTab === item.id
+                      ? "bg-sage-tint text-sage-dark font-semibold border-l-2 border-sage-green pl-[calc(1rem-2px)]"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-l-2 border-transparent"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           ))}
           <div className="my-2 border-t border-border" />
+          <div className="px-4 pt-2 pb-1 font-bebas tracking-widest text-[11px] text-ink/55">TOOLS &amp; GUIDES</div>
           <a
             href="/daily-checklists"
             className="w-full text-left px-4 py-2 font-dm text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-l-2 border-transparent flex items-center justify-between group"
@@ -1045,6 +1065,9 @@ export default function Dashboard() {
   };
   const [kanbanDetailOpen, setKanbanDetailOpen] = useState(false);
   const [kanbanSettingsOpen, setKanbanSettingsOpen] = useState(false);
+  // Lost/cancelled are dead ends, not work — the board hides them until asked
+  // (unless the user has saved their own stage choices via CUSTOMISE).
+  const [showClosedStages, setShowClosedStages] = useState(false);
   const [kanbanStagePrefs, setKanbanStagePrefs] = useState<{ visible: string[]; order: string[] } | null>(null);
   // ── Events table display prefs (persisted to localStorage) ──────────────
   const EVENT_TABLE_PREFS_KEY = `vf_events_table_prefs_v1_${user?.id ?? "default"}`;
@@ -1490,13 +1513,13 @@ export default function Dashboard() {
   }, [user?.id]);
 
   const kanbanStages = React.useMemo(() => {
-    if (!kanbanStagePrefs) return pipelineStages;
+    if (!kanbanStagePrefs) return showClosedStages ? pipelineStages : pipelineStages.filter(s => s.key !== 'lost' && s.key !== 'cancelled');
     const { visible, order } = kanbanStagePrefs;
     const ordered = order.length > 0
       ? order.map(k => pipelineStages.find(s => s.key === k)).filter(Boolean) as typeof pipelineStages
       : pipelineStages;
     return ordered.filter(s => !visible.length || visible.includes(s.key));
-  }, [pipelineStages, kanbanStagePrefs]);
+  }, [pipelineStages, kanbanStagePrefs, showClosedStages]);
   const { data: contacts, refetch: refetchContacts } = trpc.contacts.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: spaces, refetch: refetchSpaces } = trpc.spaces.list.useQuery(undefined, { enabled: !!user?.id });
   const { data: monthBookings, isError: monthBookingsError, refetch: refetchMonthBookings } = trpc.bookings.byMonth.useQuery(
@@ -3439,6 +3462,16 @@ export default function Dashboard() {
                           primary action share one row instead of two. */}
                       <Plus className="w-3.5 h-3.5" /> <span className="sm:hidden">ADD</span><span className="hidden sm:inline">ADD ENQUIRY</span>
                     </button>
+                    {leadViewMode === "kanban" && !kanbanStagePrefs && (() => {
+                      const closedCount = allEnquiries.filter((l: any) => l.status === 'lost' || l.status === 'cancelled').length;
+                      if (closedCount === 0) return null;
+                      return (
+                        <button onClick={() => setShowClosedStages(v => !v)} aria-pressed={showClosedStages}
+                          className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/60 hover:bg-linen transition-colors">
+                          {showClosedStages ? "HIDE LOST" : `SHOW LOST (${closedCount})`}
+                        </button>
+                      );
+                    })()}
                     {leadViewMode === "kanban" && (
                       <button onClick={() => setKanbanSettingsOpen(true)}
                         className="flex items-center gap-1.5 font-bebas tracking-widest text-xs px-3 py-1.5 border border-gold/30 text-ink/60 hover:bg-linen transition-colors">
@@ -3784,7 +3817,20 @@ export default function Dashboard() {
                         // control in board mode). Using filteredLeads here left
                         // the board showing only the active subset (e.g. just
                         // "new" leads), so most columns looked empty.
-                        const stageLeads = allEnquiries.filter((l: any) => l.status === stage.key);
+                        // "Needs you first": overdue follow-ups, then upcoming events by
+                        // date, then undated, then past; newest enquiry breaks ties.
+                        const nowTs = Date.now();
+                        const needsYou = (l: any) => l.followUpDate && new Date(l.followUpDate).getTime() <= nowTs && !['booked', 'lost', 'cancelled'].includes(l.status);
+                        const stageLeads = allEnquiries.filter((l: any) => l.status === stage.key).sort((a: any, b: any) => {
+                          const oa = needsYou(a) ? 0 : 1, ob = needsYou(b) ? 0 : 1;
+                          if (oa !== ob) return oa - ob;
+                          // upcoming (soonest first) → undated → already past
+                          const rank = (l: any) => !l.eventDate ? 1 : new Date(l.eventDate).getTime() >= nowTs - 86400000 ? 0 : 2;
+                          const ra = rank(a), rb = rank(b);
+                          if (ra !== rb) return ra - rb;
+                          if (ra === 0) { const d = new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(); if (d) return d; }
+                          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                        });
                         const tone = (stage as any).swatch ?? '#2f5488';
                         const stageTotal = stageLeads.reduce((s: number, l: any) => s + (Number(l.budget) || 0), 0);
                         const stageTotalLabel = stageTotal > 0 ? `$${(stageTotal / 1000).toFixed(1)}k` : null;
@@ -10723,15 +10769,19 @@ export default function Dashboard() {
           {/* ── Smart Paste panel ── */}
           {enquiryPasteMode ? (
             <div className="space-y-3">
-              <div className="bg-forest/5 border border-forest/20 p-4">
-                <div className="flex items-center gap-2 mb-2">
+              <div className="bg-forest/5 border border-forest/20 p-3 sm:p-4">
+                {/* The tab above and the dialog subtitle already say this on a
+                    phone, so the in-panel title only shows from sm up; it stays
+                    in the DOM as the textarea's accessible name. */}
+                <div className="hidden sm:flex items-center gap-2 mb-2">
                   <span id={`${addEnquiryFormId}-smart-paste`} className="font-bebas tracking-widest text-xs text-forest">SMART PASTE</span>
-                  <span className="font-dm text-[10px] text-ink/60 ml-1">— paste a client email, booking request, or any text</span>
+                  <span className="font-dm text-xs text-ink/60 ml-1">— paste a client email, booking request, or any text</span>
                 </div>
+                <span id={`${addEnquiryFormId}-smart-paste-sm`} className="sr-only sm:hidden">Smart paste: paste a client email, booking request, or any text</span>
                 <textarea
                   autoFocus
-                  rows={7}
-                  aria-labelledby={`${addEnquiryFormId}-smart-paste`}
+                  rows={5}
+                  aria-labelledby={`${addEnquiryFormId}-smart-paste ${addEnquiryFormId}-smart-paste-sm`}
                   value={enquiryPasteText}
                   onPaste={e => {
                     const text = e.clipboardData.getData('text');
