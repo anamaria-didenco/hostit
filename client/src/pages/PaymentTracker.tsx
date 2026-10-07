@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, DollarSign, CheckCircle, Clock, AlertCircle, Send, Mail } from "lucide-react";
 import { getLoginUrl } from "@/const";
 import { currency } from "@/lib/money";
+import BookingInvoices from "@/components/BookingInvoices";
 
 const PAYMENT_TYPES = [
   { value: "deposit", label: "Deposit" },
@@ -328,6 +329,9 @@ export default function PaymentTracker() {
             </div>
           )}
         </div>
+
+        {/* Invoices already sent through to Xero for this event */}
+        {bookingId ? <BookingInvoices bookingId={bookingId} /> : null}
 
         {/* Payment history */}
         <div className="bg-white border border-border">

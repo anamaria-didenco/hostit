@@ -4494,18 +4494,38 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     overview: protectedProcedure
       .query(async ({ ctx }) => {
         const { getDb } = await import('./db');
-        const { payments, bookings, runsheets } = await import('../drizzle/schema');
+        const { payments, bookings, runsheets, xeroInvoices } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return [] as any[];
 
         const { netPaid, covers, round2 } = await import('../shared/paymentMath');
-        const [allBookings, allPayments, allRunsheets] = await Promise.all([
+        const [allBookings, allPayments, allRunsheets, allInvoices] = await Promise.all([
           db.select().from(bookings).where(eq(bookings.ownerId, ctx.user.id)),
           db.select().from(payments).where(eq(payments.ownerId, ctx.user.id)),
           db.select({ bookingId: runsheets.bookingId, drinksData: runsheets.drinksData, paymentNotes: runsheets.paymentNotes })
             .from(runsheets).where(eq(runsheets.ownerId, ctx.user.id)),
+          db.select().from(xeroInvoices).where(eq(xeroInvoices.ownerId, ctx.user.id)),
         ]);
+
+        // Invoices sent to Xero, by booking — so the board can show WHICH
+        // invoices went through and where each one stands. Deleted ones are
+        // gone from Xero and would only confuse; voided ones stay visible
+        // (struck through in the UI) so "why was this re-sent?" has an answer.
+        const invByBooking = new Map<number, any[]>();
+        for (const inv of allInvoices) {
+          if (inv.status === 'DELETED') continue;
+          const arr = invByBooking.get(inv.bookingId) ?? [];
+          arr.push({
+            id: inv.id,
+            stream: inv.stream,
+            invoiceNumber: inv.invoiceNumber ?? null,
+            status: inv.status ?? 'DRAFT',
+            total: Number(inv.total ?? 0),
+            createdAt: inv.createdAt,
+          });
+          invByBooking.set(inv.bookingId, arr);
+        }
 
         // Index the payment ledger and the on-the-night signals by bookingId.
         const payByBooking = new Map<number, any[]>();
@@ -4559,8 +4579,16 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             // drinks default is inferred from the bar setup when the team
             // hasn't chosen a settlement mode yet (cash-style bars settle on
             // the night, otherwise it's invoiced).
-            const foodStatus = ((b as any).foodStatus as string) || 'to_invoice';
-            const drinksStatus = ((b as any).drinksStatus as string | null) ?? (onNightSignal ? 'on_night' : 'to_invoice');
+            let foodStatus = ((b as any).foodStatus as string) || 'to_invoice';
+            let drinksStatus = ((b as any).drinksStatus as string | null) ?? (onNightSignal ? 'on_night' : 'to_invoice');
+            // A live invoice in Xero means the stream HAS been invoiced, even if
+            // the chip was never tapped (invoice raised in Xero directly, or
+            // before the push began setting it). Upgrade only — paid is never
+            // downgraded and nothing is ever auto-marked paid from here.
+            const liveInv = invByBooking.get(b.id) ?? [];
+            const hasLive = (stream: string) => liveInv.some((i: any) => i.stream === stream && i.status !== 'VOIDED');
+            if (hasLive('food') && (foodStatus === 'to_invoice' || foodStatus === 'on_night')) foodStatus = 'invoiced';
+            if (hasLive('drinks') && (drinksStatus === 'to_invoice' || drinksStatus === 'on_night')) drinksStatus = 'invoiced';
 
             return {
               bookingId: b.id,
@@ -4583,7 +4611,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               drinksStatus,
               // true when drinks mode was inferred (not explicitly set) — the UI
               // can show it as a suggestion the team can confirm/override.
-              drinksInferred: (b as any).drinksStatus == null,
+              drinksInferred: (b as any).drinksStatus == null && !hasLive('drinks'),
+              invoices: (invByBooking.get(b.id) ?? []).sort((x: any, y: any) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime()),
             };
           });
       }),

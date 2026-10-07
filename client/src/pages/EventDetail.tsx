@@ -1,3 +1,4 @@
+import BookingInvoices from "@/components/BookingInvoices";
 import { useState, useEffect, useMemo } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -410,6 +411,7 @@ export default function EventDetail() {
                 </button>
               </Link>
             </div>
+            <BookingInvoices bookingId={bookingId} />
           </div>
 
           {/* Event spend & profitability tracking */}
