@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import XeroPushModal from "@/components/XeroPushModal";
 import PaymentsReceived from "@/components/PaymentsReceived";
+import { invoiceState, STREAM_LABEL } from "@/lib/xeroInvoice";
 import {
   DollarSign, FileText, Clock, CheckCircle2, Moon, Search,
   CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw, Check, ChevronDown,
@@ -31,7 +32,19 @@ interface Row {
   foodStatus: FoodStatus;
   drinksStatus: DrinksStatus;
   drinksInferred: boolean;
+  invoices: SentInvoice[];
 }
+
+// An invoice that has been sent through to Xero (the xero_invoices ledger).
+interface SentInvoice {
+  id: number;
+  stream: "food" | "drinks" | "deposit";
+  invoiceNumber: string | null;
+  status: string; // DRAFT | SUBMITTED | AUTHORISED | PAID | VOIDED
+  total: number;
+  createdAt: string;
+}
+
 
 const fmtNZD = (n: number) =>
   n.toLocaleString("en-NZ", { style: "currency", currency: "NZD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -81,7 +94,7 @@ export default function PaymentsBoard() {
   const [xeroFor, setXeroFor] = useState<Row | null>(null);
   // "Events" tracks where each event's money is up to; "Received" is the ledger
   // of money that actually landed — the view that reconciles against the bank.
-  const [view, setView] = useState<"events" | "received">("events");
+  const [view, setView] = useState<"events" | "invoices" | "received">("events");
 
   const { data, isLoading, isError, refetch } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
   const { data: xeroStatus } = trpc.xero.status.useQuery();
@@ -235,7 +248,7 @@ export default function PaymentsBoard() {
 
       {/* View switcher */}
       <div className="flex gap-1.5 mb-4 border-b border-gold/20" role="tablist" aria-label="Payments view">
-        {([["events", "Bookings"], ["received", "Received"]] as const).map(([k, lbl]) => (
+        {([["events", "Bookings"], ["invoices", "Invoices sent"], ["received", "Received"]] as const).map(([k, lbl]) => (
           <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)}
             className={`font-bebas tracking-widest text-sm px-4 py-2.5 border-b-2 -mb-px transition-colors ${
               view === k ? "border-forest text-forest" : "border-transparent text-sage hover:text-ink"}`}>
@@ -244,7 +257,9 @@ export default function PaymentsBoard() {
         ))}
       </div>
 
-      {view === "received" ? <PaymentsReceived /> : (<>
+      {view === "received" ? <PaymentsReceived /> : view === "invoices" ? (
+        <SentInvoices rows={all} loading={isLoading} onOpen={r => setXeroFor(r)} />
+      ) : (<>
 
       {/* Summary strip — a funnel across every booking (not the filtered list
           below), so the four numbers sum to your total book. */}
@@ -325,6 +340,87 @@ export default function PaymentsBoard() {
         initialStream={xeroFor && xeroFor.depositRequired && !xeroFor.depositPaid ? "deposit"
           : xeroFor && xeroFor.foodStatus === "paid" ? "drinks" : "food"}
       />
+    </div>
+  );
+}
+
+// Every invoice sent through to Xero, newest first — the "what have we billed
+// and has it been paid" view, across all events.
+function SentInvoices({ rows, loading, onOpen }: { rows: Row[]; loading: boolean; onOpen: (r: Row) => void }) {
+  const [only, setOnly] = useState<"all" | "open" | "paid">("all");
+  const list = useMemo(() => {
+    const flat = rows.flatMap(r => r.invoices.map(inv => ({ inv, row: r })));
+    flat.sort((a, b) => new Date(b.inv.createdAt).getTime() - new Date(a.inv.createdAt).getTime());
+    return flat.filter(({ inv }) =>
+      only === "all" ? true
+      : only === "paid" ? inv.status === "PAID"
+      : inv.status !== "PAID" && inv.status !== "VOIDED");
+  }, [rows, only]);
+  const totals = useMemo(() => {
+    let out = 0, paid = 0;
+    for (const r of rows) for (const i of r.invoices) {
+      if (i.status === "PAID") paid += i.total;
+      else if (i.status !== "VOIDED") out += i.total;
+    }
+    return { out, paid };
+  }, [rows]);
+
+  if (loading) return <div className="text-center py-16 text-sage font-dm text-sm">Loading invoices…</div>;
+  const anyAtAll = rows.some(r => r.invoices.length > 0);
+  if (!anyAtAll) {
+    return (
+      <div className="text-center py-16">
+        <FileText className="w-8 h-8 text-sage/50 mx-auto mb-2" />
+        <p className="font-dm text-ink text-sm">No invoices sent to Xero yet.</p>
+        <p className="font-dm text-sage text-xs mt-1">Use the XERO button on a booking to send a food, drinks or deposit invoice — it will appear here.</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-white border border-gold/20 rounded-lg px-4 py-3">
+          <div className="font-bebas tracking-widest text-[11px] text-sage">NOT YET PAID</div>
+          <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(totals.out)}</div>
+        </div>
+        <div className="bg-white border border-gold/20 rounded-lg px-4 py-3">
+          <div className="font-bebas tracking-widest text-[11px] text-sage">PAID</div>
+          <div className="font-cormorant text-2xl font-semibold text-green-700">{fmtNZD(totals.paid)}</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 mb-3">
+        {([["all", "All"], ["open", "Not yet paid"], ["paid", "Paid"]] as const).map(([k, lbl]) => (
+          <button key={k} onClick={() => setOnly(k)}
+            className={`font-bebas tracking-widest text-xs px-3 py-1.5 rounded-md transition-colors ${only === k ? "bg-forest text-cream" : "bg-cream text-sage hover:text-ink border border-gold/20"}`}>
+            {lbl}
+          </button>
+        ))}
+        <span className="font-dm text-xs text-sage ml-auto">{list.length} invoice{list.length === 1 ? "" : "s"}</span>
+      </div>
+      {list.length === 0 ? (
+        <p className="text-center py-12 font-dm text-sage text-sm">No invoices match this filter.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {list.map(({ inv, row }) => {
+            const st = invoiceState(inv.status);
+            return (
+              <button key={inv.id} onClick={() => onOpen(row)}
+                className="bg-white border border-gold/20 rounded-lg px-3.5 py-3 flex items-center gap-3 text-left hover:border-forest/40 transition-colors">
+                <div className="min-w-0 flex-1">
+                  <div className="font-cormorant text-base font-semibold text-ink truncate" style={{ textDecoration: st.strike ? "line-through" : undefined }}>
+                    {inv.invoiceNumber ?? "Invoice"} <span className="font-dm text-xs font-normal text-sage">· {STREAM_LABEL[inv.stream] ?? inv.stream}</span>
+                  </div>
+                  <div className="font-dm text-[11px] text-sage truncate">
+                    {row.name} · {fmtDate(row.eventDate)} · sent {new Date(inv.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}
+                  </div>
+                </div>
+                <span className="font-bebas tracking-widest text-[11px] px-2.5 py-1 rounded-md whitespace-nowrap" title={st.hint} style={{ background: st.bg, color: st.text }}>{st.label.toUpperCase()}</span>
+                <span className="font-cormorant text-lg font-semibold text-ink tabular-nums w-24 text-right">{fmtNZD(inv.total)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -479,10 +575,30 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
       </button>
 
       {/* Status chips */}
-      <div className="flex items-center gap-1.5 flex-wrap flex-1">
-        {depositChip}
-        {foodChip}
-        {drinksChip}
+      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {depositChip}
+          {foodChip}
+          {drinksChip}
+        </div>
+        {/* Which invoices have actually been sent to Xero, and where each stands */}
+        {row.invoices.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap" aria-label="Invoices sent to Xero">
+            {row.invoices.map(inv => {
+              const st = invoiceState(inv.status);
+              return (
+                <button key={inv.id} onClick={onXero} title={`${st.hint} — click to manage`}
+                  className="inline-flex items-center gap-1.5 font-dm text-[11px] rounded-md border px-2 py-0.5 hover:opacity-80 transition-opacity"
+                  style={{ background: st.bg, color: st.text, borderColor: `${st.text}33`, textDecoration: st.strike ? "line-through" : undefined }}>
+                  <FileText className="w-3 h-3 flex-shrink-0" aria-hidden />
+                  <span className="font-semibold">{STREAM_LABEL[inv.stream] ?? inv.stream} {inv.invoiceNumber ?? ""}</span>
+                  <span>· {st.label}</span>
+                  <span className="tabular-nums">· {fmtNZD(inv.total)}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Balance — the amount owed leads the row (the reason to open Payments),
@@ -509,7 +625,7 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <button onClick={onXero} title="Send a food or drinks invoice to Xero as a draft"
           className="font-bebas tracking-widest text-[11px] text-blue-800 border border-blue-800/30 rounded-md px-2.5 py-1.5 hover:bg-blue-800/5 transition-colors flex items-center gap-1">
-          <FileText className="w-3 h-3" /> XERO
+          <FileText className="w-3 h-3" /> XERO{row.invoices.length > 0 ? ` · ${row.invoices.filter(i => i.status !== "VOIDED").length}` : ""}
         </button>
         <button onClick={onRecord}
           className="font-bebas tracking-widest text-[11px] text-forest border border-forest/30 rounded-md px-2.5 py-1.5 hover:bg-forest/5 transition-colors flex items-center gap-1">
