@@ -757,6 +757,30 @@ function BeoPreviewOverlay({ bookingId, name, onClose }: { bookingId: number; na
   const [nonce] = React.useState(() => Date.now());
   const [loaded, setLoaded] = React.useState(false);
   const closeRef = React.useRef<HTMLButtonElement>(null);
+  const frameRef = React.useRef<HTMLIFrameElement>(null);
+  // Jump chips: the BEO tags its main sections with ids; show a chip for each
+  // one that's actually on this event's sheet (hidden sections, or events with
+  // no menu or dietaries, simply get no chip). Same-origin iframe, so we can
+  // read and scroll it directly.
+  const [anchors, setAnchors] = React.useState<{ id: string; label: string }[]>([]);
+  const BEO_SECTIONS: Array<[string, string]> = [
+    ['beo-run', 'Run of day'], ['beo-food', 'Food'], ['beo-dietary', 'Dietary'], ['beo-bev', 'Drinks'], ['beo-billing', 'Billing'],
+  ];
+  const onFrameLoad = () => {
+    setLoaded(true);
+    try {
+      const d = frameRef.current?.contentDocument;
+      setAnchors(BEO_SECTIONS.filter(([id]) => d?.getElementById(id)).map(([id, label]) => ({ id, label })));
+    } catch { /* cross-origin or blocked: just no chips */ }
+  };
+  const jumpTo = (id: string | null) => {
+    try {
+      const d = frameRef.current?.contentDocument;
+      if (!d) return;
+      if (id === null) d.defaultView?.scrollTo({ top: 0, behavior: 'smooth' });
+      else d.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch { /* ignore */ }
+  };
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); onClose(); }
@@ -787,10 +811,22 @@ function BeoPreviewOverlay({ bookingId, name, onClose }: { bookingId: number; na
             <X className="w-3.5 h-3.5" /> <span className="hidden sm:inline">CLOSE</span>
           </button>
         </div>
+        {anchors.length > 0 && (
+          <nav aria-label="Jump to a section of the BEO" className="flex items-center gap-1.5 px-3 py-2 bg-cream border-b border-gold/25 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <span className="font-bebas tracking-widest text-[10px] text-ink/70 flex-shrink-0 mr-1">JUMP TO</span>
+            {anchors.map(a => (
+              <button key={a.id} onClick={() => jumpTo(a.id)}
+                className="flex-shrink-0 px-3 py-1.5 rounded-full border border-forest/30 text-forest hover:bg-forest hover:text-cream transition-colors font-bebas tracking-widest text-xs">
+                {a.label.toUpperCase()}
+              </button>
+            ))}
+            <button onClick={() => jumpTo(null)} className="flex-shrink-0 ml-auto px-2 py-1.5 font-bebas tracking-widest text-xs text-ink/70 hover:text-ink">TOP ↑</button>
+          </nav>
+        )}
         <div className="relative flex-1 min-h-0 bg-white">
           {!loaded && <div className="absolute inset-0 flex items-center justify-center font-dm text-sm text-ink/70">Loading BEO…</div>}
-          <iframe title={`BEO for ${name}`} src={beoUrl(bookingId, { format: 'html', nonce })}
-            onLoad={() => setLoaded(true)} className="absolute inset-0 w-full h-full border-0" />
+          <iframe ref={frameRef} title={`BEO for ${name}`} src={beoUrl(bookingId, { format: 'html', nonce })}
+            onLoad={onFrameLoad} className="absolute inset-0 w-full h-full border-0" />
         </div>
       </div>
     </div>
