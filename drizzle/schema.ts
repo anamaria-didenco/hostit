@@ -722,6 +722,9 @@ export const xeroInvoices = pgTable("xero_invoices", {
   invoiceNumber: varchar("invoiceNumber", { length: 50 }),
   status: varchar("status", { length: 20 }), // DRAFT | AUTHORISED | PAID | VOIDED
   total: decimal("total", { precision: 10, scale: 2 }),
+  // Who raised it in VenueFlow (a team member's name, or the owner's) — so
+  // "which invoices did she send?" has an answer. Null on older rows.
+  sentBy: varchar("sentBy", { length: 120 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (t) => ({
   // One tracking row per Xero invoice per owner, so a failed-then-retried push

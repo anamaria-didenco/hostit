@@ -93,7 +93,9 @@ export const appRouter = router({
 
   auth: router({
     me: publicProcedure.query(opts => ({
-      user: opts.ctx.user,
+      // Never send the password hash to the browser (it used to ride along in
+      // the full user row — to team-link and staff sessions too).
+      user: opts.ctx.user ? { ...opts.ctx.user, passwordHash: undefined } : opts.ctx.user,
       isTeamMember: opts.ctx.isTeamMember,
       isStaff: opts.ctx.isStaff,
     })),
@@ -4522,6 +4524,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             invoiceNumber: inv.invoiceNumber ?? null,
             status: inv.status ?? 'DRAFT',
             total: Number(inv.total ?? 0),
+            sentBy: inv.sentBy ?? null,
             createdAt: inv.createdAt,
           });
           invByBooking.set(inv.bookingId, arr);
@@ -4858,7 +4861,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         updateInvoiceId: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        if (ctx.isTeamMember) throw new Error('Only the venue owner can send invoices to Xero');
+        // Team members (e.g. the events manager) raise invoices too; the row
+        // records who did. Read-only staff sessions can't.
+        if (ctx.isStaff) throw new Error('Your login can\'t send invoices to Xero');
         const { getDb } = await import('./db');
         const { bookings, xeroInvoices } = await import('../drizzle/schema');
         const { eq, and, or, isNull, notInArray } = await import('drizzle-orm');
@@ -4957,6 +4962,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             invoiceNumber: result.invoiceNumber,
             status: result.status,
             total: String(result.total),
+            sentBy: (ctx.isTeamMember ? ctx.actorName : ctx.user?.name) ?? null,
           });
         }
         // Raising the invoice IS the "invoiced" moment for the operator, so
@@ -4982,7 +4988,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     deleteInvoice: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        if (ctx.isTeamMember) throw new Error('Only the venue owner can delete Xero invoices');
+        // Only DRAFTs can be deleted (approved/paid ones are refused below), so a
+        // team member can clear a draft they got wrong.
+        if (ctx.isStaff) throw new Error('Your login can\'t delete Xero invoices');
         const { getDb } = await import('./db');
         const { xeroInvoices } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');

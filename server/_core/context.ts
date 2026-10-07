@@ -10,6 +10,9 @@ export type TrpcContext = {
   user: User | null;
   isTeamMember: boolean;
   isStaff: boolean;
+  /** Display name from the session — for a team-link login this is the team
+   *  member's own name (ctx.user is the venue owner they act under). */
+  actorName: string | null;
 };
 
 export async function createContext(
@@ -18,6 +21,7 @@ export async function createContext(
   let user: User | null = null;
   let isTeamMember = false;
   let isStaff = false;
+  let actorName: string | null = null;
 
   try {
     user = await sdk.authenticateRequest(opts.req);
@@ -25,6 +29,7 @@ export async function createContext(
     const sessionInfo = await sdk.verifySession(cookies[COOKIE_NAME]);
     isTeamMember = sessionInfo?.isTeamMember === true;
     isStaff = sessionInfo?.isStaff === true;
+    actorName = sessionInfo?.name ?? null;
   } catch (error) {
     user = null;
   }
@@ -35,5 +40,6 @@ export async function createContext(
     user,
     isTeamMember,
     isStaff,
+    actorName,
   };
 }
