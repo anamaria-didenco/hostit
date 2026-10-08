@@ -44,6 +44,8 @@ import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
+import { ClashDialogHost, promptClashOverride, getClashes } from "@/components/ClashDialog";
+import { HoldPanel, HoldTag, DateClashChip, holdState, fmtHoldDay } from "@/components/DateHold";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
@@ -254,7 +256,9 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
                     <span key={b.id} className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === 'confirmed' ? 'bg-forest' : b.status === 'finished' ? 'bg-stone-400' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'}`} />
                   ))}
                   {dayLeads.slice(0, 2).map((l: any) => (
-                    <span key={l.id} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
+                    holdState(l) === 'held'
+                      ? <span key={l.id} title="Date on hold" className="w-2 h-2 rounded-full flex-shrink-0 border-[1.5px] border-dashed border-amber-700 bg-white" />
+                      : <span key={l.id} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
                   ))}
                 </div>
                 {dayBookings.slice(0, 1).map((b: any) => (
@@ -1295,6 +1299,8 @@ export default function Dashboard() {
     { status: leadStatusFilter.length === 1 ? leadStatusFilter[0] : undefined },
     { enabled: !!user?.id, refetchInterval: 30_000 }
   );
+  // leadId → date clashes with a booking or hold, for the "Date clash" chips.
+  const { data: clashMap } = trpc.holds.clashMap.useQuery(undefined, { enabled: !!user?.id && !isStaff, refetchInterval: 60_000 });
 
   // One-tap follow-up: email the enquirer a nudge and push the next follow-up
   // out a week (so the lead leaves the "needs follow-up" list).
@@ -1615,7 +1621,11 @@ export default function Dashboard() {
       utils.dashboard.invalidate();
       toast.success("Event rescheduled");
     },
-    onError: () => toast.error("Failed to reschedule"),
+    onError: (err, vars) => {
+      // Date clash → "Book anyway?" (resends with allowClash), not a dead end.
+      if (promptClashOverride(err, () => rescheduleLead.mutate({ ...vars, allowClash: true }), { confirmLabel: "Move anyway" })) return;
+      toast.error("Failed to reschedule");
+    },
   });
   const rescheduleBooking = trpc.bookings.update.useMutation({
     // Booking edits cascade to the parent lead on the server, so we also
@@ -1640,8 +1650,17 @@ export default function Dashboard() {
       else if (v.depositRequired !== undefined) msg = v.depositRequired ? "Deposit now required" : "Marked as no deposit needed";
       else if (v.status !== undefined) msg = "Status updated";
       toast.success(msg);
+      // A save that went through after "Book anyway" — the inline editor had
+      // rolled its optimistic value back, so put the saved one back in place.
+      if (v.allowClash) {
+        const { id: _id, allowClash: _a, ...fields } = v;
+        setSelectedBooking((prev: any) => prev && !prev._isLead && prev.id === v.id ? { ...prev, ...fields } : prev);
+      }
     },
-    onError: () => toast.error("Failed to save change"),
+    onError: (err, vars) => {
+      if (promptClashOverride(err, () => rescheduleBooking.mutate({ ...vars, allowClash: true }), { confirmLabel: "Save anyway" })) return;
+      toast.error("Failed to save change");
+    },
   });
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   function handleEventDrop(payload: { id: number; type: 'lead'|'booking'; eventDate: string }, newDateStr: string) {
@@ -1717,9 +1736,10 @@ export default function Dashboard() {
     // server rejects the mutation.
     const prevValue = (selectedBooking as any)[field];
     setSelectedBooking((prev: any) => prev ? { ...prev, [field]: field === "eventDate" ? mutValue : mutValue } : prev);
-    const onErr = () => {
+    const onErr = (err: unknown) => {
       setSelectedBooking((prev: any) => (prev && prev.id === selectedBooking.id) ? { ...prev, [field]: prevValue } : prev);
-      toast.error("Failed to save change — reverted");
+      // A date clash opens the "already taken" dialog instead (hook-level onError).
+      if (!getClashes(err)) toast.error("Failed to save change — reverted");
     };
     if (selectedBooking._isLead) {
       rescheduleLead.mutate({ id: selectedBooking.id, [field]: mutValue } as any, { onError: onErr });
@@ -1766,12 +1786,20 @@ export default function Dashboard() {
       setEditingEventDetails(false);
       toast.success("Event details saved");
     },
-    onError: () => toast.error("Failed to save event details"),
+    onError: (err, vars) => {
+      if (promptClashOverride(err, () => updateLeadDetails.mutate({ ...vars, allowClash: true }), { confirmLabel: "Save anyway" })) return;
+      toast.error("Failed to save event details");
+    },
   });
   const updateStatus = trpc.leads.updateStatus.useMutation({
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       refetchLeads();
       setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status } : prev);
+      // Moving to/from "tentative" starts/ends a date hold on the server.
+      const holdPatch = { holdUntil: data?.holdUntil ?? null, ...(data?.holdUntil ? {} : { holdNote: null }) };
+      setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, ...holdPatch } : prev);
+      setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === variables.id ? { ...prev, ...holdPatch } : prev);
+      utils.holds.invalidate();
       if (selectedLead?.id === variables.id) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
       // Status changes (especially → 'booked') affect bookings list, calendar, and dashboard tiles.
       utils.bookings.invalidate();
@@ -1787,8 +1815,20 @@ export default function Dashboard() {
         toast.success("Status updated");
       }
     },
-    onError: () => {
+    onError: (err, variables) => {
       suppressStatusToast.current = false;
+      if (getClashes(err)) {
+        // Undo the optimistic status flip, then ask "Book anyway?".
+        const prior = (allLeads ?? []).find((l: any) => l.id === variables.id)?.status;
+        if (prior) {
+          setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === variables.id ? { ...prev, status: prior } : prev);
+          setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: prior } : prev);
+        }
+        promptClashOverride(err, () => {
+          updateStatus.mutate({ ...variables, allowClash: true });
+          setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === variables.id ? { ...prev, status: variables.status } : prev);
+        }, { confirmLabel: variables.status === 'tentative' ? 'Hold anyway' : 'Book anyway' });
+      }
     },
   });
   const bulkUpdateStatus = trpc.leads.bulkUpdateStatus.useMutation({
@@ -1796,7 +1836,16 @@ export default function Dashboard() {
       refetchLeads();
       setSelectedLeadIds(new Set());
       setBulkSelectMode(false);
+      utils.holds.invalidate();
       toast.success(`${data.updated} lead${data.updated === 1 ? '' : 's'} updated`);
+      // Clashing leads are skipped, not failed — say which and why.
+      const skipped = (data as any).skipped as { id: number; name: string; clashes: string[] }[] | undefined;
+      if (skipped?.length) {
+        toast.warning(`${skipped.length} skipped — the date is already taken`, {
+          description: <div className="space-y-1">{skipped.map(s => <div key={s.id}>{s.name} — {s.clashes[0]}</div>)}</div>,
+          duration: 12000,
+        });
+      }
     },
     onError: (err) => toast.error(err.message || 'Bulk update failed'),
   });
@@ -1952,7 +2001,10 @@ export default function Dashboard() {
       setEnquiryPasteMode(true);
       toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Added successfully!');
     },
-    onError: () => toast.error('Failed to add record'),
+    onError: (err, vars) => {
+      if (promptClashOverride(err, () => createEnquiry.mutate({ ...vars, allowClash: true }))) return;
+      toast.error('Failed to add record');
+    },
   });
   const createEnquiryFromCalendar = trpc.leads.create.useMutation({
     onSuccess: (created: any, vars: any) => {
@@ -1970,7 +2022,10 @@ export default function Dashboard() {
       setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' });
       toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Event added to calendar!');
     },
-    onError: () => toast.error('Failed to create event'),
+    onError: (err, vars) => {
+      if (promptClashOverride(err, () => createEnquiryFromCalendar.mutate({ ...vars, allowClash: true }))) return;
+      toast.error('Failed to create event');
+    },
   });
   const updateSettings = trpc.venue.update.useMutation({
     onSuccess: () => { refetchSettings(); toast.success("Settings saved!"); },
@@ -2539,6 +2594,8 @@ export default function Dashboard() {
         eventTimeEnd: vs?.eventTimeEnd ?? "22:00",
         minGroupSize: vs?.minGroupSize ?? 0,
         autoCancelTentative: vs?.autoCancelTentative ?? 1,
+        defaultHoldDays: vs?.defaultHoldDays ?? 7,
+        holdClientReminderEnabled: vs?.holdClientReminderEnabled ?? 0,
         // Venue profile fields
         bannerImageUrl: vs?.bannerImageUrl ?? "",
         venueType: vs?.venueType ?? "",
@@ -3675,7 +3732,14 @@ export default function Dashboard() {
                                   </button>
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[200px] truncate">{lead.eventType || "—"}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}{budgetRangeLabel((lead as any).budgetRange) ? <span className="ml-1.5 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap">{budgetRangeLabel((lead as any).budgetRange)}</span> : null}</td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}
+                                  {(holdState(lead) === 'held' || clashMap?.[lead.id]) && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                      {holdState(lead) === 'held' && <HoldTag until={lead.holdUntil} />}
+                                      <DateClashChip clashes={clashMap?.[lead.id] as any} />
+                                    </div>
+                                  )}
+                                </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
                                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                   <select
@@ -3810,6 +3874,8 @@ export default function Dashboard() {
                         ) : (
                           <span className="font-dm text-xs text-ink/55 italic">no date</span>
                         )}
+                        {holdState(lead) === 'held' && <HoldTag until={lead.holdUntil} />}
+                        <DateClashChip clashes={clashMap?.[lead.id] as any} />
                       </div>
                       {/* Row 4: follow-up badge if set */}
                       {lead.followUpDate && (() => {
@@ -4146,6 +4212,19 @@ export default function Dashboard() {
                           </button>
                         </div>
                       )}
+                      {!isStaff && (
+                        <div className="mb-3">
+                          <HoldPanel
+                            key={selectedLead.id}
+                            lead={selectedLead}
+                            defaultHoldDays={(venueSettings as any)?.defaultHoldDays}
+                            onChanged={(patch) => {
+                              setSelectedLead((prev: any) => prev && prev.id === selectedLead.id ? { ...prev, ...patch } : prev);
+                              refetchLeads();
+                            }}
+                          />
+                        </div>
+                      )}
                       <div className="space-y-1.5">
                         {pipelineStages.map(stage => {
                           const isActive = selectedLead.status === stage.key;
@@ -4325,6 +4404,8 @@ export default function Dashboard() {
                             <span className={`font-bebas text-xs tracking-widest px-2.5 py-1 border ${stage.color}`}>{stage.label}</span>
                           ) : null;
                         })()}
+                        {holdState(selectedLead) === 'held' && <HoldTag until={selectedLead.holdUntil} />}
+                        <DateClashChip clashes={clashMap?.[selectedLead.id] as any} />
                       </div>
                       {/* Contact */}
                       <div className="grid grid-cols-2 gap-3 text-sm">
@@ -4830,6 +4911,8 @@ export default function Dashboard() {
                                 <>
                                   {shown.map((ev: any) => {
                                     const isLead = ev._kind === 'lead';
+                                    // A held date draws as a dashed, hatched "HOLD" chip, never a solid booking.
+                                    const isHold = isLead && holdState(ev) === 'held';
                                     const time = ev.startTime ?? ev.eventTime ?? null;
                                     return (
                                       <div key={`${ev._kind}-${ev.id}`} className="relative group/card w-full">
@@ -4838,8 +4921,9 @@ export default function Dashboard() {
                                           onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
                                           style={spaceColor(ev.spaceName) ? { borderLeft: `3px solid ${spaceColor(ev.spaceName)}` } : undefined}
-                                          className={`w-full text-left rounded font-dm ${statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
-                                          title={`${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
+                                          className={`w-full text-left rounded font-dm ${isHold ? 'vf-hold-chip' : statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
+                                          title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
+                                          {isHold && <span className="shrink-0 font-bebas text-[9px] tracking-widest leading-snug">HOLD</span>}
                                           {time && <span className="shrink-0 text-[9px] tabular-nums opacity-70 leading-snug">{time}</span>}
                                           <span className="truncate font-semibold text-[10px] leading-snug">{ev.firstName} {ev.lastName ? ev.lastName[0] + '.' : ''}</span>
                                         </button>
@@ -4935,9 +5019,11 @@ export default function Dashboard() {
                                     {e.spaceName ? ` · ${e.spaceName}` : ''}
                                   </div>
                                 </div>
+                                {e._kind === 'lead' && holdState(e) === 'held' ? <HoldTag until={e.holdUntil} /> : (
                                 <span className={`font-bebas text-[9px] tracking-widest px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(e.status).calClasses}`}>
                                   {getStatusInfo(e.status).label.toUpperCase()}
                                 </span>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -5174,7 +5260,9 @@ export default function Dashboard() {
                                 </div>
                                 {/* Status (+ deposit for bookings) */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-bebas text-[10px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>
+                                  {item._type === 'lead' && holdState(item) === 'held'
+                                    ? <HoldTag until={item.holdUntil} />
+                                    : <span className="font-bebas text-[10px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>}
                                   {item._type === 'booking' && (
                                     <span className={`font-bebas text-[9px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-700'}`}>{item.depositPaid ? '· PAID' : '· PENDING'}</span>
                                   )}
@@ -5292,11 +5380,11 @@ export default function Dashboard() {
                           {dayLeads.map((l: any) => (
                             <button key={l.id}
                               onClick={() => openEventDrawer({ ...l, _isLead: true })}
-                              className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}>
+                              className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${holdState(l) === 'held' ? 'vf-hold-chip' : statusCard(l.status)} hover:opacity-80 transition-opacity`}>
                               <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                               {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
                               {l.guestCount && <div className="opacity-95">{l.guestCount} pax</div>}
-                              <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{statusLabel(l.status)}</div>
+                              <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{holdState(l) === 'held' ? `HOLD · TO ${fmtHoldDay(l.holdUntil).toUpperCase()}` : statusLabel(l.status)}</div>
                             </button>
                           ))}
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
@@ -5419,7 +5507,7 @@ export default function Dashboard() {
                         {dayLeads.map((l: any) => (
                           <button key={l.id}
                             onClick={() => openEventDrawer({ ...l, _isLead: true })}
-                            className={`w-full text-left p-4 ${statusCard(l.status)} hover:opacity-90 transition-opacity`}>
+                            className={`w-full text-left p-4 ${holdState(l) === 'held' ? 'vf-hold-chip rounded-sm' : statusCard(l.status)} hover:opacity-90 transition-opacity`}>
                             <div className="flex items-start gap-3">
                               <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${statusDot(l.status)}`} />
                               <div className="flex-1 min-w-0">
@@ -5438,9 +5526,11 @@ export default function Dashboard() {
                                   {l.spaceName && <span>{l.spaceName}</span>}
                                 </div>
                               </div>
+                              {holdState(l) === 'held' ? <HoldTag until={l.holdUntil} /> : (
                               <div className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(l.status).calClasses}`}>
                                 {getStatusInfo(l.status).label.toUpperCase()}
                               </div>
+                              )}
                             </div>
                           </button>
                         ))}
@@ -5761,11 +5851,41 @@ export default function Dashboard() {
                       {/* pt-6 only makes sense next to a field that has a label
                           above it — in the single-column phone layout it was
                           just a gap. */}
-                      <div className="flex items-start gap-3 md:pt-6">
-                        <input type="checkbox" id="autoCancelTentative" checked={settingsForm.autoCancelTentative === 1}
-                          onChange={e => setSettingsForm((f: any) => ({ ...f, autoCancelTentative: e.target.checked ? 1 : 0 }))}
-                          className="w-5 h-5 mt-0.5 flex-none accent-forest" />
-                        <label htmlFor="autoCancelTentative" className="font-dm text-sm text-ink">Automatically cancel tentative events after their event date</label>
+                      <div aria-hidden="true" className="hidden md:block" />
+                      {/* ── Date holds ── */}
+                      <div className="md:col-span-2 border-t border-gold pt-4 mt-2">
+                        <h3 className="font-bebas text-xs tracking-widest text-sage mb-1">DATE HOLDS</h3>
+                        <p className="font-dm text-xs text-stone-600 mb-3">Hold a date for an enquiry from its panel. Holds show on the calendar and warn anyone booking the same space that day. You get an alert the day before a hold ends.</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label htmlFor="vs-default-hold-days" className="font-bebas text-xs tracking-widest text-sage block mb-1">DEFAULT HOLD LENGTH (DAYS)</label>
+                            <Input id="vs-default-hold-days" type="number" min={1} max={90} value={settingsForm.defaultHoldDays ?? 7}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, defaultHoldDays: Math.min(90, Math.max(1, parseInt(e.target.value) || 7)) }))}
+                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                          </div>
+                          <div className="space-y-3 md:pt-1">
+                            <div className="flex items-start gap-3">
+                              <input type="checkbox" id="autoCancelTentative" checked={settingsForm.autoCancelTentative === 1}
+                                onChange={e => setSettingsForm((f: any) => ({ ...f, autoCancelTentative: e.target.checked ? 1 : 0 }))}
+                                aria-describedby="autoCancelTentative-help"
+                                className="w-5 h-5 mt-0.5 flex-none accent-forest" />
+                              <div>
+                                <label htmlFor="autoCancelTentative" className="font-dm text-sm text-ink">Release holds automatically when they end</label>
+                                <p id="autoCancelTentative-help" className="font-dm text-xs text-stone-600 mt-0.5">The date is freed and the enquiry goes back to the status it had before. Off: holds stay on the calendar and you're told they've lapsed.</p>
+                              </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <input type="checkbox" id="holdClientReminderEnabled" checked={settingsForm.holdClientReminderEnabled === 1}
+                                onChange={e => setSettingsForm((f: any) => ({ ...f, holdClientReminderEnabled: e.target.checked ? 1 : 0 }))}
+                                aria-describedby="holdClientReminderEnabled-help"
+                                className="w-5 h-5 mt-0.5 flex-none accent-forest" />
+                              <div>
+                                <label htmlFor="holdClientReminderEnabled" className="font-dm text-sm text-ink">Remind clients before a hold expires</label>
+                                <p id="holdClientReminderEnabled-help" className="font-dm text-xs text-stone-600 mt-0.5">Emails the client the day before their hold ends, asking if they'd like to go ahead. Needs your email (SMTP) set up in Settings → Email.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       <div className="md:col-span-2">
                         <label htmlFor="vs-payment-instructions" className="font-bebas text-xs tracking-widest text-sage block mb-1">PAYMENT INSTRUCTIONS</label>
@@ -9311,6 +9431,7 @@ export default function Dashboard() {
           )}
         </main>
 
+        <ClashDialogHost />
         <XeroPushModal
           open={xeroInvoiceFor !== null}
           onClose={() => setXeroInvoiceFor(null)}
@@ -9467,6 +9588,19 @@ export default function Dashboard() {
                   </Popover>
                 )}
               </div>
+              {/* Date hold (enquiries): hold / held-until / extend / release,
+                  plus a "Date clash" warning when the date + space is taken. */}
+              {selectedBooking._isLead && !isStaff && (
+                <HoldPanel
+                  key={selectedBooking.id}
+                  lead={selectedBooking}
+                  defaultHoldDays={(venueSettings as any)?.defaultHoldDays}
+                  onChanged={(patch) => {
+                    setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === selectedBooking.id ? { ...prev, ...patch } : prev);
+                    refetchLeads();
+                  }}
+                />
+              )}
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
                   Cancel/Esc/blur reverts.

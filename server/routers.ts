@@ -20,6 +20,7 @@ const VENUE_SECRET_FIELDS = [
   "notificationEmail", "internalName",
   "nbiApiKey", "nbiVenueId", "nbiAccountId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret", "nbiServiceMappings",
   "automatedTaskRules", "emailSignature", "emailSignatureLogo", "emailSignatures", "autoCancelTentative",
+  "defaultHoldDays", "holdClientReminderEnabled",
 ] as const;
 function stripVenueSecrets<T extends Record<string, any>>(row: T): T {
   const safe: any = { ...row };
@@ -180,6 +181,8 @@ export const appRouter = router({
         eventTimeEnd: z.string().optional(),
         minGroupSize: z.number().optional(),
         autoCancelTentative: z.number().optional(),
+        defaultHoldDays: z.coerce.number().int().min(1).max(90).optional(),
+        holdClientReminderEnabled: z.coerce.number().optional(),
         // Venue profile fields
         bannerImageUrl: z.string().optional(),
         venueType: z.string().optional(),
@@ -495,6 +498,8 @@ export const appRouter = router({
         status: z.string().optional(),
         source: z.string().optional(),
         spaceName: z.string().optional(),
+        // The user has seen the date-clash warning and chosen to go ahead.
+        allowClash: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Rule: every event must have a space selected. If this lead is being
@@ -504,7 +509,13 @@ export const appRouter = router({
         if (['booked', 'confirmed', 'tentative', 'finished'].includes(incomingStatus) && !input.spaceName?.trim()) {
           throw new Error('Please select an event space before saving this event.');
         }
-        return createLead({
+        // Double-booking guard: a new event created straight into a booked or
+        // held state must not silently land on a taken date/space.
+        if (['booked', 'confirmed', 'tentative'].includes(incomingStatus) && input.eventDate) {
+          const { findClashes, assertNoClashes } = await import('./availability');
+          assertNoClashes(await findClashes(ctx.user.id, { start: new Date(input.eventDate), spaceName: input.spaceName }), input.allowClash);
+        }
+        const createdLead = await createLead({
           ownerId: ctx.user.id,
           firstName: input.firstName,
           lastName: input.lastName,
@@ -520,6 +531,11 @@ export const appRouter = router({
           status: incomingStatus,
           spaceName: input.spaceName?.trim() || undefined,
         });
+        if (createdLead && incomingStatus === 'tentative') {
+          const { startHoldFromStatusChange } = await import('./holds');
+          await startHoldFromStatusChange(ctx.user.id, { ...createdLead, status: 'contacted' });
+        }
+        return createdLead;
       }),
 
     list: protectedProcedure
@@ -974,6 +990,8 @@ export const appRouter = router({
         id: z.number(),
         status: z.string(),
         note: z.string().optional(),
+        // The user has seen the date-clash warning and chosen to go ahead.
+        allowClash: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Capture the prior status so we can react to transitions (e.g. moving
@@ -992,7 +1010,28 @@ export const appRouter = router({
           throw new Error('Please set an event space on this enquiry before changing its status to ' + input.status + '.');
         }
 
+        // Double-booking guard: confirming or holding a date checks the
+        // calendar first. A clash comes back as CONFLICT with the clash list;
+        // the UI asks "Book anyway?" and resends with allowClash.
+        const takesDate = ['booked', 'confirmed'].includes(input.status) ? !wasBooked
+          : input.status === 'tentative' ? priorLead.status !== 'tentative' : false;
+        if (takesDate && priorLead.eventDate) {
+          const { findClashes, assertNoClashes } = await import('./availability');
+          const { clashSpace } = await import('./holds');
+          assertNoClashes(await findClashes(ctx.user.id, clashSpace(priorLead)), input.allowClash);
+        }
+
         await updateLeadStatus(input.id, ctx.user.id, input.status, undefined);
+        // Date holds: moving to tentative starts a hold (default length);
+        // moving off it ends one.
+        let holdUntil: Date | null = null;
+        if (input.status === 'tentative' && priorLead.status !== 'tentative') {
+          const { startHoldFromStatusChange } = await import('./holds');
+          holdUntil = await startHoldFromStatusChange(ctx.user.id, priorLead);
+        } else if (input.status !== 'tentative' && priorLead.status === 'tentative') {
+          const { clearHoldFields } = await import('./holds');
+          await clearHoldFields(ctx.user.id, [input.id]);
+        }
         await addLeadActivity({
           leadId: input.id,
           ownerId: ctx.user.id,
@@ -1079,7 +1118,7 @@ export const appRouter = router({
             });
           }
         }
-        return { success: true };
+        return { success: true, holdUntil };
       }),
 
     addNote: protectedProcedure
@@ -1114,9 +1153,29 @@ export const appRouter = router({
         minimumSpend: z.coerce.number().nullable().optional(),
         message: z.string().nullable().optional(),
         spaceName: z.string().nullable().optional(),
+        // The user has seen the date-clash warning and chosen to go ahead.
+        allowClash: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const { id, followUpDate, eventDate, minimumSpend, spaceName, ...rest } = input;
+        const { id, followUpDate, eventDate, minimumSpend, spaceName, allowClash, ...rest } = input;
+        // Double-booking guard: moving a confirmed or held event to another
+        // date or space checks the calendar first.
+        if ((eventDate !== undefined && eventDate !== null) || (spaceName !== undefined && spaceName?.trim())) {
+          const current = await getLeadById(id, ctx.user.id);
+          if (current && ['booked', 'confirmed', 'tentative'].includes(current.status ?? '')) {
+            const start = eventDate ? new Date(eventDate) : current.eventDate;
+            const space = spaceName !== undefined ? spaceName : current.spaceName;
+            const moved = (start?.getTime() ?? null) !== (current.eventDate?.getTime() ?? null)
+              || (space ?? '').trim() !== (current.spaceName ?? '').trim();
+            if (start && moved) {
+              const { findClashes, assertNoClashes } = await import('./availability');
+              assertNoClashes(await findClashes(ctx.user.id, {
+                start, end: current.eventEndDate, spaceId: spaceName !== undefined ? null : current.spaceId,
+                spaceName: space, excludeLeadId: id,
+              }), allowClash);
+            }
+          }
+        }
         // Rule: every event must have a space selected. If the lead is already
         // in a live state, block clearing the space.
         if (spaceName !== undefined && !spaceName?.trim()) {
@@ -1367,12 +1426,45 @@ export const appRouter = router({
             throw new Error(`Please set an event space on ${missing.length} enquir${missing.length === 1 ? 'y' : 'ies'} before bulk-changing status to ${input.status}.`);
           }
         }
-        // Only update leads owned by this user
-        await db.update(leads)
-          .set({ status: input.status })
+        // Double-booking guard: when the batch confirms or holds dates, check
+        // each lead in turn (so two selected leads on the same date/space are
+        // caught too) and skip the clashing ones instead of failing the batch.
+        let ids = input.ids;
+        const skipped: { id: number; name: string; clashes: string[] }[] = [];
+        const takesDate = ['booked', 'confirmed', 'tentative'].includes(input.status);
+        const owned = await db.select().from(leads)
           .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
+        if (takesDate) {
+          const { findClashes } = await import('./availability');
+          const { clashSpace, startHoldFromStatusChange } = await import('./holds');
+          ids = [];
+          for (const lead of owned) {
+            const already = input.status === 'tentative' ? lead.status === 'tentative' : ['booked', 'confirmed', 'finished'].includes(lead.status);
+            if (!already && lead.eventDate) {
+              const clashes = (await findClashes(ctx.user.id, clashSpace(lead))).filter(c => c.certainty === 'clash');
+              if (clashes.length) {
+                skipped.push({ id: lead.id, name: [lead.firstName, lead.lastName].filter(Boolean).join(' '), clashes: clashes.map(c => c.summary) });
+                continue;
+              }
+            }
+            await db.update(leads).set({ status: input.status })
+              .where(and(eq(leads.id, lead.id), eq(leads.ownerId, ctx.user.id)));
+            if (input.status === 'tentative' && lead.status !== 'tentative') await startHoldFromStatusChange(ctx.user.id, lead);
+            ids.push(lead.id);
+          }
+        } else {
+          // Only update leads owned by this user
+          await db.update(leads)
+            .set({ status: input.status })
+            .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
+        }
+        // Leaving tentative ends any date hold.
+        if (input.status !== 'tentative') {
+          const { clearHoldFields } = await import('./holds');
+          await clearHoldFields(ctx.user.id, owned.filter(l => l.status === 'tentative').map(l => l.id));
+        }
         // Log activity for each lead
-        await Promise.all(input.ids.map(leadId =>
+        await Promise.all(ids.map(leadId =>
           addLeadActivity({
             leadId,
             ownerId: ctx.user.id,
@@ -1380,7 +1472,7 @@ export const appRouter = router({
             content: `Bulk status update: changed to ${input.status}`,
           })
         ));
-        return { updated: input.ids.length };
+        return { updated: takesDate ? ids.length : input.ids.length, skipped };
       }),
 
     // Bulk import leads from CSV
@@ -1857,6 +1949,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             // Push to NBI so accepted proposals appear in the NBI diary too.
             const newId = (created as any)?.id ?? (created as any)?.[0]?.id;
             if (newId) {
+              // Date clash → flag + urgent venue alert; never blocks the client. Also ends any hold.
+              await (await import('./holds')).afterProposalAccepted(proposal.ownerId, newId, proposal.leadId);
               const { pushBookingToNbi } = await import('./nowbookit');
               await pushBookingToNbi(newId, proposal.ownerId, { source: 'proposals.respond→accepted' });
               // Event confirmed → remind the events manager to send the deposit.
@@ -2052,6 +2146,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         billingDrinks: z.enum(['invoiced_after', 'on_night', 'prepaid_tab', 'cash_bar', 'tab_then_cash']).nullable().optional(),
         billingDepositApplied: z.enum(['drinks', 'food', 'total', 'none']).nullable().optional(),
         billingNote: z.string().nullable().optional(),
+        // The user has seen the date-clash warning and chosen to go ahead.
+        allowClash: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -2059,7 +2155,29 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const { id, ...rest } = input;
+        const { id, allowClash, ...rest } = input;
+        // Double-booking guard: moving a live event to a new date, time or
+        // space — or bringing a cancelled one back — checks the calendar.
+        if (rest.eventDate !== undefined || rest.eventEndDate !== undefined || rest.spaceName !== undefined || rest.status !== undefined) {
+          const [cur] = await db.select().from(bookings)
+            .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          if (cur) {
+            const start = rest.eventDate !== undefined ? new Date(rest.eventDate) : cur.eventDate;
+            const end = rest.eventEndDate !== undefined ? (rest.eventEndDate ? new Date(rest.eventEndDate) : null) : cur.eventEndDate;
+            const space = rest.spaceName !== undefined ? rest.spaceName : cur.spaceName;
+            const finalStatus = rest.status ?? cur.status;
+            const moved = start.getTime() !== cur.eventDate.getTime()
+              || (end?.getTime() ?? null) !== (cur.eventEndDate?.getTime() ?? null)
+              || (space ?? '').trim() !== (cur.spaceName ?? '').trim();
+            const revived = cur.status === 'cancelled' && finalStatus !== 'cancelled';
+            if (['confirmed', 'tentative'].includes(finalStatus) && (moved || revived)) {
+              const { findClashes, assertNoClashes } = await import('./availability');
+              assertNoClashes(await findClashes(ctx.user.id, {
+                start, end, spaceName: space, excludeBookingId: id, excludeLeadId: cur.leadId,
+              }), allowClash);
+            }
+          }
+        }
         // Prior status, captured before the update so the deposit-prompt email
         // only fires on a real transition INTO "confirmed" (not on every save).
         let priorBookingStatus: string | null = null;
@@ -5314,18 +5432,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     checkAvailability: publicProcedure
       .input(z.object({ date: z.string(), ownerId: z.number() }))
       .query(async ({ input }) => {
-        const { getDb } = await import('./db');
-        const { bookings } = await import('../drizzle/schema');
-        const { eq, and, gte, lt } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return { available: true, bookedSpaces: [] };
-        const day = new Date(input.date);
-        const nextDay = new Date(day);
-        nextDay.setDate(nextDay.getDate() + 1);
-        const dayBookings = await db.select().from(bookings)
-          .where(and(eq(bookings.ownerId, input.ownerId), gte(bookings.eventDate, day), lt(bookings.eventDate, nextDay)));
-        const bookedSpaces = dayBookings.filter(b => b.status !== 'cancelled').map(b => b.spaceName).filter(Boolean);
-        return { available: bookedSpaces.length === 0, bookedSpaces };
+        // Same rules as every other clash check (server/availability.ts): the
+        // NZ calendar day — not the UTC one — and live date holds count too.
+        // Public, so only space names go back, never who booked them.
+        const { findClashes, dayBoundsFromYmd, zonedYmd } = await import('./availability');
+        const parsed = new Date(input.date);
+        const ymd = /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : isNaN(parsed.getTime()) ? null : zonedYmd(parsed);
+        if (!ymd) return { available: true, bookedSpaces: [] as string[] };
+        const midday = new Date(dayBoundsFromYmd(ymd).start.getTime() + 12 * 3600_000);
+        const sameDay = await findClashes(input.ownerId, { start: midday });
+        const bookedSpaces = Array.from(new Set(sameDay.map(c => c.spaceName).filter((s): s is string => !!s)));
+        return { available: sameDay.length === 0, bookedSpaces };
       }),
     getVenueInfo: publicProcedure
       .input(z.object({ ownerId: z.number() }))
@@ -5407,6 +5524,53 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           });
         } catch {}
         return { success: true, leadId: result.id };
+      }),
+  }),
+
+  // ─── Date holds & clash checks (server/holds.ts, server/availability.ts) ───
+  holds: router({
+    // Everything that clashes with this lead's date + space (definite clashes
+    // first, then same-day "possible" ones). For the drawer and hold dialog.
+    clashesForLead: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const lead = await getLeadById(input.leadId, ctx.user.id);
+        if (!lead?.eventDate) return [];
+        const { findClashes } = await import('./availability');
+        const { clashSpace } = await import('./holds');
+        return findClashes(ctx.user.id, clashSpace(lead));
+      }),
+    // leadId → definite clashes, for the "Date clash" chips on the list.
+    clashMap: protectedProcedure.query(async ({ ctx }) => {
+      const { leadClashMap } = await import('./availability');
+      return leadClashMap(ctx.user.id);
+    }),
+    place: protectedProcedure
+      .input(z.object({
+        leadId: z.number(),
+        // NZ calendar date the hold runs until (inclusive), "YYYY-MM-DD".
+        untilDate: z.string(),
+        note: z.string().max(500).optional(),
+        notifyClient: z.boolean().optional(),
+        allowClash: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { placeHold } = await import('./holds');
+        const r = await placeHold(ctx.user.id, { leadId: input.leadId, untilYmd: input.untilDate, note: input.note, notifyClient: input.notifyClient, allowClash: input.allowClash });
+        return { holdUntil: r.holdUntil, email: r.email };
+      }),
+    extend: protectedProcedure
+      .input(z.object({ leadId: z.number(), untilDate: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const { extendHold } = await import('./holds');
+        return extendHold(ctx.user.id, { leadId: input.leadId, untilYmd: input.untilDate });
+      }),
+    release: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { releaseHold } = await import('./holds');
+        const r = await releaseHold(ctx.user.id, input.leadId, 'manual');
+        return { released: r.released, status: r.status };
       }),
   }),
 

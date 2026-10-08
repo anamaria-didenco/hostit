@@ -483,6 +483,13 @@
       "when": 1779801512000,
       "tag": "0068_venue_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1779801512072,
+      "tag": "0072_date_holds",
+      "breakpoints": true
     }
   ]
 }

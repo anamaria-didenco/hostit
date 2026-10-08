@@ -2,6 +2,7 @@ import BookingInvoices from "@/components/BookingInvoices";
 import { useState, useEffect, useMemo } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { ClashDialogHost, promptClashOverride } from "@/components/ClashDialog";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -81,7 +82,11 @@ export default function EventDetail() {
       setEditing(false);
       toast.success("Event updated");
     },
-    onError: (e) => toast.error(e.message ?? "Failed to update event"),
+    onError: (e, vars) => {
+      // Date/space already taken → "Save anyway?" instead of a dead-end error.
+      if (promptClashOverride(e, () => updateBooking.mutate({ ...vars, allowClash: true }), { confirmLabel: "Save anyway" })) return;
+      toast.error(e.message ?? "Failed to update event");
+    },
   });
 
   const getBeoToken = trpc.bookings.getOrCreateBeoToken.useMutation({
@@ -173,6 +178,7 @@ export default function EventDetail() {
 
   return (
     <div className="min-h-screen bg-cream">
+      <ClashDialogHost />
       {beoPreviewOpen && (
         <BeoPreviewOverlay bookingId={booking.id} name={`${booking.firstName ?? ''} ${booking.lastName ?? ''}`.trim() || 'Event'} onClose={() => setBeoPreviewOpen(false)} />
       )}
