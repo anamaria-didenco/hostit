@@ -10973,6 +10973,8 @@ export default function Dashboard() {
         ] : [
           { id: "overview", label: "Home", icon: <LayoutDashboard className="w-5 h-5" /> },
           { id: "enquiries", label: "Enquiries", icon: <MessageSquare className="w-5 h-5" /> },
+          // Payments was only reachable via More on a phone.
+          { id: "payments", label: "Payments", icon: <DollarSign className="w-5 h-5" /> },
           // Daily Checklists is a separate route, not a tab — rendered as an
           // anchor below so mobile users can reach it without diving into More.
           { id: "checklists", label: "Checklists", icon: <CheckSquare className="w-5 h-5" />, href: "/daily-checklists" },

@@ -6,8 +6,11 @@ import XeroPushModal from "@/components/XeroPushModal";
 import PaymentsReceived from "@/components/PaymentsReceived";
 import { invoiceState, STREAM_LABEL } from "@/lib/xeroInvoice";
 import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu";
+import {
   DollarSign, FileText, Clock, CheckCircle2, Moon, Search,
-  CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw, Check, ChevronDown,
+  CalendarDays, Users, AlertCircle, ExternalLink, RefreshCw, ChevronDown, X,
 } from "lucide-react";
 
 // ─── Types mirror the server payments.overview shape ────────────────────────
@@ -46,14 +49,11 @@ interface SentInvoice {
   createdAt: string;
 }
 
-
 const fmtNZD = (n: number) =>
   n.toLocaleString("en-NZ", { style: "currency", currency: "NZD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "No date";
-
-const DEFAULT_DEPOSIT = 575; // Bar Franco standard deposit to secure an event.
 
 // Chip palette by state.
 const CHIP = {
@@ -61,41 +61,45 @@ const CHIP = {
   invoiced: { bg: "#dbeafe", text: "#1e40af", label: "invoiced" },   // blue — awaiting payment
   night:    { bg: "#ede9fe", text: "#5b21b6", label: "on night" },   // purple — settling on the night
   paid:     { bg: "#dcfce7", text: "#166534", label: "paid" },       // green — done
-  none:     { bg: "#f1f0ec", text: "#8a8578", label: "n/a" },        // grey — not applicable
+  // #6b6457 on #f1f0ec is ~5.0:1 (the old #8a8578 was ~3.3:1 — under AA).
+  none:     { bg: "#f1f0ec", text: "#6b6457", label: "n/a" },        // grey — not applicable
 } as const;
 
-// Forward-cycle helpers — one click advances to the next state, looping round.
-// Each chip's selectable statuses. Chips used to CYCLE on click — getting from
-// "to invoice" to "paid" meant tapping through every state in between, and one
-// tap too many wrapped back to the start. Now the chip opens this list and the
-// wanted state is picked directly.
-const FOOD_STATES: Array<{ value: FoodStatus; label: string; state: keyof typeof CHIP }> = [
+// Each chip's selectable statuses, picked directly from a menu.
+const STREAM_STATES: Array<{ value: FoodStatus & DrinksStatus; label: string; state: keyof typeof CHIP }> = [
   { value: "on_night", label: "On the night", state: "night" },
   { value: "to_invoice", label: "To invoice", state: "todo" },
   { value: "invoiced", label: "Invoiced", state: "invoiced" },
   { value: "paid", label: "Paid", state: "paid" },
 ];
-const DRINKS_STATES: Array<{ value: DrinksStatus; label: string; state: keyof typeof CHIP }> = [
-  { value: "on_night", label: "On the night", state: "night" },
-  { value: "to_invoice", label: "To invoice", state: "todo" },
-  { value: "invoiced", label: "Invoiced", state: "invoiced" },
-  { value: "paid", label: "Paid", state: "paid" },
-];
+
+// The four summary buckets. Each booking lands in exactly one (a funnel), so
+// the numbers sum to the whole book — and each card filters the list to it.
+type Bucket = "to_invoice" | "awaiting" | "on_night" | "settled";
+const BUCKET_LABEL: Record<Bucket, string> = {
+  to_invoice: "To invoice", awaiting: "Awaiting payment", on_night: "Paying on the night", settled: "Fully settled",
+};
+
+const TABS = [["events", "Bookings"], ["invoices", "Invoices sent"], ["received", "Received"]] as const;
+type View = typeof TABS[number][0];
 
 export default function PaymentsBoard() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const [q, setQ] = useState("");
-  // Direct event picker — typing a search works, but with a page of events
-  // "find the one I mean" is faster as a dropdown. 0 = all events.
+  // Direct event picker — with a page of events "find the one I mean" is
+  // faster as a dropdown. 0 = all events.
   const [eventFilter, setEventFilter] = useState(0);
-  // Default to Upcoming: the day-to-day question is "what's coming up and where
-  // is its money at", not "what's overdue".
+  // Default to Upcoming (what's coming up and where is its money at). Past
+  // events that still need something are surfaced by a banner above the list,
+  // so a forgotten post-event drinks bill can't hide behind this default.
   const [filter, setFilter] = useState<"action" | "upcoming" | "all">("upcoming");
+  const [bucket, setBucket] = useState<Bucket | null>(null);
   const [xeroFor, setXeroFor] = useState<Row | null>(null);
-  // "Events" tracks where each event's money is up to; "Received" is the ledger
-  // of money that actually landed — the view that reconciles against the bank.
-  const [view, setView] = useState<"events" | "invoices" | "received">("events");
+  // "Bookings" tracks where each booking's money is up to; "Invoices sent" is
+  // what went to Xero; "Received" is the ledger of money that actually landed.
+  const [view, setView] = useState<View>("events");
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const { data, isLoading, isError, refetch } = trpc.payments.overview.useQuery(undefined, { refetchOnWindowFocus: true });
   const { data: xeroStatus } = trpc.xero.status.useQuery();
@@ -123,15 +127,9 @@ export default function PaymentsBoard() {
   }, [xeroStatus?.connected]);
 
   const update = trpc.bookings.update.useMutation({
-    onSuccess: (_d, vars: any) => {
+    onSuccess: () => {
       utils.payments.overview.invalidate();
       utils.bookings.list.invalidate();
-      let msg = "Updated";
-      if (vars.depositRequired === false) msg = "No deposit for this event";
-      else if (vars.depositPaid !== undefined) msg = vars.depositPaid ? "Deposit marked as paid" : "Deposit marked as pending";
-      else if (vars.foodStatus !== undefined) msg = `Food · ${labelFor(vars.foodStatus)}`;
-      else if (vars.drinksStatus !== undefined) msg = `Drinks · ${labelFor(vars.drinksStatus)}`;
-      toast.success(msg);
     },
     onError: () => toast.error("Failed to update — try again"),
   });
@@ -140,7 +138,7 @@ export default function PaymentsBoard() {
 
   // Per-event flags used for filtering + the summary.
   const isDepositDue = (r: Row) => r.depositRequired && !r.depositPaid;
-  const isFullySettled = (r: Row) =>
+  const chipsSettled = (r: Row) =>
     (!r.depositRequired || r.depositPaid) && r.foodStatus === "paid" && r.drinksStatus === "paid";
   const isFuture = (r: Row) => !r.eventDate || new Date(r.eventDate).getTime() >= startOfToday();
   // A stream settling on the night needs nothing until the event has happened.
@@ -148,6 +146,13 @@ export default function PaymentsBoard() {
     status === "to_invoice" || status === "invoiced" || (status === "on_night" && !isFuture(r));
   const needsAction = (r: Row) =>
     isDepositDue(r) || streamNeedsAction(r, r.foodStatus) || streamNeedsAction(r, r.drinksStatus);
+  const bucketOf = (r: Row): Bucket | null => {
+    if (chipsSettled(r)) return "settled";
+    if (r.foodStatus === "to_invoice" || r.drinksStatus === "to_invoice") return "to_invoice";
+    if (isDepositDue(r) || r.foodStatus === "invoiced" || r.drinksStatus === "invoiced") return "awaiting";
+    if ((r.drinksStatus === "on_night" || r.foodStatus === "on_night") && isFuture(r)) return "on_night";
+    return null;
+  };
 
   const rows = useMemo(() => {
     if (eventFilter) {
@@ -160,40 +165,89 @@ export default function PaymentsBoard() {
       r.name.toLowerCase().includes(needle) ||
       (r.eventType ?? "").toLowerCase().includes(needle) ||
       (r.spaceName ?? "").toLowerCase().includes(needle));
-    if (filter === "action") list = list.filter(needsAction);
+    if (bucket) list = list.filter(r => bucketOf(r) === bucket);
+    else if (filter === "action") list = list.filter(needsAction);
     else if (filter === "upcoming") list = list.filter(isFuture);
-    // Sort: soonest event first for action/upcoming; most recent first for all.
+    // Sort: soonest event first, except "All" which is most recent first.
     const ts = (r: Row) => (r.eventDate ? new Date(r.eventDate).getTime() : Number.MAX_SAFE_INTEGER);
-    if (filter === "all") list = [...list].sort((a, b) => (b.eventDate ? new Date(b.eventDate).getTime() : 0) - (a.eventDate ? new Date(a.eventDate).getTime() : 0));
+    if (!bucket && filter === "all") list = [...list].sort((a, b) => (b.eventDate ? new Date(b.eventDate).getTime() : 0) - (a.eventDate ? new Date(a.eventDate).getTime() : 0));
     else list = [...list].sort((a, b) => ts(a) - ts(b));
     return list;
-  }, [all, q, filter, eventFilter]);
+  }, [all, q, filter, eventFilter, bucket]);
 
-  // Each booking counts in exactly ONE card, as a funnel: settled → to invoice
-  // → awaiting payment → on the night. So the four numbers sum to the total
-  // number of bookings instead of overlapping (a booking that both needs
-  // invoicing and has a deposit due used to be counted twice).
   const summary = useMemo(() => {
-    let toInvoice = 0, awaiting = 0, onNight = 0, settled = 0;
-    for (const r of all) {
-      if (isFullySettled(r)) settled++;
-      else if (r.foodStatus === "to_invoice" || r.drinksStatus === "to_invoice") toInvoice++;
-      else if (isDepositDue(r) || r.foodStatus === "invoiced" || r.drinksStatus === "invoiced") awaiting++;
-      else if ((r.drinksStatus === "on_night" || r.foodStatus === "on_night") && isFuture(r)) onNight++;
-    }
-    return { toInvoice, awaiting, onNight, settled };
+    const s: Record<Bucket, number> = { to_invoice: 0, awaiting: 0, on_night: 0, settled: 0 };
+    for (const r of all) { const b = bucketOf(r); if (b) s[b]++; }
+    return s;
   }, [all]);
 
-  const setFood = (r: Row, next: FoodStatus) => update.mutate({ id: r.bookingId, foodStatus: next } as any);
-  const setDrinks = (r: Row, next: DrinksStatus) => update.mutate({ id: r.bookingId, drinksStatus: next } as any);
+  // Past events that still need something done — usually the drinks bill that
+  // goes out after the event. "Upcoming" hides them, so call them out.
+  const pastNeedingAction = useMemo(() => all.filter(r => !isFuture(r) && needsAction(r)), [all]);
+
+  // Jump list: upcoming bookings soonest-first, then past ones newest-first —
+  // it used to start with the oldest event on record.
+  const jumpGroups = useMemo(() => {
+    const ts = (r: Row) => (r.eventDate ? new Date(r.eventDate).getTime() : Number.MAX_SAFE_INTEGER);
+    return {
+      upcoming: all.filter(isFuture).sort((a, b) => ts(a) - ts(b)),
+      past: all.filter(r => !isFuture(r)).sort((a, b) => ts(b) - ts(a)),
+    };
+  }, [all]);
+
+  const recordUrl = (r: Row) => `/payments?bookingId=${r.bookingId}&from=board&record=1`;
+
+  // Marking a stream Paid only changes its status — it records no money. When
+  // the booking still shows money owed, say so and offer to record it, so the
+  // chip and the balance don't quietly disagree.
+  const setStream = (r: Row, key: "foodStatus" | "drinksStatus", next: string) => {
+    const name = key === "foodStatus" ? "Food" : "Drinks";
+    update.mutate({ id: r.bookingId, [key]: next } as any, {
+      onSuccess: () => {
+        if (next === "paid" && (r.outstanding ?? 0) > 0) {
+          toast(`${name} marked paid — ${fmtNZD(r.outstanding ?? 0)} still isn't recorded as received for ${r.name}.`, {
+            action: { label: "Record payment", onClick: () => navigate(recordUrl(r)) },
+            duration: 9000,
+          });
+        } else {
+          toast.success(`${name} · ${labelFor(next)}`);
+        }
+      },
+    });
+  };
   // "Not taken" flips depositRequired off (the server clears the paid flag with
   // it); the other two turn it back on, so a deposit can be reinstated from
   // the same menu it was dismissed from.
   const setDeposit = (r: Row, next: "due" | "paid" | "not_taken") => update.mutate(
     next === "not_taken"
       ? ({ id: r.bookingId, depositRequired: false } as any)
-      : ({ id: r.bookingId, depositRequired: true, depositPaid: next === "paid" } as any)
+      : ({ id: r.bookingId, depositRequired: true, depositPaid: next === "paid" } as any),
+    { onSuccess: () => toast.success(next === "not_taken" ? "No deposit for this booking" : next === "paid" ? "Deposit marked as paid" : "Deposit marked as due") },
   );
+  // All the money is in, but some chips still say otherwise — tick them in one go.
+  const markAllPaid = (r: Row) => update.mutate(
+    { id: r.bookingId, foodStatus: "paid", drinksStatus: "paid", ...(r.depositRequired && !r.depositPaid ? { depositPaid: true } : {}) } as any,
+    { onSuccess: () => toast.success(`${r.name} marked fully settled`) },
+  );
+
+  const onTabKey = (e: React.KeyboardEvent, i: number) => {
+    let n: number | null = null;
+    if (e.key === "ArrowRight") n = (i + 1) % TABS.length;
+    else if (e.key === "ArrowLeft") n = (i + TABS.length - 1) % TABS.length;
+    else if (e.key === "Home") n = 0;
+    else if (e.key === "End") n = TABS.length - 1;
+    if (n === null) return;
+    e.preventDefault();
+    setView(TABS[n][0]);
+    tabRefs.current[n]?.focus();
+  };
+
+  const searchLabel = view === "invoices" ? "Search invoices by client or invoice number"
+    : view === "received" ? "Search payments received by client or notes"
+    : "Search bookings by client, event type or space";
+  const searchPlaceholder = view === "invoices" ? "Search client or invoice #…"
+    : view === "received" ? "Search client or notes…"
+    : "Search client, type, space…";
 
   return (
     <div className="p-4 md:p-6 max-w-[1200px] mx-auto">
@@ -201,9 +255,10 @@ export default function PaymentsBoard() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
         <div>
           <h1 className="font-cormorant text-3xl font-semibold text-ink flex items-center gap-2">
-            <DollarSign className="w-6 h-6 text-forest" /> Payments
+            <DollarSign className="w-6 h-6 text-forest" aria-hidden="true" /> Payments
           </h1>
-          <p className="font-dm text-sm text-sage mt-0.5">
+          {/* Hidden on phones: it pushed the first booking below the screen. */}
+          <p className="hidden sm:block font-dm text-sm text-sage mt-0.5">
             Deposit, food and drinks tracked per booking — so the team always knows who to invoice, who's paid, and who's settling on the night.
           </p>
         </div>
@@ -213,44 +268,55 @@ export default function PaymentsBoard() {
             onClick={() => syncXero.mutate({ force: true })}
             disabled={syncXero.isPending}
             title="Check Xero for invoices that have been reconciled and bring those payments in"
-            className="font-bebas tracking-widest text-[11px] text-blue-800 border border-blue-800/30 rounded-md px-3 py-2 hover:bg-blue-800/5 transition-colors flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${syncXero.isPending ? "animate-spin" : ""}`} />
+            className="font-bebas tracking-widest text-xs text-blue-800 border border-blue-800/30 rounded-md px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${syncXero.isPending ? "animate-spin" : ""}`} aria-hidden="true" />
             {syncXero.isPending ? "SYNCING…" : "SYNC XERO"}
           </button>
         )}
-        <select
-          value={eventFilter}
-          onChange={e => setEventFilter(Number(e.target.value))}
-          aria-label="Jump to one booking"
-          className="w-full sm:w-56 px-2 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
-        >
-          <option value={0}>All bookings…</option>
-          {[...all].sort((a, b) => (a.eventDate ? new Date(a.eventDate).getTime() : 0) - (b.eventDate ? new Date(b.eventDate).getTime() : 0)).map(r => (
-            <option key={r.bookingId} value={r.bookingId}>
-              {r.name}{r.eventDate ? ` — ${new Date(r.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}
-            </option>
-          ))}
-        </select>
+        {view === "events" && (
+          <select
+            value={eventFilter}
+            onChange={e => setEventFilter(Number(e.target.value))}
+            aria-label="Jump to one booking"
+            className="w-full sm:w-56 px-2 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
+          >
+            <option value={0}>All bookings…</option>
+            {jumpGroups.upcoming.length > 0 && (
+              <optgroup label="Upcoming">
+                {jumpGroups.upcoming.map(r => <option key={r.bookingId} value={r.bookingId}>{jumpLabel(r)}</option>)}
+              </optgroup>
+            )}
+            {jumpGroups.past.length > 0 && (
+              <optgroup label="Past">
+                {jumpGroups.past.map(r => <option key={r.bookingId} value={r.bookingId}>{jumpLabel(r)}</option>)}
+              </optgroup>
+            )}
+          </select>
+        )}
         <div className="relative w-full sm:w-64">
           <Search className="w-4 h-4 text-sage absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
+            type="search"
             value={q}
             // Typing a search clears any "jump to one booking" selection, so the
-            // two filters don't silently fight (the dropdown used to override
-            // search with no obvious way back except reselecting "All").
+            // two filters don't silently fight. It now searches whichever tab
+            // you're on (it used to do nothing on Invoices sent / Received).
             onChange={e => { setQ(e.target.value); if (eventFilter) setEventFilter(0); }}
-            aria-label="Search payments by client, event type or space"
-            placeholder="Search client, type, space…"
+            aria-label={searchLabel}
+            placeholder={searchPlaceholder}
             className="w-full pl-9 pr-3 py-2 border border-gold/30 bg-cream font-dm text-sm text-ink rounded-md focus:outline-none focus:border-forest"
           />
         </div>
         </div>
       </div>
 
-      {/* View switcher */}
+      {/* View switcher — a real tab set: arrow keys / Home / End move between tabs. */}
       <div className="flex gap-1.5 mb-4 border-b border-gold/20" role="tablist" aria-label="Payments view">
-        {([["events", "Bookings"], ["invoices", "Invoices sent"], ["received", "Received"]] as const).map(([k, lbl]) => (
-          <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)}
+        {TABS.map(([k, lbl], i) => (
+          <button key={k} ref={el => { tabRefs.current[i] = el; }}
+            id={`pay-tab-${k}`} role="tab" aria-selected={view === k} aria-controls="pay-tabpanel"
+            tabIndex={view === k ? 0 : -1}
+            onClick={() => setView(k)} onKeyDown={e => onTabKey(e, i)}
             className={`font-bebas tracking-widest text-sm px-4 py-2.5 border-b-2 -mb-px transition-colors ${
               view === k ? "border-forest text-forest" : "border-transparent text-sage hover:text-ink"}`}>
             {lbl}
@@ -258,43 +324,72 @@ export default function PaymentsBoard() {
         ))}
       </div>
 
-      {view === "received" ? <PaymentsReceived /> : view === "invoices" ? (
-        <SentInvoices rows={all} loading={isLoading} onOpen={r => setXeroFor(r)} />
+      <div role="tabpanel" id="pay-tabpanel" aria-labelledby={`pay-tab-${view}`}>
+      {view === "received" ? <PaymentsReceived q={q} /> : view === "invoices" ? (
+        <SentInvoices rows={all} q={q} loading={isLoading} onOpen={r => setXeroFor(r)} />
       ) : (<>
 
-      {/* Summary strip — a funnel across every booking (not the filtered list
-          below), so the four numbers sum to your total book. */}
+      {/* Summary — a funnel across every booking (not the filtered list), so the
+          four numbers sum to the whole book. Each card filters the list to it. */}
       <div className="flex items-center justify-between mb-1.5">
-        <span className="font-bebas tracking-widest text-[10px] text-sage">ACROSS ALL {all.length} BOOKING{all.length === 1 ? "" : "S"}</span>
+        <span className="font-bebas tracking-widest text-[11px] text-sage">ACROSS ALL {all.length} BOOKING{all.length === 1 ? "" : "S"} · TAP A CARD TO SEE THEM</span>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <SummaryCard label="To invoice" value={String(summary.toInvoice)} tone="amber" icon={<FileText className="w-4 h-4" />} />
-        <SummaryCard label="Awaiting payment" value={String(summary.awaiting)} tone="blue" icon={<Clock className="w-4 h-4" />} />
-        <SummaryCard label="Paying on the night" value={String(summary.onNight)} tone="purple" icon={<Moon className="w-4 h-4" />} />
-        <SummaryCard label="Fully settled" value={String(summary.settled)} tone="green" icon={<CheckCircle2 className="w-4 h-4" />} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
+        {([
+          ["to_invoice", "amber", <FileText key="i" className="w-4 h-4" />],
+          ["awaiting", "blue", <Clock key="c" className="w-4 h-4" />],
+          ["on_night", "purple", <Moon key="m" className="w-4 h-4" />],
+          ["settled", "green", <CheckCircle2 key="s" className="w-4 h-4" />],
+        ] as const).map(([b, tone, icon]) => (
+          <SummaryCard key={b} label={BUCKET_LABEL[b]} value={summary[b]} tone={tone} icon={icon}
+            selected={bucket === b}
+            onClick={() => { setBucket(bucket === b ? null : b); setEventFilter(0); }} />
+        ))}
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-1.5 mb-3">
-        {([["action", "Needs action"], ["upcoming", "Upcoming"], ["all", "All"]] as const).map(([id, lbl]) => (
-          <button key={id} onClick={() => setFilter(id)}
-            className={`font-bebas tracking-widest text-xs px-3 py-1.5 rounded-md transition-colors ${
-              filter === id ? "bg-forest text-cream" : "bg-cream text-sage hover:text-ink border border-gold/20"}`}>
-            {lbl}
+      <div className="flex items-center gap-1.5 mb-3 flex-wrap" role="group" aria-label="Which bookings to show">
+        {([["action", "Needs action"], ["upcoming", "Upcoming"], ["all", "All"]] as const).map(([id, lbl]) => {
+          const on = !bucket && filter === id;
+          return (
+            <button key={id} aria-pressed={on} onClick={() => { setFilter(id); setBucket(null); }}
+              className={`font-bebas tracking-widest text-xs px-3 py-2 rounded-md transition-colors ${
+                on ? "bg-forest text-cream" : "bg-cream text-sage hover:text-ink border border-gold/20"}`}>
+              {lbl}
+            </button>
+          );
+        })}
+        {bucket && (
+          <button onClick={() => setBucket(null)} aria-label={`Clear filter: ${BUCKET_LABEL[bucket]}`}
+            className="font-dm text-xs px-2.5 py-1.5 rounded-md bg-forest text-cream flex items-center gap-1">
+            {BUCKET_LABEL[bucket]} <X className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
-        ))}
-        <span className="font-dm text-xs text-sage ml-auto">{rows.length} booking{rows.length === 1 ? "" : "s"}</span>
+        )}
+        <span className="font-dm text-xs text-sage ml-auto" aria-live="polite">{rows.length} booking{rows.length === 1 ? "" : "s"}</span>
       </div>
 
-      {/* Legend */}
-      <p className="font-dm text-[11px] text-sage/80 mb-3">
-        Tap a chip to choose its status. Deposit ($575) is deducted off the drinks bill.
-      </p>
+      {/* Past events still owing — the default Upcoming view would otherwise hide them. */}
+      {!bucket && filter === "upcoming" && !eventFilter && pastNeedingAction.length > 0 && (
+        <div className="mb-3 flex items-center justify-between gap-3 flex-wrap rounded-md border border-amber-300 bg-amber-50 px-3.5 py-2.5">
+          <p className="font-dm text-sm text-amber-900 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            {pastNeedingAction.length === 1
+              ? `1 past event still needs something done — e.g. a bill to send or chase.`
+              : `${pastNeedingAction.length} past events still need something done — e.g. bills to send or chase.`}
+          </p>
+          <button onClick={() => setFilter("action")}
+            className="font-bebas tracking-widest text-xs px-3 py-1.5 rounded-md bg-amber-800 text-white hover:bg-amber-900">
+            SHOW {pastNeedingAction.length === 1 ? "IT" : "THEM"}
+          </button>
+        </div>
+      )}
+
+      <p className="font-dm text-xs text-sage mb-3">Tap a chip to set its status.</p>
 
       {/* Rows */}
       {isError ? (
         <div className="text-center py-16">
-          <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
+          <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" aria-hidden="true" />
           <p className="font-dm text-ink text-sm mb-3">Couldn't load payments.</p>
           <button onClick={() => refetch()}
             className="font-bebas tracking-widest text-xs px-4 py-2 rounded-md bg-forest text-cream hover:opacity-90">
@@ -305,28 +400,32 @@ export default function PaymentsBoard() {
         <div className="text-center py-16 text-sage font-dm text-sm">Loading payments…</div>
       ) : rows.length === 0 ? (
         <div className="text-center py-16">
-          <CheckCircle2 className="w-8 h-8 text-green-600/60 mx-auto mb-2" />
+          <CheckCircle2 className="w-8 h-8 text-green-600/60 mx-auto mb-2" aria-hidden="true" />
           <p className="font-dm text-sage text-sm">
-            {q ? "No events match your search." : filter === "action" ? "Nothing needs action — you're all caught up." : "No events yet."}
+            {q ? "No bookings match your search." : bucket ? `Nothing in "${BUCKET_LABEL[bucket]}" right now.` : filter === "action" ? "Nothing needs action — you're all caught up." : "No events yet."}
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2" aria-label="Bookings">
           {rows.map(r => (
-            <EventRow key={r.bookingId} row={r}
-              onFood={(v) => setFood(r, v)}
-              onDrinks={(v) => setDrinks(r, v)}
-              onDeposit={(next) => setDeposit(r, next)}
-              onOpen={() => navigate(`/event/${r.bookingId}`)}
-              onRecord={() => navigate(`/payments?bookingId=${r.bookingId}&from=board`)}
-              onXero={() => setXeroFor(r)}
-              busy={update.isPending}
-            />
+            <li key={r.bookingId}>
+              <EventRow row={r}
+                onFood={(v) => setStream(r, "foodStatus", v)}
+                onDrinks={(v) => setStream(r, "drinksStatus", v)}
+                onDeposit={(next) => setDeposit(r, next)}
+                onOpen={() => navigate(`/event/${r.bookingId}`)}
+                onRecord={() => navigate(recordUrl(r))}
+                onXero={() => setXeroFor(r)}
+                onMarkAllPaid={() => markAllPaid(r)}
+                busy={update.isPending}
+              />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       </>)}
+      </div>
 
       <XeroPushModal
         open={xeroFor !== null}
@@ -345,18 +444,28 @@ export default function PaymentsBoard() {
   );
 }
 
+function jumpLabel(r: Row) {
+  return `${r.name}${r.eventDate ? ` — ${new Date(r.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}` : ""}`;
+}
+
 // Every invoice sent through to Xero, newest first — the "what have we billed
 // and has it been paid" view, across all events.
-function SentInvoices({ rows, loading, onOpen }: { rows: Row[]; loading: boolean; onOpen: (r: Row) => void }) {
+function SentInvoices({ rows, q, loading, onOpen }: { rows: Row[]; q: string; loading: boolean; onOpen: (r: Row) => void }) {
   const [only, setOnly] = useState<"all" | "open" | "paid">("all");
   const list = useMemo(() => {
+    const needle = q.trim().toLowerCase();
     const flat = rows.flatMap(r => r.invoices.map(inv => ({ inv, row: r })));
     flat.sort((a, b) => new Date(b.inv.createdAt).getTime() - new Date(a.inv.createdAt).getTime());
-    return flat.filter(({ inv }) =>
-      only === "all" ? true
-      : only === "paid" ? inv.status === "PAID"
-      : inv.status !== "PAID" && inv.status !== "VOIDED");
-  }, [rows, only]);
+    return flat.filter(({ inv, row }) =>
+      (only === "all" ? true
+        : only === "paid" ? inv.status === "PAID"
+        : inv.status !== "PAID" && inv.status !== "VOIDED")
+      && (!needle
+        || (inv.invoiceNumber ?? "").toLowerCase().includes(needle)
+        || row.name.toLowerCase().includes(needle)
+        || (STREAM_LABEL[inv.stream] ?? inv.stream).toLowerCase().includes(needle)
+        || (inv.sentBy ?? "").toLowerCase().includes(needle)));
+  }, [rows, only, q]);
   const totals = useMemo(() => {
     let out = 0, paid = 0;
     for (const r of rows) for (const i of r.invoices) {
@@ -371,7 +480,7 @@ function SentInvoices({ rows, loading, onOpen }: { rows: Row[]; loading: boolean
   if (!anyAtAll) {
     return (
       <div className="text-center py-16">
-        <FileText className="w-8 h-8 text-sage/50 mx-auto mb-2" />
+        <FileText className="w-8 h-8 text-sage/50 mx-auto mb-2" aria-hidden="true" />
         <p className="font-dm text-ink text-sm">No invoices sent to Xero yet.</p>
         <p className="font-dm text-sage text-xs mt-1">Use the XERO button on a booking to send a food, drinks or deposit invoice — it will appear here.</p>
       </div>
@@ -381,46 +490,48 @@ function SentInvoices({ rows, loading, onOpen }: { rows: Row[]; loading: boolean
     <div>
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-white border border-gold/20 rounded-lg px-4 py-3">
-          <div className="font-bebas tracking-widest text-[11px] text-sage">NOT YET PAID</div>
+          <div className="font-bebas tracking-widest text-xs text-sage">NOT YET PAID</div>
           <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(totals.out)}</div>
         </div>
         <div className="bg-white border border-gold/20 rounded-lg px-4 py-3">
-          <div className="font-bebas tracking-widest text-[11px] text-sage">PAID</div>
+          <div className="font-bebas tracking-widest text-xs text-sage">PAID</div>
           <div className="font-cormorant text-2xl font-semibold text-green-700">{fmtNZD(totals.paid)}</div>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 mb-3">
+      <div className="flex items-center gap-1.5 mb-3" role="group" aria-label="Which invoices to show">
         {([["all", "All"], ["open", "Not yet paid"], ["paid", "Paid"]] as const).map(([k, lbl]) => (
-          <button key={k} onClick={() => setOnly(k)}
-            className={`font-bebas tracking-widest text-xs px-3 py-1.5 rounded-md transition-colors ${only === k ? "bg-forest text-cream" : "bg-cream text-sage hover:text-ink border border-gold/20"}`}>
+          <button key={k} aria-pressed={only === k} onClick={() => setOnly(k)}
+            className={`font-bebas tracking-widest text-xs px-3 py-2 rounded-md transition-colors ${only === k ? "bg-forest text-cream" : "bg-cream text-sage hover:text-ink border border-gold/20"}`}>
             {lbl}
           </button>
         ))}
-        <span className="font-dm text-xs text-sage ml-auto">{list.length} invoice{list.length === 1 ? "" : "s"}</span>
+        <span className="font-dm text-xs text-sage ml-auto" aria-live="polite">{list.length} invoice{list.length === 1 ? "" : "s"}</span>
       </div>
       {list.length === 0 ? (
-        <p className="text-center py-12 font-dm text-sage text-sm">No invoices match this filter.</p>
+        <p className="text-center py-12 font-dm text-sage text-sm">{q ? "No invoices match your search." : "No invoices match this filter."}</p>
       ) : (
-        <div className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2" aria-label="Invoices sent to Xero">
           {list.map(({ inv, row }) => {
             const st = invoiceState(inv.status);
             return (
-              <button key={inv.id} onClick={() => onOpen(row)}
-                className="bg-white border border-gold/20 rounded-lg px-3.5 py-3 flex items-center gap-3 text-left hover:border-forest/40 transition-colors">
-                <div className="min-w-0 flex-1">
-                  <div className="font-cormorant text-base font-semibold text-ink truncate" style={{ textDecoration: st.strike ? "line-through" : undefined }}>
-                    {inv.invoiceNumber ?? "Invoice"} <span className="font-dm text-xs font-normal text-sage">· {STREAM_LABEL[inv.stream] ?? inv.stream}</span>
+              <li key={inv.id}>
+                <button onClick={() => onOpen(row)}
+                  className="w-full bg-white border border-gold/20 rounded-lg px-3.5 py-3 flex items-center gap-3 text-left hover:border-forest/40 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-cormorant text-base font-semibold text-ink truncate" style={{ textDecoration: st.strike ? "line-through" : undefined }}>
+                      {inv.invoiceNumber ?? "Invoice"} <span className="font-dm text-xs font-normal text-sage">· {STREAM_LABEL[inv.stream] ?? inv.stream}</span>
+                    </div>
+                    <div className="font-dm text-xs text-sage truncate">
+                      {row.name} · {fmtDate(row.eventDate)} · sent {new Date(inv.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}{inv.sentBy ? ` by ${inv.sentBy}` : ""}
+                    </div>
                   </div>
-                  <div className="font-dm text-[11px] text-sage truncate">
-                    {row.name} · {fmtDate(row.eventDate)} · sent {new Date(inv.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}{inv.sentBy ? ` by ${inv.sentBy}` : ""}
-                  </div>
-                </div>
-                <span className="font-bebas tracking-widest text-[11px] px-2.5 py-1 rounded-md whitespace-nowrap" title={st.hint} style={{ background: st.bg, color: st.text }}>{st.label.toUpperCase()}</span>
-                <span className="font-cormorant text-lg font-semibold text-ink tabular-nums w-24 text-right">{fmtNZD(inv.total)}</span>
-              </button>
+                  <span className="font-bebas tracking-widest text-xs px-2.5 py-1 rounded-md whitespace-nowrap" title={st.hint} style={{ background: st.bg, color: st.text }}>{st.label.toUpperCase()}</span>
+                  <span className="font-cormorant text-lg font-semibold text-ink tabular-nums w-24 text-right">{fmtNZD(inv.total)}</span>
+                </button>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
     </div>
   );
@@ -435,8 +546,9 @@ function labelFor(s: string): string {
   return ({ to_invoice: "To invoice", invoiced: "Invoiced", paid: "Paid", on_night: "On the night" } as Record<string, string>)[s] ?? s;
 }
 
-function SummaryCard({ label, value, tone, icon }: {
-  label: string; value: string; tone: "amber" | "blue" | "purple" | "green"; icon: React.ReactNode;
+function SummaryCard({ label, value, tone, icon, selected, onClick }: {
+  label: string; value: number; tone: "amber" | "blue" | "purple" | "green"; icon: React.ReactNode;
+  selected: boolean; onClick: () => void;
 }) {
   const toneCls: Record<string, string> = {
     amber: "text-amber-700", blue: "text-blue-700", purple: "text-purple-700", green: "text-green-700",
@@ -447,130 +559,113 @@ function SummaryCard({ label, value, tone, icon }: {
     amber: { bg: "#fffbeb", bar: "#f59e0b" }, blue: { bg: "#eff6ff", bar: "#3b82f6" },
     purple: { bg: "#faf5ff", bar: "#a855f7" }, green: { bg: "#f0fdf4", bar: "#22c55e" },
   };
-  const active = value !== "0";
+  const active = value > 0;
   return (
-    <div className="bg-white border border-gold/20 rounded-lg p-3.5"
+    <button type="button" onClick={onClick} aria-pressed={selected}
+      aria-label={`${label}: ${value} booking${value === 1 ? "" : "s"}. ${selected ? "Showing these — press to show all." : "Show these."}`}
+      className={`text-left bg-white border rounded-lg p-2.5 sm:p-3.5 transition-shadow hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest ${selected ? "ring-2 ring-forest border-forest" : "border-gold/20"}`}
       style={active ? { backgroundColor: tint[tone].bg, borderLeft: `4px solid ${tint[tone].bar}` } : undefined}>
-      <div className="flex items-center gap-1.5 font-bebas tracking-widest text-[11px] text-sage mb-1">
-        <span className={active ? toneCls[tone] : "text-sage/40"}>{icon}</span> {label}
+      <div className="flex items-center gap-1.5 font-bebas tracking-widest text-xs text-sage mb-1">
+        <span className={active ? toneCls[tone] : "text-sage"} aria-hidden="true">{icon}</span> {label}
       </div>
-      <div className={`font-cormorant text-3xl font-semibold leading-none ${active ? toneCls[tone] : "text-ink/60"}`}>{value}</div>
-    </div>
-  );
-}
-
-// A single tappable status chip.
-function Chip({ label, state, onClick, title, disabled, menu }: {
-  label: string; state: keyof typeof CHIP; onClick?: () => void; title?: string; disabled?: boolean;
-  /** When set, the chip opens this picker instead of firing onClick. */
-  menu?: { options: Array<{ label: string; state: keyof typeof CHIP; selected: boolean; onPick: () => void }> };
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false); };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
-  }, [open]);
-  if (menu) {
-    const c = CHIP[state];
-    return (
-      <div ref={wrapRef} className="relative inline-block">
-        <button onClick={() => setOpen(o => !o)} disabled={disabled} title={title}
-          aria-haspopup="listbox" aria-expanded={open}
-          className="font-bebas tracking-widest text-[11px] px-2.5 py-1 rounded-md border border-black/10 shadow-sm hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest cursor-pointer transition active:scale-95 disabled:opacity-50 whitespace-nowrap inline-flex items-center gap-1"
-          style={{ background: c.bg, color: c.text }}>
-          {label} <ChevronDown className="w-3 h-3 -mr-0.5" aria-hidden="true" />
-        </button>
-        {open && (
-          <div role="listbox" className="absolute left-0 top-full mt-1 z-50 min-w-[10rem] bg-white border border-gold/25 rounded-md shadow-lg py-1">
-            {menu.options.map(o => {
-              const oc = CHIP[o.state];
-              return (
-                <button key={o.label} role="option" aria-selected={o.selected}
-                  onClick={() => { setOpen(false); if (!o.selected) o.onPick(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-linen/70">
-                  <span className="w-3.5 flex-none">{o.selected && <Check className="w-3.5 h-3.5 text-forest" aria-hidden="true" />}</span>
-                  <span className="font-bebas tracking-widest text-[11px] px-2 py-0.5 rounded" style={{ background: oc.bg, color: oc.text }}>{o.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  }
-  const c = CHIP[state];
-  return (
-    <button onClick={onClick} disabled={disabled} title={title}
-      className="font-bebas tracking-widest text-[11px] px-2.5 py-1 rounded-md transition-transform active:scale-95 disabled:opacity-50 whitespace-nowrap"
-      style={{ background: c.bg, color: c.text }}>
-      {label}
+      <div className={`font-cormorant text-2xl sm:text-3xl font-semibold leading-none ${active ? toneCls[tone] : "text-ink"}`}>{value}</div>
     </button>
   );
 }
 
-function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, busy }: {
-  row: Row; onFood: (v: FoodStatus) => void; onDrinks: (v: DrinksStatus) => void; onDeposit: (next: "due" | "paid" | "not_taken") => void;
-  onOpen: () => void; onRecord: () => void; onXero: () => void; busy: boolean;
+// A status chip that opens a menu of its states (arrow keys, Enter, Escape all
+// work, and screen readers hear which one is selected).
+function StatusChip<V extends string>({ label, state, value, options, onChange, disabled, title }: {
+  label: string; state: keyof typeof CHIP; value: V; disabled?: boolean; title?: string;
+  options: Array<{ value: V; label: string; state: keyof typeof CHIP }>;
+  onChange: (v: V) => void;
 }) {
-  // Deposit chip — Due / Paid / Not taken. "No deposit" used to be a dead
-  // chip, so undoing it meant opening the event; it's the same menu now.
-  const depositMenu = {
-    options: [
-      { label: "Due", state: "todo" as const, selected: row.depositRequired && !row.depositPaid, onPick: () => onDeposit("due") },
-      { label: "Paid", state: "paid" as const, selected: row.depositRequired && row.depositPaid, onPick: () => onDeposit("paid") },
-      { label: "Not taken", state: "none" as const, selected: !row.depositRequired, onPick: () => onDeposit("not_taken") },
-    ],
-  };
-  const depositChip = !row.depositRequired
-    ? <Chip label="No deposit" state="none" disabled={busy} title="No deposit for this event — choose Due or Paid to reinstate one" menu={depositMenu} />
-    : <Chip
-        label={`Deposit ${fmtNZD(row.depositNzd || DEFAULT_DEPOSIT)} ${row.depositPaid ? "paid" : "due"}`}
-        state={row.depositPaid ? "paid" : "todo"} disabled={busy} title="Choose the deposit status"
-        menu={depositMenu} />;
+  const c = CHIP[state];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild disabled={disabled}>
+        <button type="button" title={title}
+          className="font-bebas tracking-widest text-xs px-2.5 py-1.5 rounded-md border border-black/10 shadow-sm hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest cursor-pointer transition active:scale-95 disabled:opacity-50 whitespace-nowrap inline-flex items-center gap-1"
+          style={{ background: c.bg, color: c.text }}>
+          {label} <ChevronDown className="w-3 h-3 -mr-0.5" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[11rem]">
+        <DropdownMenuRadioGroup value={value} onValueChange={(v) => { if (v !== value) onChange(v as V); }}>
+          {options.map(o => (
+            <DropdownMenuRadioItem key={o.value} value={o.value} className="py-2">
+              <span className="font-bebas tracking-widest text-xs px-2 py-0.5 rounded" style={{ background: CHIP[o.state].bg, color: CHIP[o.state].text }}>{o.label}</span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
-  // Food chip
-  const foodState: keyof typeof CHIP = row.foodStatus === "paid" ? "paid"
-    : row.foodStatus === "invoiced" ? "invoiced"
-    : row.foodStatus === "on_night" ? "night" : "todo";
-  const foodChip = <Chip label={`Food · ${labelFor(row.foodStatus)}`} state={foodState} disabled={busy}
-    title="Choose the food payment status"
-    menu={{ options: FOOD_STATES.map(o => ({ label: o.label, state: o.state, selected: row.foodStatus === o.value, onPick: () => onFood(o.value) })) }} />;
+function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, onMarkAllPaid, busy }: {
+  row: Row; onFood: (v: FoodStatus) => void; onDrinks: (v: DrinksStatus) => void; onDeposit: (next: "due" | "paid" | "not_taken") => void;
+  onOpen: () => void; onRecord: () => void; onXero: () => void; onMarkAllPaid: () => void; busy: boolean;
+}) {
+  // Deposit chip — Due / Paid / Not taken, all in one menu so "no deposit"
+  // can be undone where it was set.
+  const depositValue: "due" | "paid" | "not_taken" = !row.depositRequired ? "not_taken" : row.depositPaid ? "paid" : "due";
+  // No made-up figure: the deposit used to show "$575" (one venue's standard
+  // amount) whenever none was set on the booking.
+  const depAmt = row.depositNzd > 0 ? `${fmtNZD(row.depositNzd)} ` : "";
+  const depositLabel = !row.depositRequired ? "No deposit"
+    : row.depositPaid ? `Deposit ${depAmt}paid`
+    : row.depositNzd > 0 ? `Deposit ${depAmt}due` : "Deposit due · no amount set";
+  const depositChip = (
+    <StatusChip label={depositLabel} state={!row.depositRequired ? "none" : row.depositPaid ? "paid" : "todo"}
+      value={depositValue} disabled={busy} title="Choose the deposit status"
+      options={[
+        { value: "due", label: "Due", state: "todo" },
+        { value: "paid", label: "Paid", state: "paid" },
+        { value: "not_taken", label: "Not taken", state: "none" },
+      ]}
+      onChange={onDeposit} />
+  );
 
-  // Drinks chip
-  const drinksState: keyof typeof CHIP = row.drinksStatus === "paid" ? "paid"
-    : row.drinksStatus === "invoiced" ? "invoiced"
-    : row.drinksStatus === "on_night" ? "night" : "todo";
-  const drinksLabel = `Drinks · ${labelFor(row.drinksStatus)}${row.drinksInferred && row.drinksStatus !== "paid" ? "?" : ""}`;
-  const drinksChip = <Chip label={drinksLabel} state={drinksState} disabled={busy}
-    title={row.drinksInferred ? "Suggested from the bar setup — choose to confirm or change it" : "Choose the drinks payment status"}
-    menu={{ options: DRINKS_STATES.map(o => ({ label: o.label, state: o.state, selected: row.drinksStatus === o.value, onPick: () => onDrinks(o.value) })) }} />;
+  const stateFor = (s: string): keyof typeof CHIP =>
+    s === "paid" ? "paid" : s === "invoiced" ? "invoiced" : s === "on_night" ? "night" : "todo";
+  const foodChip = (
+    <StatusChip label={`Food · ${labelFor(row.foodStatus)}`} state={stateFor(row.foodStatus)}
+      value={row.foodStatus} disabled={busy} title="Choose the food payment status"
+      options={STREAM_STATES} onChange={v => onFood(v as FoodStatus)} />
+  );
+  // An inferred drinks status is spelled out ("suggested"), not a bare "?".
+  const suggested = row.drinksInferred && row.drinksStatus !== "paid";
+  const drinksChip = (
+    <StatusChip label={`Drinks · ${labelFor(row.drinksStatus)}${suggested ? " (suggested)" : ""}`} state={stateFor(row.drinksStatus)}
+      value={row.drinksStatus} disabled={busy}
+      title={suggested ? "Suggested from the bar setup — choose to confirm or change it" : "Choose the drinks payment status"}
+      options={STREAM_STATES} onChange={v => onDrinks(v as DrinksStatus)} />
+  );
 
   const settled = (!row.depositRequired || row.depositPaid) && row.foodStatus === "paid" && row.drinksStatus === "paid";
-  // Overdue = money still owed, and either the deposit is unpaid or the event
-  // has already happened. Drives the red treatment on the balance.
-  const isOverdue = (row.outstanding ?? 0) > 0 &&
-    ((row.depositRequired && !row.depositPaid) ||
-      (!!row.eventDate && new Date(row.eventDate).getTime() < new Date().setHours(0, 0, 0, 0)));
+  const owed = row.outstanding ?? 0;
+  const eventPast = !!row.eventDate && new Date(row.eventDate).getTime() < new Date().setHours(0, 0, 0, 0);
+  // Overdue only once the event has happened. A future booking with its deposit
+  // due used to show its WHOLE balance in red as "OVERDUE" weeks in advance.
+  const isOverdue = owed > 0 && eventPast;
+  // The money ledger says it's all in, but chips still say otherwise.
+  const ledgerPaid = row.hasPrice && owed === 0 && row.paidToDate > 0;
 
   return (
     <div className={`bg-white border rounded-lg px-3.5 py-3 flex flex-col lg:flex-row lg:items-center gap-3 ${settled ? "border-green-200/70" : "border-gold/20"}`}>
       {/* Event info */}
-      <button onClick={onOpen} className="text-left min-w-0 lg:w-64 flex-shrink-0 group">
+      <button onClick={onOpen} className="text-left min-w-0 lg:w-64 flex-shrink-0 group" aria-label={`Open ${row.name}, ${fmtDate(row.eventDate)}`}>
         <div className="font-cormorant text-base font-semibold text-ink truncate leading-tight group-hover:underline">{row.name}</div>
-        <div className="flex items-center gap-1.5 font-dm text-[11px] text-sage mt-0.5 flex-wrap">
-          <CalendarDays className="w-3 h-3 flex-shrink-0" />
+        <div className="flex items-center gap-1.5 font-dm text-xs text-sage mt-0.5 flex-wrap">
+          <CalendarDays className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
           <span>{fmtDate(row.eventDate)}</span>
-          {row.eventType && <><span>·</span><span className="truncate">{row.eventType}</span></>}
+          {row.eventType && <><span aria-hidden="true">·</span><span className="truncate">{row.eventType}</span></>}
         </div>
         {(row.spaceName || row.guestCount) && (
-          <div className="flex items-center gap-2 font-dm text-[11px] text-sage/80 mt-0.5">
+          <div className="flex items-center gap-2 font-dm text-xs text-sage mt-0.5">
             {row.spaceName && <span className="truncate">{row.spaceName}</span>}
-            {row.guestCount ? <span className="flex items-center gap-0.5 flex-shrink-0"><Users className="w-3 h-3" />{row.guestCount}</span> : null}
+            {row.guestCount ? <span className="flex items-center gap-0.5 flex-shrink-0"><Users className="w-3 h-3" aria-hidden="true" />{row.guestCount}<span className="sr-only"> guests</span></span> : null}
           </div>
         )}
       </button>
@@ -589,7 +684,7 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
               const st = invoiceState(inv.status);
               return (
                 <button key={inv.id} onClick={onXero} title={`${st.hint}${inv.sentBy ? ` · sent by ${inv.sentBy}` : ""} — click to manage`}
-                  className="inline-flex items-center gap-1.5 font-dm text-[11px] rounded-md border px-2 py-0.5 hover:opacity-80 transition-opacity"
+                  className="inline-flex items-center gap-1.5 font-dm text-xs rounded-md border px-2 py-1 hover:opacity-80 transition-opacity"
                   style={{ background: st.bg, color: st.text, borderColor: `${st.text}33`, textDecoration: st.strike ? "line-through" : undefined }}>
                   <FileText className="w-3 h-3 flex-shrink-0" aria-hidden />
                   <span className="font-semibold">{STREAM_LABEL[inv.stream] ?? inv.stream} {inv.invoiceNumber ?? ""}</span>
@@ -600,41 +695,55 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
             })}
           </div>
         )}
+        {/* When the chips and the recorded money disagree, say so and offer the fix. */}
+        {settled && owed > 0 && (
+          <p className="font-dm text-xs text-amber-900 flex items-center gap-1.5 flex-wrap">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+            Marked paid, but {fmtNZD(owed)} isn't recorded as received.
+            <button onClick={onRecord} className="font-semibold underline underline-offset-2 hover:no-underline">Record it</button>
+          </p>
+        )}
+        {!settled && ledgerPaid && (
+          <p className="font-dm text-xs text-green-800 flex items-center gap-1.5 flex-wrap">
+            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+            All {fmtNZD(row.total)} has been received.
+            <button onClick={onMarkAllPaid} disabled={busy} className="font-semibold underline underline-offset-2 hover:no-underline disabled:opacity-50">Mark everything paid</button>
+          </p>
+        )}
       </div>
 
-      {/* Balance — the amount owed leads the row (the reason to open Payments),
-          shown at display weight and flagged red when overdue. The money is
-          recorded in this booking's payment history, Xero imports included. */}
-      <div className="flex-shrink-0 lg:w-40 flex flex-col lg:items-end" title="Recorded in this booking's payment history">
-        {(row.outstanding ?? 0) > 0 ? (
+      {/* Balance — the amount owed leads the row; red only once it's overdue. */}
+      <div className="flex-shrink-0 lg:w-40 flex flex-col lg:items-end">
+        {owed > 0 ? (
           <>
-            <div className={`font-cormorant text-xl font-bold leading-none ${isOverdue ? "text-red-700" : "text-ink"}`}>{fmtNZD(row.outstanding ?? 0)}</div>
-            <div className={`font-bebas tracking-widest text-[10px] mt-0.5 ${isOverdue ? "text-red-700" : "text-sage"}`}>{isOverdue ? "OVERDUE" : "OWED"}</div>
-            {row.paidToDate > 0 && <div className="font-dm text-[11px] text-sage mt-0.5">{fmtNZD(row.paidToDate)} paid</div>}
+            <div className={`font-cormorant text-xl font-bold leading-none ${isOverdue ? "text-red-700" : "text-ink"}`}>{fmtNZD(owed)}</div>
+            <div className={`font-bebas tracking-widest text-[11px] mt-0.5 ${isOverdue ? "text-red-700" : "text-sage"}`}>{isOverdue ? "OVERDUE" : "OWED"}</div>
+            {row.paidToDate > 0 && <div className="font-dm text-xs text-sage mt-0.5">{fmtNZD(row.paidToDate)} paid</div>}
           </>
         ) : row.paidToDate > 0 ? (
-          <div className="font-bebas tracking-widest text-[11px] text-green-700 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Paid in full</div>
+          <div className="font-bebas tracking-widest text-xs text-green-700 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Paid in full</div>
         ) : null}
         {!row.hasPrice && (
-          <div className="font-dm text-[10px] text-amber-700 flex items-center gap-0.5 mt-0.5" title="No total set on this booking">
-            <AlertCircle className="w-3 h-3" /> no total
+          <div className="font-dm text-xs text-amber-800 flex items-center gap-1 mt-0.5" title="No total set on this booking">
+            <AlertCircle className="w-3 h-3" aria-hidden="true" /> no total set
           </div>
         )}
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
-        <button onClick={onXero} title="Send a food or drinks invoice to Xero as a draft"
-          className="font-bebas tracking-widest text-[11px] text-blue-800 border border-blue-800/30 rounded-md px-2.5 py-1.5 hover:bg-blue-800/5 transition-colors flex items-center gap-1">
-          <FileText className="w-3 h-3" /> XERO{row.invoices.length > 0 ? ` · ${row.invoices.filter(i => i.status !== "VOIDED").length}` : ""}
+        <button onClick={onXero} title="Send a deposit, food or drinks invoice to Xero as a draft"
+          aria-label={`Xero invoices for ${row.name}${row.invoices.length > 0 ? ` (${row.invoices.filter(i => i.status !== "VOIDED").length} sent)` : ""}`}
+          className="font-bebas tracking-widest text-xs text-blue-800 border border-blue-800/30 rounded-md px-2.5 py-2 hover:bg-blue-50 transition-colors flex items-center gap-1">
+          <FileText className="w-3 h-3" aria-hidden="true" /> XERO{row.invoices.length > 0 ? ` · ${row.invoices.filter(i => i.status !== "VOIDED").length}` : ""}
         </button>
-        <button onClick={onRecord}
-          className="font-bebas tracking-widest text-[11px] text-forest border border-forest/30 rounded-md px-2.5 py-1.5 hover:bg-forest/5 transition-colors flex items-center gap-1">
-          <DollarSign className="w-3 h-3" /> RECORD
+        <button onClick={onRecord} aria-label={`Record a payment for ${row.name}`}
+          className="font-bebas tracking-widest text-xs text-forest border border-forest/30 rounded-md px-2.5 py-2 hover:bg-linen transition-colors flex items-center gap-1">
+          <DollarSign className="w-3 h-3" aria-hidden="true" /> RECORD
         </button>
-        <button onClick={onOpen}
-          className="font-bebas tracking-widest text-[11px] text-sage border border-gold/20 rounded-md px-2.5 py-1.5 hover:text-ink transition-colors flex items-center gap-1">
-          <ExternalLink className="w-3 h-3" /> OPEN
+        <button onClick={onOpen} aria-label={`Open ${row.name}`}
+          className="font-bebas tracking-widest text-xs text-sage border border-gold/20 rounded-md px-2.5 py-2 hover:text-ink transition-colors flex items-center gap-1">
+          <ExternalLink className="w-3 h-3" aria-hidden="true" /> OPEN
         </button>
       </div>
     </div>

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toLocalDateInput } from "@/lib/dateTime";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -52,14 +53,23 @@ export default function PaymentTracker() {
   const backTarget = cameFromBoard ? "/dashboard?tab=payments" : bookingId ? `/event/${bookingId}` : "/";
   const backLabel = cameFromBoard ? "BACK TO PAYMENTS" : bookingId ? "BACK TO EVENT" : "BACK";
 
-  const [newPayment, setNewPayment] = useState({
+  // Arriving from the board's RECORD button (or a "record it" prompt) means
+  // you came here to record a payment — open the form straight away.
+  const autoOpen = params.get("record") === "1" || cameFromBoard;
+  // LOCAL date: toISOString() is UTC, so before 1pm in NZ it defaulted to
+  // yesterday's date.
+  const blankPayment = () => ({
     amount: "",
     type: "deposit",
     method: "bank_transfer",
-    paidAt: new Date().toISOString().split("T")[0],
+    paidAt: toLocalDateInput(new Date()),
     notes: "",
   });
-  const [adding, setAdding] = useState(false);
+  const [newPayment, setNewPayment] = useState(blankPayment);
+  const [adding, setAdding] = useState(autoOpen);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
+  const prefilled = useRef(false);
 
   const utils = trpc.useUtils();
   const { data: booking } = trpc.bookings.getById.useQuery(
@@ -82,12 +92,33 @@ export default function PaymentTracker() {
     if (bookingId) await utils.bookings.getById.invalidate({ id: bookingId });
   };
 
+  // Prefill what you're most likely recording: the deposit while it's due,
+  // otherwise the outstanding balance as the final payment. Used to always
+  // open on a blank "Deposit" — even after the deposit was paid, and a
+  // payment saved as Deposit counts toward the deposit.
+  useEffect(() => {
+    if (prefilled.current || !booking || !summary) return;
+    prefilled.current = true;
+    const b: any = booking;
+    const dep = Number(b.depositNzd ?? 0);
+    const depositDue = b.depositRequired !== false && !b.depositPaid;
+    const outstanding = Number(summary.outstanding ?? 0);
+    const hasTotal = Number(summary.total ?? 0) > 0;
+    setNewPayment(p => depositDue
+      ? { ...p, type: "deposit", amount: dep > 0 ? String(dep) : "" }
+      : { ...p, type: hasTotal && outstanding > 0 ? "final" : "partial", amount: hasTotal && outstanding > 0 ? String(outstanding) : "" });
+  }, [booking, summary]);
+
   const addMutation = trpc.payments.add.useMutation({
-    onSuccess: async () => {
-      toast.success("Payment recorded");
-      await refreshAll();
-      setNewPayment({ amount: "", type: "deposit", method: "bank_transfer", paidAt: new Date().toISOString().split("T")[0], notes: "" });
+    onSuccess: async (r: any) => {
+      toast.success(r?.fullyPaid ? "Payment recorded — this booking is now paid in full" : "Payment recorded");
+      setNewPayment(blankPayment());
+      setAmountError(null);
       setAdding(false);
+      // Re-run the prefill against the refreshed totals for the next payment.
+      prefilled.current = false;
+      await refreshAll();
+      utils.payments.overview.invalidate();
     },
     onError: () => toast.error("Failed to record payment"),
   });
@@ -134,16 +165,21 @@ export default function PaymentTracker() {
   );
 
   async function handleAdd() {
-    if (!newPayment.amount || isNaN(Number(newPayment.amount))) {
-      toast.error("Enter a valid amount");
+    const amt = Number(newPayment.amount);
+    if (!newPayment.amount || isNaN(amt) || amt <= 0) {
+      setAmountError("Enter the amount received, e.g. 575");
+      amountRef.current?.focus();
       return;
     }
+    setAmountError(null);
     await addMutation.mutateAsync({
       bookingId: bookingId!,
-      amount: Number(newPayment.amount),
+      amount: amt,
       type: newPayment.type as any,
       method: newPayment.method as any,
-      paidAt: new Date(newPayment.paidAt).toISOString(),
+      // Local midday on the chosen day, so no timezone can shift it onto the
+      // neighbouring date (a bare "YYYY-MM-DD" parses as UTC midnight).
+      paidAt: new Date(`${newPayment.paidAt}T12:00:00`).toISOString(),
       notes: newPayment.notes || undefined,
     });
   }
@@ -153,26 +189,31 @@ export default function PaymentTracker() {
   return (
     <div role="main" className="min-h-screen bg-cream">
       {/* Header */}
-      <div className="bg-ink border-b border-amber/20 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4 min-w-0">
+      {/* Header. text-cream/NN opacity classes don't compile in this theme —
+          they fell back to dark ink on this dark bar, so the back button and
+          the client name were invisible. Use text-cream + opacity-* instead. */}
+      <div className="bg-ink border-b border-amber/20 px-4 md:px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <button
             onClick={() => navigate(backTarget)}
-            className="text-cream/60 hover:text-cream transition-colors flex items-center gap-1.5"
-            title={backLabel}
+            aria-label={backLabel.toLowerCase().replace(/^\w/, c => c.toUpperCase())}
+            className="text-cream opacity-80 hover:opacity-100 transition-opacity flex items-center gap-1.5 flex-shrink-0 rounded-sm px-1 py-1 -mx-1"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
             <span className="font-bebas tracking-widest text-xs hidden sm:inline">
               {backLabel}
             </span>
           </button>
-          <div className="w-px h-4 bg-cream/20" />
-          <span className="font-bebas tracking-widest text-amber text-sm">PAYMENT TRACKER</span>
-          {booking && (
-            <span className="font-dm text-xs text-cream/60 truncate hidden md:inline">
-              · {booking.firstName} {booking.lastName}
-              {booking.eventDate && ` · ${new Date(booking.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}`}
-            </span>
-          )}
+          <div className="w-px h-4 bg-cream opacity-25 flex-shrink-0" aria-hidden="true" />
+          <h1 className="min-w-0 flex items-baseline gap-2">
+            <span className="font-bebas tracking-widest text-gold-bright text-sm flex-shrink-0">PAYMENTS</span>
+            {booking && (
+              <span className="font-dm text-sm text-cream truncate">
+                {booking.firstName} {booking.lastName}
+                {booking.eventDate && <span className="opacity-75"> · {new Date(booking.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}</span>}
+              </span>
+            )}
+          </h1>
         </div>
       </div>
 
@@ -243,28 +284,39 @@ export default function PaymentTracker() {
         <div className="bg-white border border-border">
           <button
             onClick={() => setAdding(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-cream/50 transition-colors"
+            aria-expanded={adding}
+            aria-controls="record-payment-form"
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-linen transition-colors"
           >
             <div className="flex items-center gap-2">
-              <Plus className="w-4 h-4 text-burgundy" />
+              <Plus className={`w-4 h-4 text-burgundy transition-transform ${adding ? "rotate-45" : ""}`} aria-hidden="true" />
               <span className="font-bebas tracking-widest text-sm text-burgundy">RECORD PAYMENT</span>
             </div>
           </button>
           {adding && (
-            <div className="border-t border-border p-4 md:p-5 space-y-4">
+            <div id="record-payment-form" className="border-t border-border p-4 md:p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label htmlFor="pay-amount" className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">AMOUNT (NZD) *</label>
                   <Input
                     id="pay-amount"
+                    ref={amountRef}
                     type="number"
+                    inputMode="decimal"
                     min={0}
                     step={0.01}
+                    required
                     value={newPayment.amount}
-                    onChange={e => setNewPayment(p => ({ ...p, amount: e.target.value }))}
+                    onChange={e => { setNewPayment(p => ({ ...p, amount: e.target.value })); if (amountError) setAmountError(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAdd(); } }}
+                    aria-invalid={amountError ? true : undefined}
+                    aria-describedby={amountError ? "pay-amount-error" : undefined}
                     placeholder="0.00"
                     className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-burgundy text-sm"
                   />
+                  {amountError && (
+                    <p id="pay-amount-error" role="alert" className="font-dm text-xs text-red-700 mt-1">{amountError}</p>
+                  )}
                 </div>
                 <div>
                   <label htmlFor="pay-date" className="font-bebas tracking-widest text-xs text-ink/70 block mb-1">DATE PAID *</label>
