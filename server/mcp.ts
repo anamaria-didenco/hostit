@@ -471,9 +471,8 @@ function buildServer(ctx: { ownerId: number }): McpServer {
       if (!db) return ok([]);
       const rows = await db.select().from(staffPortalLinks)
         .where(and(eq(staffPortalLinks.runsheetId, runsheetId), eq(staffPortalLinks.ownerId, ctx.ownerId)));
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : "https://venueflowhq.com";
+      const { publicBaseUrl } = await import("./publicUrl");
+      const baseUrl = publicBaseUrl();
       return ok(rows.map(r => ({ ...r, url: `${baseUrl}/staff/${r.token}` })));
     }
   );

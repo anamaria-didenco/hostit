@@ -9,6 +9,8 @@ import { enforceRateLimit, getRequestIp } from "./_core/rateLimit";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { smtpTls } from "./smtpTls";
+import { leadAccessToken, isValidLeadAccessToken } from "./leadToken";
+import { publicBaseUrl } from "./publicUrl";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -384,10 +386,7 @@ export const appRouter = router({
         secret = randomBytes(24).toString('hex');
         await db.update(venueSettings).set({ nbiWebhookSecret: secret }).where(eq(venueSettings.id, vs.id));
       }
-      const base = process.env.PUBLIC_BASE_URL
-        ?? (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
-        ?? 'https://venueflowhq.com';
-      return { url: `${base.replace(/\/$/, '')}/api/webhook/nowbookit/${secret}`, secret };
+      return { url: `${publicBaseUrl()}/api/webhook/nowbookit/${secret}`, secret };
     }),
 
     /** Rotate the webhook secret — invalidates any URL pasted into NBI before. */
@@ -400,10 +399,7 @@ export const appRouter = router({
       const { randomBytes } = await import('crypto');
       const secret = randomBytes(24).toString('hex');
       await db.update(venueSettings).set({ nbiWebhookSecret: secret }).where(eq(venueSettings.ownerId, ctx.user.id));
-      const base = process.env.PUBLIC_BASE_URL
-        ?? (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
-        ?? 'https://venueflowhq.com';
-      return { url: `${base.replace(/\/$/, '')}/api/webhook/nowbookit/${secret}`, secret };
+      return { url: `${publicBaseUrl()}/api/webhook/nowbookit/${secret}`, secret };
     }),
   }),
 
@@ -585,7 +581,7 @@ export const appRouter = router({
           utmContent: input.utmContent,
         });
         if (!lead) throw new Error("Could not save — please try again.");
-        return { leadId: lead.id };
+        return { leadId: lead.id, leadToken: leadAccessToken(input.ownerId, lead.id) };
       }),
 
     // Public: submit from lead form. Rate-limited per (IP, ownerId) to prevent
@@ -598,6 +594,10 @@ export const appRouter = router({
         // (or the row no longer exists) falls back to a normal insert, so a
         // submission is never lost over a failed or skipped autosave.
         leadId: z.number().optional(),
+        // startCapture's proof that this visitor created leadId. Without a
+        // valid one, leadId is ignored and a fresh lead is inserted — ids are
+        // sequential, so an id alone would let anyone overwrite any enquiry.
+        leadToken: z.string().max(64).optional(),
         firstName: z.string().min(1).max(120),
         lastName: z.string().max(120).optional(),
         email: z.string().trim().email().max(254),
@@ -673,11 +673,16 @@ export const appRouter = router({
           // "Partial" marker (unless a staff member already overwrote it
           // with a real note in the meantime — that's theirs, not ours to
           // erase).
-          const existing = await getLeadById(input.leadId, input.ownerId);
-          if (existing) {
+          // Only ever complete the visitor's OWN autosaved draft: the token
+          // must match, and the row must still be an untouched partial. Any
+          // enquiry staff have since worked on is left alone.
+          const existing = isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)
+            ? await getLeadById(input.leadId, input.ownerId)
+            : undefined;
+          if (existing && existing.internalNotes === PARTIAL_LEAD_NOTE && existing.status === "new") {
             await updateLead(input.leadId, input.ownerId, {
               ...leadData,
-              internalNotes: existing.internalNotes === PARTIAL_LEAD_NOTE ? null : existing.internalNotes,
+              internalNotes: null,
               updatedAt: new Date(),
             });
             lead = await getLeadById(input.leadId, input.ownerId);
@@ -938,7 +943,7 @@ export const appRouter = router({
           console.error('[LeadSubmit] Auto-reply error:', autoErr?.message ?? autoErr);
         }
 
-        return lead;
+        return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id) } : lead;
       }),
 
     // Public: after a successful submit, the confirmation screen offers a
@@ -952,9 +957,12 @@ export const appRouter = router({
         ownerId: z.number(),
         leadId: z.number(),
         slotLabel: z.string().min(1).max(60),
+        // submit()'s proof that this visitor owns leadId (see leadToken.ts).
+        leadToken: z.string().max(64),
       }))
       .mutation(async ({ input, ctx }) => {
         await enforceLeadRateLimit(ctx, input.ownerId);
+        if (!isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)) throw new Error("Enquiry not found.");
         const existing = await getLeadById(input.leadId, input.ownerId);
         if (!existing) throw new Error("Enquiry not found.");
         await updateLead(input.leadId, input.ownerId, { walkthroughSlot: input.slotLabel });
@@ -1598,6 +1606,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .mutation(async ({ input, ctx }) => {
         await updateProposal(input.id, ctx.user.id, { status: "sent", sentAt: new Date() });
         const proposal = await getProposalById(input.id, ctx.user.id);
+        let emailSent = false;
         if (proposal) {
           await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
           await addLeadActivity({
@@ -1648,7 +1657,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                     auth: { user: vs.smtpUser, pass: vs.smtpPass },
                     tls: smtpTls(),
                   });
-                  const proposalUrl = `${process.env.REPLIT_DEV_DOMAIN ? 'https://' + process.env.REPLIT_DEV_DOMAIN : 'https://' + (process.env.REPLIT_DOMAINS ?? '').split(',')[0]}/proposal/${proposal.publicToken}`;
+                  const proposalUrl = `${publicBaseUrl()}/proposal/${proposal.publicToken}`;
                   const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
                   const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
                   const clientName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
@@ -1659,6 +1668,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                     html: `<p>Hi ${lead.firstName},</p><p>Please find your event proposal below:</p><p><a href="${proposalUrl}" style="background:#4f7942;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">View Proposal</a></p><p>Or copy this link: <a href="${proposalUrl}">${proposalUrl}</a></p><p>This proposal includes pricing, details, and terms for your event. Please don't hesitate to reach out if you have any questions.</p><p>Warm regards,<br>${fromName}</p>`,
                     text: `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`,
                   });
+                  emailSent = true;
                 }
               }
             } catch (emailErr) {
@@ -1666,7 +1676,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             }
           }
         }
-        return { success: true, token: proposal?.publicToken, emailSent: true };
+        // emailSent is only true when the client was actually emailed — the UI
+        // must not claim "sent" when SMTP isn't set up or the send failed.
+        return { success: true, token: proposal?.publicToken, emailSent };
       }),
 
     update: protectedProcedure
@@ -8126,6 +8138,28 @@ Return ONLY valid JSON.`;
           .where(and(eq(usersTable.id, input.id), eq(usersTable.workspaceOwnerId, ctx.user.id)))
           .returning({ id: usersTable.id });
         if (!result[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Login not found.' });
+        return { success: true };
+      }),
+  }),
+
+  // ─── Staff notifications (the bell) ─────────────────────────────────────────
+  notifications: router({
+    list: protectedProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(100).optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        const { listNotifications } = await import('./notify');
+        return listNotifications(ctx.user.id, input?.limit ?? 30);
+      }),
+    unreadCount: protectedProcedure.query(async ({ ctx }) => {
+      const { countUnreadNotifications } = await import('./notify');
+      return countUnreadNotifications(ctx.user.id);
+    }),
+    // No id = mark everything read.
+    markRead: protectedProcedure
+      .input(z.object({ id: z.number().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const { markNotificationsRead } = await import('./notify');
+        await markNotificationsRead(ctx.user.id, input.id);
         return { success: true };
       }),
   }),

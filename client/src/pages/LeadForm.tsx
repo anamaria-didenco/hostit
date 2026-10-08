@@ -515,6 +515,9 @@ export default function LeadForm() {
   // means submit() falls back to a normal insert; the visitor's flow never
   // waits on or breaks over this write.
   const [capturedLeadId, setCapturedLeadId] = useState<number | null>(null);
+  // startCapture's proof that this visitor created capturedLeadId — the
+  // server only completes that row when it's sent back (see leadToken.ts).
+  const [capturedLeadToken, setCapturedLeadToken] = useState<string | null>(null);
   // Field ids that failed validation on the last submit attempt — drives the
   // inline error text/aria-invalid under each field. Cleared on submit, and
   // implicitly "resolved" per-field the moment isFieldFilled() says so again
@@ -525,6 +528,7 @@ export default function LeadForm() {
   // attach the chosen slot to. Distinct from capturedLeadId (set earlier, by
   // startCapture): that one only ever fires in the step-wizard's step 1.
   const [submittedLeadId, setSubmittedLeadId] = useState<number | null>(null);
+  const [submittedLeadToken, setSubmittedLeadToken] = useState<string | null>(null);
   // Post-submit walkthrough: null = not yet answered, 'skip' = declined, or
   // the chosen slot. Cosmetic — see leads.bookWalkthrough.
   const [walkthrough, setWalkthrough] = useState<{ key: string; label: string } | "skip" | null>(null);
@@ -559,7 +563,9 @@ export default function LeadForm() {
     setNoDateYet(false);
     setEmbedStep(1);
     setCapturedLeadId(null);
+    setCapturedLeadToken(null);
     setSubmittedLeadId(null);
+    setSubmittedLeadToken(null);
     setWalkthrough(null);
     setTouchedInvalid(new Set());
     setSubmitted(false);
@@ -572,8 +578,8 @@ export default function LeadForm() {
   });
   const pickWalkthrough = (slot: { key: string; label: string }) => {
     setWalkthrough(slot);
-    if (venue?.ownerId && submittedLeadId) {
-      bookWalkthroughMut.mutate({ ownerId: venue.ownerId, leadId: submittedLeadId, slotLabel: slot.label });
+    if (venue?.ownerId && submittedLeadId && submittedLeadToken) {
+      bookWalkthroughMut.mutate({ ownerId: venue.ownerId, leadId: submittedLeadId, leadToken: submittedLeadToken, slotLabel: slot.label });
     }
     postToParent({ type: "vf-walkthrough-booked", slot: slot.key });
   };
@@ -585,6 +591,7 @@ export default function LeadForm() {
   const startCapture = trpc.leads.startCapture.useMutation({
     onSuccess: (data) => {
       setCapturedLeadId(data.leadId);
+      setCapturedLeadToken(data.leadToken);
       postToParent({ type: 'vf-partial-captured' });
     },
     // No error toast — this is a background nicety. If it fails, submit()
@@ -595,6 +602,7 @@ export default function LeadForm() {
     onSuccess: (data: any) => {
       setSubmitted(true);
       setSubmittedLeadId(data?.id ?? null);
+      setSubmittedLeadToken(data?.leadToken ?? null);
       clearDraft();
       // ── Conversion signal ───────────────────────────────────────────────
       // Embedding pages (and tag managers on them) need to know a submission
@@ -680,6 +688,7 @@ export default function LeadForm() {
       // inserting a second one. If it never fired (or is still in flight),
       // this is undefined and the server falls back to a normal insert.
       leadId: capturedLeadId ?? undefined,
+      leadToken: capturedLeadToken ?? undefined,
       firstName: (form.firstName ?? '').trim(),
       lastName: form.lastName?.trim() || undefined,
       email: (form.email ?? '').trim(),
