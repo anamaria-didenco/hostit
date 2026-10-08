@@ -315,6 +315,9 @@ export async function handleInboundEmail(vs: Pick<Venue, "ownerId" | "smtpFromEm
     .set({
       lastInboundAt: sql`GREATEST(COALESCE(${leads.lastInboundAt}, ${opts.receivedAt}), ${opts.receivedAt})`,
       updatedAt: new Date(),
+      // A client reply is activity (the lead isn't "gone quiet"), but it
+      // isn't the venue replying, so respondedAt is left alone.
+      lastActivityAt: new Date(),
     })
     .where(and(eq(leads.id, match.leadId), eq(leads.ownerId, ownerId)));
   await db.insert(leadActivity).values({

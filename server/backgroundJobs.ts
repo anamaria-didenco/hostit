@@ -9,5 +9,6 @@ export async function startBackgroundJobs() {
   (await import("./speedToLead")).registerSpeedToLeadJobs();
   (await import("./inbox")).registerInboxJobs();
   (await import("./proposalExpiry")).registerProposalExpiryJob();
+  (await import("./automatedTasks")).registerAutomatedTaskJobs();
   startJobs();
 }

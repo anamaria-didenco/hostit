@@ -334,6 +334,9 @@ export async function respondToProposal(input: {
     link: bookingLink(bookingId),
     dedupeKey: `proposal_accepted:${proposal.id}`,
   });
+  // Venue's "when a booking is confirmed" task rules (server/automatedTasks.ts).
+  const { fireTaskRules } = await import("./automatedTasks");
+  await fireTaskRules(proposal.ownerId, { trigger: "on_booking_confirmed", leadId: proposal.leadId, bookingId });
   const confirmationEmailed = await sendAcceptConfirmation(proposal, lead, bookingId);
   return { success: true, status: "accepted", confirmationEmailed };
 }

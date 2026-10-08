@@ -44,7 +44,12 @@ import InboxSettingsCard from "@/components/InboxSettingsCard";
 import LeadConversation, { RepliedChip, useReplyStatus, type buildReply } from "@/components/LeadConversation";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
-import { leadFollowUpState } from "@shared/followUp";
+import { leadFollowUpState, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
+import { leadNeedsReply } from "@shared/needsReply";
+import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel } from "@shared/emailSignatures";
+import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
+import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
+import { FollowUpDateControl } from "@/components/FollowUpDateControl";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
@@ -129,6 +134,22 @@ function PartialChip() {
       title="Gave a name + email but never finished the enquiry"
       className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap flex-shrink-0">
       PARTIAL
+    </span>
+  );
+}
+
+// A new enquiry nobody has replied to yet (no email out, no status change) —
+// independent of the unread badge, which clears as soon as the lead is opened.
+// "How did they find you?" choices for a manually added enquiry. Values match
+// the Enquiry Source picker in the lead detail panel, so both read the same.
+const MANUAL_ENQUIRY_SOURCES = ["Phone", "Walk-In", "Email", "Instagram", "Word of Mouth / Referral", "Website", "Other"];
+
+function NeedsReplyChip() {
+  return (
+    <span
+      title="Nobody has replied yet — no email sent and the status hasn't changed"
+      className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-sky-100 text-sky-900 whitespace-nowrap flex-shrink-0">
+      NEEDS REPLY
     </span>
   );
 }
@@ -1328,9 +1349,10 @@ export default function Dashboard() {
   const [enquiryPasteText, setEnquiryPasteText] = useState('');
   const [enquiryParsing, setEnquiryParsing] = useState(false);
   const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
-  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '' });
+  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '', source: '' });
   const addEnquiryFormId = useId();
   const [addEnquirySpaceError, setAddEnquirySpaceError] = useState(false);
+  const addEnquiryNeedsSpace = ['booked', 'confirmed', 'tentative', 'finished'].includes(addEnquiryForm.status);
   // Single, deterministic entry point for adding an enquiry. Always opens on a
   // fresh "new" enquiry in Smart-paste mode, so every "Add enquiry" button
   // behaves identically (no stale status carried over from a previous open).
@@ -1352,13 +1374,20 @@ export default function Dashboard() {
   // One-tap follow-up: email the enquirer a nudge and push the next follow-up
   // out a week (so the lead leaves the "needs follow-up" list).
   const sendFollowUp = trpc.leads.sendFollowUp.useMutation({
-    onSuccess: (res: any) => {
+    onSuccess: (res: any, vars) => {
       if (res?.sent) {
-        toast.success(`Follow-up sent to ${res.to}`);
-        utils.followUps.leadStatus.invalidate();
+        const next = res.nextFollowUp ? new Date(res.nextFollowUp).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }) : null;
+        toast.success(`Follow-up sent to ${res.to} and logged on the enquiry.${next ? ` Next follow-up: ${next}.` : ''}`);
         refetchLeads();
         utils.dashboard.invalidate();
+        utils.followUps.leadStatus.invalidate();
         utils.inbox.invalidate();
+        utils.leads.getActivity.invalidate({ leadId: vars.leadId });
+        const patch = (prev: any) => prev && prev.id === vars.leadId
+          ? { ...prev, followUpDate: res.nextFollowUp ?? prev.followUpDate, lastActivityAt: new Date(), ...(res.statusAdvanced ? { status: 'contacted', respondedAt: prev.respondedAt ?? new Date() } : {}) }
+          : prev;
+        setSelectedLead(patch);
+        setSelectedBooking((prev: any) => prev?._isLead ? patch(prev) : prev);
       } else {
         toast.error(
           res?.reason === 'smtp_not_configured' ? 'Set up your email (SMTP) in Settings first, then you can send follow-ups.'
@@ -1840,9 +1869,9 @@ export default function Dashboard() {
     onError: () => toast.error("Failed to save event details"),
   });
   const updateStatus = trpc.leads.updateStatus.useMutation({
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       refetchLeads();
-      setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status } : prev);
+      setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status, respondedAt: prev.respondedAt ?? new Date(), lastActivityAt: new Date() } : prev);
       if (selectedLead?.id === variables.id) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
       // Status changes (especially → 'booked') affect bookings list, calendar, and dashboard tiles.
       utils.bookings.invalidate();
@@ -1853,8 +1882,11 @@ export default function Dashboard() {
         suppressStatusToast.current = false;
         return;
       }
-      if (variables.status === 'function_pack_sent') {
-        toast.success("Status updated — a follow-up reminder has been added to your Tasks for 5 days from now.");
+      // Automated task rules (Settings → Automated Tasks) report what they made.
+      const made = (data as any)?.tasksCreated ?? 0;
+      if (made > 0) {
+        utils.tasks.invalidate();
+        toast.success(`Status updated — ${made} task${made === 1 ? '' : 's'} added to your Tasks.`);
       } else {
         toast.success("Status updated");
       }
@@ -2019,7 +2051,7 @@ export default function Dashboard() {
       utils.bookings.byMonth.invalidate();
       utils.leads.eventsByMonth.invalidate();
       setShowAddLead(false);
-      setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new', spaceName: '' });
+      setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new', spaceName: '', source: '' });
       setEnquiryPasteText('');
       setEnquiryPasteMode(true);
       toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Added successfully!');
@@ -2183,6 +2215,13 @@ export default function Dashboard() {
     setShowEmailModal(true);
   };
   const [emailAttachments, setEmailAttachments] = useState<Array<{ filename: string; content: string; contentType: string }>>([]);
+  // Signature profile for the compose modal ('' = none). Every new email
+  // starts on the venue's default (first) signature — the modal shows exactly
+  // which one is added, and email.send appends that same profile.
+  const [emailSigId, setEmailSigId] = useState('');
+  useEffect(() => {
+    if (showEmailModal) setEmailSigId(defaultSignatureId(venueSettings as any) ?? '');
+  }, [showEmailModal]);
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
   // Email Templates
   const { data: emailTemplates, refetch: refetchTemplates } = trpc.templates.list.useQuery(undefined, { enabled: isAuthenticated });
@@ -2368,7 +2407,7 @@ export default function Dashboard() {
       if (selectedLead?.status === 'new') {
         const followUp = new Date();
         followUp.setDate(followUp.getDate() + 3);
-        setSelectedLead((prev: any) => prev ? { ...prev, status: 'contacted', followUpDate: followUp } : prev);
+        setSelectedLead((prev: any) => prev ? { ...prev, status: 'contacted', followUpDate: followUp, respondedAt: prev.respondedAt ?? new Date(), lastActivityAt: new Date() } : prev);
         toast.success('Email sent! Lead moved to Contacted — follow-up set for 3 days from now.');
       } else {
         toast.success('Email sent successfully!');
@@ -2441,7 +2480,7 @@ export default function Dashboard() {
 
   // Automated task rules
   const [showAddTaskRule, setShowAddTaskRule] = useState(false);
-  const [taskRuleForm, setTaskRuleForm] = useState({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium' });
+  const [taskRuleForm, setTaskRuleForm] = useState({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium', status: '' });
 
   // Team members
   const [showTeamForm, setShowTeamForm] = useState(false);
@@ -3741,7 +3780,9 @@ export default function Dashboard() {
                                   >
                                     {lead.firstName} {lead.lastName}
                                     {isPartialLead(lead) && <PartialChip />}
-                                    {replyStatus.get(lead.id)?.direction === 'in' && <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />}
+                                    {replyStatus.get(lead.id)?.direction === 'in'
+                                      ? <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />
+                                      : leadNeedsReply(lead) && <NeedsReplyChip />}
                                   </button>
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[200px] truncate">{lead.eventType || "—"}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}{budgetRangeLabel((lead as any).budgetRange) ? <span className="ml-1.5 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap">{budgetRangeLabel((lead as any).budgetRange)}</span> : null}</td>
@@ -3856,7 +3897,9 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 mb-0.5 min-w-0">
                         <div className="font-cormorant font-semibold text-base text-ink truncate flex-1 min-w-0">{lead.firstName} {lead.lastName}</div>
                         {isPartialLead(lead) && <PartialChip />}
-                        {replyStatus.get(lead.id)?.direction === 'in' && <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />}
+                        {replyStatus.get(lead.id)?.direction === 'in'
+                          ? <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />
+                          : leadNeedsReply(lead) && <NeedsReplyChip />}
                         <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
                           {pipelineStages.find(s => s.key === lead.status)?.label ?? String(lead.status ?? "").replace(/_/g, " ").toUpperCase()}
                         </div>
@@ -3882,12 +3925,13 @@ export default function Dashboard() {
                           <span className="font-dm text-xs text-ink/55 italic">no date</span>
                         )}
                       </div>
-                      {/* Row 4: follow-up badge if set */}
-                      {lead.followUpDate && (() => {
-                            const d = new Date(lead.followUpDate);
-                            const overdue = d <= new Date() && !['booked','lost','cancelled'].includes(lead.status);
-                            if (overdue) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-red-100 text-red-700 inline-block mt-1">OVERDUE</span>;
-                            if (d > new Date()) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-gold/20 text-amber-700 inline-block mt-1">FOLLOW UP {d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>;
+                      {/* Row 4: follow-up badge — same shared rule as the
+                          table column and the dashboard "Needs follow-up" tile. */}
+                      {(() => {
+                            const fu = leadFollowUpState(lead, followUpNowMs);
+                            if (fu.reason === 'overdue') return <span className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-red-100 text-red-700 inline-block mt-1">OVERDUE</span>;
+                            if (fu.reason === 'idle') return <span className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-amber-100 text-amber-800 inline-block mt-1" title="No activity on this lead for a while">GONE QUIET</span>;
+                            if (lead.followUpDate && !CLOSED_FOLLOWUP_STATUSES.includes(lead.status)) return <span className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-amber-50 text-amber-800 inline-block mt-1">FOLLOW UP {new Date(lead.followUpDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>;
                             return null;
                           })()}
                     </button>
@@ -3914,7 +3958,7 @@ export default function Dashboard() {
                         // "Needs you first": overdue follow-ups, then upcoming events by
                         // date, then undated, then past; newest enquiry breaks ties.
                         const nowTs = Date.now();
-                        const needsYou = (l: any) => l.followUpDate && new Date(l.followUpDate).getTime() <= nowTs && !['booked', 'lost', 'cancelled'].includes(l.status);
+                        const needsYou = (l: any) => leadFollowUpState(l, nowTs).reason === 'overdue';
                         const stageLeads = allEnquiries.filter((l: any) => l.status === stage.key).sort((a: any, b: any) => {
                           const oa = needsYou(a) ? 0 : 1, ob = needsYou(b) ? 0 : 1;
                           if (oa !== ob) return oa - ob;
@@ -3951,7 +3995,7 @@ export default function Dashboard() {
                             <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 pb-2">
                               {stageLeads.map((lead: any) => {
                                 const value = fmtBudget(lead.budget);
-                                const overdue = lead.followUpDate && new Date(lead.followUpDate) <= new Date() && !['booked', 'lost', 'cancelled'].includes(lead.status);
+                                const fuReason = leadFollowUpState(lead, nowTs).reason;
                                 return (
                                   <button key={lead.id}
                                     onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
@@ -3990,8 +4034,12 @@ export default function Dashboard() {
                                     {/* Footer — serif value + age / overdue flag */}
                                     <div className="flex items-baseline justify-between pt-[9px]" style={{ borderTop: '1px solid #eee6d8' }}>
                                       <span className="font-serif text-[18px] font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]">{value ?? '—'}</span>
-                                      {overdue ? (
+                                      {fuReason === 'overdue' ? (
                                         <span className="text-[11px] font-semibold" style={{ color: '#c0392b' }}>Follow-up overdue</span>
+                                      ) : fuReason === 'idle' ? (
+                                        <span className="text-[11px] font-semibold" style={{ color: '#92400e' }}>Gone quiet</span>
+                                      ) : leadNeedsReply(lead) ? (
+                                        <span className="text-[11px] font-semibold" style={{ color: '#0c4a6e' }}>Needs reply · {fmtAgo(lead.createdAt)}</span>
                                       ) : (
                                         <span className="text-[11px]" style={{ color: '#7e7466' }}>{fmtAgo(lead.createdAt)}</span>
                                       )}
@@ -4021,18 +4069,21 @@ export default function Dashboard() {
                 {/* Lead Detail — only used in list mode (table mode opens event drawer instead) */}
                 {leadViewMode === "list" && (selectedLead ? (
                   <div className="flex-1 overflow-auto p-4 md:p-6">
-                  <div className="flex items-center gap-3 mb-4 md:mb-6">
+                  {/* flex-wrap: on a phone the action buttons drop below the
+                      name instead of running off the right edge. */}
+                  <div className="flex flex-wrap items-center gap-3 mb-3">
                     <button onClick={() => setSelectedLead(null)} className="md:hidden font-bebas tracking-widest text-xs text-ink/60 hover:text-ink flex items-center gap-1 py-1 pr-2">
                       <ChevronLeft className="w-4 h-4" /> BACK
                     </button>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-[12rem]">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h2 className="font-cormorant text-ink" style={{ fontSize: '1.8rem', fontWeight: 600 }}>{selectedLead.firstName} {selectedLead.lastName}</h2>
                         {isPartialLead(selectedLead) && <PartialChip />}
+                        {leadNeedsReply(selectedLead) && <NeedsReplyChip />}
                       </div>
                       <div className="font-dm text-sm text-ink/60">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-wrap max-w-full">
                       {selectedLead.email && !isTeamMember && (
                         <button onClick={() => {
                           setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
@@ -4103,6 +4154,15 @@ export default function Dashboard() {
                         onOpenSettings={() => { setTab("settings"); setSettingsSubTab("follow-ups"); }} />
                     </div>
                   )}
+                  {!CLOSED_FOLLOWUP_STATUSES.includes(selectedLead.status) && !isStaff ? (
+                    <div className="mb-4 md:mb-6">
+                      <FollowUpDateControl
+                        leadId={selectedLead.id}
+                        value={selectedLead.followUpDate}
+                        onChanged={next => setSelectedLead((prev: any) => prev && prev.id === selectedLead.id ? { ...prev, followUpDate: next } : prev)}
+                      />
+                    </div>
+                  ) : <div className="mb-1 md:mb-3" />}
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
@@ -4316,7 +4376,7 @@ export default function Dashboard() {
                         <SelectValue placeholder="Select source…" />
                       </SelectTrigger>
                       <SelectContent>
-                        {["Instagram","Facebook","Google Search","Website","Word of Mouth / Referral","Walk-In","Event Directory","Previous Client","lead_form","express_book","Other"].map(s => (
+                        {["Phone","Email","Instagram","Facebook","Google Search","Website","Word of Mouth / Referral","Walk-In","Event Directory","Previous Client","lead_form","express_book","Other"].map(s => (
                           <SelectItem key={s} value={s}>{s === "lead_form" ? "Lead Form" : s === "express_book" ? "Express Book" : s}</SelectItem>
                         ))}
                       </SelectContent>
@@ -4505,10 +4565,14 @@ export default function Dashboard() {
                 <div className="bg-forest text-cream px-6 py-4 flex items-center justify-between">
                   <div>
                     <div className="font-bebas tracking-widest text-sm">COMPOSE EMAIL</div>
-                    <div className="font-dm text-xs text-cream/70">To: {selectedLead.firstName} {selectedLead.lastName} &lt;{selectedLead.email}&gt;</div>
+                    <div className="font-dm text-xs text-cream opacity-80">To: {selectedLead.firstName} {selectedLead.lastName} &lt;{selectedLead.email}&gt;</div>
                     {emailThread && <div className="font-dm text-xs text-cream opacity-80 mt-0.5">Replying in the same email thread</div>}
+                    <div className="font-dm text-xs text-cream opacity-80">
+                      From: {effectiveFromName(venueSettings as any, signatureProfiles(venueSettings as any).find(p => p.id === emailSigId))}
+                      {((venueSettings as any)?.smtpFromEmail || (venueSettings as any)?.smtpUser) ? ` <${(venueSettings as any)?.smtpFromEmail || (venueSettings as any)?.smtpUser}>` : ''}
+                    </div>
                   </div>
-                  <button onClick={() => setShowEmailModal(false)} className="text-cream/60 hover:text-cream text-xl leading-none">&times;</button>
+                  <button onClick={() => setShowEmailModal(false)} aria-label="Close" className="text-cream opacity-70 hover:opacity-100 text-xl leading-none">&times;</button>
                 </div>
                 <div className="p-6 space-y-4">
                   {/* Template picker */}
@@ -4564,18 +4628,39 @@ export default function Dashboard() {
                       className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest resize-none"
                       placeholder="Write your message here..."
                     />
-                    {/* Signature preview */}
-                    {(venueSettings?.emailSignature || (venueSettings as any)?.emailSignatureLogo) && (
-                      <div className="mt-1 border-t border-dashed border-gold/30 pt-2">
-                        <p className="font-bebas text-[9px] tracking-widest text-sage/60 mb-1">SIGNATURE (auto-appended)</p>
-                        {(venueSettings as any)?.emailSignatureLogo && (
-                          <img src={(venueSettings as any).emailSignatureLogo} alt="Logo" className="h-8 w-auto object-contain mb-1 opacity-60" />
-                        )}
-                        {venueSettings?.emailSignature && (
-                          <pre className="font-dm text-xs text-ink/60 whitespace-pre-wrap leading-relaxed">{venueSettings.emailSignature}</pre>
-                        )}
-                      </div>
-                    )}
+                    {/* Signature — the exact profile email.send appends (same
+                        shared helper), defaulting to the venue's first one. */}
+                    {(() => {
+                      const sigs = signatureProfiles(venueSettings as any);
+                      if (sigs.length === 0) return null;
+                      const chosen = sigs.find(p => p.id === emailSigId);
+                      return (
+                        <div className="mt-2 border-t border-dashed border-stone-300 pt-2">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <label htmlFor="compose-signature" className="font-bebas text-xs tracking-widest text-sage flex-shrink-0">SIGNATURE</label>
+                            <select id="compose-signature" value={emailSigId} onChange={e => setEmailSigId(e.target.value)}
+                              className="flex-1 min-w-0 border border-border px-2 py-1 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest">
+                              {sigs.map(s => <option key={s.id} value={s.id}>{signatureLabel(s)}</option>)}
+                              <option value="">No signature</option>
+                            </select>
+                          </div>
+                          {chosen ? (
+                            <div aria-label="Signature preview" className="bg-white border border-stone-200 px-3 py-2">
+                              {chosen.signatureLogo && (
+                                <img src={chosen.signatureLogo} alt="" className="h-8 w-auto object-contain mb-1" />
+                              )}
+                              {chosen.signature?.trim() ? (
+                                <pre className="font-dm text-xs text-stone-700 whitespace-pre-wrap leading-relaxed">{chosen.signature}</pre>
+                              ) : !chosen.signatureLogo ? (
+                                <p className="font-dm text-xs text-stone-600 italic">This signature has no sign-off text — only the sender name is used.</p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <p className="font-dm text-xs text-stone-600">Sent without a signature.</p>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {/* Inline variable hint — shows which {{vars}} are still unreplaced */}
                     {emailForm.body && /\{\{\w+\}\}/.test(emailForm.body) && (
                       <div className="mt-1 px-2 py-1 bg-gold/10 border border-gold/30 font-dm text-xs text-amber-800 flex items-start gap-1.5">
@@ -4640,6 +4725,7 @@ export default function Dashboard() {
                         attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
                         inReplyTo: emailThread?.inReplyTo,
                         references: emailThread?.references,
+                        signatureId: emailSigId || undefined,
                       })}
                       disabled={sendEmail.isPending || !emailForm.subject || !emailForm.body}
                       className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream flex items-center gap-2 disabled:opacity-50">
@@ -7061,7 +7147,7 @@ export default function Dashboard() {
                     value={settingsForm.formSuccessMessage ?? ''}
                     onChange={e => setSettingsForm((f: any) => ({ ...f, formSuccessMessage: e.target.value }))}
                     aria-label="Success message"
-                    placeholder={`Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.`}
+                    placeholder={DEFAULT_FORM_SUCCESS_MESSAGE}
                     rows={3}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none" />
                 </div>
@@ -7085,7 +7171,7 @@ export default function Dashboard() {
                       value={settingsForm.enquiryAutoReplyMessage ?? ''}
                       onChange={e => setSettingsForm((f: any) => ({ ...f, enquiryAutoReplyMessage: e.target.value }))}
                       aria-label="Auto-reply message"
-                      placeholder={`Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch within one business day.`}
+                      placeholder={DEFAULT_AUTO_REPLY_INTRO}
                       rows={3}
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none" />
                   )}
@@ -7289,7 +7375,7 @@ export default function Dashboard() {
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM SUBTITLE</label>
                     <Textarea value={settingsForm.leadFormSubtitle ?? ''} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormSubtitle: e.target.value }))}
-                      placeholder="Tell us about your event and we'll get back to you within 24 hours."
+                      placeholder={DEFAULT_LEAD_FORM_SUBTITLE}
                       rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                   </div>
                 </div>
@@ -8070,28 +8156,31 @@ export default function Dashboard() {
 
               {/* ── AUTOMATED TASKS ─────────────────────────────── */}
               {settingsSubTab === "automated-tasks" && (() => {
-                const taskRules: { name: string; trigger: string; daysOffset: string; priority: string }[] = (() => {
-                  try { return JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); } catch { return []; }
+                // Saved as-is (raw) so deleting one rule never rewrites the
+                // others; parsed per row for the plain-language "When" column.
+                const taskRules: any[] = (() => {
+                  try { const v = JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
                 })();
-                const TRIGGER_LABELS: Record<string, string> = {
-                  days_before_event: 'Days before event',
-                  on_booking_confirmed: 'On booking confirmed',
-                  on_function_pack_sent: 'On function pack sent',
-                  on_enquiry_received: 'On new enquiry',
-                };
+                const statusLabel = (key: string) => pipelineStages.find(s => s.key === key)?.label ?? key.replace(/_/g, ' ');
                 const saveRules = (rules: typeof taskRules) => {
-                  updateSettings.mutate({ automatedTaskRules: JSON.stringify(rules) });
+                  updateSettings.mutate({ automatedTaskRules: JSON.stringify(rules) }, { onSuccess: () => utils.tasks.invalidate() });
                 };
+                const hasPackStatus = pipelineStages.some(s => s.key === FUNCTION_PACK_STATUS);
+                const packRuleOverridden = parseTaskRules(taskRules).some(r => r.trigger === 'on_status_change' && r.status === FUNCTION_PACK_STATUS);
                 return (
                 <div className="max-w-3xl mx-auto">
                   <div className="flex items-center justify-between mb-6">
                     <h1 className="font-cormorant text-3xl font-semibold text-ink">Automated Tasks</h1>
                   </div>
-                  <p className="font-dm text-sm text-ink/60 mb-4">When a trigger fires, a task is automatically created and linked to the event.</p>
+                  <p className="font-dm text-sm text-stone-700 mb-1">When something happens on an enquiry or booking, a task is added to your Tasks list, linked to it.</p>
+                  <p className="font-dm text-sm text-stone-700 mb-4">Each rule makes its task once per enquiry or booking — moving a lead back and forth won't double up.</p>
+                  {hasPackStatus && !packRuleOverridden && (
+                    <p className="font-dm text-xs text-stone-600 mb-4">Built in: moving an enquiry to {statusLabel(FUNCTION_PACK_STATUS)} adds a "Follow up" task due 5 days later. Add your own rule for that status to replace it.</p>
+                  )}
                   <div className="bg-white border border-gray-200 rounded">
                     <div className="flex items-center justify-between p-4 border-b border-gray-200">
                       <h2 className="font-semibold text-gray-800">Task Rules</h2>
-                      <button onClick={() => { setTaskRuleForm({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium' }); setShowAddTaskRule(true); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add Rule</button>
+                      <button onClick={() => { setTaskRuleForm({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium', status: '' }); setShowAddTaskRule(true); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add Rule</button>
                     </div>
                     {taskRules.length === 0 ? (
                       <div className="p-8 text-center">
@@ -8099,29 +8188,31 @@ export default function Dashboard() {
                       </div>
                     ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[600px]">
+                      <table className="w-full">
                       <thead>
                         <tr className="border-b border-gray-100">
-                          <th className="text-left p-3 text-xs font-medium text-gray-500">Task Name</th>
-                          <th className="text-left p-3 text-xs font-medium text-gray-500">Trigger</th>
-                          <th className="text-left p-3 text-xs font-medium text-gray-500">Priority</th>
-                          <th className="p-3"></th>
+                          <th className="text-left p-3 text-xs font-medium text-gray-600">Task</th>
+                          <th className="text-left p-3 text-xs font-medium text-gray-600">When</th>
+                          <th className="text-left p-3 text-xs font-medium text-gray-600">Priority</th>
+                          <th className="p-3"><span className="sr-only">Actions</span></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {taskRules.map((row, i) => (
-                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                        {taskRules.map((row, i) => {
+                          const parsed = parseTaskRules([row])[0];
+                          return (
+                          <tr key={row.id ?? i} className="border-b border-gray-50 hover:bg-gray-50">
                             <td className="p-3 text-sm text-gray-700">{row.name}</td>
-                            <td className="p-3 text-sm text-gray-500">
-                              {TRIGGER_LABELS[row.trigger] || row.trigger}
-                              {row.trigger === 'days_before_event' && row.daysOffset ? ` (${row.daysOffset}d)` : ''}
+                            <td className="p-3 text-sm text-gray-600">
+                              {parsed ? describeTaskRule(parsed, statusLabel) : <span className="text-red-700">Can't run — delete and re-add this rule</span>}
                             </td>
-                            <td className="p-3 text-sm text-gray-500 capitalize">{row.priority}</td>
+                            <td className="p-3 text-sm text-gray-600 capitalize">{row.priority}</td>
                             <td className="p-3 text-right">
-                              <button aria-label="Delete rule" onClick={() => { const next = taskRules.filter((_, j) => j !== i); saveRules(next); }} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                              <button aria-label={`Delete rule ${row.name}`} onClick={() => { const next = taskRules.filter((_, j) => j !== i); saveRules(next); }} className="text-red-600 hover:text-red-800"><Trash2 className="w-4 h-4" /></button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                     </div>
@@ -9683,6 +9774,19 @@ export default function Dashboard() {
                 <LeadResponseInfo leadId={selectedBooking.id} readOnly={isTeamMember}
                   onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("follow-ups"); }} />
               )}
+              {/* Enquiry follow-up: when to chase next, plus whether anyone
+                  has replied yet (separate from the unread badge). */}
+              {selectedBooking._isLead && !CLOSED_FOLLOWUP_STATUSES.includes(selectedBooking.status) && !isStaff && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`${DRAWER_LABEL} flex-shrink-0`}>Follow-up</span>
+                  <FollowUpDateControl
+                    leadId={selectedBooking.id}
+                    value={selectedBooking.followUpDate}
+                    onChanged={next => setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === selectedBooking.id ? { ...prev, followUpDate: next } : prev)}
+                  />
+                  {leadNeedsReply(selectedBooking) && <NeedsReplyChip />}
+                </div>
+              )}
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
                   Cancel/Esc/blur reverts.
@@ -10519,32 +10623,55 @@ export default function Dashboard() {
           <form onSubmit={e => {
             e.preventDefault();
             if (!taskRuleForm.name.trim()) return;
-            const existing: any[] = (() => { try { return JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); } catch { return []; } })();
-            const next = [...existing, { name: taskRuleForm.name.trim(), trigger: taskRuleForm.trigger, daysOffset: taskRuleForm.daysOffset, priority: taskRuleForm.priority }];
-            updateSettings.mutate({ automatedTaskRules: JSON.stringify(next) }, { onSuccess: () => { refetchSettings(); setShowAddTaskRule(false); toast.success('Task rule added!'); } });
+            if (taskRuleForm.trigger === 'on_status_change' && !taskRuleForm.status) { toast.error('Pick which status starts this rule.'); return; }
+            const existing: any[] = (() => { try { const v = JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } })();
+            const days = Math.max(0, parseInt(taskRuleForm.daysOffset || '0', 10) || 0);
+            const next = [...existing, {
+              id: newTaskRuleId(),
+              name: taskRuleForm.name.trim(),
+              trigger: taskRuleForm.trigger,
+              daysOffset: String(days),
+              priority: taskRuleForm.priority,
+              ...(taskRuleForm.trigger === 'on_status_change' ? { status: taskRuleForm.status } : {}),
+            }];
+            updateSettings.mutate({ automatedTaskRules: JSON.stringify(next) }, { onSuccess: () => { refetchSettings(); utils.tasks.invalidate(); setShowAddTaskRule(false); toast.success('Task rule added.'); } });
           }} className="space-y-3">
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TASK NAME *</label>
-              <Input required value={taskRuleForm.name} onChange={e => setTaskRuleForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Confirm final guest numbers" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+              <label htmlFor="task-rule-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">TASK NAME *</label>
+              <Input id="task-rule-name" required value={taskRuleForm.name} onChange={e => setTaskRuleForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Confirm final guest numbers" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TRIGGER</label>
-              <select value={taskRuleForm.trigger} onChange={e => setTaskRuleForm(f => ({ ...f, trigger: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
-                <option value="days_before_event">Days before event</option>
-                <option value="on_booking_confirmed">On booking confirmed</option>
-                <option value="on_function_pack_sent">On function pack sent</option>
-                <option value="on_enquiry_received">On new enquiry received</option>
+              <label htmlFor="task-rule-trigger" className="font-bebas text-xs tracking-widest text-sage block mb-1">WHEN</label>
+              <select id="task-rule-trigger" value={taskRuleForm.trigger} onChange={e => setTaskRuleForm(f => ({ ...f, trigger: e.target.value, daysOffset: e.target.value === 'days_before_event' ? '3' : '0' }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
+                {TASK_RULE_TRIGGERS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
               </select>
             </div>
-            {taskRuleForm.trigger === 'days_before_event' && (
+            {taskRuleForm.trigger === 'on_status_change' && (
               <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DAYS BEFORE EVENT</label>
-                <Input type="number" min="1" value={taskRuleForm.daysOffset} onChange={e => setTaskRuleForm(f => ({ ...f, daysOffset: e.target.value }))} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                <label htmlFor="task-rule-status" className="font-bebas text-xs tracking-widest text-sage block mb-1">STATUS</label>
+                <select id="task-rule-status" value={taskRuleForm.status} onChange={e => setTaskRuleForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
+                  <option value="">Pick a status…</option>
+                  {/* New is covered by "new enquiry"; confirmed statuses by "booking is confirmed". */}
+                  {pipelineStages.filter(s => s.key !== 'new' && !BOOKED_STATUSES.includes(s.key)).map(s => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </select>
               </div>
             )}
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRIORITY</label>
-              <select value={taskRuleForm.priority} onChange={e => setTaskRuleForm(f => ({ ...f, priority: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
+              <label htmlFor="task-rule-days" className="font-bebas text-xs tracking-widest text-sage block mb-1">
+                {taskRuleForm.trigger === 'days_before_event' ? 'DAYS BEFORE THE EVENT' : 'DUE (DAYS LATER)'}
+              </label>
+              <Input id="task-rule-days" type="number" min="0" max="365" value={taskRuleForm.daysOffset} onChange={e => setTaskRuleForm(f => ({ ...f, daysOffset: e.target.value }))} aria-describedby="task-rule-days-hint" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+              <p id="task-rule-days-hint" className="font-dm text-xs text-stone-600 mt-1">
+                {taskRuleForm.trigger === 'days_before_event'
+                  ? 'For confirmed bookings. The task appears in your list a week before it’s due.'
+                  : '0 means due the same day.'}
+              </p>
+            </div>
+            <div>
+              <label htmlFor="task-rule-priority" className="font-bebas text-xs tracking-widest text-sage block mb-1">PRIORITY</label>
+              <select id="task-rule-priority" value={taskRuleForm.priority} onChange={e => setTaskRuleForm(f => ({ ...f, priority: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
@@ -11083,7 +11210,9 @@ export default function Dashboard() {
           ) : (
             <form onSubmit={e => {
               e.preventDefault();
-              if (!addEnquiryForm.spaceName.trim()) { setAddEnquirySpaceError(true); toast.error('Please pick an event space.'); return; }
+              // A space is only needed once it's a live event (the server
+              // enforces the same rule); an enquiry can be logged without one.
+              if (addEnquiryNeedsSpace && !addEnquiryForm.spaceName.trim()) { setAddEnquirySpaceError(true); toast.error('Pick an event space — confirmed events need one.'); return; }
               setAddEnquirySpaceError(false);
               createEnquiry.mutate({
                 firstName: addEnquiryForm.firstName,
@@ -11097,8 +11226,8 @@ export default function Dashboard() {
                 budget: addEnquiryForm.budget ? parseFloat(addEnquiryForm.budget) : undefined,
                 message: addEnquiryForm.message || undefined,
                 status: addEnquiryForm.status,
-                source: 'manual',
-                spaceName: addEnquiryForm.spaceName,
+                source: addEnquiryForm.source || 'manual',
+                spaceName: addEnquiryForm.spaceName.trim() || undefined,
               });
             }} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -11174,8 +11303,21 @@ export default function Dashboard() {
                   </Select>
                 </div>
               </div>
+              <div>
+                <label htmlFor={`${addEnquiryFormId}-source`} className="font-bebas text-xs tracking-widest text-sage block mb-1">HOW DID THEY FIND YOU?</label>
+                <select id={`${addEnquiryFormId}-source`} value={addEnquiryForm.source}
+                  onChange={e => setAddEnquiryForm(f => ({ ...f, source: e.target.value }))}
+                  className="w-full h-9 rounded-none border border-gold/30 bg-white px-3 font-dm text-sm text-ink focus:outline-none focus:border-gold">
+                  <option value="">Not sure / skip</option>
+                  {MANUAL_ENQUIRY_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
               <fieldset>
-                <legend className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE <span className="text-red-500">*</span></legend>
+                <legend className="font-bebas text-xs tracking-widest text-sage block mb-1">
+                  SPACE {addEnquiryNeedsSpace
+                    ? <span className="text-red-500">*</span>
+                    : <span className="font-dm normal-case tracking-normal text-xs text-stone-600">(optional — you can pick one later)</span>}
+                </legend>
                 {spaces && spaces.length > 0 ? (
                   <SpaceMultiSelect value={addEnquiryForm.spaceName}
                     onChange={v => { setAddEnquiryForm(f => ({ ...f, spaceName: v })); if (v.trim()) setAddEnquirySpaceError(false); }}
@@ -11187,8 +11329,8 @@ export default function Dashboard() {
                     aria-invalid={addEnquirySpaceError}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 )}
-                {addEnquirySpaceError && (
-                  <p role="alert" className="font-dm text-xs text-red-600 mt-1">Please pick an event space.</p>
+                {addEnquirySpaceError && addEnquiryNeedsSpace && (
+                  <p role="alert" className="font-dm text-xs text-red-600 mt-1">Confirmed events need a space — pick one, or save it as an enquiry for now.</p>
                 )}
               </fieldset>
               <div>
