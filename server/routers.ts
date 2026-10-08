@@ -11,12 +11,15 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { smtpTls } from "./smtpTls";
 import { leadAccessToken, isValidLeadAccessToken } from "./leadToken";
 import { publicBaseUrl } from "./publicUrl";
+import { inboxRouter } from "./inboxRouter";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
 // emailSignature*, autoCancelTentative, automatedTaskRules are owner-only.
 const VENUE_SECRET_FIELDS = [
   "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFromName", "smtpFromEmail", "smtpSecure",
+  "imapEnabled", "imapHost", "imapPort", "imapSecure", "imapUser", "imapPass", "imapFolder",
+  "imapLastUid", "imapUidValidity", "imapLastCheckedAt", "imapLastError",
   "notificationEmail", "internalName",
   "nbiApiKey", "nbiVenueId", "nbiAccountId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret", "nbiServiceMappings",
   "automatedTaskRules", "emailSignature", "emailSignatureLogo", "emailSignatures", "autoCancelTentative",
@@ -92,6 +95,7 @@ async function enforceLeadRateLimit(ctx: any, ownerId: number) {
 
 export const appRouter = router({
   system: systemRouter,
+  inbox: inboxRouter,
 
   auth: router({
     me: publicProcedure.query(opts => ({
@@ -1150,6 +1154,9 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) return;
          await db.delete(leads).where(and(eq(leads.id, input.id), eq(leads.ownerId, ctx.user.id)));
+        // The client's emails go with the enquiry.
+        const { leadMessages } = await import('../drizzle/schema');
+        await db.delete(leadMessages).where(and(eq(leadMessages.leadId, input.id), eq(leadMessages.ownerId, ctx.user.id)));
         return { success: true };
       }),
     // Mark a lead as read (clears the unread badge)
@@ -1283,17 +1290,24 @@ export const appRouter = router({
   </div>
 </div>`;
         const text = `Hi ${lead.firstName ?? 'there'},\n\n${bodyText}\n\nWarm regards,\n${venueName}`;
+        const { leadMailHeaders, recordLeadMessage } = await import('./inbox');
+        const threadHeaders = leadMailHeaders(mailer.venue, { leadId: lead.id, fromEmail: mailer.fromEmail, replyTo: mailer.fromEmail });
         try {
           await mailer.transporter.sendMail({
             from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
             to: `"${clientName}" <${lead.email}>`,
-            replyTo: mailer.fromEmail,
             subject, html, text,
+            ...threadHeaders,
           });
         } catch (err) {
           console.error('[leads.sendFollowUp] send failed', err);
           return { sent: false as const, reason: 'send_failed' as const };
         }
+        await recordLeadMessage({
+          ownerId: ctx.user.id, leadId: lead.id, direction: 'out',
+          fromEmail: mailer.fromEmail, fromName: mailer.fromName, toEmail: lead.email,
+          subject, bodyText: text, messageId: threadHeaders.messageId,
+        });
         // Push the next follow-up out a week so this lead clears the list.
         await db.update(leads)
           .set({ followUpDate: new Date(Date.now() + 7 * 86_400_000), updatedAt: new Date() })
@@ -1450,6 +1464,9 @@ export const appRouter = router({
           inArray(leadActivity.leadId, ownedIds),
           eq(leadActivity.ownerId, ctx.user.id),
         ));
+        const { leadMessages } = await import('../drizzle/schema');
+        await db.delete(leadMessages)
+          .where(and(inArray(leadMessages.leadId, ownedIds), eq(leadMessages.ownerId, ctx.user.id)));
         await db.delete(leads)
           .where(and(inArray(leads.id, ownedIds), eq(leads.ownerId, ctx.user.id)));
         return { deleted: ownedIds.length };
@@ -1661,14 +1678,26 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                   const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
                   const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
                   const clientName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
+                  const subject = `Your event proposal — ${proposal.title}`;
+                  const text = `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`;
+                  // With the inbox connected, replies also reach the polled
+                  // mailbox; without it Reply-To stays unset (replies go to From).
+                  const { leadMailHeaders, recordLeadMessage, inboxAddress } = await import('./inbox');
+                  const threadHeaders = leadMailHeaders(vs, { leadId: proposal.leadId, fromEmail, replyTo: inboxAddress(vs) ? fromEmail : null });
                   await transporter.sendMail({
                     from: `"${fromName}" <${fromEmail}>`,
                     to: `"${clientName}" <${lead.email}>`,
-                    subject: `Your event proposal — ${proposal.title}`,
+                    subject,
                     html: `<p>Hi ${lead.firstName},</p><p>Please find your event proposal below:</p><p><a href="${proposalUrl}" style="background:#4f7942;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">View Proposal</a></p><p>Or copy this link: <a href="${proposalUrl}">${proposalUrl}</a></p><p>This proposal includes pricing, details, and terms for your event. Please don't hesitate to reach out if you have any questions.</p><p>Warm regards,<br>${fromName}</p>`,
-                    text: `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`,
+                    text,
+                    ...threadHeaders,
                   });
                   emailSent = true;
+                  await recordLeadMessage({
+                    ownerId: ctx.user.id, leadId: proposal.leadId, direction: 'out',
+                    fromEmail, fromName, toEmail: lead.email, subject, bodyText: text,
+                    messageId: threadHeaders.messageId,
+                  });
                 }
               }
             } catch (emailErr) {
@@ -2638,6 +2667,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // profile's signature. The authenticated SMTP account is unchanged, so
         // deliverability isn't affected — only the visible sender/reply differ.
         signatureId: z.string().optional(),
+        // Threading for a reply to a client's email (the conversation's
+        // "Reply" button): the Message-ID being answered, and its chain.
+        inReplyTo: z.string().max(500).regex(/^<[^<>\s]+>$/).optional(),
+        references: z.array(z.string().max(500).regex(/^<[^<>\s]+>$/)).max(30).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Block ephemeral team-link sessions (which mark isTeamMember=true),
@@ -2747,15 +2780,23 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           ? input.to
           : (input.toName ? `"${input.toName}" <${input.to}>` : input.to);
         const toForLog = Array.isArray(input.to) ? input.to.join(', ') : input.to;
+        // A single recipient is a client email (staff briefings send to a
+        // list): give it a threadable Message-ID and, with the inbox
+        // connected, a Reply-To that includes the polled mailbox.
+        const { leadMailHeaders, recordLeadMessage } = await import('./inbox');
+        const isClientEmail = !Array.isArray(input.to);
+        const threadHeaders = isClientEmail
+          ? leadMailHeaders(settings, { leadId: input.leadId, fromEmail, replyTo, inReplyTo: input.inReplyTo, references: input.references })
+          : { replyTo };
         await transporter.sendMail({
           from: `"${fromName}" <${fromEmail}>`,
           to: toForNodemailer,
-          replyTo,
           bcc: bccAddress,
           subject: input.subject,
           html: fullHtml,
           text: input.body,
           attachments,
+          ...threadHeaders,
         });
 
         // Resolve a leadId for activity logging — accept it directly, or look
@@ -2770,6 +2811,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .where(and(eq(bookingsTable.id, input.bookingId), eq(bookingsTable.ownerId, ctx.user.id)))
             .limit(1);
           if (b?.leadId) activityLeadId = b.leadId;
+        }
+        if (activityLeadId && isClientEmail && 'messageId' in threadHeaders) {
+          await recordLeadMessage({
+            ownerId: ctx.user.id, leadId: activityLeadId, direction: 'out',
+            fromEmail, fromName, toEmail: toForLog, subject: input.subject, bodyText: input.body,
+            messageId: threadHeaders.messageId, inReplyTo: input.inReplyTo, references: threadHeaders.references,
+            attachments: attachments.length ? attachments.map(a => ({ filename: a.filename, size: a.content.length, contentType: a.contentType })) : null,
+          });
         }
         // Log as lead activity if we have a leadId
         if (activityLeadId) {
