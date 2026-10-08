@@ -21,6 +21,7 @@ import EventSpendSection from "@/components/EventSpendSection";
 import { beoUrl } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
+import LeadProposals from "@/components/LeadProposals";
 
 const EVENT_TYPES = [
   "Wedding", "Corporate", "Birthday", "Engagement", "Cocktail Party",
@@ -32,7 +33,7 @@ const EVENT_TYPES = [
 export default function EventDetail() {
   const [, params] = useRoute("/event/:id");
   const [, setLocation] = useLocation();
-  const { user, loading } = useAuth();
+  const { user, loading, isStaff } = useAuth();
   const bookingId = params?.id ? parseInt(params.id) : 0;
 
   const [editing, setEditing] = useState(false);
@@ -508,6 +509,7 @@ export default function EventDetail() {
                 <FileText className="w-4 h-4" />
                 {booking.proposalId ? 'OPEN PROPOSAL BUILDER' : 'START PROPOSAL'}
               </button>
+              {booking.leadId && !isStaff && <LeadProposals leadId={booking.leadId} compact />}
               <button
                 onClick={() => setBeoPreviewOpen(true)}
                 title="Read the full BEO (run of day, menu, dietaries) without downloading anything"
@@ -702,7 +704,26 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
   const create = trpc.contracts.create.useMutation({
     onSuccess: () => { utils.contracts.list.invalidate({ bookingId }); setShowForm(false); toast.success('Contract created'); },
   });
-  const send = trpc.contracts.send.useMutation({ onSuccess: () => { utils.contracts.list.invalidate({ bookingId }); toast.success('Contract marked as sent'); } });
+  // The client signs in their portal link for this event. Sending makes sure
+  // that link exists (with signing on) and emails it when SMTP is set up.
+  const { data: portalLinks } = trpc.portal.list.useQuery({ bookingId });
+  const signingLink = (() => {
+    const t = (portalLinks ?? []).find((t: any) => {
+      try { return JSON.parse(t.permissions ?? '{}').signContract && (!t.expiresAt || Number(t.expiresAt) > Date.now()); } catch { return false; }
+    });
+    return t ? `${window.location.origin}/portal/${t.token}` : null;
+  })();
+  const send = trpc.contracts.send.useMutation({
+    onSuccess: (r) => {
+      utils.contracts.list.invalidate({ bookingId });
+      utils.portal.list.invalidate({ bookingId });
+      if (r.emailSent) toast.success(`Contract emailed to ${r.to} with their signing link`);
+      else if (r.reason === 'no_client_email') toast.warning('Marked as sent, but there\'s no client email — copy the signing link below and send it yourself.');
+      else if (r.reason === 'send_failed') toast.error('Marked as sent, but the email failed to send — copy the signing link below and send it yourself.');
+      else toast.warning('Marked as sent, but email isn\'t set up — copy the signing link below and send it yourself.');
+    },
+    onError: (e) => toast.error(e.message || 'Could not send the contract'),
+  });
   const del = trpc.contracts.delete.useMutation({ onSuccess: () => utils.contracts.list.invalidate({ bookingId }) });
   const STATUS_COLORS: Record<string, string> = { draft: 'bg-gray-100 text-gray-600', sent: 'bg-blue-100 text-blue-700', signed: 'bg-green-100 text-green-700', declined: 'bg-red-100 text-red-700', expired: 'bg-gray-100 text-gray-400' };
   return (
@@ -753,28 +774,48 @@ function ContractsTab({ bookingId, booking }: { bookingId: number; booking: any 
                   <span className="font-semibold text-ink text-sm">{c.title}</span>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[c.status] ?? 'bg-gray-100 text-gray-600'}`}>{c.status}</span>
                 </div>
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-stone-600">
                   {c.clientName && <span>For: {c.clientName}</span>}
                   {c.clientEmail && <span> · {c.clientEmail}</span>}
                   <span> · Created {new Date(c.createdAt).toLocaleDateString('en-NZ')}</span>
-                  {c.signedAt && <span className="text-green-600"> · Signed {new Date(c.signedAt).toLocaleDateString('en-NZ')} by {c.signerName}</span>}
+                  {c.sentAt && c.status !== 'signed' && <span> · Sent {new Date(Number(c.sentAt)).toLocaleDateString('en-NZ')}</span>}
+                  {c.expiresAt && c.status !== 'signed' && <span> · {Number(c.expiresAt) < Date.now() ? 'Expired' : 'Sign by'} {new Date(Number(c.expiresAt)).toLocaleDateString('en-NZ')}</span>}
                 </div>
+                {c.signedAt && (
+                  <div className="text-xs text-green-800 mt-1">
+                    Signed by <strong>{c.signerName}</strong> on {new Date(Number(c.signedAt)).toLocaleString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+                    {c.signerIp && <span className="text-stone-600"> · from {c.signerIp}</span>}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {c.status === 'draft' && (
-                  <button onClick={() => send.mutate({ id: c.id })} className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-blue-300 text-blue-600 hover:bg-blue-50">MARK SENT</button>
+                {(c.status === 'draft' || c.status === 'sent') && (
+                  <button onClick={() => send.mutate({ id: c.id })} disabled={send.isPending}
+                    title={c.status === 'draft' ? 'Email the client their signing link (or get a link to send yourself)' : 'Email the signing link again'}
+                    className="text-xs font-bebas tracking-widest px-3 py-1.5 border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+                    {send.isPending && send.variables?.id === c.id ? 'SENDING…' : c.status === 'draft' ? 'SEND TO CLIENT' : 'RESEND'}
+                  </button>
                 )}
                 <button onClick={() => { if (confirm('Delete this contract? This cannot be undone.')) del.mutate({ id: c.id }); }} aria-label="Delete contract" className="text-red-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" aria-hidden /></button>
               </div>
             </div>
-            {c.token && (
+            {c.status === 'sent' && (
               <div className="mt-2 pt-2 border-t border-gray-100">
-                <div className="text-xs text-gray-400 mb-1">Signing link (share with client):</div>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs bg-gray-50 px-2 py-1 rounded flex-1 truncate">{window.location.origin}/portal/{c.token}</code>
-                  <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/portal/${c.token}`); toast.success('Link copied!'); }} className="text-xs font-bebas tracking-widest px-2 py-1 border border-gray-300 text-gray-500 hover:bg-gray-50">COPY</button>
-                </div>
+                {signingLink ? (
+                  <>
+                    <div className="text-xs text-stone-600 mb-1">Signing link — the client's event page, where they read and sign:</div>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs bg-gray-50 px-2 py-1 rounded flex-1 truncate">{signingLink}</code>
+                      <button onClick={() => { navigator.clipboard.writeText(signingLink); toast.success('Link copied'); }} className="text-xs font-bebas tracking-widest px-2 py-1 border border-gray-300 text-stone-700 hover:bg-gray-50">COPY</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs text-stone-600">No signing link yet — press Resend to create one.</div>
+                )}
               </div>
+            )}
+            {c.status === 'draft' && (
+              <p className="mt-2 pt-2 border-t border-gray-100 text-xs text-stone-600">Not sent yet. Send to client creates their signing link and emails it if your email is set up.</p>
             )}
           </div>
         ))}
@@ -1088,6 +1129,15 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
     onSuccess: () => { utils.portal.list.invalidate({ bookingId }); setShowForm(false); toast.success('Client portal link created!'); },
   });
   const del = trpc.portal.delete.useMutation({ onSuccess: () => utils.portal.list.invalidate({ bookingId }) });
+  const emailLink = trpc.portal.emailLink.useMutation({
+    onSuccess: (r) => {
+      if (r.emailSent) toast.success(`Portal link emailed to ${r.to}`);
+      else if (r.reason === 'no_client_email') toast.warning('There\'s no client email on this event — copy the link and send it yourself.');
+      else if (r.reason === 'send_failed') toast.error('The email failed to send — copy the link and send it yourself.');
+      else toast.warning('Email isn\'t set up yet (Settings → Email) — copy the link and send it yourself.');
+    },
+    onError: (e) => toast.error(e.message || 'Could not email the link'),
+  });
   const PERM_LABELS: Record<string, string> = { viewProposal: 'View Proposal', viewRunsheet: 'View Runsheet', viewBudget: 'View Budget', approveProposal: 'Approve Proposal', signContract: 'Sign Contract' };
   return (
     <div className="space-y-4">
@@ -1142,9 +1192,14 @@ function PortalTab({ bookingId, booking }: { bookingId: number; booking: any }) 
                       <span key={k} className="text-xs bg-forest/10 text-forest px-2 py-0.5 rounded-full">{label}</span>
                     ))}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <code className="text-xs bg-gray-50 px-2 py-1 rounded flex-1 truncate">{url}</code>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <code className="text-xs bg-gray-50 px-2 py-1 rounded flex-1 min-w-[12rem] truncate">{url}</code>
                     <button onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied!'); }} className="text-xs font-bebas tracking-widest px-2 py-1 border border-gray-300 text-gray-500 hover:bg-gray-50 flex-shrink-0">COPY</button>
+                    <button onClick={() => emailLink.mutate({ id: t.id })} disabled={emailLink.isPending}
+                      title={`Email this link to ${t.clientEmail || booking?.email || 'the client'}`}
+                      className="text-xs font-bebas tracking-widest px-2 py-1 border border-gray-300 text-stone-700 hover:bg-gray-50 flex-shrink-0 disabled:opacity-50">
+                      {emailLink.isPending && emailLink.variables?.id === t.id ? 'SENDING…' : 'EMAIL TO CLIENT'}
+                    </button>
                     <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-bebas tracking-widest px-2 py-1 border border-forest/30 text-forest hover:bg-forest/5 flex-shrink-0">PREVIEW</a>
                   </div>
                 </div>

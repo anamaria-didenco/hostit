@@ -11,6 +11,7 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { smtpTls } from "./smtpTls";
 import { leadAccessToken, isValidLeadAccessToken } from "./leadToken";
 import { publicBaseUrl } from "./publicUrl";
+import { zonedDayBoundUtc } from "@shared/tz";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -49,6 +50,18 @@ function formatVenueDateTime(eventDate: Date | string, timeZone: string = "Pacif
   const dateStr = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
   const timeStr = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
   return { dateStr, timeStr };
+}
+
+/** A proposal's expiry date ("YYYY-MM-DD") runs to the end of that NZ day; a
+ *  full timestamp is used as given. */
+function proposalExpiryInstant(value: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    // Start of the next NZ day, less 1 ms (the "end" bound drifts by up to a second).
+    const [y, m, d] = value.split("-").map(Number);
+    const next = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+    return new Date(zonedDayBoundUtc(next, "Pacific/Auckland", "start").getTime() - 1);
+  }
+  return new Date(value);
 }
 
 // Anti-spam for the public lead-form endpoints: 5 writes / 10 min per (IP,
@@ -213,6 +226,7 @@ export const appRouter = router({
         formSuccessMessage: z.string().optional(),
         enquiryAutoReplyEnabled: z.coerce.number().optional(),
         enquiryAutoReplyMessage: z.string().optional(),
+        proposalAcceptEmailEnabled: z.coerce.number().optional(),
         nbiApiKey: z.string().optional(),
         nbiVenueId: z.string().optional(),
         nbiAccountId: z.string().optional(),
@@ -1536,17 +1550,20 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .input(z.object({ token: z.string() }))
       .query(async ({ input, ctx }) => {
         enforceRateLimit('proposal:getByToken', getRequestIp(ctx.req), 120, 60_000);
-        const proposal = await getProposalByToken(input.token);
+        let proposal = await getProposalByToken(input.token);
         if (!proposal) return null;
-        // Mark as viewed if sent
-        if (proposal.status === "sent") {
-          // Public token IS the auth — use the proposal's own ownerId.
-          await updateProposal(proposal.id, proposal.ownerId, { status: "viewed", viewedAt: new Date() });
+        // First open by the client: mark viewed, log it and alert the venue.
+        // The venue's own login previewing the page doesn't count.
+        if (proposal.status === "sent" && ctx.user?.id !== proposal.ownerId) {
+          const { recordProposalViewed } = await import('./proposalResponses');
+          if (await recordProposalViewed(proposal)) proposal = (await getProposalByToken(input.token)) ?? proposal;
         }
         // Also fetch venue settings for branding — STRIP secrets first since
         // this endpoint is reachable by anyone with a proposal token.
         const venue = await getVenueSettings(proposal.ownerId);
-        return { proposal, venue: venue ? stripVenueSecrets(venue) : null };
+        // Internal notes are staff-only; never hand them to the client.
+        const { internalNotes: _internal, ...publicProposal } = proposal;
+        return { proposal: publicProposal, venue: venue ? stripVenueSecrets(venue) : null };
       }),
 
     create: protectedProcedure
@@ -1596,7 +1613,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           depositNzd: input.depositNzd?.toString() as any,
           termsAndConditions: input.termsAndConditions,
           internalNotes: input.internalNotes,
-          expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+          expiresAt: input.expiresAt ? proposalExpiryInstant(input.expiresAt) : undefined,
         });
         return proposal;
       }),
@@ -1604,9 +1621,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     send: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const before = await getProposalById(input.id, ctx.user.id);
+        if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Proposal not found' });
+        if (before.status === 'accepted' || before.status === 'declined') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `This proposal was already ${before.status} by the client, so it can't be sent again. Start a new proposal instead.` });
+        }
+        if (before.expiresAt && new Date(before.expiresAt).getTime() < Date.now()) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: "This proposal's expiry date has passed. Set a new one before sending, or the client won't be able to accept it." });
+        }
         await updateProposal(input.id, ctx.user.id, { status: "sent", sentAt: new Date() });
         const proposal = await getProposalById(input.id, ctx.user.id);
         let emailSent = false;
+        let emailedTo: string | null = null;
         if (proposal) {
           await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
           await addLeadActivity({
@@ -1669,6 +1695,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                     text: `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`,
                   });
                   emailSent = true;
+                  emailedTo = lead.email;
                 }
               }
             } catch (emailErr) {
@@ -1678,7 +1705,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         }
         // emailSent is only true when the client was actually emailed — the UI
         // must not claim "sent" when SMTP isn't set up or the send failed.
-        return { success: true, token: proposal?.publicToken, emailSent };
+        return { success: true, token: proposal?.publicToken, emailSent, emailedTo };
       }),
 
     update: protectedProcedure
@@ -1702,11 +1729,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         spaceName: z.string().optional(),
         guestCount: z.number().optional(),
         eventDate: z.string().optional(),
+        internalNotes: z.string().optional(),
+        // "" clears the expiry; a YYYY-MM-DD date runs to the end of that NZ day.
+        expiresAt: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const { id, lineItems, eventDate, subtotalNzd, taxPercent, taxNzd, totalNzd, depositPercent, depositNzd, ...rest } = input;
+        const { id, lineItems, eventDate, expiresAt, subtotalNzd, taxPercent, taxNzd, totalNzd, depositPercent, depositNzd, ...rest } = input;
+        const existing = await getProposalById(id, ctx.user.id);
+        if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Proposal not found' });
+        const nextExpiry = expiresAt === undefined ? undefined : expiresAt ? proposalExpiryInstant(expiresAt) : null;
+        // Moving the expiry into the future re-opens an expired proposal.
+        const reopen = existing.status === 'expired' && nextExpiry && nextExpiry.getTime() > Date.now();
         await updateProposal(id, ctx.user.id, {
           ...rest,
+          ...(nextExpiry !== undefined ? { expiresAt: nextExpiry } : {}),
+          ...(reopen ? { status: existing.viewedAt ? 'viewed' as const : 'sent' as const } : {}),
+          updatedAt: new Date(),
           lineItems: lineItems ? JSON.stringify(lineItems) : undefined,
           eventDate: eventDate ? new Date(eventDate) : undefined,
           subtotalNzd: subtotalNzd?.toString() as any,
@@ -1811,68 +1849,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .limit(1);
         return rows[0] ?? null;
       }),
-    // Public: client responds to proposal
+    // Public: client responds to proposal. The token is the auth; the checks,
+    // the booking and the venue alerts live in proposalResponses.ts.
     respond: publicProcedure
       .input(z.object({
         token: z.string(),
         action: z.enum(["accepted", "declined"]),
-        clientMessage: z.string().optional(),
+        clientMessage: z.string().max(2000).optional(),
+        declineReason: z.string().max(2000).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         enforceRateLimit('proposal:respond', getRequestIp(ctx.req), 20, 5 * 60_000);
-        const proposal = await getProposalByToken(input.token);
-        if (!proposal) throw new Error("Proposal not found");
-        if (!["sent", "viewed"].includes(proposal.status)) throw new Error("Proposal cannot be responded to");
-        // Public token already authenticated the action — use the proposal's own ownerId.
-        await updateProposal(proposal.id, proposal.ownerId, {
-          status: input.action,
-          respondedAt: new Date(),
-          clientMessage: input.clientMessage,
-        });
-        // If accepted, create a booking
-        if (input.action === "accepted") {
-          const lead = await getLeadById(proposal.leadId, proposal.ownerId);
-          if (lead) {
-            // Rule: every event must have a space selected.
-            const resolvedSpace = (proposal.spaceName ?? lead.spaceName ?? '').trim();
-            if (!resolvedSpace) {
-              throw new Error('This proposal has no event space set — please assign a space before the client can accept.');
-            }
-            const created = await createBooking({
-              ownerId: proposal.ownerId,
-              leadId: proposal.leadId,
-              proposalId: proposal.id,
-              firstName: lead.firstName,
-              lastName: lead.lastName ?? undefined,
-              email: lead.email,
-              eventType: lead.eventType ?? undefined,
-              eventDate: proposal.eventDate ?? lead.eventDate ?? new Date(),
-              eventEndDate: proposal.eventEndDate ?? undefined,
-              guestCount: proposal.guestCount ?? lead.guestCount ?? undefined,
-              spaceName: resolvedSpace,
-              totalNzd: proposal.totalNzd as any,
-              depositNzd: proposal.depositNzd as any,
-              status: "confirmed",
-            });
-            // Push to NBI so accepted proposals appear in the NBI diary too.
-            const newId = (created as any)?.id ?? (created as any)?.[0]?.id;
-            if (newId) {
-              const { pushBookingToNbi } = await import('./nowbookit');
-              await pushBookingToNbi(newId, proposal.ownerId, { source: 'proposals.respond→accepted' });
-              // Event confirmed → remind the events manager to send the deposit.
-              const { sendDepositPromptEmail } = await import('./depositPrompt');
-              await sendDepositPromptEmail(newId, proposal.ownerId, { source: 'proposals.respond→accepted' });
-            }
-            await updateLeadStatus(proposal.leadId, proposal.ownerId, "booked");
-            await addLeadActivity({
-              leadId: proposal.leadId,
-              ownerId: proposal.ownerId,
-              type: "booking_created",
-              content: `Client accepted proposal "${proposal.title}" — booking confirmed!`,
-            });
-          }
-        }
-        return { success: true, status: input.action };
+        const { respondToProposal } = await import('./proposalResponses');
+        return respondToProposal(input);
       }),
   }),
 
@@ -6319,9 +6308,24 @@ Return ONLY valid JSON.`;
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        const [contract] = await db.select().from(contracts).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id))).limit(1);
+        if (!contract) throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
+        if (contract.status === 'signed') throw new TRPCError({ code: 'BAD_REQUEST', message: 'This contract is already signed.' });
+        const { ensureSigningPortal, emailPortalLink, portalUrl, isContractExpired } = await import('./clientPortal');
+        if (isContractExpired(contract)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This contract has passed its expiry date. Update the expiry before sending it.' });
+        // The client signs inside their event's portal link — make sure there
+        // is one with signing switched on, then email it if SMTP is set up.
+        const token = await ensureSigningPortal(ctx.user.id, contract);
         const now = Date.now();
-        await db.update(contracts).set({ status: 'sent', sentAt: now, updatedAt: now }).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id)));
-        return { success: true };
+        await db.update(contracts).set({ status: 'sent', sentAt: contract.sentAt ?? now, updatedAt: now }).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id)));
+        let to = contract.clientEmail;
+        if (!to && contract.bookingId) {
+          const { bookings } = await import('../drizzle/schema');
+          const [b] = await db.select({ email: bookings.email }).from(bookings).where(and(eq(bookings.id, contract.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          to = b?.email ?? null;
+        }
+        const outcome = await emailPortalLink(ctx.user.id, { to, clientName: contract.clientName, token, contractTitle: contract.title });
+        return { success: true, link: portalUrl(token), ...outcome };
       }),
     sign: publicProcedure
       .input(z.object({ token: z.string(), signerName: z.string(), signatureData: z.string(), signerIp: z.string().optional() }))
@@ -6332,19 +6336,12 @@ Return ONLY valid JSON.`;
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const now = Date.now();
-        await db.update(contracts).set({
-          status: 'signed',
-          signedAt: now,
-          signatureData: input.signatureData,
-          signerName: input.signerName,
-          // Record the SERVER-observed IP as signing evidence, not a
-          // client-supplied value (which is trivially spoofable and would
-          // weaken non-repudiation of the e-signature).
-          signerIp: getRequestIp(ctx.req) || input.signerIp || '',
-          updatedAt: now,
-        }).where(and(eq(contracts.token, input.token), eq(contracts.status, 'sent')));
-        return { success: true };
+        const [contract] = await db.select().from(contracts).where(eq(contracts.token, input.token)).limit(1);
+        if (!contract) throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
+        // Fails loudly when nothing was signed (it used to report success
+        // after updating zero rows). The IP is the SERVER-observed one.
+        const { signContract } = await import('./clientPortal');
+        return signContract({ contract, signerName: input.signerName, signerIp: getRequestIp(ctx.req) });
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -6708,7 +6705,7 @@ Return ONLY valid JSON.`;
         enforceRateLimit('clientPortal:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { clientPortalTokens, bookings, leads, proposals, payments, venueSettings } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
+        const { eq, and, ne, desc } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const rows = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
@@ -6727,20 +6724,29 @@ Return ONLY valid JSON.`;
         }
         // Update last accessed
         await db.update(clientPortalTokens).set({ lastAccessedAt: Date.now() }).where(eq(clientPortalTokens.token, input.token));
-        const permissions = row.permissions ? JSON.parse(row.permissions) : {};
+        const { parsePermissions, portalContracts } = await import('./clientPortal');
+        const permissions = parsePermissions(row.permissions);
         let booking = null, lead = null, proposal = null;
         if (row.bookingId) {
-          const br = await db.select().from(bookings).where(eq(bookings.id, row.bookingId)).limit(1);
+          const br = await db.select().from(bookings).where(and(eq(bookings.id, row.bookingId), eq(bookings.ownerId, row.ownerId))).limit(1);
           booking = br[0] ?? null;
         }
-        if (row.leadId) {
-          const lr = await db.select().from(leads).where(eq(leads.id, row.leadId)).limit(1);
+        // Links made from an event carry only the booking — find the enquiry
+        // through it, or the proposal never shows.
+        const leadId = row.leadId ?? booking?.leadId ?? null;
+        if (leadId) {
+          const lr = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.ownerId, row.ownerId))).limit(1);
           lead = lr[0] ?? null;
         }
-        if (permissions.viewProposal && row.leadId) {
-          const pr = await db.select().from(proposals).where(eq(proposals.leadId, row.leadId)).limit(1);
+        if (permissions.viewProposal && leadId) {
+          // The most recent proposal the client has been sent (never a draft).
+          const pr = await db.select().from(proposals)
+            .where(and(eq(proposals.leadId, leadId), eq(proposals.ownerId, row.ownerId), ne(proposals.status, 'draft')))
+            .orderBy(desc(proposals.createdAt), desc(proposals.id)).limit(1);
           proposal = pr[0] ?? null;
         }
+        const [venueRow] = await db.select({ name: venueSettings.name }).from(venueSettings).where(eq(venueSettings.ownerId, row.ownerId)).limit(1);
+        const contractList = permissions.signContract ? await portalContracts({ ownerId: row.ownerId, bookingId: row.bookingId, leadId: row.bookingId ? null : leadId }) : [];
         // Payments the venue has recorded against this booking, so the client
         // can see which deposits/payments have landed and what's still owing —
         // the whole point being "did they get my deposit?". Only meaningful once
@@ -6790,7 +6796,77 @@ Return ONLY valid JSON.`;
             paymentInstructions = vs?.pi?.trim() || null;
           }
         }
-        return { token: row, permissions, booking, lead, proposal, paymentSummary, payments: clientPayments, paymentInstructions };
+        // Only what the client page shows — no internal notes, budgets or tokens.
+        const safeBooking = booking ? {
+          firstName: booking.firstName, lastName: booking.lastName, eventType: booking.eventType,
+          eventDate: booking.eventDate, guestCount: booking.guestCount, spaceName: booking.spaceName,
+        } : null;
+        const safeLead = lead ? {
+          firstName: lead.firstName, lastName: lead.lastName, eventType: lead.eventType,
+          eventDate: lead.eventDate, guestCount: lead.guestCount, spaceName: lead.spaceName,
+        } : null;
+        const safeProposal = proposal ? (({ internalNotes: _n, ...rest }) => rest)(proposal) : null;
+        return {
+          token: { token: row.token, clientName: row.clientName },
+          permissions, booking: safeBooking, lead: safeLead, proposal: safeProposal,
+          venue: { name: venueRow?.name?.trim() || null },
+          contracts: contractList,
+          paymentSummary, payments: clientPayments, paymentInstructions,
+        };
+      }),
+    // Public: sign a contract from the client's portal link. The portal token
+    // is the auth; the contract must belong to that link's event.
+    signContract: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        contractId: z.number(),
+        signerName: z.string().min(1).max(255),
+        agreed: z.literal(true),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('contract:sign', getRequestIp(ctx.req), 20, 5 * 60_000);
+        const { getDb } = await import('./db');
+        const { clientPortalTokens, contracts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { parsePermissions, signContract } = await import('./clientPortal');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
+        const expiresMs = row?.expiresAt != null ? Number(row.expiresAt) : null;
+        if (!row || (expiresMs != null && expiresMs < Date.now())) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link has expired. Please contact the venue.' });
+        if (!parsePermissions(row.permissions).signContract) throw new TRPCError({ code: 'FORBIDDEN', message: 'Contract signing isn\'t switched on for this link. Please contact the venue.' });
+        const [contract] = await db.select().from(contracts).where(and(eq(contracts.id, input.contractId), eq(contracts.ownerId, row.ownerId))).limit(1);
+        let belongs = false;
+        if (contract) {
+          if (row.bookingId) belongs = contract.bookingId === row.bookingId;
+          else if (row.leadId) belongs = contract.leadId === row.leadId;
+        }
+        if (!contract || !belongs) throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
+        return signContract({ contract, signerName: input.signerName, signerIp: getRequestIp(ctx.req) });
+      }),
+    // Email the portal link to the client (venue's own SMTP). Reports honestly.
+    emailLink: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { clientPortalTokens, bookings, leads } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { emailPortalLink, portalUrl } = await import('./clientPortal');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(clientPortalTokens).where(and(eq(clientPortalTokens.id, input.id), eq(clientPortalTokens.ownerId, ctx.user.id))).limit(1);
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Portal link not found' });
+        let to = row.clientEmail;
+        if (!to && row.bookingId) {
+          const [b] = await db.select({ email: bookings.email }).from(bookings).where(and(eq(bookings.id, row.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          to = b?.email ?? null;
+        }
+        if (!to && row.leadId) {
+          const [l] = await db.select({ email: leads.email }).from(leads).where(and(eq(leads.id, row.leadId), eq(leads.ownerId, ctx.user.id))).limit(1);
+          to = l?.email ?? null;
+        }
+        const outcome = await emailPortalLink(ctx.user.id, { to, clientName: row.clientName, token: row.token });
+        return { link: portalUrl(row.token), ...outcome };
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))

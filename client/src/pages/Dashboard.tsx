@@ -43,6 +43,8 @@ import { leadFollowUpState } from "@shared/followUp";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
+import LeadProposals from "@/components/LeadProposals";
+import ProposalEmailSettings from "@/components/ProposalEmailSettings";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
@@ -4190,6 +4192,8 @@ export default function Dashboard() {
                     </div>
                   )}
 
+                  {!isStaff && <LeadProposals leadId={selectedLead.id} />}
+
                   {/* Activity Log */}
                   <div className="dante-card p-4 mb-4">
                     <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-3">ACTIVITY LOG</h3>
@@ -6198,6 +6202,8 @@ export default function Dashboard() {
                   </div>
                 </form>
               </div>
+
+              <ProposalEmailSettings />
 
               {/* ── Email Signatures ────────────────────────────────────── */}
               <div className="mt-8">
@@ -10020,6 +10026,7 @@ export default function Dashboard() {
                     </>
                   )}
                 </div>
+                {selectedBooking._isLead && !isStaff && <LeadProposals leadId={selectedBooking.id} compact onNavigate={() => setSelectedBooking(null)} />}
               </SectionOrPlain>
               {/* ── Inline Payments Panel (bookings only) ─────────────────── */}
               {drawerPaymentsOpen && !selectedBooking._isLead && (
