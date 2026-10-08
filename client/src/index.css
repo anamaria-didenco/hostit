@@ -297,6 +297,15 @@
      #b07c25 is only ~3.1:1 on #1f3a63, but #d4a843 is ~5.1:1 — passes AA. */
   .text-gold-bright { color: #d4a843; }            /* 5.1:1 on forest-dark */
 
+  /* Date hold — a dashed, hatched chip so a held date never reads as a
+     confirmed booking. Text is ~9:1 on the pale fill. */
+  .vf-hold-chip {
+    background-color: #fffaf0;
+    background-image: repeating-linear-gradient(135deg, rgba(176, 124, 37, 0.18) 0 3px, transparent 3px 7px);
+    border: 1.5px dashed #8a5f18;
+    color: #4a3410;
+  }
+
   /* ── iOS safe area ──────────────────────────────────────────────────────
      `safe-area-inset-bottom` was used on the mobile tab bar but never defined,
      so it did nothing: the bar sat under the home indicator and its labels were

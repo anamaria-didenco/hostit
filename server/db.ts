@@ -117,7 +117,7 @@ export async function getEventSpaces(ownerId: number) {
   return db.select().from(eventSpaces).where(and(eq(eventSpaces.ownerId, ownerId), eq(eventSpaces.isActive, true)));
 }
 
-export async function createEventSpace(data: { ownerId: number; name: string; description?: string; minCapacity?: number; maxCapacity?: number; minSpend?: number }) {
+export async function createEventSpace(data: { ownerId: number; name: string; description?: string; minCapacity?: number; maxCapacity?: number; minSpend?: number; minSpendWeekend?: number; packagesFromPp?: number; showPricingOnForm?: boolean }) {
   const db = await getDb();
   if (!db) return null;
   await db.insert(eventSpaces).values({
@@ -127,6 +127,9 @@ export async function createEventSpace(data: { ownerId: number; name: string; de
     minCapacity: data.minCapacity,
     maxCapacity: data.maxCapacity,
     minSpend: data.minSpend?.toString() as any,
+    minSpendWeekend: data.minSpendWeekend?.toString() as any,
+    packagesFromPp: data.packagesFromPp?.toString() as any,
+    showPricingOnForm: data.showPricingOnForm ?? false,
   });
   const result = await db.select().from(eventSpaces).where(eq(eventSpaces.ownerId, data.ownerId)).orderBy(desc(eventSpaces.id)).limit(1);
   return result[0] ?? null;
@@ -183,17 +186,18 @@ export async function getLeadById(id: number, ownerId: number) {
 export async function createLead(data: InsertLead) {
   const db = await getDb();
   if (!db) return null;
-  await db.insert(leads).values(data);
-  const result = await db.select().from(leads)
-    .where(and(eq(leads.ownerId, data.ownerId), eq(leads.email, data.email)))
-    .orderBy(desc(leads.createdAt)).limit(1);
-  return result[0] ?? null;
+  // RETURNING, not a re-select by email: a returning client (or a manual
+  // lead with a blank email) shares that email with other rows, and the
+  // re-select could hand back a different lead.
+  const [row] = await db.insert(leads).values(data).returning();
+  return row ?? null;
 }
 
 export async function updateLeadStatus(id: number, ownerId: number, status: string, internalNotes?: string) {
   const db = await getDb();
   if (!db) return;
-  const updateData: Record<string, any> = { status };
+  const now = new Date();
+  const updateData: Record<string, any> = { status, updatedAt: now, lastActivityAt: now };
   if (internalNotes !== undefined) updateData.internalNotes = internalNotes;
   await db.update(leads).set(updateData)
     .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
@@ -202,21 +206,95 @@ export async function updateLeadStatus(id: number, ownerId: number, status: stri
 export async function updateLead(id: number, ownerId: number, data: Partial<InsertLead>) {
   const db = await getDb();
   if (!db) return;
-  await db.update(leads).set(data)
+  await db.update(leads).set({ updatedAt: new Date(), ...data })
     .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
 }
 
-// ─── Lead Activity ────────────────────────────────────────────────────────────
-export async function getLeadActivity(leadId: number) {
+/**
+ * Mark a lead lost, recording why. Safe for other features to call (e.g. a
+ * client declining a proposal): `reason` should be one of LOST_REASONS' keys
+ * (shared/lostReasons.ts); free text is kept as "other" with the text in the
+ * note. Cancels any live booking for the lead, as a manual status change
+ * does, and logs one activity entry unless `logActivity: false` (when the
+ * caller writes its own). Returns false if the lead isn't this owner's.
+ */
+export async function markLeadLost(
+  ownerId: number,
+  leadId: number,
+  reason?: string | null,
+  note?: string | null,
+  opts: { logActivity?: boolean } = {},
+): Promise<boolean> {
   const db = await getDb();
-  if (!db) return [];
-  return db.select().from(leadActivity).where(eq(leadActivity.leadId, leadId)).orderBy(desc(leadActivity.createdAt));
+  if (!db) return false;
+  const lead = await getLeadById(leadId, ownerId);
+  if (!lead) return false;
+  const { isLostReason, lostReasonLabel } = await import("../shared/lostReasons");
+  let key: string | null = null;
+  let noteText = note?.trim() || null;
+  if (reason && isLostReason(reason)) key = reason;
+  else if (reason?.trim()) { key = "other"; noteText = [reason.trim(), noteText].filter(Boolean).join(" — "); }
+  await db.update(leads)
+    .set({ status: "lost", lostReason: key, lostReasonNote: noteText, updatedAt: new Date() })
+    .where(and(eq(leads.id, leadId), eq(leads.ownerId, ownerId)));
+  if (["booked", "confirmed", "finished"].includes(lead.status ?? "")) {
+    await db.update(bookings).set({ status: "cancelled" })
+      .where(and(eq(bookings.leadId, leadId), eq(bookings.ownerId, ownerId), ne(bookings.status, "cancelled")));
+  }
+  if (lead.status === "tentative") {
+    // Leaving "tentative" ends the date hold (server/holds.ts).
+    const { clearHoldFields } = await import("./holds");
+    await clearHoldFields(ownerId, [leadId]);
+  }
+  if (opts.logActivity !== false) {
+    const label = lostReasonLabel(key);
+    await addLeadActivity({
+      leadId, ownerId, type: "status_change",
+      content: `Status changed to lost${label ? ` — ${label}` : ""}${noteText ? `: ${noteText}` : ""}`,
+    });
+  }
+  return true;
 }
 
-export async function addLeadActivity(data: { leadId: number; ownerId: number; type: "note" | "status_change" | "proposal_sent" | "email" | "call" | "booking_created"; content?: string }) {
+/**
+ * Record that something happened on a lead: bumps lastActivityAt (drives
+ * "gone quiet") and updatedAt, and — when the venue replied (outbound email,
+ * call, status change) — stamps respondedAt the first time (drives "needs
+ * reply"). addLeadActivity calls this; call it directly for changes that don't
+ * log an activity row.
+ */
+export async function touchLead(leadId: number, ownerId: number, opts: { replied?: boolean } = {}) {
+  const db = await getDb();
+  if (!db) return;
+  const now = new Date();
+  const set: Record<string, any> = { lastActivityAt: now, updatedAt: now };
+  // Same UTC wall-clock convention drizzle uses for Date values.
+  if (opts.replied) set.respondedAt = sql`COALESCE(${leads.respondedAt}, ${now.toISOString()}::timestamp)`;
+  await db.update(leads).set(set).where(and(eq(leads.id, leadId), eq(leads.ownerId, ownerId)));
+}
+
+// ─── Lead Activity ────────────────────────────────────────────────────────────
+export async function getLeadActivity(leadId: number, ownerId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(leadActivity)
+    .where(and(eq(leadActivity.leadId, leadId), eq(leadActivity.ownerId, ownerId)))
+    .orderBy(desc(leadActivity.createdAt));
+}
+
+// Activity types that mean the venue has replied to the enquirer.
+const REPLY_ACTIVITY_TYPES = new Set(["email", "call", "status_change", "proposal_sent", "booking_created"]);
+
+export async function addLeadActivity(
+  data: { leadId: number; ownerId: number; type: "note" | "status_change" | "proposal_sent" | "email" | "call" | "booking_created"; content?: string },
+  // countsAsReply: override for automatic messages (e.g. the enquiry
+  // auto-reply is an email, but nobody at the venue has replied yet).
+  opts: { countsAsReply?: boolean } = {},
+) {
   const db = await getDb();
   if (!db) return;
   await db.insert(leadActivity).values(data);
+  await touchLead(data.leadId, data.ownerId, { replied: opts.countsAsReply ?? REPLY_ACTIVITY_TYPES.has(data.type) });
 }
 
 // ─── Proposals ────────────────────────────────────────────────────────────────

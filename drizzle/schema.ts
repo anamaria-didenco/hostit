@@ -114,7 +114,14 @@ export const venueSettings = pgTable("venue_settings", {
   eventTimeStart: varchar("eventTimeStart", { length: 10 }).default("08:00"),
   eventTimeEnd: varchar("eventTimeEnd", { length: 10 }).default("22:00"),
   minGroupSize: integer("minGroupSize").default(0),
+  // Date holds: when a hold reaches its expiry and this is on, the hold job
+  // releases it (status back to what it was, date freed). Off = the venue is
+  // only told the hold has lapsed.
   autoCancelTentative: integer("autoCancelTentative").default(1),
+  // Default length of a new date hold, in days (the hold dialog can change it).
+  defaultHoldDays: integer("defaultHoldDays").default(7),
+  // Email the client a day before their hold expires. Off by default.
+  holdClientReminderEnabled: integer("holdClientReminderEnabled").default(0),
   bannerImageUrl: text("bannerImageUrl"),
   venueType: varchar("venueType", { length: 100 }),
   priceCategory: varchar("priceCategory", { length: 10 }).default("$$$"),
@@ -144,6 +151,22 @@ export const venueSettings = pgTable("venue_settings", {
   // line that replaces the default "thanks, we'll be in touch" copy.
   enquiryAutoReplyEnabled: integer("enquiryAutoReplyEnabled").default(1),
   enquiryAutoReplyMessage: text("enquiryAutoReplyMessage"),
+  // Confirmation email to the client when they accept a proposal online
+  // (needs SMTP). On by default — it answers the client's own action.
+  proposalAcceptEmailEnabled: integer("proposalAcceptEmailEnabled").default(1),
+  // Enquiry form shows booked / busy dates on its date picker (dates and
+  // states only — never who booked). On by default.
+  showAvailabilityOnForm: integer("showAvailabilityOnForm").default(1),
+  // Walkthroughs the enquirer can book on the thank-you screen. Slots are
+  // generated server-side in Pacific/Auckland from these settings, minus
+  // other walkthroughs and times an event is running.
+  //   walkthroughDays: comma-separated JS weekdays (0 = Sun … 6 = Sat)
+  walkthroughEnabled: integer("walkthroughEnabled").default(1),
+  walkthroughDays: varchar("walkthroughDays", { length: 20 }).default("2,3,4,5,6"),
+  walkthroughStart: varchar("walkthroughStart", { length: 5 }).default("10:00"),
+  walkthroughEnd: varchar("walkthroughEnd", { length: 5 }).default("16:00"),
+  walkthroughSlotMinutes: integer("walkthroughSlotMinutes").default(30),
+  walkthroughDaysAhead: integer("walkthroughDaysAhead").default(14),
   nbiApiKey: text("nbiApiKey"),
   nbiVenueId: varchar("nbiVenueId", { length: 100 }),
   nbiAccountId: varchar("nbiAccountId", { length: 100 }),
@@ -192,6 +215,10 @@ export const venueSettings = pgTable("venue_settings", {
   // Automatic client follow-up emails, keyed by sequence (see
   // shared/followUpSequences.ts). Null = every sequence off, built-in wording.
   followUpSequences: jsonb("followUpSequences"),
+  // JSON array of event types that recur yearly (e.g. ["Birthday",
+  // "Christmas party"]) for the "Same time next year" win-back list. Null =
+  // the built-in defaults in shared/winBack.ts.
+  winBackAnnualTypes: text("winBackAnnualTypes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -207,6 +234,12 @@ export const eventSpaces = pgTable("event_spaces", {
   minCapacity: integer("minCapacity"),
   maxCapacity: integer("maxCapacity"),
   minSpend: decimal("minSpend", { precision: 10, scale: 2 }),
+  // Price guidance for the enquiry form: an optional higher Fri/Sat minimum
+  // and a "packages from $X per person". Only shown publicly when
+  // showPricingOnForm is on — off by default, so nothing leaks unasked.
+  minSpendWeekend: decimal("minSpendWeekend", { precision: 10, scale: 2 }),
+  packagesFromPp: decimal("packagesFromPp", { precision: 10, scale: 2 }),
+  showPricingOnForm: boolean("showPricingOnForm").default(false).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -260,11 +293,11 @@ export const leads = pgTable("leads", {
   // Corporate enquiries only: where to send the invoice (accounts email or
   // PO number), separate from `message` for the same reason as eventDetail.
   invoicingNote: varchar("invoicingNote", { length: 255 }),
-  // Label of the post-submit walkthrough slot the enquirer picked (e.g.
-  // "Tue 3 Mar · 10:30am") — cosmetic scheduling, not a real calendar
-  // booking: no availability is checked, this just records the hold so
-  // staff know what was offered.
+  // The walkthrough the enquirer booked on the thank-you screen: the real
+  // start time (checked against other walkthroughs and events when booked)
+  // plus its display label (e.g. "Tue 14 Oct, 10:30am").
   walkthroughSlot: varchar("walkthroughSlot", { length: 60 }),
+  walkthroughAt: timestamp("walkthroughAt"),
   spaceId: integer("spaceId"),
   spaceName: varchar("spaceName", { length: 255 }),
   budget: decimal("budget", { precision: 10, scale: 2 }),
@@ -288,6 +321,14 @@ export const leads = pgTable("leads", {
   utmContent: varchar("utmContent", { length: 255 }),
   internalNotes: text("internalNotes"),
   followUpDate: timestamp("followUpDate"),
+  // Date hold: the lead "holds" its date and space while status is
+  // `tentative` and holdUntil is in the future. statusBeforeHold is what the
+  // lead goes back to when the hold is released; holdReminderSentAt stops the
+  // expiry job emailing the client twice for the same hold.
+  holdUntil: timestamp("holdUntil"),
+  holdNote: text("holdNote"),
+  statusBeforeHold: text("statusBeforeHold"),
+  holdReminderSentAt: timestamp("holdReminderSentAt"),
   readAt: timestamp("readAt"),
   // Speed-to-lead: the first time staff responded (an email sent from the
   // app, a proposal sent, or a manual status change away from "new").
@@ -300,6 +341,21 @@ export const leads = pgTable("leads", {
   lastStaffEmailAt: timestamp("lastStaffEmailAt"),
   // "Stop automatic follow-ups for this lead" from the lead drawer.
   followUpsPaused: boolean("followUpsPaused").default(false).notNull(),
+  // Bumped whenever something happens on the lead (an activity is logged, its
+  // status changes, an email goes out). Drives "gone quiet" — updatedAt was
+  // never touched after creation, so it couldn't.
+  lastActivityAt: timestamp("lastActivityAt").defaultNow(),
+  // First time the venue replied (outbound email, call or status change).
+  // Null on a new enquiry nobody has answered yet — see shared/needsReply.ts.
+  respondedAt: timestamp("respondedAt"),
+  // Why the enquiry was lost — one of LOST_REASONS in shared/lostReasons.ts
+  // (price, date_unavailable, …), plus an optional free-text note. Cleared
+  // when the lead moves back out of `lost`.
+  lostReason: varchar("lostReason", { length: 40 }),
+  lostReasonNote: text("lostReasonNote"),
+  // Last time a win-back email went to this lead. A lead is never sent
+  // another win-back within 90 days of this.
+  lastWinBackAt: timestamp("lastWinBackAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -335,6 +391,8 @@ export const proposals = pgTable("proposals", {
   respondedAt: timestamp("respondedAt"),
   expiresAt: timestamp("expiresAt"),
   clientMessage: text("clientMessage"),
+  // Optional "why" the client gave when declining on the public proposal page.
+  declineReason: text("declineReason"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -401,6 +459,9 @@ export const bookings = pgTable("bookings", {
   actualSpendRecordedAt: timestamp("actualSpendRecordedAt"),
   spendPromptDismissedAt: timestamp("spendPromptDismissedAt"),
   beoShareToken: varchar("beoShareToken", { length: 64 }).unique(),
+  // Set when a client accepted a proposal for a date/space that was already
+  // taken. The public accept is never blocked; the venue is alerted instead.
+  clashFlaggedAt: timestamp("clashFlaggedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -860,6 +921,18 @@ export const tasks = pgTable("tasks", {
 });
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = typeof tasks.$inferInsert;
+
+// One row per (automated task rule × lead/booking) that has fired, so a rule
+// creates its task once per subject even if the trigger happens again (e.g. a
+// lead bounced back into the same status). See server/automatedTasks.ts.
+export const automatedTaskRuns = pgTable("automated_task_runs", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  ruleKey: varchar("ruleKey", { length: 160 }).notNull(),
+  subjectKey: varchar("subjectKey", { length: 60 }).notNull(),
+  taskId: integer("taskId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
 
 // ─── Taxes & Fees ─────────────────────────────────────────────────────────────
 export const taxesFees = pgTable("taxes_fees", {

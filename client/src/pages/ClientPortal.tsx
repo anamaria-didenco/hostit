@@ -35,6 +35,14 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+const PROPOSAL_STATUS_LABELS: Record<string, string> = {
+  sent: "Awaiting your reply",
+  viewed: "Awaiting your reply",
+  accepted: "Accepted",
+  declined: "Declined",
+  expired: "Expired",
+};
+
 const nzd = (n: number) => `$${Number(n ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function ClientPortal() {
@@ -48,11 +56,6 @@ export default function ClientPortal() {
       retry: false,
     },
   );
-  const [signerName, setSignerName] = useState("");
-  const [signatureData, setSignatureData] = useState("");
-  const [signing, setSigning] = useState(false);
-  const [signed, setSigned] = useState(false);
-  const signContract = trpc.contracts.sign.useMutation();
 
   if (isLoading) {
     return (
@@ -77,11 +80,11 @@ export default function ClientPortal() {
     );
   }
 
-  const { token: portalToken, permissions, booking, lead, proposal, paymentSummary, payments, paymentInstructions } = data;
+  const { token: portalToken, permissions, booking, lead, proposal, paymentSummary, payments, paymentInstructions, venue, contracts } = data;
   const eventName = booking ? `${booking.firstName}${booking.lastName ? ' ' + booking.lastName : ''}'s ${booking.eventType ?? 'Event'}` : lead ? `${lead.firstName}${lead.lastName ? ' ' + lead.lastName : ''}'s ${lead.eventType ?? 'Event'}` : "Your Event";
   const eventDate = booking?.eventDate ?? lead?.eventDate;
   const guestCount = booking?.guestCount ?? lead?.guestCount;
-  const venueName = "VenueFlowHQ Venue";
+  const venueName = venue?.name ?? "Your event";
 
   const lineItems = proposal?.lineItems ? (() => { try { return JSON.parse(proposal.lineItems); } catch { return []; } })() : [];
 
@@ -115,10 +118,10 @@ export default function ClientPortal() {
             </div>
           </div>
           <div className="px-6 py-4 grid grid-cols-2 gap-4 text-sm">
-            {(booking?.spaceName ?? lead?.spaceId) && (
+            {(booking?.spaceName ?? lead?.spaceName) && (
               <div>
                 <div className="text-gray-600 text-xs uppercase tracking-wide mb-1">Venue Space</div>
-                <div className="font-medium text-gray-800">{booking?.spaceName ?? "Main Hall"}</div>
+                <div className="font-medium text-gray-800">{booking?.spaceName ?? lead?.spaceName}</div>
               </div>
             )}
             {(booking?.eventType ?? lead?.eventType) && (
@@ -136,9 +139,21 @@ export default function ClientPortal() {
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h3 className="font-bold text-gray-800 text-lg">Event Proposal</h3>
               <span className={`text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wide ${STATUS_COLORS[proposal.status ?? "draft"]}`}>
-                {proposal.status}
+                {PROPOSAL_STATUS_LABELS[proposal.status] ?? proposal.status}
               </span>
             </div>
+            {proposal.publicToken && (
+              <div className="px-6 py-3 border-b border-gray-50 flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="text-gray-600">
+                  {["sent", "viewed"].includes(proposal.status) && permissions.approveProposal
+                    ? "Have a look and let us know if you'd like to go ahead."
+                    : "The full proposal, with menus and terms."}
+                </span>
+                <a href={`/proposal/${proposal.publicToken}`} className="font-semibold text-[#2d4ec2] underline underline-offset-2 hover:text-[#1f3a9e]">
+                  {["sent", "viewed"].includes(proposal.status) && permissions.approveProposal ? "Review and respond" : "View full proposal"}
+                </a>
+              </div>
+            )}
             {proposal.introMessage && (
               <div className="px-6 py-4 text-gray-600 text-sm leading-relaxed border-b border-gray-50">
                 {proposal.introMessage}
@@ -180,7 +195,7 @@ export default function ClientPortal() {
                     <span>${Number(proposal.totalNzd ?? 0).toFixed(2)} NZD</span>
                   </div>
                   {proposal.depositNzd && (
-                    <div className="flex justify-between text-[#4f72e0] font-medium">
+                    <div className="flex justify-between text-[#2d4ec2] font-medium">
                       <span>Deposit Required ({proposal.depositPercent ?? 25}%)</span>
                       <span>${Number(proposal.depositNzd).toFixed(2)} NZD</span>
                     </div>
@@ -297,63 +312,14 @@ export default function ClientPortal() {
           </div>
         )}
 
-        {/* Contract Signing Section */}
-        {permissions.signContract && !signed && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-800 text-lg">Sign Contract</h3>
-              <p className="text-sm text-gray-500 mt-1">Please review and sign below to confirm your booking.</p>
+        {/* Contracts — read the contract and sign it with a typed name */}
+        {permissions.signContract && (
+          contracts.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-6 py-5">
+              <h3 className="font-bold text-gray-800 text-lg">Contract</h3>
+              <p className="text-sm text-gray-600 mt-1">Your contract will appear here once the venue sends it.</p>
             </div>
-            <div className="px-6 py-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  value={signerName}
-                  onChange={e => setSignerName(e.target.value)}
-                  placeholder="Your full legal name"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#4f72e0]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Signature *</label>
-                <input
-                  type="text"
-                  value={signatureData}
-                  onChange={e => setSignatureData(e.target.value)}
-                  placeholder="Type your name as your electronic signature"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#4f72e0] font-serif italic text-lg"
-                />
-                <p className="text-xs text-gray-600 mt-1">By typing your name above, you agree this constitutes your legal electronic signature.</p>
-              </div>
-              <button
-                disabled={!signerName || !signatureData || signing}
-                onClick={async () => {
-                  setSigning(true);
-                  try {
-                    // Find the contract token from the portal token's booking/lead
-                    await signContract.mutateAsync({ token: token ?? "", signerName, signatureData });
-                    setSigned(true);
-                  } catch (e) {
-                    toast.error("Could not sign contract. Please try again or contact your coordinator.");
-                  } finally {
-                    setSigning(false);
-                  }
-                }}
-                className="w-full bg-[#4f72e0] text-white py-3 rounded-lg font-semibold text-sm hover:bg-[#2d4ec2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {signing ? "Signing…" : "Sign & Confirm Booking"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {signed && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl px-6 py-6 text-center">
-            <div className="text-4xl mb-2">✅</div>
-            <h3 className="font-bold text-green-800 text-lg">Contract Signed!</h3>
-            <p className="text-green-700 text-sm mt-1">Thank you. Your booking is confirmed. Your coordinator will be in touch shortly.</p>
-          </div>
+          ) : contracts.map(c => <ContractCard key={c.id} contract={c} portalToken={token ?? ""} />)
         )}
 
         {/* Footer */}
@@ -361,6 +327,120 @@ export default function ClientPortal() {
           Powered by <span className="font-semibold text-[#2d4ec2]">VenueFlowHQ</span> · New Zealand Venue Management
         </div>
       </div>
+    </div>
+  );
+}
+
+type PortalContract = {
+  id: number;
+  title: string;
+  bodyHtml: string | null;
+  bodyText: string;
+  status: string;
+  signedAt: number | null;
+  signerName: string | null;
+  expiresAt: number | null;
+};
+
+function ContractCard({ contract, portalToken }: { contract: PortalContract; portalToken: string }) {
+  const utils = trpc.useUtils();
+  const [name, setName] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const sign = trpc.portal.signContract.useMutation({
+    onSuccess: () => utils.portal.getByToken.invalidate({ token: portalToken }),
+    onError: (e) => toast.error(e.message || "We couldn't record your signature. Please try again."),
+  });
+  const bodyId = `contract-body-${contract.id}`;
+  const nameId = `contract-name-${contract.id}`;
+  const agreeId = `contract-agree-${contract.id}`;
+  const fmtDate = (ms: number) => new Date(ms).toLocaleString("en-NZ", { day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+  const canSign = contract.status === "sent";
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Contract</div>
+          <h3 className="font-bold text-gray-800 text-lg">{contract.title}</h3>
+        </div>
+        <span className={`text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wide flex-shrink-0 ${
+          contract.status === "signed" ? "bg-green-100 text-green-800" : contract.status === "expired" ? "bg-gray-100 text-gray-600" : "bg-amber-100 text-amber-800"
+        }`}>
+          {contract.status === "signed" ? "Signed" : contract.status === "expired" ? "Expired" : "Ready to sign"}
+        </span>
+      </div>
+
+      {/* The contract itself — scrolls inside the card so the sign form stays close. */}
+      <div
+        id={bodyId}
+        tabIndex={0}
+        role="region"
+        aria-label={`${contract.title} — contract text`}
+        className="mx-6 my-4 max-h-96 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 leading-relaxed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4f72e0]"
+      >
+        {contract.bodyHtml
+          ? <div className="contract-body space-y-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-semibold" dangerouslySetInnerHTML={{ __html: contract.bodyHtml }} />
+          : <div className="whitespace-pre-wrap">{contract.bodyText}</div>}
+      </div>
+
+      {contract.status === "signed" && (
+        <div className="mx-6 mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          Signed by <span className="font-semibold">{contract.signerName}</span>
+          {contract.signedAt ? <> on {fmtDate(contract.signedAt)}</> : null}. Thank you — the venue has been told.
+        </div>
+      )}
+
+      {contract.status === "expired" && (
+        <div className="mx-6 mb-5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          This contract has expired, so it can't be signed. Please contact the venue for an updated one.
+        </div>
+      )}
+
+      {canSign && (
+        <form
+          className="px-6 pb-6 space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!name.trim() || !agreed) return;
+            sign.mutate({ token: portalToken, contractId: contract.id, signerName: name.trim(), agreed: true });
+          }}
+        >
+          {contract.expiresAt && (
+            <p className="text-xs text-gray-600">Please sign by {new Date(contract.expiresAt).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}.</p>
+          )}
+          <div>
+            <label htmlFor={nameId} className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Your full name</label>
+            <input
+              id={nameId}
+              type="text"
+              autoComplete="name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Type your full name"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 font-serif italic text-lg text-gray-900 focus:outline-none focus:border-[#4f72e0] focus-visible:ring-2 focus-visible:ring-[#4f72e0]"
+            />
+          </div>
+          <label htmlFor={agreeId} className="flex items-start gap-3 cursor-pointer text-sm text-gray-700">
+            <input
+              id={agreeId}
+              type="checkbox"
+              checked={agreed}
+              onChange={e => setAgreed(e.target.checked)}
+              aria-describedby={bodyId}
+              className="mt-0.5 w-4 h-4 accent-[#4f72e0]"
+            />
+            <span>I've read this contract and agree to it. Typing my name above is my electronic signature.</span>
+          </label>
+          <button
+            type="submit"
+            disabled={!name.trim() || !agreed || sign.isPending}
+            className="w-full bg-[#2d4ec2] text-white py-3 rounded-lg font-semibold text-sm hover:bg-[#1f3a9e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2d4ec2]"
+          >
+            {sign.isPending ? "Signing…" : "Sign contract"}
+          </button>
+          <p className="text-xs text-gray-600">We record your name, the time and your internet address with your signature.</p>
+        </form>
+      )}
     </div>
   );
 }

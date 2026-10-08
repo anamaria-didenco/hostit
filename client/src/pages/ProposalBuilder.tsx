@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { COLOUR_THEMES } from "@/contexts/ThemeContext";
 import { currency, currencyWhole } from "@/lib/money";
+import { DRINKS_MENU } from "@shared/drinksMenu";
+import { toLocalDateInput } from "@/lib/dateTime";
 
 interface LineItem {
   description: string;
@@ -23,8 +25,15 @@ export default function ProposalBuilder() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
 
-  // Parse leadId from query string
-  const leadId = parseInt(new URLSearchParams(window.location.search).get("leadId") ?? "0");
+  // ?leadId=N starts a new proposal for that enquiry; ?proposalId=N opens an
+  // existing proposal for editing (its enquiry comes from the proposal).
+  const query = new URLSearchParams(window.location.search);
+  const editId = parseInt(query.get("proposalId") ?? "0") || 0;
+  const { data: existingProposal, isLoading: existingLoading, error: existingError } = trpc.proposals.get.useQuery(
+    { id: editId }, { enabled: !!editId && !!user });
+  const { data: existingDrinks } = trpc.proposals.getDrinks.useQuery({ proposalId: editId }, { enabled: !!editId && !!user });
+  const { data: existingQuote } = trpc.quote.get.useQuery({ proposalId: editId }, { enabled: !!editId && !!user });
+  const leadId = (parseInt(query.get("leadId") ?? "0") || 0) || existingProposal?.leadId || 0;
 
   const { data: lead } = trpc.leads.get.useQuery({ id: leadId }, { enabled: !!leadId && !!user });
   const { data: venueSettings } = trpc.venue.get.useQuery({ ownerId: user?.id }, { enabled: !!user });
@@ -48,11 +57,13 @@ export default function ProposalBuilder() {
   const [expiresAt, setExpiresAt] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 14);
-    return d.toISOString().split("T")[0];
+    return toLocalDateInput(d);
   });
 
   const [savedProposal, setSavedProposal] = useState<any>(null);
-  const [sent, setSent] = useState(false);
+  // What the last "Send to client" actually did — the email only goes out
+  // when SMTP is set up, so the UI must say which happened.
+  const [sendResult, setSendResult] = useState<{ emailSent: boolean; emailedTo: string | null } | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
   // ── Appearance state ────────────────────────────────────────────────────────
@@ -172,51 +183,6 @@ export default function ProposalBuilder() {
     setSelectedSampleItems(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   };
 
-  const DRINKS_MENU = [
-    { category: "Aperitivo", items: [
-      { key: "aperol_spritz", name: "Aperol Spritz", description: "Aperol, Prosecco, Soda", price: 20 },
-      { key: "campari_spritz", name: "Campari Spritz", description: "Campari, Prosecco, Soda", price: 20 },
-      { key: "limoncello_spritz", name: "Limoncello Spritz", description: "Limoncello, Prosecco, Soda", price: 20 },
-      { key: "hugo_spritz", name: "Hugo Spritz", description: "Elderflower, Prosecco, Soda", price: 20 },
-      { key: "classic_negroni", name: "Classic Negroni", description: "Campari, Rosso Vermouth, Gin", price: 24 },
-      { key: "negroni_sbagliato", name: "Negroni Sbagliato", description: "Campari, Rosso Vermouth, Prosecco", price: 23 },
-      { key: "cherry_negroni", name: "Cherry Negroni", description: "Campari, Amaro, Rosso Vermouth, Gin", price: 25 },
-      { key: "americano", name: "Americano", description: "Campari, Rosso Vermouth, Soda", price: 23 },
-    ]},
-    { category: "Vino Spumante", items: [
-      { key: "tallero_prosecco", name: "Tallero Prosecco Extra Dry", description: "Veneto", priceGlass: 17, priceBottle: 85 },
-      { key: "lambrusco", name: "Paltrinieri Lambrusco Di Soraba Radice", description: "Emiglia Romagna", priceBottle: 105 },
-    ]},
-    { category: "Vino Bianco", items: [
-      { key: "sauvignon_blanc", name: "Mezzacorona Castel Firmian Sauvignon Blanc", description: "Trentino", priceGlass: 17, priceBottle: 85 },
-      { key: "malvasia_chardonnay", name: "Fantini Primo Malvasia Chardonnay", description: "Abruzzo", priceGlass: 16, priceBottle: 80 },
-      { key: "pinot_grigio", name: "Vigneti Romio Pinot Grigio Rubione IGT", description: "Friuli", priceGlass: 16, priceBottle: 80 },
-      { key: "grillo", name: "Parthenium Grillo", description: "Sicilia", priceBottle: 85 },
-      { key: "pipoli_bianco", name: "Pipoli Bianco Basilicata IGT", description: "Basilicata", priceBottle: 90 },
-    ]},
-    { category: "Vino Rosato", items: [
-      { key: "rosato", name: "Fattoria Di Basciano Rosato", description: "Toscana", priceGlass: 17, priceBottle: 85 },
-    ]},
-    { category: "Vino Rosso", items: [
-      { key: "sangiovese_merlot", name: "Primo Sangiovese Merlot", description: "Puglia", priceGlass: 16, priceBottle: 80 },
-      { key: "chianti", name: "Renzo Masi Chianti Cornioletta", description: "Toscana", priceGlass: 17, priceBottle: 85 },
-      { key: "montepulciano", name: "Fantini Montepulciano", description: "Abruzzo", priceGlass: 17, priceBottle: 85 },
-      { key: "nebbiolo", name: "Ascheri Langhe Nebbiolo San Giacomo", description: "Piemonte", priceBottle: 110 },
-      { key: "barbaresco", name: "Fontanabianca Barbaresco DOCG", description: "Piemonte", priceBottle: 165 },
-    ]},
-    { category: "Birra", items: [
-      { key: "peroni_tap", name: "Peroni Tap", description: "Italia", price: 14 },
-      { key: "peroni_330", name: "Peroni 330ml", description: "Italia", price: 12 },
-      { key: "peroni_0", name: "Peroni 0%", description: "Italia", price: 12 },
-    ]},
-    { category: "Non Alcolico", items: [
-      { key: "ginger_ale", name: "Fever Tree Ginger Ale", price: 8 },
-      { key: "cola", name: "Fever Tree Cola", price: 8 },
-      { key: "blood_orange", name: "Fever Tree Italian Blood Orange", price: 8 },
-      { key: "lemonade", name: "Fever Tree Italian Lemonade", price: 8 },
-    ]},
-  ] as const;
-
   const BAR_OPTIONS = [
     { key: "bar_tab" as const, label: "Bar Tab", description: "Set a fixed dollar amount" },
     { key: "cash_bar" as const, label: "Cash Bar", description: "Guests pay for their own drinks" },
@@ -284,29 +250,79 @@ export default function ProposalBuilder() {
 
   const selectedPackages = (menuPackages ?? []).filter(p => selectedMenuPackageIds.includes(p.id));
 
+  // New proposal: start from the enquiry. (The client's budget is NOT a
+  // price — it used to be dropped straight into Venue Hire.)
   useEffect(() => {
-    if (lead) {
+    if (lead && !editId) {
       setTitle(`${lead.eventType || "Event"} Proposal — ${lead.firstName} ${lead.lastName ?? ""}`);
-      if (lead.eventDate) setEventDate(new Date(lead.eventDate).toISOString().split("T")[0]);
+      if (lead.eventDate) setEventDate(toLocalDateInput(lead.eventDate));
       if (lead.guestCount) setGuestCount(String(lead.guestCount));
-      if (lead.budget) {
-        setLineItems(prev => prev.map((item, i) =>
-          i === 0 ? { ...item, unitPrice: Number(lead.budget), total: Number(lead.budget) } : item
-        ));
-      }
     }
   }, [lead]);
 
+  // Editing: load the saved proposal (and its drinks + quote) once.
+  const loadedExisting = useRef(false);
   useEffect(() => {
-    if (venueSettings?.depositPercent) setDepositPercent(Number(venueSettings.depositPercent));
+    if (!existingProposal || loadedExisting.current) return;
+    loadedExisting.current = true;
+    const p = existingProposal;
+    setSavedProposal(p);
+    setTitle(p.title);
+    setIntroMessage(p.introMessage ?? "");
+    setEventDate(p.eventDate ? toLocalDateInput(p.eventDate) : "");
+    setGuestCount(p.guestCount ? String(p.guestCount) : "");
+    setSpaceName(p.spaceName ?? "");
+    try {
+      const items = JSON.parse(p.lineItems ?? "[]");
+      if (Array.isArray(items)) setLineItems(items);
+    } catch { /* keep the defaults */ }
+    if (p.taxPercent != null) setTaxPercent(Number(p.taxPercent));
+    if (p.depositPercent != null) setDepositPercent(Number(p.depositPercent));
+    setTermsAndConditions(p.termsAndConditions ?? "");
+    setInternalNotes(p.internalNotes ?? "");
+    setExpiresAt(p.expiresAt ? toLocalDateInput(p.expiresAt) : "");
+  }, [existingProposal]);
+  const loadedDrinks = useRef(false);
+  useEffect(() => {
+    if (!existingDrinks || loadedDrinks.current) return;
+    loadedDrinks.current = true;
+    setBarOption(existingDrinks.barOption);
+    setTabAmount(existingDrinks.tabAmount ? String(Number(existingDrinks.tabAmount)) : "");
+    setSelectedDrinks((existingDrinks.selectedDrinks as string[] | null) ?? []);
+    setCustomDrinks((existingDrinks.customDrinks as any[] | null) ?? []);
+    setSelectedSampleItems((existingDrinks.selectedSampleItems as string[] | null) ?? []);
+  }, [existingDrinks]);
+  const loadedQuote = useRef(false);
+  useEffect(() => {
+    if (!existingQuote || loadedQuote.current) return;
+    loadedQuote.current = true;
+    const qs = existingQuote.settings;
+    if (qs) {
+      setMinimumSpend(qs.minimumSpend ? String(Number(qs.minimumSpend)) : "");
+      setFoodTotalOverride(qs.foodTotal ? String(Number(qs.foodTotal)) : "");
+      setAutoBarTab(qs.autoBarTab ?? true);
+      setQuoteNotes(qs.notes ?? "");
+    }
+    setHireItems(existingQuote.items.map((it: any) => ({ name: it.name ?? "", description: it.description ?? "", qty: Number(it.qty ?? 1), unitPrice: Number(it.unitPrice ?? 0) })));
+  }, [existingQuote]);
+
+  useEffect(() => {
+    if (venueSettings?.depositPercent && !editId) setDepositPercent(Number(venueSettings.depositPercent));
     if (venueSettings?.themeKey) setAppearanceThemeKey(venueSettings.themeKey);
     if (venueSettings?.logoUrl) setAppearanceLogoUrl(venueSettings.logoUrl);
     if (venueSettings?.coverImageUrl) setAppearanceVenuePhotoUrl(venueSettings.coverImageUrl);
   }, [venueSettings]);
 
+  // Default the space to the one on the enquiry (or the venue's only space) —
+  // never just the first in the list, which quietly booked the wrong room.
   useEffect(() => {
-    if (spaces && spaces.length > 0 && !spaceName) setSpaceName(spaces[0].name);
-  }, [spaces]);
+    if (editId || spaceName || !spaces || spaces.length === 0) return;
+    if (leadId && !lead) return; // wait for the enquiry
+    const fromLead = lead?.spaceId ? spaces.find(s => s.id === lead.spaceId)
+      : lead?.spaceName ? spaces.find(s => s.name === lead.spaceName) : undefined;
+    if (fromLead) setSpaceName(fromLead.name);
+    else if (spaces.length === 1) setSpaceName(spaces[0].name);
+  }, [spaces, lead]);
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
   const taxAmount = (subtotal * taxPercent) / 100;
@@ -325,26 +341,29 @@ export default function ProposalBuilder() {
     });
   };
 
+  const utils = trpc.useUtils();
   const createProposal = trpc.proposals.create.useMutation({
     onSuccess: (data) => { setSavedProposal(data); },
   });
-
-  const hasSmtp = !!(venueSettings as any)?.smtpHost && !!(venueSettings as any)?.smtpUser && !!(venueSettings as any)?.smtpPass;
+  const updateProposal = trpc.proposals.update.useMutation();
+  const saving = createProposal.isPending || updateProposal.isPending || saveQuote.isPending;
+  const status: string | undefined = savedProposal?.status;
+  // Accepted / declined proposals are the client's answer — they can't be re-sent.
+  const canSend = !!savedProposal && !["accepted", "declined"].includes(status ?? "");
 
   const sendProposal = trpc.proposals.send.useMutation({
     onSuccess: (data) => {
-      setSent(true);
-      if (hasSmtp) {
-        toast.success("Proposal sent and emailed to client!");
-      } else {
-        toast.success("Proposal marked as sent — copy the link below to share with your client. (Configure SMTP in Settings → Email to send emails directly.)");
-      }
+      setSendResult({ emailSent: data.emailSent, emailedTo: data.emailedTo ?? null });
+      setSavedProposal((p: any) => p ? { ...p, status: "sent", sentAt: new Date() } : p);
+      if (leadId) utils.proposals.byLead.invalidate({ leadId });
+      toast.success(data.emailSent && data.emailedTo ? `Proposal emailed to ${data.emailedTo}` : "Proposal saved — email isn't set up, so copy the link to send it.");
     },
-    onError: () => toast.error("Failed to send proposal"),
+    onError: (e) => toast.error(e.message || "Couldn't send the proposal"),
   });
 
-  const handleSave = async () => {
-    if (!leadId) return toast.error("No lead selected");
+  /** Save the proposal (create the first time, update after). Returns the saved row, or null. */
+  const handleSave = async (opts: { quiet?: boolean } = {}): Promise<any | null> => {
+    if (!leadId) { toast.error("No enquiry selected"); return null; }
     // Build enriched line items: include selected menu packages as line items
     const menuLineItems = selectedPackages.map(pkg => ({
       description: `${pkg.type === 'food' ? '🍽 Food Package' : pkg.type === 'beverages' ? '🍷 Beverages Package' : '🍽🍷 Food & Beverages Package'}: ${pkg.name}`,
@@ -359,8 +378,7 @@ export default function ProposalBuilder() {
     const allDeposit = (allTotal * depositPercent) / 100;
     try {
       // One save = proposal + its quote (pricing / min-spend), now a single document.
-      const proposal = await createProposal.mutateAsync({
-        leadId,
+      const fields = {
         title,
         introMessage: introMessage || undefined,
         eventDate: eventDate || undefined,
@@ -375,13 +393,22 @@ export default function ProposalBuilder() {
         depositNzd: allDeposit,
         termsAndConditions,
         internalNotes: internalNotes || undefined,
-        expiresAt: expiresAt || undefined,
-      });
+      };
+      let proposal: any;
+      if (savedProposal) {
+        await updateProposal.mutateAsync({ id: savedProposal.id, ...fields, internalNotes, expiresAt });
+        proposal = await utils.proposals.get.fetch({ id: savedProposal.id });
+      } else {
+        proposal = await createProposal.mutateAsync({ leadId, ...fields, expiresAt: expiresAt || undefined });
+        // A reload should reopen this proposal, not start another one.
+        if (proposal) window.history.replaceState(null, "", `/proposals/new?proposalId=${proposal.id}`);
+      }
       if (!proposal) {
         toast.error("Failed to save proposal");
-        return;
+        return null;
       }
       setSavedProposal(proposal);
+      if (leadId) utils.proposals.byLead.invalidate({ leadId });
       await saveQuote.mutateAsync({
         proposalId: proposal.id,
         minimumSpend: minimumSpend ? parseFloat(minimumSpend) : undefined,
@@ -390,15 +417,21 @@ export default function ProposalBuilder() {
         notes: quoteNotes,
         items: hireItems.map((item, i) => ({ type: 'hire', name: item.name, description: item.description, qty: item.qty, unitPrice: item.unitPrice, sortOrder: i })),
       });
-      toast.success("Proposal saved!");
-    } catch {
-      toast.error("Failed to save proposal");
+      if (!opts.quiet) toast.success(savedProposal ? "Changes saved" : "Proposal saved");
+      return proposal;
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save proposal");
+      return null;
     }
   };
 
-  const handleSend = () => {
+  // Sending always saves first, so the client never gets a stale version.
+  const handleSend = async () => {
     if (!savedProposal) return toast.error("Save the proposal first");
-    sendProposal.mutate({ id: savedProposal.id });
+    if (!spaceName) return toast.error("Choose an event space first — the client can't accept a proposal without one.");
+    if (expiresAt && expiresAt < toLocalDateInput(new Date())) return toast.error("The expiry date has passed. Pick a new one before sending.");
+    const saved = await handleSave({ quiet: true });
+    if (saved) sendProposal.mutate({ id: saved.id });
   };
 
   const proposalUrl = savedProposal?.publicToken
@@ -435,7 +468,7 @@ export default function ProposalBuilder() {
         <div className="hidden sm:flex items-center mr-3">
           <span className="font-bold text-gray-900 text-base tracking-tight">VenueFlowHQ</span>
         </div>
-        <h1 className="font-inter text-sm font-medium text-gray-700 whitespace-nowrap m-0">Proposal Builder</h1>
+        <h1 className="font-inter text-sm font-medium text-gray-700 whitespace-nowrap m-0 sr-only sm:not-sr-only">{savedProposal ? "Edit Proposal" : "Proposal Builder"}</h1>
         <div className="ml-auto flex items-center gap-2">
           {savedProposal?.publicToken && (
             <Button
@@ -449,20 +482,15 @@ export default function ProposalBuilder() {
               {pdfLoading ? "PDF..." : "PDF"}
             </Button>
           )}
-          {!savedProposal ? (
-            <Button onClick={handleSave} disabled={createProposal.isPending}
-              variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent">
-              {createProposal.isPending ? "Saving..." : "Save Draft"}
+          <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
+            variant="outline" className="border-sage-green text-sage-dark hover:bg-sage-green/10 font-inter rounded-lg text-xs bg-transparent">
+            {saving ? "Saving..." : savedProposal ? "Save Changes" : "Save Draft"}
+          </Button>
+          {canSend && (
+            <Button onClick={handleSend} disabled={sendProposal.isPending || saving}
+              className="hidden sm:inline-flex bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs gap-1">
+              <Send className="w-3 h-3" /> {sendProposal.isPending ? "Sending..." : status === "draft" ? "Send to Client" : "Resend"}
             </Button>
-          ) : !sent ? (
-            <Button onClick={handleSend} disabled={sendProposal.isPending}
-              className="bg-sage-green hover:bg-sage-dark text-white font-inter rounded-lg text-xs gap-1">
-              <Send className="w-3 h-3" /> {sendProposal.isPending ? "Sending..." : "Send to Client"}
-            </Button>
-          ) : (
-            <div className="flex items-center gap-2 text-sage-dark font-inter text-xs font-medium">
-              <CheckCircle className="w-4 h-4" /> Sent
-            </div>
           )}
         </div>
       </header>
@@ -470,10 +498,21 @@ export default function ProposalBuilder() {
       <main className="max-w-5xl mx-auto p-6 grid lg:grid-cols-3 gap-6">
         {/* Left: Form */}
         <div className="lg:col-span-2 space-y-5">
+          {/* Editing an existing proposal */}
+          {!!editId && existingLoading && (
+            <div className="bg-cream-card border border-border p-4 font-dm text-sm text-muted-foreground">Loading proposal…</div>
+          )}
+          {!!editId && !existingLoading && !existingProposal && (
+            <div role="alert" className="bg-red-50 border-2 border-red-200 p-4 font-dm text-sm text-red-800">
+              {existingError?.message || "We couldn't find that proposal."} <Link href="/dashboard" className="underline underline-offset-2">Back to the dashboard</Link>
+            </div>
+          )}
+          {savedProposal && <ProposalStatusPanel proposal={savedProposal} />}
+
           {/* Lead Info Banner */}
           {lead && (
             <div className="bg-sage-tint border-2 border-sage-green/40 p-4">
-              <div className="font-bebas text-xs tracking-widest text-sage-green mb-1">CREATING PROPOSAL FOR</div>
+              <div className="font-bebas text-xs tracking-widest text-sage-green mb-1">{savedProposal ? "EDITING PROPOSAL FOR" : "CREATING PROPOSAL FOR"}</div>
               <div className="font-alfa text-lg text-ink">{lead.firstName} {lead.lastName}</div>
               <div className="font-dm text-sm text-muted-foreground">{lead.email} · {lead.eventType || "Event"}</div>
             </div>
@@ -1378,49 +1417,41 @@ export default function ProposalBuilder() {
           </div>
 
           {/* Actions */}
-          {!savedProposal ? (
-            <Button onClick={handleSave} disabled={createProposal.isPending} className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11">
-              {createProposal.isPending ? "SAVING..." : "SAVE DRAFT"}
+          <div className="space-y-2">
+            <Button onClick={() => handleSave()} disabled={saving || (!!editId && !savedProposal)}
+              className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11">
+              {saving ? "SAVING..." : savedProposal ? "SAVE CHANGES" : "SAVE DRAFT"}
             </Button>
-          ) : !sent ? (
-            <div className="space-y-2">
-              <div className="bg-blue-50 border-2 border-blue-200 p-3 text-center">
-                <div className="font-bebas text-xs tracking-widest text-forest">DRAFT SAVED</div>
-                <div className="font-dm text-xs text-forest mt-0.5">Ready to send to client</div>
-              </div>
-              <Button onClick={handleSend} disabled={sendProposal.isPending}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-bebas tracking-widest rounded-none h-11 gap-2">
+            {canSend && (
+              <Button onClick={handleSend} disabled={sendProposal.isPending || saving}
+                className="w-full bg-ink text-cream hover:opacity-90 font-bebas tracking-widest rounded-none h-11 gap-2">
                 <Send className="w-4 h-4" />
-                {sendProposal.isPending ? "SENDING..." : "SEND TO CLIENT"}
+                {sendProposal.isPending ? "SENDING..." : status === "draft" ? "SAVE & SEND TO CLIENT" : "SAVE & RESEND TO CLIENT"}
               </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="bg-blue-50 border-2 border-blue-300 p-4 text-center">
-                <CheckCircle className="w-8 h-8 text-forest mx-auto mb-2" />
-                <div className="font-alfa text-lg text-forest">PROPOSAL SENT!</div>
-                <p className="font-dm text-xs text-forest mt-1">Share this link with your client</p>
+            )}
+            {sendResult && (
+              <div role="status" className={`border-2 p-3 font-dm text-xs ${sendResult.emailSent ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-amber-50 border-amber-200 text-amber-900"}`}>
+                {sendResult.emailSent && sendResult.emailedTo ? (
+                  <div className="flex items-start gap-2"><CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden /> <span>Proposal emailed to <strong>{sendResult.emailedTo}</strong>.</span></div>
+                ) : (
+                  <span>Proposal saved, but email isn't set up — copy the link below and send it yourself. <a href="/dashboard?tab=settings&sub=email" className="underline underline-offset-2">Set up email</a></span>
+                )}
               </div>
-              {proposalUrl && (
-                <div className="bg-white border-2 border-border p-3">
-                  <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">CLIENT LINK</div>
-                  <div className="font-dm text-xs text-muted-foreground break-all mb-2 bg-linen p-2 border border-border">{proposalUrl}</div>
-                  <Button size="sm" onClick={() => { navigator.clipboard.writeText(proposalUrl); toast.success("Link copied!"); }}
-                    className="w-full bg-ink text-cream font-bebas tracking-widest rounded-none text-xs gap-1">
-                    <Copy className="w-3 h-3" /> COPY LINK
-                  </Button>
-                </div>
-              )}
-              <Button asChild variant="outline" className="w-full border-2 border-border font-bebas tracking-widest rounded-none text-xs">
-                <Link href="/dashboard">
-                  BACK TO DASHBOARD
-                </Link>
-              </Button>
-            </div>
-          )}
+            )}
+            {proposalUrl && status && status !== "draft" && (
+              <div className="bg-white border-2 border-border p-3">
+                <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">CLIENT LINK</div>
+                <div className="font-dm text-xs text-muted-foreground break-all mb-2 bg-linen p-2 border border-border">{proposalUrl}</div>
+                <Button size="sm" onClick={() => { navigator.clipboard.writeText(proposalUrl); toast.success("Link copied"); }}
+                  className="w-full bg-ink text-cream font-bebas tracking-widest rounded-none text-xs gap-1">
+                  <Copy className="w-3 h-3" /> COPY LINK
+                </Button>
+              </div>
+            )}
+          </div>
 
           {/* Preview hint */}
-          {savedProposal?.publicToken && !sent && (
+          {savedProposal?.publicToken && (
             <a href={`/proposal/${savedProposal.publicToken}`} target="_blank" rel="noopener noreferrer">
               <Button variant="outline" size="sm" className="w-full border-2 border-border font-bebas tracking-widest rounded-none text-xs gap-1">
                 <FileText className="w-3 h-3" /> PREVIEW CLIENT VIEW
@@ -1443,6 +1474,48 @@ export default function ProposalBuilder() {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+const PROPOSAL_STATUS_TEXT: Record<string, { label: string; cls: string }> = {
+  draft: { label: "Draft", cls: "bg-stone-100 text-stone-700" },
+  sent: { label: "Sent", cls: "bg-blue-100 text-blue-800" },
+  viewed: { label: "Opened by client", cls: "bg-amber-100 text-amber-900" },
+  accepted: { label: "Accepted", cls: "bg-emerald-100 text-emerald-800" },
+  declined: { label: "Declined", cls: "bg-red-100 text-red-800" },
+  expired: { label: "Expired", cls: "bg-stone-100 text-stone-700" },
+};
+
+const fmtWhen = (d: string | Date) => new Date(d).toLocaleString("en-NZ", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+
+/** Shown when editing a saved proposal: where it's at, and what editing it means. */
+function ProposalStatusPanel({ proposal }: { proposal: any }) {
+  const st = PROPOSAL_STATUS_TEXT[proposal.status] ?? PROPOSAL_STATUS_TEXT.draft;
+  const note =
+    proposal.status === "accepted" ? "The client accepted this proposal and the booking was created from it. Saving changes here won't change the booking."
+    : proposal.status === "declined" ? "The client declined this proposal. Start a new proposal to offer something different."
+    : proposal.status === "expired" ? "This proposal has expired. Set a new expiry date, save, and resend it to re-open it."
+    : proposal.status === "sent" || proposal.status === "viewed" ? "The client already has the link — saved changes show on their page straight away."
+    : "Not sent yet — only your team can see it.";
+  return (
+    <div className="bg-white border-2 border-border p-4">
+      <div className="flex items-center gap-2 flex-wrap mb-1">
+        <span className="font-bebas text-xs tracking-widest text-muted-foreground">EDITING SAVED PROPOSAL</span>
+        <span className={`font-dm text-[11px] font-semibold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+      </div>
+      <div className="font-dm text-xs text-ink">
+        {[
+          proposal.sentAt ? `Sent ${fmtWhen(proposal.sentAt)}` : null,
+          proposal.viewedAt ? `Viewed ${fmtWhen(proposal.viewedAt)}` : null,
+          proposal.respondedAt && (proposal.status === "accepted" || proposal.status === "declined")
+            ? `${proposal.status === "declined" ? "Declined" : "Accepted"} ${fmtWhen(proposal.respondedAt)}` : null,
+        ].filter(Boolean).join(" · ")}
+      </div>
+      {proposal.status === "declined" && proposal.declineReason && (
+        <p className="font-dm text-xs text-ink mt-1">Their reason: “{proposal.declineReason}”</p>
+      )}
+      <p className="font-dm text-xs text-muted-foreground mt-1">{note}</p>
     </div>
   );
 }

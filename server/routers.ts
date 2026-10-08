@@ -14,6 +14,8 @@ import { publicBaseUrl } from "./publicUrl";
 import { followUpsRouter } from "./followUpsRouter";
 import { markStaffResponse, markBulkStatusResponse } from "./speedToLead";
 import { inboxRouter } from "./inboxRouter";
+import { zonedDayBoundUtc } from "@shared/tz";
+import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -26,6 +28,7 @@ const VENUE_SECRET_FIELDS = [
   "nbiApiKey", "nbiVenueId", "nbiAccountId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret", "nbiServiceMappings",
   "automatedTaskRules", "emailSignature", "emailSignatureLogo", "emailSignatures", "autoCancelTentative",
   "alertEmailsEnabled", "alertEmailKinds", "replyOverdueEnabled", "replyOverdueHours", "followUpSequences",
+  "defaultHoldDays", "holdClientReminderEnabled",
 ] as const;
 function stripVenueSecrets<T extends Record<string, any>>(row: T): T {
   const safe: any = { ...row };
@@ -36,7 +39,7 @@ import {
   getVenueSettings, upsertVenueSettings,
   getEventSpaces, createEventSpace,
   getContacts, getContactById, createContact,
-  getLeads, getLeadById, createLead, updateLeadStatus, updateLead,
+  getLeads, getLeadById, createLead, updateLeadStatus, updateLead, markLeadLost,
   getLeadActivity, addLeadActivity,
   getProposals, getProposalById, getProposalByToken, getProposalsByLead, createProposal, updateProposal,
   getBookings, getBookingsByMonth, createBooking,
@@ -55,6 +58,18 @@ function formatVenueDateTime(eventDate: Date | string, timeZone: string = "Pacif
   const dateStr = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
   const timeStr = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
   return { dateStr, timeStr };
+}
+
+/** A proposal's expiry date ("YYYY-MM-DD") runs to the end of that NZ day; a
+ *  full timestamp is used as given. */
+function proposalExpiryInstant(value: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    // Start of the next NZ day, less 1 ms (the "end" bound drifts by up to a second).
+    const [y, m, d] = value.split("-").map(Number);
+    const next = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+    return new Date(zonedDayBoundUtc(next, "Pacific/Auckland", "start").getTime() - 1);
+  }
+  return new Date(value);
 }
 
 // Anti-spam for the public lead-form endpoints: 5 writes / 10 min per (IP,
@@ -187,6 +202,8 @@ export const appRouter = router({
         eventTimeEnd: z.string().optional(),
         minGroupSize: z.number().optional(),
         autoCancelTentative: z.number().optional(),
+        defaultHoldDays: z.coerce.number().int().min(1).max(90).optional(),
+        holdClientReminderEnabled: z.coerce.number().optional(),
         // Venue profile fields
         bannerImageUrl: z.string().optional(),
         venueType: z.string().optional(),
@@ -220,6 +237,15 @@ export const appRouter = router({
         formSuccessMessage: z.string().optional(),
         enquiryAutoReplyEnabled: z.coerce.number().optional(),
         enquiryAutoReplyMessage: z.string().optional(),
+        proposalAcceptEmailEnabled: z.coerce.number().optional(),
+        // Enquiry form: availability on the date picker + walkthrough booking.
+        showAvailabilityOnForm: z.coerce.number().int().min(0).max(1).optional(),
+        walkthroughEnabled: z.coerce.number().int().min(0).max(1).optional(),
+        walkthroughDays: z.string().regex(/^([0-6](,[0-6])*)?$/).optional(),
+        walkthroughStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+        walkthroughEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+        walkthroughSlotMinutes: z.coerce.number().int().min(10).max(240).optional(),
+        walkthroughDaysAhead: z.coerce.number().int().min(1).max(90).optional(),
         nbiApiKey: z.string().optional(),
         nbiVenueId: z.string().optional(),
         nbiAccountId: z.string().optional(),
@@ -272,7 +298,14 @@ export const appRouter = router({
           }
           data.slug = unique;
         }
-        return upsertVenueSettings(ctx.user.id, data);
+        const saved = await upsertVenueSettings(ctx.user.id, data);
+        // A new "before the event" rule should cover events already booked
+        // now, not at the next hourly sweep.
+        if (input.automatedTaskRules !== undefined) {
+          const { sweepDaysBeforeEvent } = await import('./automatedTasks');
+          await sweepDaysBeforeEvent(ctx.user.id);
+        }
+        return saved;
       }),
     getOwn: protectedProcedure.query(async ({ ctx }) => {      return getVenueSettings(ctx.user.id);
     }),
@@ -434,6 +467,10 @@ export const appRouter = router({
         minCapacity: z.number().optional(),
         maxCapacity: z.number().optional(),
         minSpend: z.number().optional(),
+        // Enquiry-form price guidance (shown only when showPricingOnForm).
+        minSpendWeekend: z.number().min(0).optional(),
+        packagesFromPp: z.number().min(0).optional(),
+        showPricingOnForm: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         return createEventSpace({ ownerId: ctx.user.id, ...input });
@@ -446,6 +483,9 @@ export const appRouter = router({
         minCapacity: z.number().optional().nullable(),
         maxCapacity: z.number().optional().nullable(),
         minSpend: z.number().optional().nullable(),
+        minSpendWeekend: z.number().min(0).optional().nullable(),
+        packagesFromPp: z.number().min(0).optional().nullable(),
+        showPricingOnForm: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -454,6 +494,10 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) return;
         const { id, ...fields } = input;
+        // Decimal columns take strings; null clears.
+        for (const k of ['minSpendWeekend', 'packagesFromPp'] as const) {
+          if (fields[k] != null) (fields as any)[k] = String(fields[k]);
+        }
         await db.update(eventSpaces).set(fields as any).where(and(eq(eventSpaces.id, id), eq(eventSpaces.ownerId, ctx.user.id)));
         return { success: true };
       }),
@@ -502,6 +546,8 @@ export const appRouter = router({
         status: z.string().optional(),
         source: z.string().optional(),
         spaceName: z.string().optional(),
+        // The user has seen the date-clash warning and chosen to go ahead.
+        allowClash: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Rule: every event must have a space selected. If this lead is being
@@ -511,8 +557,16 @@ export const appRouter = router({
         if (['booked', 'confirmed', 'tentative', 'finished'].includes(incomingStatus) && !input.spaceName?.trim()) {
           throw new Error('Please select an event space before saving this event.');
         }
-        return createLead({
+        // Double-booking guard: a new event created straight into a booked or
+        // held state must not silently land on a taken date/space.
+        if (['booked', 'confirmed', 'tentative'].includes(incomingStatus) && input.eventDate) {
+          const { findClashes, assertNoClashes } = await import('./availability');
+          assertNoClashes(await findClashes(ctx.user.id, { start: new Date(input.eventDate), spaceName: input.spaceName }), input.allowClash);
+        }
+        const { findContactIdFor } = await import('./leadRetention');
+        const created = await createLead({
           ownerId: ctx.user.id,
+          contactId: await findContactIdFor(ctx.user.id, input.email, input.phone),
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email || '',
@@ -523,16 +577,31 @@ export const appRouter = router({
           guestCount: input.guestCount,
           budget: input.budget?.toString() as any,
           message: input.message,
-          source: input.source ?? "manual",
+          source: input.source?.trim() || "manual",
           status: incomingStatus,
           spaceName: input.spaceName?.trim() || undefined,
         });
+        if (created && incomingStatus === 'tentative') {
+          const { startHoldFromStatusChange } = await import('./holds');
+          await startHoldFromStatusChange(ctx.user.id, { ...created, status: 'contacted' });
+        }
+        if (created && !['booked', 'confirmed', 'finished'].includes(incomingStatus)) {
+          const { fireTaskRules } = await import('./automatedTasks');
+          await fireTaskRules(ctx.user.id, { trigger: 'on_enquiry_received', leadId: created.id });
+        }
+        return created;
       }),
 
     list: protectedProcedure
       .input(z.object({ status: z.string().optional() }))
       .query(async ({ input, ctx }) => {
-        return getLeads(ctx.user.id, input.status);
+        const rows = await getLeads(ctx.user.id, input.status);
+        // Returning-client / possible-duplicate flags, computed on read from
+        // the owner's leads + bookings (one extra query) so they're always
+        // current and need no stored state.
+        const { clientFlagsForOwner } = await import('./leadRetention');
+        const flags = await clientFlagsForOwner(ctx.user.id, input.status ? undefined : rows);
+        return rows.map(l => ({ ...l, clientFlag: flags.get(l.id) ?? null }));
       }),
 
     get: protectedProcedure
@@ -564,11 +633,20 @@ export const appRouter = router({
         utmCampaign: z.string().max(255).optional(),
         utmTerm: z.string().max(255).optional(),
         utmContent: z.string().max(255).optional(),
+        // Spam checks: a hidden field only bots fill in, and the signed
+        // "form opened at" token from leads.formConfig.
+        hp: z.string().max(500).optional(),
+        formToken: z.string().max(80).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         await enforceLeadRateLimit(ctx, input.ownerId);
+        const { isBotSubmission } = await import('./enquiryForm');
+        // A bot gets a convincing "saved" and nothing is stored.
+        if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { leadId: 0, leadToken: "" };
+        const { findContactIdFor } = await import('./leadRetention');
         const lead = await createLead({
           ownerId: input.ownerId,
+          contactId: await findContactIdFor(input.ownerId, input.email, input.phone),
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email,
@@ -639,12 +717,35 @@ export const appRouter = router({
         utmCampaign: z.string().max(255).optional(),
         utmTerm: z.string().max(255).optional(),
         utmContent: z.string().max(255).optional(),
+        // The event space the client picked, when the form asks for one.
+        spaceId: z.number().int().positive().optional(),
+        // Spam checks — see startCapture. turnstileToken only when the
+        // TURNSTILE_* env vars are set.
+        hp: z.string().max(500).optional(),
+        formToken: z.string().max(80).optional(),
+        turnstileToken: z.string().max(2048).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         await enforceLeadRateLimit(ctx, input.ownerId);
+        const { isBotSubmission, verifyTurnstile } = await import('./enquiryForm');
+        // A bot gets a convincing success and nothing is stored or sent.
+        if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
+        if (!(await verifyTurnstile(input.turnstileToken, getRequestIp(ctx?.req)))) {
+          throw new Error("Please complete the quick security check above the button, then send again.");
+        }
+        // Only a space this venue actually has — never trust the id alone.
+        let space: { id: number; name: string } | undefined;
+        if (input.spaceId) {
+          const all = await getEventSpaces(input.ownerId);
+          space = all.find(s => s.id === input.spaceId);
+        }
 
+        // Link an existing client contact (matched by email or phone) so a
+        // returning client's history follows them.
+        const { findContactIdFor } = await import('./leadRetention');
         const leadData = {
           ownerId: input.ownerId,
+          contactId: await findContactIdFor(input.ownerId, input.email, input.phone),
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email,
@@ -671,6 +772,7 @@ export const appRouter = router({
           utmCampaign: input.utmCampaign,
           utmTerm: input.utmTerm,
           utmContent: input.utmContent,
+          ...(space ? { spaceId: space.id, spaceName: space.name } : {}),
         };
 
         let lead = null;
@@ -886,7 +988,9 @@ export const appRouter = router({
         // they're not left wondering whether the form worked. This is a
         // transactional confirmation the enquirer initiated by submitting (like
         // a receipt), on by default and switchable in Settings; it never blocks
-        // the submit if SMTP is down.
+        // the submit if SMTP is down. Whether it actually went out is returned
+        // so the success screen doesn't tell them to check an empty inbox.
+        let autoReplySent = false;
         try {
           const { getDb } = await import('./db');
           const { venueSettings } = await import('../drizzle/schema');
@@ -900,13 +1004,12 @@ export const appRouter = router({
               const mailer = await buildVenueMailer(input.ownerId);
               if (mailer) {
                 const { escapeHtml: esc } = await import('./sanitizeHtml');
+                const { DEFAULT_AUTO_REPLY_INTRO } = await import('../shared/enquiryCopy');
                 const venueName = String(vs.name ?? mailer.fromName ?? 'our venue');
                 const accent = (vs.primaryColor && /^#[0-9a-fA-F]{6}$/.test(vs.primaryColor)) ? vs.primaryColor : '#2D4A3E';
                 const firstName = esc(input.firstName);
                 const introRaw = vs.enquiryAutoReplyMessage?.trim();
-                const intro = introRaw
-                  ? esc(introRaw)
-                  : `Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch within one business day.`;
+                const intro = introRaw ? esc(introRaw) : DEFAULT_AUTO_REPLY_INTRO;
                 const fmtDate = input.eventDate
                   ? (() => {
                       const raw = String(input.eventDate);
@@ -933,16 +1036,28 @@ export const appRouter = router({
     <p style="font-size:15px;margin:16px 0 0">Warm regards,<br/><strong>${esc(venueName)}</strong></p>
   </div>
 </div>`;
-                const text = `Hi ${input.firstName},\n\n${introRaw ?? "Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch within one business day."}\n\n${[input.eventType && `Event: ${input.eventType}`, fmtDate && `Date: ${fmtDate}`, input.guestCount && `Guests: ${input.guestCount}`].filter(Boolean).join('\n')}\n\nWarm regards,\n${venueName}`;
+                const text = `Hi ${input.firstName},\n\n${introRaw || DEFAULT_AUTO_REPLY_INTRO}\n\n${[input.eventType && `Event: ${input.eventType}`, fmtDate && `Date: ${fmtDate}`, input.guestCount && `Guests: ${input.guestCount}`].filter(Boolean).join('\n')}\n\nWarm regards,\n${venueName}`;
+                const subject = `We've received your enquiry — ${venueName}`;
                 await mailer.transporter.sendMail({
                   from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
                   to: input.email,
                   replyTo: mailer.fromEmail,
-                  subject: `We've received your enquiry — ${venueName}`,
+                  subject,
                   html,
                   text,
                 });
+                autoReplySent = true;
                 console.log(`[LeadSubmit] Auto-reply sent to ${input.email}`);
+                // On the lead's timeline, but it isn't a reply from the team —
+                // the lead still shows "needs reply".
+                if (lead) {
+                  await addLeadActivity({
+                    leadId: lead.id,
+                    ownerId: input.ownerId,
+                    type: 'email',
+                    content: `Automatic reply sent to ${input.email}\n\nSubject: ${subject}\n\n${text}`,
+                  }, { countsAsReply: false });
+                }
               }
             }
           }
@@ -965,20 +1080,67 @@ export const appRouter = router({
           });
         }
 
-        return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id) } : lead;
+        // Synthetic health-check pings never become real work.
+        if (lead && lead.source !== 'healthcheck') {
+          const { fireTaskRules } = await import('./automatedTasks');
+          await fireTaskRules(input.ownerId, { trigger: 'on_enquiry_received', leadId: lead.id });
+        }
+
+        return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id), autoReplySent } : lead;
       }),
 
-    // Public: after a successful submit, the confirmation screen offers a
-    // 20-minute walkthrough slot (computed client-side — next few Tue–Sat
-    // days, no real availability check). Picking one just records the label
-    // on the lead so staff can see what was offered; it is not a calendar
-    // booking. Rate-limited the same as submit/startCapture since it's a
-    // public write keyed by a client-supplied ownerId.
+    // Public: the enquiry form's settings that the page needs before anyone
+    // types — spaces (with prices only where the venue publishes them),
+    // whether to show availability / walkthroughs, the optional Turnstile site
+    // key, and the signed "form opened at" token the spam check uses.
+    formConfig: publicProcedure
+      .input(z.object({ ownerId: z.number().int().positive() }))
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('enquiry-form-read', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 120, 60_000);
+        const { getPublicFormConfig } = await import('./enquiryForm');
+        return getPublicFormConfig(input.ownerId);
+      }),
+
+    // Public: which dates in a month are fully booked or busy, for the date
+    // picker. Dates and states only — never who booked. Respects the venue's
+    // "Show availability on enquiry form" switch.
+    availability: publicProcedure
+      .input(z.object({
+        ownerId: z.number().int().positive(),
+        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+        spaceId: z.number().int().positive().optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('enquiry-form-read', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 120, 60_000);
+        const { getMonthAvailability } = await import('./enquiryForm');
+        return getMonthAvailability(input.ownerId, input.month, input.spaceId ?? null);
+      }),
+
+    // Public: open walkthrough slots for the thank-you screen, generated in
+    // Pacific/Auckland from the venue's walkthrough settings, minus other
+    // walkthroughs and times an event is on.
+    walkthroughSlots: publicProcedure
+      .input(z.object({ ownerId: z.number().int().positive() }))
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('enquiry-form-read', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 120, 60_000);
+        const { getWalkthroughSlots } = await import('./enquiryForm');
+        return getWalkthroughSlots(input.ownerId);
+      }),
+
+    // Public: book (or move) the enquirer's walkthrough. The slot is
+    // re-checked on the server under a lock, so a time someone else just took
+    // is refused. Creates a task, logs activity, alerts the venue and emails
+    // the client a confirmation with a calendar file (reported honestly in
+    // `emailed`). Rate-limited like submit since it's a public write keyed by
+    // a client-supplied ownerId, and needs submit()'s leadToken.
     bookWalkthrough: publicProcedure
       .input(z.object({
         ownerId: z.number(),
         leadId: z.number(),
-        slotLabel: z.string().min(1).max(60),
+        // ISO start of a slot from leads.walkthroughSlots.
+        slotStart: z.string().max(40).optional(),
+        // Legacy: a page loaded before real slots shipped sends only a label.
+        slotLabel: z.string().min(1).max(60).optional(),
         // submit()'s proof that this visitor owns leadId (see leadToken.ts).
         leadToken: z.string().max(64),
       }))
@@ -987,8 +1149,26 @@ export const appRouter = router({
         if (!isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)) throw new Error("Enquiry not found.");
         const existing = await getLeadById(input.leadId, input.ownerId);
         if (!existing) throw new Error("Enquiry not found.");
+        if (input.slotStart) {
+          const { bookWalkthrough, SlotTakenError } = await import('./enquiryForm');
+          try {
+            return await bookWalkthrough(input.ownerId, input.leadId, input.slotStart);
+          } catch (err: any) {
+            if (err instanceof SlotTakenError) throw new TRPCError({ code: "CONFLICT", message: err.message });
+            throw err;
+          }
+        }
+        if (!input.slotLabel) throw new Error("Pick a time first.");
         await updateLead(input.leadId, input.ownerId, { walkthroughSlot: input.slotLabel });
-        return { ok: true };
+        return { ok: true as const, label: input.slotLabel, walkthroughAt: null, ics: null, emailed: false, emailNote: "legacy" };
+      }),
+
+    // The venue's booked walkthroughs for a month — shown on the calendar.
+    walkthroughsByMonth: protectedProcedure
+      .input(z.object({ year: z.number().int(), month: z.number().int().min(1).max(12) }))
+      .query(async ({ input, ctx }) => {
+        const { walkthroughsForMonth } = await import('./enquiryForm');
+        return walkthroughsForMonth(ctx.user.id, input.year, input.month);
       }),
 
     updateStatus: protectedProcedure
@@ -996,6 +1176,12 @@ export const appRouter = router({
         id: z.number(),
         status: z.string(),
         note: z.string().optional(),
+        // The user has seen the date-clash warning and chosen to go ahead.
+        allowClash: z.boolean().optional(),
+        // Only used when status is 'lost' (see shared/lostReasons.ts). Both
+        // optional: the venue may skip the question.
+        lostReason: z.enum(LOST_REASON_KEYS).optional(),
+        lostReasonNote: z.string().max(500).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Capture the prior status so we can react to transitions (e.g. moving
@@ -1014,13 +1200,44 @@ export const appRouter = router({
           throw new Error('Please set an event space on this enquiry before changing its status to ' + input.status + '.');
         }
 
-        await updateLeadStatus(input.id, ctx.user.id, input.status, undefined);
-        await addLeadActivity({
-          leadId: input.id,
-          ownerId: ctx.user.id,
-          type: "status_change",
-          content: `Status changed to ${input.status}${input.note ? ": " + input.note : ""}`,
-        });
+        // Double-booking guard: confirming or holding a date checks the
+        // calendar first. A clash comes back as CONFLICT with the clash list;
+        // the UI asks "Book anyway?" and resends with allowClash.
+        const takesDate = ['booked', 'confirmed'].includes(input.status) ? !wasBooked
+          : input.status === 'tentative' ? priorLead.status !== 'tentative' : false;
+        if (takesDate && priorLead.eventDate) {
+          const { findClashes, assertNoClashes } = await import('./availability');
+          const { clashSpace } = await import('./holds');
+          assertNoClashes(await findClashes(ctx.user.id, clashSpace(priorLead)), input.allowClash);
+        }
+
+        let holdUntil: Date | null = null;
+        if (input.status === 'lost') {
+          // Records the reason, ends any hold and logs the activity (with the reason) too.
+          await markLeadLost(ctx.user.id, input.id, input.lostReason ?? null,
+            [input.lostReasonNote?.trim(), input.note?.trim()].filter(Boolean).join(' — ') || null);
+        } else {
+          await updateLeadStatus(input.id, ctx.user.id, input.status, undefined);
+          // A lead brought back from lost no longer has a lost reason.
+          if (priorLead.lostReason || priorLead.lostReasonNote) {
+            await updateLead(input.id, ctx.user.id, { lostReason: null, lostReasonNote: null });
+          }
+          // Date holds: moving to tentative starts a hold (default length);
+          // moving off it ends one.
+          if (input.status === 'tentative' && priorLead.status !== 'tentative') {
+            const { startHoldFromStatusChange } = await import('./holds');
+            holdUntil = await startHoldFromStatusChange(ctx.user.id, priorLead);
+          } else if (input.status !== 'tentative' && priorLead.status === 'tentative') {
+            const { clearHoldFields } = await import('./holds');
+            await clearHoldFields(ctx.user.id, [input.id]);
+          }
+          await addLeadActivity({
+            leadId: input.id,
+            ownerId: ctx.user.id,
+            type: "status_change",
+            content: `Status changed to ${input.status}${input.note ? ": " + input.note : ""}`,
+          });
+        }
         // Moving a lead on from "new" by hand counts as responding to it.
         if (priorLead.status === 'new' && input.status !== 'new') {
           await markStaffResponse(ctx.user.id, input.id, { emailed: false });
@@ -1082,43 +1299,26 @@ export const appRouter = router({
             }
           }
         }
-        // When function/event pack is sent, auto-schedule a 5-day follow-up task
-        if (input.status === "function_pack_sent") {
-          const { getDb } = await import('./db');
-          const { tasks } = await import('../drizzle/schema');
-          const db = await getDb();
-          if (db) {
-            const lead = await getLeadById(input.id, ctx.user.id);
-            const leadName = lead ? `${lead.firstName}${lead.lastName ? ' ' + lead.lastName : ''}` : 'client';
-            const fiveDaysFromNow = Date.now() + 5 * 24 * 60 * 60 * 1000;
-            const now = Date.now();
-            await db.insert(tasks).values({
-              ownerId: ctx.user.id,
-              title: `Follow up with ${leadName}`,
-              description: `Function pack was sent — check in with ${leadName} to confirm they've received it and answer any questions.`,
-              dueDate: fiveDaysFromNow,
-              linkedLeadId: input.id,
-              priority: 'high',
-              completed: false,
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
-        }
-        return { success: true };
+        // Automated task rules (Settings → Automated Tasks). Includes the
+        // built-in 5-day follow-up when a lead moves to "function_pack_sent"
+        // (unless the venue has its own rule for that status).
+        const { onLeadStatusChanged } = await import('./automatedTasks');
+        const tasksCreated = await onLeadStatusChanged(ctx.user.id, input.id, priorLead.status, input.status);
+        return { success: true, tasksCreated, holdUntil };
       }),
 
     addNote: protectedProcedure
       .input(z.object({ leadId: z.number(), content: z.string().min(1) }))
       .mutation(async ({ input, ctx }) => {
+        if (!(await getLeadById(input.leadId, ctx.user.id))) throw new Error('Lead not found');
         await addLeadActivity({ leadId: input.leadId, ownerId: ctx.user.id, type: "note", content: input.content });
         return { success: true };
       }),
 
     getActivity: protectedProcedure
       .input(z.object({ leadId: z.number() }))
-      .query(async ({ input }) => {
-        return getLeadActivity(input.leadId);
+      .query(async ({ input, ctx }) => {
+        return getLeadActivity(input.leadId, ctx.user.id);
       }),
 
     update: protectedProcedure
@@ -1140,9 +1340,29 @@ export const appRouter = router({
         minimumSpend: z.coerce.number().nullable().optional(),
         message: z.string().nullable().optional(),
         spaceName: z.string().nullable().optional(),
+        // The user has seen the date-clash warning and chosen to go ahead.
+        allowClash: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const { id, followUpDate, eventDate, minimumSpend, spaceName, ...rest } = input;
+        const { id, followUpDate, eventDate, minimumSpend, spaceName, allowClash, ...rest } = input;
+        // Double-booking guard: moving a confirmed or held event to another
+        // date or space checks the calendar first.
+        if ((eventDate !== undefined && eventDate !== null) || (spaceName !== undefined && spaceName?.trim())) {
+          const current = await getLeadById(id, ctx.user.id);
+          if (current && ['booked', 'confirmed', 'tentative'].includes(current.status ?? '')) {
+            const start = eventDate ? new Date(eventDate) : current.eventDate;
+            const space = spaceName !== undefined ? spaceName : current.spaceName;
+            const moved = (start?.getTime() ?? null) !== (current.eventDate?.getTime() ?? null)
+              || (space ?? '').trim() !== (current.spaceName ?? '').trim();
+            if (start && moved) {
+              const { findClashes, assertNoClashes } = await import('./availability');
+              assertNoClashes(await findClashes(ctx.user.id, {
+                start, end: current.eventEndDate, spaceId: spaceName !== undefined ? null : current.spaceId,
+                spaceName: space, excludeLeadId: id,
+              }), allowClash);
+            }
+          }
+        }
         // Rule: every event must have a space selected. If the lead is already
         // in a live state, block clearing the space.
         if (spaceName !== undefined && !spaceName?.trim()) {
@@ -1163,8 +1383,8 @@ export const appRouter = router({
 
     activity: protectedProcedure
       .input(z.object({ leadId: z.number() }))
-      .query(async ({ input }) => {
-        return getLeadActivity(input.leadId);
+      .query(async ({ input, ctx }) => {
+        return getLeadActivity(input.leadId, ctx.user.id);
       }),
 
     delete: protectedProcedure
@@ -1204,6 +1424,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const { updateLead, addLeadActivity } = await import('./db');
+        if (!(await getLeadById(input.id, ctx.user.id))) throw new Error('Lead not found');
         await updateLead(input.id, ctx.user.id, {
           followUpDate: input.followUpDate ? new Date(input.followUpDate) : null as any,
         });
@@ -1211,8 +1432,10 @@ export const appRouter = router({
           leadId: input.id,
           ownerId: ctx.user.id,
           type: 'note',
+          // NZ calendar day — the server runs in UTC, where a local-noon date
+          // would print as the day before.
           content: input.followUpDate
-            ? `Follow-up date set to ${new Date(input.followUpDate).toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}`
+            ? `Follow-up date set to ${new Date(input.followUpDate).toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Pacific/Auckland' })}`
             : 'Follow-up date cleared',
         });
         return { success: true };
@@ -1248,7 +1471,7 @@ export const appRouter = router({
       const rows = await db.select().from(leads).where(
         and(eq(leads.ownerId, ctx.user.id), ne(leads.source, 'healthcheck')),
       );
-      const { leadFollowUpState } = await import('../shared/followUp');
+      const { leadFollowUpState, leadLastActivityMs } = await import('../shared/followUp');
       const nowMs = Date.now();
       return rows
         .map(l => ({ lead: l, fu: leadFollowUpState(l, nowMs) }))
@@ -1257,8 +1480,8 @@ export const appRouter = router({
         // Overdue (has a date that passed) before idle; within each, oldest first.
         .sort((a, b) => {
           if (a.followUpReason !== b.followUpReason) return a.followUpReason === 'overdue' ? -1 : 1;
-          const ka = a.followUpDate ? new Date(a.followUpDate).getTime() : (a.updatedAt ? new Date(a.updatedAt).getTime() : 0);
-          const kb = b.followUpDate ? new Date(b.followUpDate).getTime() : (b.updatedAt ? new Date(b.updatedAt).getTime() : 0);
+          const ka = a.followUpDate ? new Date(a.followUpDate).getTime() : (leadLastActivityMs(a) ?? 0);
+          const kb = b.followUpDate ? new Date(b.followUpDate).getTime() : (leadLastActivityMs(b) ?? 0);
           return ka - kb;
         });
     }),
@@ -1282,7 +1505,7 @@ export const appRouter = router({
         const mailer = await buildVenueMailer(ctx.user.id);
         if (!mailer) return { sent: false as const, reason: 'smtp_not_configured' as const };
         const { escapeHtml: esc } = await import('./sanitizeHtml');
-        const [vs] = await db.select({ name: venueSettings.name, primaryColor: venueSettings.primaryColor })
+        const [vs] = await db.select({ name: venueSettings.name, primaryColor: venueSettings.primaryColor, notificationEmail: venueSettings.notificationEmail })
           .from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
         const venueName = String(vs?.name ?? mailer.fromName);
         const accent = (vs?.primaryColor && /^#[0-9a-fA-F]{6}$/.test(vs.primaryColor)) ? vs.primaryColor : '#2D4A3E';
@@ -1314,10 +1537,14 @@ export const appRouter = router({
         const text = `Hi ${lead.firstName ?? 'there'},\n\n${bodyText}\n\nWarm regards,\n${venueName}`;
         const { leadMailHeaders, recordLeadMessage } = await import('./inbox');
         const threadHeaders = leadMailHeaders(mailer.venue, { leadId: lead.id, fromEmail: mailer.fromEmail, replyTo: mailer.fromEmail });
+        // BCC the venue's notification inbox, same as email.send, so the
+        // owner keeps a copy of every client email that goes out.
+        const bcc = (vs?.notificationEmail || mailer.fromEmail).split(/[,;]+/).map(s => s.trim()).filter(Boolean);
         try {
           await mailer.transporter.sendMail({
             from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
             to: `"${clientName}" <${lead.email}>`,
+            bcc,
             subject, html, text,
             ...threadHeaders,
           });
@@ -1331,11 +1558,35 @@ export const appRouter = router({
           subject, bodyText: text, messageId: threadHeaders.messageId,
         });
         // Push the next follow-up out a week so this lead clears the list.
+        const nextFollowUp = new Date(Date.now() + 7 * 86_400_000);
         await db.update(leads)
-          .set({ followUpDate: new Date(Date.now() + 7 * 86_400_000), updatedAt: new Date() })
+          .set({ followUpDate: nextFollowUp })
           .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
         await markStaffResponse(ctx.user.id, input.leadId, { emailed: true });
-        return { sent: true as const, to: lead.email };
+        // Log it on the timeline (this also bumps lastActivityAt, so the lead
+        // stops reading as "gone quiet").
+        await addLeadActivity({
+          leadId: input.leadId,
+          ownerId: ctx.user.id,
+          type: 'email',
+          content: `Follow-up email sent to ${lead.email}\n\nSubject: ${subject}\n\n${text}`,
+        });
+        // Same rule as replying from the compose modal: a "new" lead you've
+        // emailed is now contacted.
+        let statusAdvanced = false;
+        if (lead.status === 'new') {
+          await updateLeadStatus(input.leadId, ctx.user.id, 'contacted');
+          await addLeadActivity({
+            leadId: input.leadId,
+            ownerId: ctx.user.id,
+            type: 'status_change',
+            content: 'Status auto-advanced to contacted after follow-up email.',
+          });
+          statusAdvanced = true;
+          const { onLeadStatusChanged } = await import('./automatedTasks');
+          await onLeadStatusChanged(ctx.user.id, input.leadId, 'new', 'contacted');
+        }
+        return { sent: true as const, to: lead.email, nextFollowUp, statusAdvanced };
       }),
     // Returns leads with a followUpDate in the given month (for calendar display)
     followUpsByMonth: protectedProcedure
@@ -1379,11 +1630,48 @@ export const appRouter = router({
           )
         ).orderBy(leads.eventDate);
       }),
+    // ── Client recognition, owners & template links ─────────────────────
+    // Values for {{proposalLink}}, {{portalLink}}, {{enquiryFormLink}},
+    // {{depositAmount}} and {{holdUntil}} in the compose window. Named
+    // getTemplateLinks so staff logins are blocked by the "leads.get" prefix.
+    getTemplateLinks: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const lead = await getLeadById(input.leadId, ctx.user.id);
+        if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'Enquiry not found' });
+        const { resolveTemplateLinks } = await import('./leadRetention');
+        const links = await resolveTemplateLinks(ctx.user.id, lead);
+        return { ...links, holdUntil: links.holdUntil ? links.holdUntil.toISOString() : null };
+      }),
+    // Past enquiries and bookings from the same client (email or phone).
+    getClientHistory: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getClientHistory } = await import('./leadRetention');
+        return getClientHistory(ctx.user.id, input.leadId);
+      }),
+    // Fold a duplicate enquiry into another from the same client.
+    merge: protectedProcedure
+      .input(z.object({ keepId: z.number(), mergeId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { mergeLeads } = await import('./leadRetention');
+        return mergeLeads(ctx.user.id, input.keepId, input.mergeId);
+      }),
+    // Who looks after this lead: a team_members id, or null for unassigned.
+    setOwner: protectedProcedure
+      .input(z.object({ leadId: z.number(), teamMemberId: z.number().nullable(), notify: z.boolean().default(false) }))
+      .mutation(async ({ input, ctx }) => {
+        const { setLeadOwner } = await import('./leadRetention');
+        return setLeadOwner(ctx.user.id, input.leadId, input.teamMemberId, input.notify);
+      }),
+
     // Bulk update status for multiple leads
     bulkUpdateStatus: protectedProcedure
       .input(z.object({
         ids: z.array(z.number()).min(1),
         status: z.string(),
+        lostReason: z.enum(LOST_REASON_KEYS).optional(),
+        lostReasonNote: z.string().max(500).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb, addLeadActivity } = await import('./db');
@@ -1405,20 +1693,66 @@ export const appRouter = router({
           }
         }
         await markBulkStatusResponse(ctx.user.id, input.ids, input.status);
-        // Only update leads owned by this user
-        await db.update(leads)
-          .set({ status: input.status })
+        // Double-booking guard: when the batch confirms or holds dates, check
+        // each lead in turn (so two selected leads on the same date/space are
+        // caught too) and skip the clashing ones instead of failing the batch.
+        const isLost = input.status === 'lost';
+        const reasonNote = isLost ? (input.lostReasonNote?.trim() || null) : null;
+        let ids = input.ids;
+        const skipped: { id: number; name: string; clashes: string[] }[] = [];
+        const takesDate = ['booked', 'confirmed', 'tentative'].includes(input.status);
+        const owned = await db.select().from(leads)
           .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
-        // Log activity for each lead
-        await Promise.all(input.ids.map(leadId =>
+        if (takesDate) {
+          const { findClashes } = await import('./availability');
+          const { clashSpace, startHoldFromStatusChange } = await import('./holds');
+          ids = [];
+          for (const lead of owned) {
+            const already = input.status === 'tentative' ? lead.status === 'tentative' : ['booked', 'confirmed', 'finished'].includes(lead.status);
+            if (!already && lead.eventDate) {
+              const clashes = (await findClashes(ctx.user.id, clashSpace(lead))).filter(c => c.certainty === 'clash');
+              if (clashes.length) {
+                skipped.push({ id: lead.id, name: [lead.firstName, lead.lastName].filter(Boolean).join(' '), clashes: clashes.map(c => c.summary) });
+                continue;
+              }
+            }
+            await db.update(leads).set({ status: input.status })
+              .where(and(eq(leads.id, lead.id), eq(leads.ownerId, ctx.user.id)));
+            if (input.status === 'tentative' && lead.status !== 'tentative') await startHoldFromStatusChange(ctx.user.id, lead);
+            ids.push(lead.id);
+          }
+        } else {
+          ids = owned.map(row => row.id);
+          // Only update leads owned by this user
+          await db.update(leads)
+            .set({
+              status: input.status,
+              // Lost carries its reason; any other status clears it.
+              lostReason: isLost ? (input.lostReason ?? null) : null,
+              lostReasonNote: reasonNote,
+              updatedAt: new Date(),
+            })
+            .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
+        }
+        const reasonText = isLost && input.lostReason ? ` — ${lostReasonLabel(input.lostReason)}${reasonNote ? `: ${reasonNote}` : ''}` : '';
+        // Leaving tentative ends any date hold.
+        if (input.status !== 'tentative') {
+          const { clearHoldFields } = await import('./holds');
+          await clearHoldFields(ctx.user.id, owned.filter(l => l.status === 'tentative').map(l => l.id));
+        }
+        // Log activity for each lead (also bumps lastActivityAt)
+        const changed = owned.filter(row => ids.includes(row.id));
+        await Promise.all(changed.map(row =>
           addLeadActivity({
-            leadId,
+            leadId: row.id,
             ownerId: ctx.user.id,
             type: 'status_change',
-            content: `Bulk status update: changed to ${input.status}`,
+            content: `Bulk status update: changed to ${input.status}${reasonText}`,
           })
         ));
-        return { updated: input.ids.length };
+        const { onLeadStatusChanged } = await import('./automatedTasks');
+        for (const row of changed) await onLeadStatusChanged(ctx.user.id, row.id, row.status, input.status);
+        return { updated: changed.length, skipped };
       }),
 
     // Bulk import leads from CSV
@@ -1577,17 +1911,20 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .input(z.object({ token: z.string() }))
       .query(async ({ input, ctx }) => {
         enforceRateLimit('proposal:getByToken', getRequestIp(ctx.req), 120, 60_000);
-        const proposal = await getProposalByToken(input.token);
+        let proposal = await getProposalByToken(input.token);
         if (!proposal) return null;
-        // Mark as viewed if sent
-        if (proposal.status === "sent") {
-          // Public token IS the auth — use the proposal's own ownerId.
-          await updateProposal(proposal.id, proposal.ownerId, { status: "viewed", viewedAt: new Date() });
+        // First open by the client: mark viewed, log it and alert the venue.
+        // The venue's own login previewing the page doesn't count.
+        if (proposal.status === "sent" && ctx.user?.id !== proposal.ownerId) {
+          const { recordProposalViewed } = await import('./proposalResponses');
+          if (await recordProposalViewed(proposal)) proposal = (await getProposalByToken(input.token)) ?? proposal;
         }
         // Also fetch venue settings for branding — STRIP secrets first since
         // this endpoint is reachable by anyone with a proposal token.
         const venue = await getVenueSettings(proposal.ownerId);
-        return { proposal, venue: venue ? stripVenueSecrets(venue) : null };
+        // Internal notes are staff-only; never hand them to the client.
+        const { internalNotes: _internal, ...publicProposal } = proposal;
+        return { proposal: publicProposal, venue: venue ? stripVenueSecrets(venue) : null };
       }),
 
     create: protectedProcedure
@@ -1637,7 +1974,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           depositNzd: input.depositNzd?.toString() as any,
           termsAndConditions: input.termsAndConditions,
           internalNotes: input.internalNotes,
-          expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+          expiresAt: input.expiresAt ? proposalExpiryInstant(input.expiresAt) : undefined,
         });
         return proposal;
       }),
@@ -1645,10 +1982,20 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     send: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const before = await getProposalById(input.id, ctx.user.id);
+        if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Proposal not found' });
+        if (before.status === 'accepted' || before.status === 'declined') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `This proposal was already ${before.status} by the client, so it can't be sent again. Start a new proposal instead.` });
+        }
+        if (before.expiresAt && new Date(before.expiresAt).getTime() < Date.now()) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: "This proposal's expiry date has passed. Set a new one before sending, or the client won't be able to accept it." });
+        }
         await updateProposal(input.id, ctx.user.id, { status: "sent", sentAt: new Date() });
         const proposal = await getProposalById(input.id, ctx.user.id);
         let emailSent = false;
+        let emailedTo: string | null = null;
         if (proposal) {
+          const priorStatus = (await getLeadById(proposal.leadId, ctx.user.id))?.status;
           await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
           await addLeadActivity({
             leadId: proposal.leadId,
@@ -1656,6 +2003,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             type: "proposal_sent",
             content: `Proposal "${proposal.title}" sent to client`,
           });
+          const { onLeadStatusChanged } = await import('./automatedTasks');
+          await onLeadStatusChanged(ctx.user.id, proposal.leadId, priorStatus, "proposal_sent");
           // Set a follow-up a few days out so a quoted lead doesn't go cold —
           // sending a quote previously set no reminder at all. Only set one if
           // the lead doesn't already have a (future) follow-up pending.
@@ -1722,6 +2071,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                     fromEmail, fromName, toEmail: lead.email, subject, bodyText: text,
                     messageId: threadHeaders.messageId,
                   });
+                  emailedTo = lead.email;
                 }
               }
             } catch (emailErr) {
@@ -1733,7 +2083,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         }
         // emailSent is only true when the client was actually emailed — the UI
         // must not claim "sent" when SMTP isn't set up or the send failed.
-        return { success: true, token: proposal?.publicToken, emailSent };
+        return { success: true, token: proposal?.publicToken, emailSent, emailedTo };
       }),
 
     update: protectedProcedure
@@ -1757,11 +2107,22 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         spaceName: z.string().optional(),
         guestCount: z.number().optional(),
         eventDate: z.string().optional(),
+        internalNotes: z.string().optional(),
+        // "" clears the expiry; a YYYY-MM-DD date runs to the end of that NZ day.
+        expiresAt: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const { id, lineItems, eventDate, subtotalNzd, taxPercent, taxNzd, totalNzd, depositPercent, depositNzd, ...rest } = input;
+        const { id, lineItems, eventDate, expiresAt, subtotalNzd, taxPercent, taxNzd, totalNzd, depositPercent, depositNzd, ...rest } = input;
+        const existing = await getProposalById(id, ctx.user.id);
+        if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Proposal not found' });
+        const nextExpiry = expiresAt === undefined ? undefined : expiresAt ? proposalExpiryInstant(expiresAt) : null;
+        // Moving the expiry into the future re-opens an expired proposal.
+        const reopen = existing.status === 'expired' && nextExpiry && nextExpiry.getTime() > Date.now();
         await updateProposal(id, ctx.user.id, {
           ...rest,
+          ...(nextExpiry !== undefined ? { expiresAt: nextExpiry } : {}),
+          ...(reopen ? { status: existing.viewedAt ? 'viewed' as const : 'sent' as const } : {}),
+          updatedAt: new Date(),
           lineItems: lineItems ? JSON.stringify(lineItems) : undefined,
           eventDate: eventDate ? new Date(eventDate) : undefined,
           subtotalNzd: subtotalNzd?.toString() as any,
@@ -1866,68 +2227,19 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           .limit(1);
         return rows[0] ?? null;
       }),
-    // Public: client responds to proposal
+    // Public: client responds to proposal. The token is the auth; the checks,
+    // the booking and the venue alerts live in proposalResponses.ts.
     respond: publicProcedure
       .input(z.object({
         token: z.string(),
         action: z.enum(["accepted", "declined"]),
-        clientMessage: z.string().optional(),
+        clientMessage: z.string().max(2000).optional(),
+        declineReason: z.string().max(2000).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         enforceRateLimit('proposal:respond', getRequestIp(ctx.req), 20, 5 * 60_000);
-        const proposal = await getProposalByToken(input.token);
-        if (!proposal) throw new Error("Proposal not found");
-        if (!["sent", "viewed"].includes(proposal.status)) throw new Error("Proposal cannot be responded to");
-        // Public token already authenticated the action — use the proposal's own ownerId.
-        await updateProposal(proposal.id, proposal.ownerId, {
-          status: input.action,
-          respondedAt: new Date(),
-          clientMessage: input.clientMessage,
-        });
-        // If accepted, create a booking
-        if (input.action === "accepted") {
-          const lead = await getLeadById(proposal.leadId, proposal.ownerId);
-          if (lead) {
-            // Rule: every event must have a space selected.
-            const resolvedSpace = (proposal.spaceName ?? lead.spaceName ?? '').trim();
-            if (!resolvedSpace) {
-              throw new Error('This proposal has no event space set — please assign a space before the client can accept.');
-            }
-            const created = await createBooking({
-              ownerId: proposal.ownerId,
-              leadId: proposal.leadId,
-              proposalId: proposal.id,
-              firstName: lead.firstName,
-              lastName: lead.lastName ?? undefined,
-              email: lead.email,
-              eventType: lead.eventType ?? undefined,
-              eventDate: proposal.eventDate ?? lead.eventDate ?? new Date(),
-              eventEndDate: proposal.eventEndDate ?? undefined,
-              guestCount: proposal.guestCount ?? lead.guestCount ?? undefined,
-              spaceName: resolvedSpace,
-              totalNzd: proposal.totalNzd as any,
-              depositNzd: proposal.depositNzd as any,
-              status: "confirmed",
-            });
-            // Push to NBI so accepted proposals appear in the NBI diary too.
-            const newId = (created as any)?.id ?? (created as any)?.[0]?.id;
-            if (newId) {
-              const { pushBookingToNbi } = await import('./nowbookit');
-              await pushBookingToNbi(newId, proposal.ownerId, { source: 'proposals.respond→accepted' });
-              // Event confirmed → remind the events manager to send the deposit.
-              const { sendDepositPromptEmail } = await import('./depositPrompt');
-              await sendDepositPromptEmail(newId, proposal.ownerId, { source: 'proposals.respond→accepted' });
-            }
-            await updateLeadStatus(proposal.leadId, proposal.ownerId, "booked");
-            await addLeadActivity({
-              leadId: proposal.leadId,
-              ownerId: proposal.ownerId,
-              type: "booking_created",
-              content: `Client accepted proposal "${proposal.title}" — booking confirmed!`,
-            });
-          }
-        }
-        return { success: true, status: input.action };
+        const { respondToProposal } = await import('./proposalResponses');
+        return respondToProposal(input);
       }),
   }),
 
@@ -1970,6 +2282,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           spaceName: lead.spaceName,
           status: lead.status === 'finished' ? 'finished' : 'confirmed',
         } as any);
+        // A lead added straight in as Confirmed lands here (no status change
+        // fired the rule). Keyed by lead, so a lead already confirmed via
+        // updateStatus doesn't get the task twice. Past events (legacy rows
+        // backfilled on open) are skipped.
+        const eventAhead = !lead.eventDate || new Date(lead.eventDate).getTime() >= Date.now() - 86_400_000;
+        if (created && lead.status !== 'finished' && eventAhead) {
+          const { fireTaskRules } = await import('./automatedTasks');
+          await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', leadId: input.leadId, bookingId: (created as any).id });
+        }
         return created;
       }),
 
@@ -2107,6 +2428,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         billingDrinks: z.enum(['invoiced_after', 'on_night', 'prepaid_tab', 'cash_bar', 'tab_then_cash']).nullable().optional(),
         billingDepositApplied: z.enum(['drinks', 'food', 'total', 'none']).nullable().optional(),
         billingNote: z.string().nullable().optional(),
+        // The user has seen the date-clash warning and chosen to go ahead.
+        allowClash: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -2114,7 +2437,29 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const { id, ...rest } = input;
+        const { id, allowClash, ...rest } = input;
+        // Double-booking guard: moving a live event to a new date, time or
+        // space — or bringing a cancelled one back — checks the calendar.
+        if (rest.eventDate !== undefined || rest.eventEndDate !== undefined || rest.spaceName !== undefined || rest.status !== undefined) {
+          const [cur] = await db.select().from(bookings)
+            .where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          if (cur) {
+            const start = rest.eventDate !== undefined ? new Date(rest.eventDate) : cur.eventDate;
+            const end = rest.eventEndDate !== undefined ? (rest.eventEndDate ? new Date(rest.eventEndDate) : null) : cur.eventEndDate;
+            const space = rest.spaceName !== undefined ? rest.spaceName : cur.spaceName;
+            const finalStatus = rest.status ?? cur.status;
+            const moved = start.getTime() !== cur.eventDate.getTime()
+              || (end?.getTime() ?? null) !== (cur.eventEndDate?.getTime() ?? null)
+              || (space ?? '').trim() !== (cur.spaceName ?? '').trim();
+            const revived = cur.status === 'cancelled' && finalStatus !== 'cancelled';
+            if (['confirmed', 'tentative'].includes(finalStatus) && (moved || revived)) {
+              const { findClashes, assertNoClashes } = await import('./availability');
+              assertNoClashes(await findClashes(ctx.user.id, {
+                start, end, spaceName: space, excludeBookingId: id, excludeLeadId: cur.leadId,
+              }), allowClash);
+            }
+          }
+        }
         // Prior status, captured before the update so the deposit-prompt email
         // only fires on a real transition INTO "confirmed" (not on every save).
         let priorBookingStatus: string | null = null;
@@ -2247,7 +2592,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               finished: 'finished',
             };
             const mapped = statusMap[rest.status];
-            if (mapped) leadUpdates.status = mapped;
+            if (mapped) { leadUpdates.status = mapped; leadUpdates.lastActivityAt = new Date(); }
+            // A cancelled booking is a lost lead whose event was cancelled —
+            // which also keeps it out of the Win back list.
+            if (mapped === 'lost') {
+              const { sql } = await import('drizzle-orm');
+              leadUpdates.lostReason = sql`coalesce(${leads.lostReason}, 'event_cancelled')`;
+            }
+            else if (mapped) { leadUpdates.lostReason = null; leadUpdates.lostReasonNote = null; }
           }
           if (Object.keys(leadUpdates).length > 0) {
             leadUpdates.updatedAt = new Date();
@@ -2273,6 +2625,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           if (priorBookingStatus !== 'confirmed') {
             const { sendDepositPromptEmail } = await import('./depositPrompt');
             await sendDepositPromptEmail(id, ctx.user.id, { source: 'bookings.update' });
+            const { fireTaskRules } = await import('./automatedTasks');
+            await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', bookingId: id });
           }
         }
         return { success: true };
@@ -2706,7 +3060,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           throw new Error('Team members cannot send emails. Contact your venue manager.');
         }
         const { getDb } = await import('./db');
-        const { venueSettings, leadActivity, bookings: bookingsTable } = await import('../drizzle/schema');
+        const { venueSettings, bookings: bookingsTable } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
         const nodemailer = await import('nodemailer');
         const db = await getDb();
@@ -2730,10 +3084,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // authenticated SMTP account, but the sender picks a profile whose
         // From display name, Reply-To and signature are used — so a team
         // member's email shows their name/reply address, not the owner's.
-        const sigProfiles: any[] = Array.isArray((settings as any).emailSignatures)
-          ? (settings as any).emailSignatures : [];
+        // Profiles come from the same helper the compose modal uses (incl. the
+        // older single venue signature), so the preview matches what's sent.
+        const { signatureProfiles, effectiveFromName } = await import('../shared/emailSignatures');
+        const sigProfiles = signatureProfiles(settings as any);
         const sigProfile = input.signatureId
-          ? sigProfiles.find((p: any) => p && p.id === input.signatureId)
+          ? sigProfiles.find(p => p.id === input.signatureId)
           : undefined;
         // A chosen signature that no longer exists (deleted/renamed) must not
         // silently fall back to the owner's identity — surface it so the sender
@@ -2742,9 +3098,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           throw new Error('That email signature no longer exists — please pick another and resend.');
         }
 
-        const fromName = (sigProfile?.fromName?.trim())
-          || settings.smtpFromName || settings.name || 'VenueFlowHQ';
-        const fromEmail = settings.smtpFromEmail ?? settings.smtpUser;
+        const fromName = effectiveFromName(settings as any, sigProfile);
+        const fromEmail = settings.smtpFromEmail || settings.smtpUser;
 
         // Build HTML from the message body, appending the chosen profile's
         // signature (logo + text) when one is selected. With no profile the
@@ -2846,40 +3201,40 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             attachments: attachments.length ? attachments.map(a => ({ filename: a.filename, size: a.content.length, contentType: a.contentType })) : null,
           });
         }
-        // Log as lead activity if we have a leadId
-        if (activityLeadId) {
-          await db.insert(leadActivity).values({
+        // Log as lead activity if we have a leadId (only the venue's own lead).
+        // addLeadActivity also bumps lastActivityAt and marks it replied.
+        const ownLead = activityLeadId ? await getLeadById(activityLeadId, ctx.user.id) : null;
+        if (activityLeadId && ownLead) {
+          await addLeadActivity({
             leadId: activityLeadId,
             ownerId: ctx.user.id,
             type: 'email',
-            content: `Email sent to ${toForLog}\n\nSubject: ${input.subject}\n\n${input.body}`,
+            content: `Email sent to ${toForLog}${sigProfile ? ` (signature: ${sigProfile.label || sigProfile.fromName || 'untitled'})` : ''}\n\nSubject: ${input.subject}\n\n${input.body}`,
           });
           // Auto-advance: if lead is still "new", move it to "contacted"
-          const { leads } = await import('../drizzle/schema');
-          const [currentLead] = await db.select({ status: leads.status, followUpDate: leads.followUpDate, email: leads.email })
-            .from(leads).where(eq(leads.id, activityLeadId)).limit(1);
           // Speed-to-lead: an email to the client themselves (not, say, a
           // staff briefing sent from their booking) is a response.
           const recipients = (Array.isArray(input.to) ? input.to : [input.to]).map(a => a.trim().toLowerCase());
-          if (currentLead?.email && recipients.includes(currentLead.email.trim().toLowerCase())) {
+          if (ownLead.email && recipients.includes(ownLead.email.trim().toLowerCase())) {
             await markStaffResponse(ctx.user.id, activityLeadId, { emailed: true });
           }
-          if (currentLead?.status === 'new') {
+          if (ownLead.status === 'new') {
             // Set status to contacted and set a default follow-up in 3 days if none set
-            const followUpDate = currentLead.followUpDate ?? (() => {
+            const followUpDate = ownLead.followUpDate ?? (() => {
               const d = new Date();
               d.setDate(d.getDate() + 3);
               return d;
             })();
-            await db.update(leads)
-              .set({ status: 'contacted', followUpDate })
-              .where(eq(leads.id, activityLeadId));
-            await db.insert(leadActivity).values({
+            await updateLeadStatus(activityLeadId, ctx.user.id, 'contacted');
+            await updateLead(activityLeadId, ctx.user.id, { followUpDate });
+            await addLeadActivity({
               leadId: activityLeadId,
               ownerId: ctx.user.id,
               type: 'status_change',
-              content: `Status auto-advanced to contacted after email reply. Follow-up set for ${followUpDate.toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}.`,
+              content: `Status auto-advanced to contacted after email reply. Follow-up set for ${followUpDate.toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Pacific/Auckland' })}.`,
             });
+            const { onLeadStatusChanged } = await import('./automatedTasks');
+            await onLeadStatusChanged(ctx.user.id, activityLeadId, 'new', 'contacted');
           }
         }
         return { success: true, beoRequested, beoAttached, beoFailed: beoRequested - beoAttached };
@@ -3406,8 +3761,24 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const { id, ...data } = input;
-        await db.update(emailTemplates).set(data).where(and(eq(emailTemplates.id, id), eq(emailTemplates.ownerId, ctx.user.id)));
+        await db.update(emailTemplates).set({ ...data, updatedAt: new Date() }).where(and(eq(emailTemplates.id, id), eq(emailTemplates.ownerId, ctx.user.id)));
         return { success: true };
+      }),
+    // Add the built-in starter set (shared/starterTemplates.ts), skipping any
+    // the venue already has by name — safe to press twice.
+    addStarters: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        const { getDb } = await import('./db');
+        const { emailTemplates } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const { STARTER_TEMPLATES } = await import('@shared/starterTemplates');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const existing = await db.select({ name: emailTemplates.name }).from(emailTemplates).where(eq(emailTemplates.ownerId, ctx.user.id));
+        const have = new Set(existing.map(t => t.name.trim().toLowerCase()));
+        const toAdd = STARTER_TEMPLATES.filter(t => !have.has(t.name.toLowerCase()));
+        if (toAdd.length) await db.insert(emailTemplates).values(toAdd.map(t => ({ ...t, ownerId: ctx.user.id })));
+        return { added: toAdd.length, skipped: STARTER_TEMPLATES.length - toAdd.length };
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -3419,6 +3790,42 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!db) throw new Error('DB not available');
         await db.delete(emailTemplates).where(and(eq(emailTemplates.id, input.id), eq(emailTemplates.ownerId, ctx.user.id)));
         return { success: true };
+      }),
+  }),
+  // ─── Win back ────────────────────────────────────────────────────────────
+  // Lost and gone-quiet enquiries, plus "same time next year" clients, and a
+  // personalised bulk send that never emails a lead twice within 90 days.
+  winBack: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { winBackCandidates, sameTimeNextYear } = await import('./leadRetention');
+      const [cands, annual] = await Promise.all([winBackCandidates(ctx.user.id), sameTimeNextYear(ctx.user.id)]);
+      return { ...cands, annual };
+    }),
+    setAnnualTypes: protectedProcedure
+      .input(z.object({ types: z.array(z.string().max(100)).max(50) }))
+      .mutation(async ({ input, ctx }) => {
+        const { setAnnualTypes } = await import('./leadRetention');
+        return setAnnualTypes(ctx.user.id, input.types);
+      }),
+    // The email exactly as one lead would get it.
+    preview: protectedProcedure
+      .input(z.object({ leadId: z.number(), subject: z.string().max(500), body: z.string().max(20000) }))
+      .query(async ({ input, ctx }) => {
+        const lead = await getLeadById(input.leadId, ctx.user.id);
+        if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'Enquiry not found' });
+        const { renderTemplateForLead } = await import('./leadRetention');
+        const vs = await getVenueSettings(ctx.user.id);
+        return renderTemplateForLead(ctx.user.id, lead, input.subject, input.body, vs);
+      }),
+    send: protectedProcedure
+      .input(z.object({
+        leadIds: z.array(z.number()).min(1).max(200),
+        subject: z.string().trim().min(1).max(500),
+        body: z.string().trim().min(1).max(20000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { sendWinBack } = await import('./leadRetention');
+        return sendWinBack(ctx.user.id, input.leadIds, input.subject, input.body);
       }),
   }),
   // ─── Quote ───────────────────────────────────────────────────────────────
@@ -5419,18 +5826,17 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     checkAvailability: publicProcedure
       .input(z.object({ date: z.string(), ownerId: z.number() }))
       .query(async ({ input }) => {
-        const { getDb } = await import('./db');
-        const { bookings } = await import('../drizzle/schema');
-        const { eq, and, gte, lt } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return { available: true, bookedSpaces: [] };
-        const day = new Date(input.date);
-        const nextDay = new Date(day);
-        nextDay.setDate(nextDay.getDate() + 1);
-        const dayBookings = await db.select().from(bookings)
-          .where(and(eq(bookings.ownerId, input.ownerId), gte(bookings.eventDate, day), lt(bookings.eventDate, nextDay)));
-        const bookedSpaces = dayBookings.filter(b => b.status !== 'cancelled').map(b => b.spaceName).filter(Boolean);
-        return { available: bookedSpaces.length === 0, bookedSpaces };
+        // Same rules as every other clash check (server/availability.ts): the
+        // NZ calendar day — not the UTC one — and live date holds count too.
+        // Public, so only space names go back, never who booked them.
+        const { findClashes, dayBoundsFromYmd, zonedYmd } = await import('./availability');
+        const parsed = new Date(input.date);
+        const ymd = /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : isNaN(parsed.getTime()) ? null : zonedYmd(parsed);
+        if (!ymd) return { available: true, bookedSpaces: [] as string[] };
+        const midday = new Date(dayBoundsFromYmd(ymd).start.getTime() + 12 * 3600_000);
+        const sameDay = await findClashes(input.ownerId, { start: midday });
+        const bookedSpaces = Array.from(new Set(sameDay.map(c => c.spaceName).filter((s): s is string => !!s)));
+        return { available: sameDay.length === 0, bookedSpaces };
       }),
     getVenueInfo: publicProcedure
       .input(z.object({ ownerId: z.number() }))
@@ -5512,6 +5918,53 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           });
         } catch {}
         return { success: true, leadId: result.id };
+      }),
+  }),
+
+  // ─── Date holds & clash checks (server/holds.ts, server/availability.ts) ───
+  holds: router({
+    // Everything that clashes with this lead's date + space (definite clashes
+    // first, then same-day "possible" ones). For the drawer and hold dialog.
+    clashesForLead: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const lead = await getLeadById(input.leadId, ctx.user.id);
+        if (!lead?.eventDate) return [];
+        const { findClashes } = await import('./availability');
+        const { clashSpace } = await import('./holds');
+        return findClashes(ctx.user.id, clashSpace(lead));
+      }),
+    // leadId → definite clashes, for the "Date clash" chips on the list.
+    clashMap: protectedProcedure.query(async ({ ctx }) => {
+      const { leadClashMap } = await import('./availability');
+      return leadClashMap(ctx.user.id);
+    }),
+    place: protectedProcedure
+      .input(z.object({
+        leadId: z.number(),
+        // NZ calendar date the hold runs until (inclusive), "YYYY-MM-DD".
+        untilDate: z.string(),
+        note: z.string().max(500).optional(),
+        notifyClient: z.boolean().optional(),
+        allowClash: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { placeHold } = await import('./holds');
+        const r = await placeHold(ctx.user.id, { leadId: input.leadId, untilYmd: input.untilDate, note: input.note, notifyClient: input.notifyClient, allowClash: input.allowClash });
+        return { holdUntil: r.holdUntil, email: r.email };
+      }),
+    extend: protectedProcedure
+      .input(z.object({ leadId: z.number(), untilDate: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const { extendHold } = await import('./holds');
+        return extendHold(ctx.user.id, { leadId: input.leadId, untilYmd: input.untilDate });
+      }),
+    release: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { releaseHold } = await import('./holds');
+        const r = await releaseHold(ctx.user.id, input.leadId, 'manual');
+        return { released: r.released, status: r.status };
       }),
   }),
 
@@ -6424,9 +6877,24 @@ Return ONLY valid JSON.`;
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
+        const [contract] = await db.select().from(contracts).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id))).limit(1);
+        if (!contract) throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
+        if (contract.status === 'signed') throw new TRPCError({ code: 'BAD_REQUEST', message: 'This contract is already signed.' });
+        const { ensureSigningPortal, emailPortalLink, portalUrl, isContractExpired } = await import('./clientPortal');
+        if (isContractExpired(contract)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This contract has passed its expiry date. Update the expiry before sending it.' });
+        // The client signs inside their event's portal link — make sure there
+        // is one with signing switched on, then email it if SMTP is set up.
+        const token = await ensureSigningPortal(ctx.user.id, contract);
         const now = Date.now();
-        await db.update(contracts).set({ status: 'sent', sentAt: now, updatedAt: now }).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id)));
-        return { success: true };
+        await db.update(contracts).set({ status: 'sent', sentAt: contract.sentAt ?? now, updatedAt: now }).where(and(eq(contracts.id, input.id), eq(contracts.ownerId, ctx.user.id)));
+        let to = contract.clientEmail;
+        if (!to && contract.bookingId) {
+          const { bookings } = await import('../drizzle/schema');
+          const [b] = await db.select({ email: bookings.email }).from(bookings).where(and(eq(bookings.id, contract.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          to = b?.email ?? null;
+        }
+        const outcome = await emailPortalLink(ctx.user.id, { to, clientName: contract.clientName, token, contractTitle: contract.title });
+        return { success: true, link: portalUrl(token), ...outcome };
       }),
     sign: publicProcedure
       .input(z.object({ token: z.string(), signerName: z.string(), signatureData: z.string(), signerIp: z.string().optional() }))
@@ -6437,19 +6905,12 @@ Return ONLY valid JSON.`;
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
-        const now = Date.now();
-        await db.update(contracts).set({
-          status: 'signed',
-          signedAt: now,
-          signatureData: input.signatureData,
-          signerName: input.signerName,
-          // Record the SERVER-observed IP as signing evidence, not a
-          // client-supplied value (which is trivially spoofable and would
-          // weaken non-repudiation of the e-signature).
-          signerIp: getRequestIp(ctx.req) || input.signerIp || '',
-          updatedAt: now,
-        }).where(and(eq(contracts.token, input.token), eq(contracts.status, 'sent')));
-        return { success: true };
+        const [contract] = await db.select().from(contracts).where(eq(contracts.token, input.token)).limit(1);
+        if (!contract) throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
+        // Fails loudly when nothing was signed (it used to report success
+        // after updating zero rows). The IP is the SERVER-observed one.
+        const { signContract } = await import('./clientPortal');
+        return signContract({ contract, signerName: input.signerName, signerIp: getRequestIp(ctx.req) });
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -6813,7 +7274,7 @@ Return ONLY valid JSON.`;
         enforceRateLimit('clientPortal:getByToken', getRequestIp(ctx.req), 120, 60_000);
         const { getDb } = await import('./db');
         const { clientPortalTokens, bookings, leads, proposals, payments, venueSettings } = await import('../drizzle/schema');
-        const { eq, and } = await import('drizzle-orm');
+        const { eq, and, ne, desc } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const rows = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
@@ -6832,20 +7293,29 @@ Return ONLY valid JSON.`;
         }
         // Update last accessed
         await db.update(clientPortalTokens).set({ lastAccessedAt: Date.now() }).where(eq(clientPortalTokens.token, input.token));
-        const permissions = row.permissions ? JSON.parse(row.permissions) : {};
+        const { parsePermissions, portalContracts } = await import('./clientPortal');
+        const permissions = parsePermissions(row.permissions);
         let booking = null, lead = null, proposal = null;
         if (row.bookingId) {
-          const br = await db.select().from(bookings).where(eq(bookings.id, row.bookingId)).limit(1);
+          const br = await db.select().from(bookings).where(and(eq(bookings.id, row.bookingId), eq(bookings.ownerId, row.ownerId))).limit(1);
           booking = br[0] ?? null;
         }
-        if (row.leadId) {
-          const lr = await db.select().from(leads).where(eq(leads.id, row.leadId)).limit(1);
+        // Links made from an event carry only the booking — find the enquiry
+        // through it, or the proposal never shows.
+        const leadId = row.leadId ?? booking?.leadId ?? null;
+        if (leadId) {
+          const lr = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.ownerId, row.ownerId))).limit(1);
           lead = lr[0] ?? null;
         }
-        if (permissions.viewProposal && row.leadId) {
-          const pr = await db.select().from(proposals).where(eq(proposals.leadId, row.leadId)).limit(1);
+        if (permissions.viewProposal && leadId) {
+          // The most recent proposal the client has been sent (never a draft).
+          const pr = await db.select().from(proposals)
+            .where(and(eq(proposals.leadId, leadId), eq(proposals.ownerId, row.ownerId), ne(proposals.status, 'draft')))
+            .orderBy(desc(proposals.createdAt), desc(proposals.id)).limit(1);
           proposal = pr[0] ?? null;
         }
+        const [venueRow] = await db.select({ name: venueSettings.name }).from(venueSettings).where(eq(venueSettings.ownerId, row.ownerId)).limit(1);
+        const contractList = permissions.signContract ? await portalContracts({ ownerId: row.ownerId, bookingId: row.bookingId, leadId: row.bookingId ? null : leadId }) : [];
         // Payments the venue has recorded against this booking, so the client
         // can see which deposits/payments have landed and what's still owing —
         // the whole point being "did they get my deposit?". Only meaningful once
@@ -6895,7 +7365,77 @@ Return ONLY valid JSON.`;
             paymentInstructions = vs?.pi?.trim() || null;
           }
         }
-        return { token: row, permissions, booking, lead, proposal, paymentSummary, payments: clientPayments, paymentInstructions };
+        // Only what the client page shows — no internal notes, budgets or tokens.
+        const safeBooking = booking ? {
+          firstName: booking.firstName, lastName: booking.lastName, eventType: booking.eventType,
+          eventDate: booking.eventDate, guestCount: booking.guestCount, spaceName: booking.spaceName,
+        } : null;
+        const safeLead = lead ? {
+          firstName: lead.firstName, lastName: lead.lastName, eventType: lead.eventType,
+          eventDate: lead.eventDate, guestCount: lead.guestCount, spaceName: lead.spaceName,
+        } : null;
+        const safeProposal = proposal ? (({ internalNotes: _n, ...rest }) => rest)(proposal) : null;
+        return {
+          token: { token: row.token, clientName: row.clientName },
+          permissions, booking: safeBooking, lead: safeLead, proposal: safeProposal,
+          venue: { name: venueRow?.name?.trim() || null },
+          contracts: contractList,
+          paymentSummary, payments: clientPayments, paymentInstructions,
+        };
+      }),
+    // Public: sign a contract from the client's portal link. The portal token
+    // is the auth; the contract must belong to that link's event.
+    signContract: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        contractId: z.number(),
+        signerName: z.string().min(1).max(255),
+        agreed: z.literal(true),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        enforceRateLimit('contract:sign', getRequestIp(ctx.req), 20, 5 * 60_000);
+        const { getDb } = await import('./db');
+        const { clientPortalTokens, contracts } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { parsePermissions, signContract } = await import('./clientPortal');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(clientPortalTokens).where(eq(clientPortalTokens.token, input.token)).limit(1);
+        const expiresMs = row?.expiresAt != null ? Number(row.expiresAt) : null;
+        if (!row || (expiresMs != null && expiresMs < Date.now())) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link has expired. Please contact the venue.' });
+        if (!parsePermissions(row.permissions).signContract) throw new TRPCError({ code: 'FORBIDDEN', message: 'Contract signing isn\'t switched on for this link. Please contact the venue.' });
+        const [contract] = await db.select().from(contracts).where(and(eq(contracts.id, input.contractId), eq(contracts.ownerId, row.ownerId))).limit(1);
+        let belongs = false;
+        if (contract) {
+          if (row.bookingId) belongs = contract.bookingId === row.bookingId;
+          else if (row.leadId) belongs = contract.leadId === row.leadId;
+        }
+        if (!contract || !belongs) throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
+        return signContract({ contract, signerName: input.signerName, signerIp: getRequestIp(ctx.req) });
+      }),
+    // Email the portal link to the client (venue's own SMTP). Reports honestly.
+    emailLink: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { clientPortalTokens, bookings, leads } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const { emailPortalLink, portalUrl } = await import('./clientPortal');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(clientPortalTokens).where(and(eq(clientPortalTokens.id, input.id), eq(clientPortalTokens.ownerId, ctx.user.id))).limit(1);
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Portal link not found' });
+        let to = row.clientEmail;
+        if (!to && row.bookingId) {
+          const [b] = await db.select({ email: bookings.email }).from(bookings).where(and(eq(bookings.id, row.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+          to = b?.email ?? null;
+        }
+        if (!to && row.leadId) {
+          const [l] = await db.select({ email: leads.email }).from(leads).where(and(eq(leads.id, row.leadId), eq(leads.ownerId, ctx.user.id))).limit(1);
+          to = l?.email ?? null;
+        }
+        const outcome = await emailPortalLink(ctx.user.id, { to, clientName: row.clientName, token: row.token });
+        return { link: portalUrl(row.token), ...outcome };
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -7951,6 +8491,9 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         await db.delete(teamMembers).where(and(eq(teamMembers.id, input.id), eq(teamMembers.ownerId, ctx.user.id)));
+        // Their enquiries go back to unassigned rather than pointing at nobody.
+        const { leads } = await import('../drizzle/schema');
+        await db.update(leads).set({ assignedTo: null }).where(and(eq(leads.assignedTo, input.id), eq(leads.ownerId, ctx.user.id)));
         return { success: true };
       }),
 

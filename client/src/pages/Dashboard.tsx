@@ -15,7 +15,7 @@ import {
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, MoveUp, MoveDown, Lock, Type,
   SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare,
-  Link as LinkIcon, LogOut, MoreHorizontal, Ban
+  Link as LinkIcon, LogOut, MoreHorizontal, Ban, RotateCcw
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
@@ -25,7 +25,11 @@ import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { Spinner } from "@/components/ui/spinner";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
-import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
+import { substituteTemplateVars, blankTemplateVars } from "@/lib/templateVars";
+import LostReasonDialog from "@/components/LostReasonDialog";
+import EmailTemplatesSettings from "@/components/EmailTemplatesSettings";
+import LeadClientPanel, { LeadRowBadges } from "@/components/LeadClientPanel";
+import WinBackPanel from "@/components/WinBackPanel";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
 import CsvImportModal from "@/components/CsvImportModal";
 import StatusManager, { parseCustomStatuses, getStatusClasses, getStatusCalClasses, getStatusBarClasses, getStatusDayClasses, COLOR_PRESETS, type StatusDef } from "@/components/StatusManager";
@@ -44,11 +48,20 @@ import InboxSettingsCard from "@/components/InboxSettingsCard";
 import LeadConversation, { RepliedChip, useReplyStatus, type buildReply } from "@/components/LeadConversation";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
-import { leadFollowUpState } from "@shared/followUp";
+import { leadFollowUpState, CLOSED_LEAD_STATUSES as CLOSED_FOLLOWUP_STATUSES } from "@shared/followUp";
+import { leadNeedsReply } from "@shared/needsReply";
+import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabel } from "@shared/emailSignatures";
+import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
+import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
+import { FollowUpDateControl } from "@/components/FollowUpDateControl";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
+import LeadProposals from "@/components/LeadProposals";
+import ProposalEmailSettings from "@/components/ProposalEmailSettings";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
+import { ClashDialogHost, promptClashOverride, getClashes } from "@/components/ClashDialog";
+import { HoldPanel, HoldTag, DateClashChip, holdState, fmtHoldDay } from "@/components/DateHold";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
 import { DEFAULT_FORM_FIELDS, mergeFormFields, type FormFieldDef } from "@shared/formFields";
@@ -127,6 +140,22 @@ function PartialChip() {
       title="Gave a name + email but never finished the enquiry"
       className="font-bebas text-[9px] tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap flex-shrink-0">
       PARTIAL
+    </span>
+  );
+}
+
+// A new enquiry nobody has replied to yet (no email out, no status change) —
+// independent of the unread badge, which clears as soon as the lead is opened.
+// "How did they find you?" choices for a manually added enquiry. Values match
+// the Enquiry Source picker in the lead detail panel, so both read the same.
+const MANUAL_ENQUIRY_SOURCES = ["Phone", "Walk-In", "Email", "Instagram", "Word of Mouth / Referral", "Website", "Other"];
+
+function NeedsReplyChip() {
+  return (
+    <span
+      title="Nobody has replied yet — no email sent and the status hasn't changed"
+      className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-sky-100 text-sky-900 whitespace-nowrap flex-shrink-0">
+      NEEDS REPLY
     </span>
   );
 }
@@ -259,7 +288,9 @@ function MiniCalendarWidget({ month, year, firstDay, daysInMonth, monthBookings,
                     <span key={b.id} className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === 'confirmed' ? 'bg-forest' : b.status === 'finished' ? 'bg-stone-400' : b.status === 'tentative' ? 'bg-amber-400' : 'bg-stone-400'}`} />
                   ))}
                   {dayLeads.slice(0, 2).map((l: any) => (
-                    <span key={l.id} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
+                    holdState(l) === 'held'
+                      ? <span key={l.id} title="Date on hold" className="w-2 h-2 rounded-full flex-shrink-0 border-[1.5px] border-dashed border-amber-700 bg-white" />
+                      : <span key={l.id} className="w-2 h-2 rounded-full flex-shrink-0 bg-rose-400" />
                   ))}
                 </div>
                 {dayBookings.slice(0, 1).map((b: any) => (
@@ -539,6 +570,51 @@ function WaitlistPanel() {
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Space price guidance shown on the public enquiry form — shared by the
+ *  Add and Edit space dialogs. Off by default: prices only go public when
+ *  the venue switches them on. */
+type SpacePricingForm = { minSpend: string; minSpendWeekend: string; packagesFromPp: string; showPricingOnForm: boolean; name: string };
+function SpacePricingFields<T extends SpacePricingForm>({ form, setForm }: { form: T; setForm: (fn: (f: T) => T) => void }) {
+  const money = (v: string) => `$${Number(v).toLocaleString('en-NZ')}`;
+  const preview = [
+    form.name || 'This space',
+    form.minSpend && form.minSpendWeekend ? `minimum spend from ${money(form.minSpend)} (${money(form.minSpendWeekend)} Fri & Sat)`
+      : form.minSpend ? `minimum spend ${money(form.minSpend)}`
+      : form.minSpendWeekend ? `minimum spend ${money(form.minSpendWeekend)} Fri & Sat` : '',
+    form.packagesFromPp ? `packages from ${money(form.packagesFromPp)} pp` : '',
+  ].filter(Boolean).join(' · ');
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 items-end">
+        <div>
+          <label htmlFor="space-min-spend-weekend" className="font-bebas text-xs tracking-widest text-sage block mb-1">FRI &amp; SAT MIN SPEND</label>
+          <Input id="space-min-spend-weekend" type="number" min={0} inputMode="decimal" value={form.minSpendWeekend}
+            onChange={e => setForm(f => ({ ...f, minSpendWeekend: e.target.value }))}
+            placeholder="Optional" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+        </div>
+        <div>
+          <label htmlFor="space-packages-from" className="font-bebas text-xs tracking-widest text-sage block mb-1">PACKAGES FROM ($PP)</label>
+          <Input id="space-packages-from" type="number" min={0} inputMode="decimal" value={form.packagesFromPp}
+            onChange={e => setForm(f => ({ ...f, packagesFromPp: e.target.value }))}
+            placeholder="65" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+        </div>
+      </div>
+      <label className="flex items-start gap-2.5 cursor-pointer">
+        <input type="checkbox" checked={form.showPricingOnForm}
+          onChange={e => setForm(f => ({ ...f, showPricingOnForm: e.target.checked }))}
+          className="w-4 h-4 mt-0.5 accent-forest shrink-0" />
+        <span>
+          <span className="font-dm text-sm text-ink block">Show pricing on the enquiry form</span>
+          <span className="font-dm text-xs text-stone block mt-0.5">Clients see one short line when they pick this space or enter guests, so they can self-qualify.</span>
+        </span>
+      </label>
+      {form.showPricingOnForm && preview.includes('·') && (
+        <p className="font-dm text-xs italic text-stone bg-linen px-3 py-2">{preview}</p>
       )}
     </div>
   );
@@ -1019,7 +1095,9 @@ export default function Dashboard() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [actionsMenuOpen]);
-  const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
+  const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all" | "winback">("new");
+  // Enquiries "Owner" filter: everyone, unassigned, or one team member's id.
+  const [leadOwnerFilter, setLeadOwnerFilter] = useState<"all" | "unassigned" | number>("all");
 
   // ── Events table display prefs — persisted to localStorage ────────────────
   const LEAD_TABLE_PREFS_KEY = "vf_lead_table_prefs_v1";
@@ -1200,10 +1278,10 @@ export default function Dashboard() {
     navCalendar(dx > 0 ? -1 : 1);
   };
   const [showAddSpace, setShowAddSpace] = useState(false);
-  const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
+  const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false });
   const [showEditSpace, setShowEditSpace] = useState(false);
   const [editingSpace, setEditingSpace] = useState<any>(null);
-  const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
+  const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   // Xero invoice modal, opened straight from the event drawer — invoicing an
   // event used to mean leaving for the Payments board and finding it again.
@@ -1281,9 +1359,10 @@ export default function Dashboard() {
   const [enquiryPasteText, setEnquiryPasteText] = useState('');
   const [enquiryParsing, setEnquiryParsing] = useState(false);
   const [enquiryPasteMode, setEnquiryPasteMode] = useState(true);
-  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '' });
+  const [addEnquiryForm, setAddEnquiryForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new' as string, spaceName: '', source: '' });
   const addEnquiryFormId = useId();
   const [addEnquirySpaceError, setAddEnquirySpaceError] = useState(false);
+  const addEnquiryNeedsSpace = ['booked', 'confirmed', 'tentative', 'finished'].includes(addEnquiryForm.status);
   // Single, deterministic entry point for adding an enquiry. Always opens on a
   // fresh "new" enquiry in Smart-paste mode, so every "Add enquiry" button
   // behaves identically (no stale status carried over from a previous open).
@@ -1301,17 +1380,26 @@ export default function Dashboard() {
     { status: leadStatusFilter.length === 1 ? leadStatusFilter[0] : undefined },
     { enabled: !!user?.id, refetchInterval: 30_000 }
   );
+  // leadId → date clashes with a booking or hold, for the "Date clash" chips.
+  const { data: clashMap } = trpc.holds.clashMap.useQuery(undefined, { enabled: !!user?.id && !isStaff, refetchInterval: 60_000 });
 
   // One-tap follow-up: email the enquirer a nudge and push the next follow-up
   // out a week (so the lead leaves the "needs follow-up" list).
   const sendFollowUp = trpc.leads.sendFollowUp.useMutation({
-    onSuccess: (res: any) => {
+    onSuccess: (res: any, vars) => {
       if (res?.sent) {
-        toast.success(`Follow-up sent to ${res.to}`);
-        utils.followUps.leadStatus.invalidate();
+        const next = res.nextFollowUp ? new Date(res.nextFollowUp).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }) : null;
+        toast.success(`Follow-up sent to ${res.to} and logged on the enquiry.${next ? ` Next follow-up: ${next}.` : ''}`);
         refetchLeads();
         utils.dashboard.invalidate();
+        utils.followUps.leadStatus.invalidate();
         utils.inbox.invalidate();
+        utils.leads.getActivity.invalidate({ leadId: vars.leadId });
+        const patch = (prev: any) => prev && prev.id === vars.leadId
+          ? { ...prev, followUpDate: res.nextFollowUp ?? prev.followUpDate, lastActivityAt: new Date(), ...(res.statusAdvanced ? { status: 'contacted', respondedAt: prev.respondedAt ?? new Date() } : {}) }
+          : prev;
+        setSelectedLead(patch);
+        setSelectedBooking((prev: any) => prev?._isLead ? patch(prev) : prev);
       } else {
         toast.error(
           res?.reason === 'smtp_not_configured' ? 'Set up your email (SMTP) in Settings first, then you can send follow-ups.'
@@ -1566,6 +1654,11 @@ export default function Dashboard() {
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
   );
+  // Walkthroughs clients booked from the enquiry form — month view chips.
+  const { data: monthWalkthroughs } = trpc.leads.walkthroughsByMonth.useQuery(
+    { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
+    { enabled: !!user?.id && tab === 'calendar' && calendarView === 'month' }
+  );
   // Adjacent month data for week/day view (handles month boundaries)
   const adjNextMonthDate = new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1);
   const adjPrevMonthDate = new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1);
@@ -1634,7 +1727,11 @@ export default function Dashboard() {
       utils.dashboard.invalidate();
       toast.success("Event rescheduled");
     },
-    onError: () => toast.error("Failed to reschedule"),
+    onError: (err, vars) => {
+      // Date clash → "Book anyway?" (resends with allowClash), not a dead end.
+      if (promptClashOverride(err, () => rescheduleLead.mutate({ ...vars, allowClash: true }), { confirmLabel: "Move anyway" })) return;
+      toast.error("Failed to reschedule");
+    },
   });
   const rescheduleBooking = trpc.bookings.update.useMutation({
     // Booking edits cascade to the parent lead on the server, so we also
@@ -1659,8 +1756,17 @@ export default function Dashboard() {
       else if (v.depositRequired !== undefined) msg = v.depositRequired ? "Deposit now required" : "Marked as no deposit needed";
       else if (v.status !== undefined) msg = "Status updated";
       toast.success(msg);
+      // A save that went through after "Book anyway" — the inline editor had
+      // rolled its optimistic value back, so put the saved one back in place.
+      if (v.allowClash) {
+        const { id: _id, allowClash: _a, ...fields } = v;
+        setSelectedBooking((prev: any) => prev && !prev._isLead && prev.id === v.id ? { ...prev, ...fields } : prev);
+      }
     },
-    onError: () => toast.error("Failed to save change"),
+    onError: (err, vars) => {
+      if (promptClashOverride(err, () => rescheduleBooking.mutate({ ...vars, allowClash: true }), { confirmLabel: "Save anyway" })) return;
+      toast.error("Failed to save change");
+    },
   });
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   function handleEventDrop(payload: { id: number; type: 'lead'|'booking'; eventDate: string }, newDateStr: string) {
@@ -1736,9 +1842,10 @@ export default function Dashboard() {
     // server rejects the mutation.
     const prevValue = (selectedBooking as any)[field];
     setSelectedBooking((prev: any) => prev ? { ...prev, [field]: field === "eventDate" ? mutValue : mutValue } : prev);
-    const onErr = () => {
+    const onErr = (err: unknown) => {
       setSelectedBooking((prev: any) => (prev && prev.id === selectedBooking.id) ? { ...prev, [field]: prevValue } : prev);
-      toast.error("Failed to save change — reverted");
+      // A date clash opens the "already taken" dialog instead (hook-level onError).
+      if (!getClashes(err)) toast.error("Failed to save change — reverted");
     };
     if (selectedBooking._isLead) {
       rescheduleLead.mutate({ id: selectedBooking.id, [field]: mutValue } as any, { onError: onErr });
@@ -1785,12 +1892,20 @@ export default function Dashboard() {
       setEditingEventDetails(false);
       toast.success("Event details saved");
     },
-    onError: () => toast.error("Failed to save event details"),
+    onError: (err, vars) => {
+      if (promptClashOverride(err, () => updateLeadDetails.mutate({ ...vars, allowClash: true }), { confirmLabel: "Save anyway" })) return;
+      toast.error("Failed to save event details");
+    },
   });
-  const updateStatus = trpc.leads.updateStatus.useMutation({
-    onSuccess: (_data, variables) => {
+  const updateStatusMut = trpc.leads.updateStatus.useMutation({
+    onSuccess: (data, variables) => {
       refetchLeads();
-      setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status } : prev);
+      setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status, respondedAt: prev.respondedAt ?? new Date(), lastActivityAt: new Date() } : prev);
+      // Moving to/from "tentative" starts/ends a date hold on the server.
+      const holdPatch = { holdUntil: data?.holdUntil ?? null, ...(data?.holdUntil ? {} : { holdNote: null }) };
+      setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, ...holdPatch } : prev);
+      setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === variables.id ? { ...prev, ...holdPatch } : prev);
+      utils.holds.invalidate();
       if (selectedLead?.id === variables.id) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
       // Status changes (especially → 'booked') affect bookings list, calendar, and dashboard tiles.
       utils.bookings.invalidate();
@@ -1801,25 +1916,90 @@ export default function Dashboard() {
         suppressStatusToast.current = false;
         return;
       }
-      if (variables.status === 'function_pack_sent') {
-        toast.success("Status updated — a follow-up reminder has been added to your Tasks for 5 days from now.");
+      // Automated task rules (Settings → Automated Tasks) report what they made.
+      const made = (data as any)?.tasksCreated ?? 0;
+      if (made > 0) {
+        utils.tasks.invalidate();
+        toast.success(`Status updated — ${made} task${made === 1 ? '' : 's'} added to your Tasks.`);
       } else {
         toast.success("Status updated");
       }
     },
-    onError: () => {
+    onError: (err, variables) => {
       suppressStatusToast.current = false;
+      if (getClashes(err)) {
+        // Undo the optimistic status flip, then ask "Book anyway?".
+        const prior = (allLeads ?? []).find((l: any) => l.id === variables.id)?.status;
+        if (prior) {
+          setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === variables.id ? { ...prev, status: prior } : prev);
+          setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: prior } : prev);
+        }
+        promptClashOverride(err, () => {
+          updateStatus.mutate({ ...variables, allowClash: true });
+          setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === variables.id ? { ...prev, status: variables.status } : prev);
+        }, { confirmLabel: variables.status === 'tentative' ? 'Hold anyway' : 'Book anyway' });
+      }
     },
   });
-  const bulkUpdateStatus = trpc.leads.bulkUpdateStatus.useMutation({
+  const bulkUpdateStatusMut = trpc.leads.bulkUpdateStatus.useMutation({
     onSuccess: (data) => {
       refetchLeads();
       setSelectedLeadIds(new Set());
       setBulkSelectMode(false);
+      utils.holds.invalidate();
       toast.success(`${data.updated} lead${data.updated === 1 ? '' : 's'} updated`);
+      // Clashing leads are skipped, not failed — say which and why.
+      const skipped = (data as any).skipped as { id: number; name: string; clashes: string[] }[] | undefined;
+      if (skipped?.length) {
+        toast.warning(`${skipped.length} skipped — the date is already taken`, {
+          description: <div className="space-y-1">{skipped.map(s => <div key={s.id}>{s.name} — {s.clashes[0]}</div>)}</div>,
+          duration: 12000,
+        });
+      }
     },
     onError: (err) => toast.error(err.message || 'Bulk update failed'),
   });
+  // Every move to Lost — status select, drawer, pipeline buttons, bulk bar,
+  // "cancel enquiry" — goes through these two wrappers, which first ask why
+  // (LostReasonDialog). Skip still marks it lost; cancel leaves it as it was.
+  type UpdateStatusVars = Parameters<typeof updateStatusMut.mutate>[0];
+  const [lostPrompt, setLostPrompt] = useState<null | { single?: UpdateStatusVars; bulkIds?: number[]; name?: string; prior?: string }>(null);
+  const updateStatus = {
+    ...updateStatusMut,
+    mutate: (vars: UpdateStatusVars) => {
+      if (vars.status === 'lost' && vars.lostReason === undefined) {
+        const l: any = (allLeads ?? []).find((x: any) => x?.id === vars.id);
+        setLostPrompt({ single: vars, name: l ? `${l.firstName ?? ''} ${l.lastName ?? ''}`.trim() : undefined, prior: l?.status });
+        return;
+      }
+      updateStatusMut.mutate(vars);
+    },
+  };
+  const bulkUpdateStatus = {
+    ...bulkUpdateStatusMut,
+    mutate: (vars: Parameters<typeof bulkUpdateStatusMut.mutate>[0]) => {
+      if (vars.status === 'lost' && vars.lostReason === undefined) { setLostPrompt({ bulkIds: vars.ids }); return; }
+      bulkUpdateStatusMut.mutate(vars);
+    },
+  };
+  const confirmLost = (reason: string | null, note: string | null) => {
+    const p = lostPrompt;
+    setLostPrompt(null);
+    if (!p) return;
+    const extra = { lostReason: (reason ?? undefined) as any, lostReasonNote: note ?? undefined };
+    if (p.single) updateStatusMut.mutate({ ...p.single, ...extra });
+    else if (p.bulkIds) bulkUpdateStatusMut.mutate({ ids: p.bulkIds, status: 'lost', ...extra });
+  };
+  const cancelLost = () => {
+    const p = lostPrompt;
+    setLostPrompt(null);
+    // Undo any optimistic "lost" the caller already showed.
+    if (p?.single && p.prior) {
+      const undo = (prev: any) => prev && prev.id === p.single!.id && prev.status === 'lost' ? { ...prev, status: p.prior } : prev;
+      setSelectedLead(undo);
+      setSelectedBooking((prev: any) => prev?._isLead ? undo(prev) : prev);
+    }
+  };
   const bulkDelete = trpc.leads.bulkDelete.useMutation({
     onSuccess: (data) => {
       utils.leads.list.invalidate();
@@ -1871,6 +2051,14 @@ export default function Dashboard() {
    * full quick-actions set (OPEN EVENT, BEO PDF, FLOOR PLAN, etc.). Otherwise
    * fall back to the lead drawer.
    */
+  // Open an enquiry from somewhere other than its row (client history, Win
+  // back, after a merge): the drawer if one is in use, else the list detail.
+  function openLeadById(id: number) {
+    const l: any = (allLeads ?? []).find((x: any) => x?.id === id);
+    if (!l) { refetchLeads(); toast("That enquiry isn't loaded yet. Try again in a moment."); return; }
+    if (leadViewMode === "list" && !selectedBooking && leadsSubTab !== "winback") { selectLead(l); return; }
+    openEventDrawer({ ...l, _isLead: true });
+  }
   function openEventDrawer(item: any) {
     if (!item) return;
     setDrawerPaymentsOpen(false);
@@ -1967,12 +2155,15 @@ export default function Dashboard() {
       utils.bookings.byMonth.invalidate();
       utils.leads.eventsByMonth.invalidate();
       setShowAddLead(false);
-      setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new', spaceName: '' });
+      setAddEnquiryForm({ firstName: '', lastName: '', email: '', phone: '', company: '', eventType: '', eventDate: '', eventTime: '', guestCount: '', budget: '', message: '', status: 'new', spaceName: '', source: '' });
       setEnquiryPasteText('');
       setEnquiryPasteMode(true);
       toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Added successfully!');
     },
-    onError: () => toast.error('Failed to add record'),
+    onError: (err, vars) => {
+      if (promptClashOverride(err, () => createEnquiry.mutate({ ...vars, allowClash: true }))) return;
+      toast.error('Failed to add record');
+    },
   });
   const createEnquiryFromCalendar = trpc.leads.create.useMutation({
     onSuccess: (created: any, vars: any) => {
@@ -1990,7 +2181,10 @@ export default function Dashboard() {
       setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' });
       toast.success(vars?.status === 'booked' ? 'Confirmed event added!' : 'Event added to calendar!');
     },
-    onError: () => toast.error('Failed to create event'),
+    onError: (err, vars) => {
+      if (promptClashOverride(err, () => createEnquiryFromCalendar.mutate({ ...vars, allowClash: true }))) return;
+      toast.error('Failed to create event');
+    },
   });
   const updateSettings = trpc.venue.update.useMutation({
     onSuccess: () => { refetchSettings(); toast.success("Settings saved!"); },
@@ -2100,7 +2294,7 @@ export default function Dashboard() {
     onError: (err) => toast.error(err.message || "Failed to clear sync"),
   });
   const createSpace = trpc.spaces.create.useMutation({
-    onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
+    onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false }); toast.success("Space added!"); },
   });
   const updateSpace = trpc.spaces.update.useMutation({
     onSuccess: () => { refetchSpaces(); setShowEditSpace(false); setEditingSpace(null); toast.success("Space updated!"); },
@@ -2131,13 +2325,28 @@ export default function Dashboard() {
     setShowEmailModal(true);
   };
   const [emailAttachments, setEmailAttachments] = useState<Array<{ filename: string; content: string; contentType: string }>>([]);
-  const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
+  // Signature profile for the compose modal ('' = none). Every new email
+  // starts on the venue's default (first) signature — the modal shows exactly
+  // which one is added, and email.send appends that same profile.
+  const [emailSigId, setEmailSigId] = useState('');
+  useEffect(() => {
+    if (showEmailModal) setEmailSigId(defaultSignatureId(venueSettings as any) ?? '');
+  }, [showEmailModal]);
   // Email Templates
-  const { data: emailTemplates, refetch: refetchTemplates } = trpc.templates.list.useQuery(undefined, { enabled: isAuthenticated });
-  const createTemplate = trpc.templates.create.useMutation({ onSuccess: () => { refetchTemplates(); setShowTemplateForm(false); setTemplateForm({ name: "", subject: "", body: "" }); toast.success("Template saved!"); } });
-  const deleteTemplate = trpc.templates.delete.useMutation({ onSuccess: () => { refetchTemplates(); toast.success("Template deleted"); } });
-  const [showTemplateForm, setShowTemplateForm] = useState(false);
-  const [templateForm, setTemplateForm] = useState({ name: "", subject: "", body: "" });
+  const { data: emailTemplates } = trpc.templates.list.useQuery(undefined, { enabled: isAuthenticated });
+  // One-click templates in the compose window: links ({{proposalLink}} etc.)
+  // come from the server; `pickedTemplate` remembers which one was used and
+  // which of its variables came out blank for this enquiry.
+  const [pickedTemplate, setPickedTemplate] = useState<{ id: number; blanks: string[] } | null>(null);
+  const { data: composeLinks } = trpc.leads.getTemplateLinks.useQuery(
+    { leadId: selectedLead?.id ?? 0 },
+    { enabled: showEmailModal && !!selectedLead?.id },
+  );
+  useEffect(() => { if (!showEmailModal) setPickedTemplate(null); }, [showEmailModal]);
+  const addStarterTemplates = trpc.templates.addStarters.useMutation({
+    onSuccess: (r) => { utils.templates.list.invalidate(); toast.success(r.added > 0 ? `Added ${r.added} starter templates` : 'You already have the starter templates'); },
+    onError: (e) => toast.error(e.message || "Couldn't add the starter templates"),
+  });
   // ── Weekly runsheet email ─────────────────────────────────────────────────
   const [showWeeklyModal, setShowWeeklyModal] = React.useState(false);
   const getMondayOfWeek = () => {
@@ -2316,7 +2525,7 @@ export default function Dashboard() {
       if (selectedLead?.status === 'new') {
         const followUp = new Date();
         followUp.setDate(followUp.getDate() + 3);
-        setSelectedLead((prev: any) => prev ? { ...prev, status: 'contacted', followUpDate: followUp } : prev);
+        setSelectedLead((prev: any) => prev ? { ...prev, status: 'contacted', followUpDate: followUp, respondedAt: prev.respondedAt ?? new Date(), lastActivityAt: new Date() } : prev);
         toast.success('Email sent! Lead moved to Contacted — follow-up set for 3 days from now.');
       } else {
         toast.success('Email sent successfully!');
@@ -2389,12 +2598,13 @@ export default function Dashboard() {
 
   // Automated task rules
   const [showAddTaskRule, setShowAddTaskRule] = useState(false);
-  const [taskRuleForm, setTaskRuleForm] = useState({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium' });
+  const [taskRuleForm, setTaskRuleForm] = useState({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium', status: '' });
 
   // Team members
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [teamForm, setTeamForm] = useState({ name: '', email: '', role: 'staff' });
   const { data: teamList, refetch: refetchTeam } = trpc.team.list.useQuery(undefined, { enabled: !!user?.id });
+  const teamById = useMemo(() => new Map<number, { name: string }>((teamList ?? []).map((m: any) => [m.id, m])), [teamList]);
   const createTeamMember = trpc.team.create.useMutation({ onSuccess: () => { refetchTeam(); setTeamForm({ name: '', email: '', role: 'staff' }); setShowTeamForm(false); toast.success('Team member added!'); } });
   const deleteTeamMember = trpc.team.delete.useMutation({ onSuccess: () => { refetchTeam(); toast.success('Team member removed'); } });
 
@@ -2571,6 +2781,8 @@ export default function Dashboard() {
         eventTimeEnd: vs?.eventTimeEnd ?? "22:00",
         minGroupSize: vs?.minGroupSize ?? 0,
         autoCancelTentative: vs?.autoCancelTentative ?? 1,
+        defaultHoldDays: vs?.defaultHoldDays ?? 7,
+        holdClientReminderEnabled: vs?.holdClientReminderEnabled ?? 0,
         // Venue profile fields
         bannerImageUrl: vs?.bannerImageUrl ?? "",
         venueType: vs?.venueType ?? "",
@@ -2598,6 +2810,13 @@ export default function Dashboard() {
         formSuccessMessage: (vs as any)?.formSuccessMessage ?? "",
         enquiryAutoReplyEnabled: ((vs as any)?.enquiryAutoReplyEnabled ?? 1) !== 0,
         enquiryAutoReplyMessage: (vs as any)?.enquiryAutoReplyMessage ?? "",
+        showAvailabilityOnForm: ((vs as any)?.showAvailabilityOnForm ?? 1) !== 0,
+        walkthroughEnabled: ((vs as any)?.walkthroughEnabled ?? 1) !== 0,
+        walkthroughDays: String((vs as any)?.walkthroughDays ?? "2,3,4,5,6").split(",").filter(Boolean).map(Number),
+        walkthroughStart: (vs as any)?.walkthroughStart ?? "10:00",
+        walkthroughEnd: (vs as any)?.walkthroughEnd ?? "16:00",
+        walkthroughSlotMinutes: (vs as any)?.walkthroughSlotMinutes ?? 30,
+        walkthroughDaysAhead: (vs as any)?.walkthroughDaysAhead ?? 14,
         operatingHours: vs?.operatingHours ?? JSON.stringify([
           { day: "Sunday", enabled: true, start: "08:00", end: "22:00" },
           { day: "Monday", enabled: true, start: "08:00", end: "22:00" },
@@ -2716,6 +2935,7 @@ export default function Dashboard() {
     .filter((l: any) => (leadStatusFilter.length > 0 || followUpOnly || showPartialOnly) ? true : !DEFAULT_HIDDEN.includes(l.status))
     .filter((l: any) => !showPartialOnly || isPartialLead(l))
     .filter((l: any) => !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
+    .filter((l: any) => leadOwnerFilter === "all" ? true : leadOwnerFilter === "unassigned" ? l.assignedTo == null : l.assignedTo === leadOwnerFilter)
     .filter((l: any) =>
       !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
     )
@@ -3434,6 +3654,12 @@ export default function Dashboard() {
                             className={tabCls(filterIs(['lost']) && !followUpOnly)}>
                             LOST
                           </button>
+                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("winback"); setSelectedLead(null); }}
+                            title="Lost and quiet enquiries, and last year's clients, to invite back"
+                            aria-pressed={leadsSubTab === "winback"}
+                            className={tabCls(leadsSubTab === "winback")}>
+                            <RotateCcw className="w-3 h-3" /> WIN BACK
+                          </button>
                           </div>
                           {/* Phone-only fade: tells you the row scrolls sideways. */}
                           <div aria-hidden="true" className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-0 w-6 rounded-r-xl bg-gradient-to-l from-muted to-transparent" />
@@ -3542,8 +3768,8 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Row 2: Search + Filters (hidden in kanban) */}
-                {leadViewMode !== "kanban" && (
+                {/* Row 2: Search + Filters (hidden in kanban and Win back) */}
+                {leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
                   <div className="flex items-center gap-2 px-4 pb-3 flex-wrap gap-y-2">
                     <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
@@ -3581,6 +3807,15 @@ export default function Dashboard() {
                           className="h-8 text-xs border border-gray-200 rounded-lg px-2 bg-white text-ink focus:outline-none focus:border-sage-green" placeholder="To" />
                       </>
                     )}
+                    {(teamList ?? []).length > 0 && (
+                      <select value={String(leadOwnerFilter)} aria-label="Filter by owner" title="Filter by owner"
+                        onChange={e => { const v = e.target.value; setLeadOwnerFilter(v === "all" || v === "unassigned" ? v : Number(v)); }}
+                        className={`h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border px-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-green ${leadOwnerFilter !== "all" ? "border-sage-green bg-emerald-50 text-ink" : "border-gray-200 bg-white text-ink"}`}>
+                        <option value="all">All owners</option>
+                        <option value="unassigned">Unassigned</option>
+                        {(teamList ?? []).map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                    )}
                     <Select value={leadSortBy} onValueChange={(v: any) => setLeadSortBy(v)}>
                       <SelectTrigger aria-label="Sort events" title="Sort events" className="h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border border-gray-200 bg-white">
                         <SelectValue />
@@ -3600,7 +3835,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 {/* Bulk select all bar */}
-                {bulkSelectMode && filteredLeads.length > 0 && (
+                {bulkSelectMode && leadsSubTab !== "winback" && filteredLeads.length > 0 && (
                   <div className="flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox"
@@ -3618,8 +3853,13 @@ export default function Dashboard() {
               {/* ── CONTENT AREA ──────────────────────────────────────────────── */}
               <div className="flex flex-1 overflow-hidden">
 
+                {/* ── WIN BACK ──────────────────────────────────────── */}
+                {leadsSubTab === "winback" && leadViewMode !== "kanban" && (
+                  <WinBackPanel onOpenLead={openLeadById} />
+                )}
+
                 {/* ── TABLE VIEW ─────────────────────────────────────── */}
-                {leadViewMode === "table" && (
+                {leadViewMode === "table" && leadsSubTab !== "winback" && (
                   <div className="flex-1 overflow-auto">
                     {filteredLeads.length === 0 ? (
                       <div className="p-12 text-center">
@@ -3682,11 +3922,21 @@ export default function Dashboard() {
                                   >
                                     {lead.firstName} {lead.lastName}
                                     {isPartialLead(lead) && <PartialChip />}
-                                    {replyStatus.get(lead.id)?.direction === 'in' && <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />}
+                                    {replyStatus.get(lead.id)?.direction === 'in'
+                                      ? <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />
+                                      : leadNeedsReply(lead) && <NeedsReplyChip />}
                                   </button>
+                                  {" "}<LeadRowBadges lead={lead} teamById={teamById} />
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[200px] truncate">{lead.eventType || "—"}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}{budgetRangeLabel((lead as any).budgetRange) ? <span className="ml-1.5 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap">{budgetRangeLabel((lead as any).budgetRange)}</span> : null}</td>
-                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}</td>
+                                <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}
+                                  {(holdState(lead) === 'held' || clashMap?.[lead.id]) && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                      {holdState(lead) === 'held' && <HoldTag until={lead.holdUntil} />}
+                                      <DateClashChip clashes={clashMap?.[lead.id] as any} />
+                                    </div>
+                                  )}
+                                </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.guestCount ?? "—"}</td>
                                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                   <select
@@ -3751,7 +4001,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 {/* ── LIST VIEW sidebar ─────────────────────────────── */}
-                {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:flex md:flex-col md:w-[360px] lg:w-[420px] flex-shrink-0" : "flex-1"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
+                {leadViewMode === "list" && leadsSubTab !== "winback" && <div className={`${selectedLead ? "hidden md:flex md:flex-col md:w-[360px] lg:w-[420px] flex-shrink-0" : "flex-1"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
                   {leadsError ? (
                     <div className="p-8 text-center">
                       <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
@@ -3797,7 +4047,10 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 mb-0.5 min-w-0">
                         <div className="font-cormorant font-semibold text-base text-ink truncate flex-1 min-w-0">{lead.firstName} {lead.lastName}</div>
                         {isPartialLead(lead) && <PartialChip />}
-                        {replyStatus.get(lead.id)?.direction === 'in' && <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />}
+                        {replyStatus.get(lead.id)?.direction === 'in'
+                          ? <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />
+                          : leadNeedsReply(lead) && <NeedsReplyChip />}
+                        <LeadRowBadges lead={lead} teamById={teamById} />
                         <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
                           {pipelineStages.find(s => s.key === lead.status)?.label ?? String(lead.status ?? "").replace(/_/g, " ").toUpperCase()}
                         </div>
@@ -3822,13 +4075,16 @@ export default function Dashboard() {
                         ) : (
                           <span className="font-dm text-xs text-ink/55 italic">no date</span>
                         )}
+                        {holdState(lead) === 'held' && <HoldTag until={lead.holdUntil} />}
+                        <DateClashChip clashes={clashMap?.[lead.id] as any} />
                       </div>
-                      {/* Row 4: follow-up badge if set */}
-                      {lead.followUpDate && (() => {
-                            const d = new Date(lead.followUpDate);
-                            const overdue = d <= new Date() && !['booked','lost','cancelled'].includes(lead.status);
-                            if (overdue) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-red-100 text-red-700 inline-block mt-1">OVERDUE</span>;
-                            if (d > new Date()) return <span className="font-bebas text-[9px] tracking-widest px-1 py-0.5 bg-gold/20 text-amber-700 inline-block mt-1">FOLLOW UP {d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>;
+                      {/* Row 4: follow-up badge — same shared rule as the
+                          table column and the dashboard "Needs follow-up" tile. */}
+                      {(() => {
+                            const fu = leadFollowUpState(lead, followUpNowMs);
+                            if (fu.reason === 'overdue') return <span className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-red-100 text-red-700 inline-block mt-1">OVERDUE</span>;
+                            if (fu.reason === 'idle') return <span className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-amber-100 text-amber-800 inline-block mt-1" title="No activity on this lead for a while">GONE QUIET</span>;
+                            if (lead.followUpDate && !CLOSED_FOLLOWUP_STATUSES.includes(lead.status)) return <span className="font-bebas text-[11px] leading-none tracking-widest px-1.5 py-1 rounded bg-amber-50 text-amber-800 inline-block mt-1">FOLLOW UP {new Date(lead.followUpDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>;
                             return null;
                           })()}
                     </button>
@@ -3855,7 +4111,7 @@ export default function Dashboard() {
                         // "Needs you first": overdue follow-ups, then upcoming events by
                         // date, then undated, then past; newest enquiry breaks ties.
                         const nowTs = Date.now();
-                        const needsYou = (l: any) => l.followUpDate && new Date(l.followUpDate).getTime() <= nowTs && !['booked', 'lost', 'cancelled'].includes(l.status);
+                        const needsYou = (l: any) => leadFollowUpState(l, nowTs).reason === 'overdue';
                         const stageLeads = allEnquiries.filter((l: any) => l.status === stage.key).sort((a: any, b: any) => {
                           const oa = needsYou(a) ? 0 : 1, ob = needsYou(b) ? 0 : 1;
                           if (oa !== ob) return oa - ob;
@@ -3892,7 +4148,7 @@ export default function Dashboard() {
                             <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 pb-2">
                               {stageLeads.map((lead: any) => {
                                 const value = fmtBudget(lead.budget);
-                                const overdue = lead.followUpDate && new Date(lead.followUpDate) <= new Date() && !['booked', 'lost', 'cancelled'].includes(lead.status);
+                                const fuReason = leadFollowUpState(lead, nowTs).reason;
                                 return (
                                   <button key={lead.id}
                                     onClick={() => { selectLead(lead); setKanbanDetailOpen(true); }}
@@ -3906,6 +4162,7 @@ export default function Dashboard() {
                                         {lead.eventType && (
                                           <div className="font-sans text-[11.5px] font-semibold uppercase tracking-[0.04em] mt-1 truncate" style={{ color: '#6e665c' }}>{lead.eventType}</div>
                                         )}
+                                        <div className="mt-1 empty:hidden"><LeadRowBadges lead={lead} teamById={teamById} /></div>
                                       </div>
                                       {lead.status === 'booked' && (
                                         <span className="font-sans text-[9.5px] font-extrabold uppercase tracking-[0.1em] px-2 py-[3px] rounded-[3px] flex-shrink-0" style={{ background: '#e8edf6', color: '#2f5488' }}>BEO</span>
@@ -3931,8 +4188,12 @@ export default function Dashboard() {
                                     {/* Footer — serif value + age / overdue flag */}
                                     <div className="flex items-baseline justify-between pt-[9px]" style={{ borderTop: '1px solid #eee6d8' }}>
                                       <span className="font-serif text-[18px] font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]">{value ?? '—'}</span>
-                                      {overdue ? (
+                                      {fuReason === 'overdue' ? (
                                         <span className="text-[11px] font-semibold" style={{ color: '#c0392b' }}>Follow-up overdue</span>
+                                      ) : fuReason === 'idle' ? (
+                                        <span className="text-[11px] font-semibold" style={{ color: '#92400e' }}>Gone quiet</span>
+                                      ) : leadNeedsReply(lead) ? (
+                                        <span className="text-[11px] font-semibold" style={{ color: '#0c4a6e' }}>Needs reply · {fmtAgo(lead.createdAt)}</span>
                                       ) : (
                                         <span className="text-[11px]" style={{ color: '#7e7466' }}>{fmtAgo(lead.createdAt)}</span>
                                       )}
@@ -3960,20 +4221,23 @@ export default function Dashboard() {
                 )}
 
                 {/* Lead Detail — only used in list mode (table mode opens event drawer instead) */}
-                {leadViewMode === "list" && (selectedLead ? (
+                {leadViewMode === "list" && leadsSubTab !== "winback" && (selectedLead ? (
                   <div className="flex-1 overflow-auto p-4 md:p-6">
-                  <div className="flex items-center gap-3 mb-4 md:mb-6">
+                  {/* flex-wrap: on a phone the action buttons drop below the
+                      name instead of running off the right edge. */}
+                  <div className="flex flex-wrap items-center gap-3 mb-3">
                     <button onClick={() => setSelectedLead(null)} className="md:hidden font-bebas tracking-widest text-xs text-ink/60 hover:text-ink flex items-center gap-1 py-1 pr-2">
                       <ChevronLeft className="w-4 h-4" /> BACK
                     </button>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-[12rem]">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h2 className="font-cormorant text-ink" style={{ fontSize: '1.8rem', fontWeight: 600 }}>{selectedLead.firstName} {selectedLead.lastName}</h2>
                         {isPartialLead(selectedLead) && <PartialChip />}
+                        {leadNeedsReply(selectedLead) && <NeedsReplyChip />}
                       </div>
                       <div className="font-dm text-sm text-ink/60">{selectedLead.email}{selectedLead.phone ? ` · ${selectedLead.phone}` : ""}</div>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-wrap max-w-full">
                       {selectedLead.email && !isTeamMember && (
                         <button onClick={() => {
                           setEmailForm({ subject: `Re: Your event enquiry — ${selectedLead.eventType || 'Event'}`, body: `Hi ${selectedLead.firstName},\n\nThank you for your enquiry. ` });
@@ -4044,6 +4308,22 @@ export default function Dashboard() {
                         onOpenSettings={() => { setTab("settings"); setSettingsSubTab("follow-ups"); }} />
                     </div>
                   )}
+                  {!CLOSED_FOLLOWUP_STATUSES.includes(selectedLead.status) && !isStaff ? (
+                    <div className="mb-4 md:mb-6">
+                      <FollowUpDateControl
+                        leadId={selectedLead.id}
+                        value={selectedLead.followUpDate}
+                        onChanged={next => setSelectedLead((prev: any) => prev && prev.id === selectedLead.id ? { ...prev, followUpDate: next } : prev)}
+                      />
+                    </div>
+                  ) : <div className="mb-1 md:mb-3" />}
+
+                  {/* Owner, returning-client / duplicate flags, client history, merge. */}
+                  <div className="mb-4 max-w-2xl">
+                    <LeadClientPanel key={selectedLead.id} leadId={selectedLead.id} assignedTo={selectedLead.assignedTo}
+                      onOpenLead={openLeadById} onMerged={openLeadById}
+                      onOwnerChanged={v => setSelectedLead((prev: any) => prev ? { ...prev, assignedTo: v } : prev)} />
+                  </div>
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
@@ -4100,6 +4380,9 @@ export default function Dashboard() {
                             ["Guests", selectedLead.guestCount],
                             ["Budget", selectedLead.budget ? `$${Number(selectedLead.budget).toLocaleString()} NZD` : null],
                             ["Company", selectedLead.company],
+                            // Booked from the enquiry form (a slot label with no
+                            // time is a pre-booking-era request, never confirmed).
+                            ["Walkthrough", selectedLead.walkthroughSlot ? `${selectedLead.walkthroughSlot}${selectedLead.walkthroughAt ? '' : ' (requested)'}` : null],
                           ].filter(([, v]) => v).map(([label, value]) => (
                             <div key={label as string} className="flex gap-2">
                               <span className="text-ink/60 w-24 flex-shrink-0">{label}:</span>
@@ -4165,6 +4448,19 @@ export default function Dashboard() {
                           </button>
                         </div>
                       )}
+                      {!isStaff && (
+                        <div className="mb-3">
+                          <HoldPanel
+                            key={selectedLead.id}
+                            lead={selectedLead}
+                            defaultHoldDays={(venueSettings as any)?.defaultHoldDays}
+                            onChanged={(patch) => {
+                              setSelectedLead((prev: any) => prev && prev.id === selectedLead.id ? { ...prev, ...patch } : prev);
+                              refetchLeads();
+                            }}
+                          />
+                        </div>
+                      )}
                       <div className="space-y-1.5">
                         {pipelineStages.map(stage => {
                           const isActive = selectedLead.status === stage.key;
@@ -4216,6 +4512,7 @@ export default function Dashboard() {
                         onReply={selectedLead.email && !isTeamMember ? (_m, reply) => openEmailReply(selectedLead, reply) : undefined} />
                     </div>
                   )}
+                  {!isStaff && <LeadProposals leadId={selectedLead.id} />}
 
                   {/* Activity Log */}
                   <div className="dante-card p-4 mb-4">
@@ -4253,7 +4550,7 @@ export default function Dashboard() {
                         <SelectValue placeholder="Select source…" />
                       </SelectTrigger>
                       <SelectContent>
-                        {["Instagram","Facebook","Google Search","Website","Word of Mouth / Referral","Walk-In","Event Directory","Previous Client","lead_form","express_book","Other"].map(s => (
+                        {["Phone","Email","Instagram","Facebook","Google Search","Website","Word of Mouth / Referral","Walk-In","Event Directory","Previous Client","lead_form","express_book","Other"].map(s => (
                           <SelectItem key={s} value={s}>{s === "lead_form" ? "Lead Form" : s === "express_book" ? "Express Book" : s}</SelectItem>
                         ))}
                       </SelectContent>
@@ -4352,6 +4649,8 @@ export default function Dashboard() {
                             <span className={`font-bebas text-xs tracking-widest px-2.5 py-1 border ${stage.color}`}>{stage.label}</span>
                           ) : null;
                         })()}
+                        {holdState(selectedLead) === 'held' && <HoldTag until={selectedLead.holdUntil} />}
+                        <DateClashChip clashes={clashMap?.[selectedLead.id] as any} />
                       </div>
                       {/* Contact */}
                       <div className="grid grid-cols-2 gap-3 text-sm">
@@ -4442,47 +4741,66 @@ export default function Dashboard() {
                 <div className="bg-forest text-cream px-6 py-4 flex items-center justify-between">
                   <div>
                     <div className="font-bebas tracking-widest text-sm">COMPOSE EMAIL</div>
-                    <div className="font-dm text-xs text-cream/70">To: {selectedLead.firstName} {selectedLead.lastName} &lt;{selectedLead.email}&gt;</div>
+                    <div className="font-dm text-xs text-cream opacity-80">To: {selectedLead.firstName} {selectedLead.lastName} &lt;{selectedLead.email}&gt;</div>
                     {emailThread && <div className="font-dm text-xs text-cream opacity-80 mt-0.5">Replying in the same email thread</div>}
+                    <div className="font-dm text-xs text-cream opacity-80">
+                      From: {effectiveFromName(venueSettings as any, signatureProfiles(venueSettings as any).find(p => p.id === emailSigId))}
+                      {((venueSettings as any)?.smtpFromEmail || (venueSettings as any)?.smtpUser) ? ` <${(venueSettings as any)?.smtpFromEmail || (venueSettings as any)?.smtpUser}>` : ''}
+                    </div>
                   </div>
-                  <button onClick={() => setShowEmailModal(false)} className="text-cream/60 hover:text-cream text-xl leading-none">&times;</button>
+                  <button onClick={() => setShowEmailModal(false)} aria-label="Close" className="text-cream opacity-70 hover:opacity-100 text-xl leading-none">&times;</button>
                 </div>
                 <div className="p-6 space-y-4">
-                  {/* Template picker */}
-                  {(emailTemplates ?? []).length > 0 && (
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowTemplateDropdown(v => !v)}
-                        className="w-full border border-gold/40 bg-gold/10 px-3 py-2 font-bebas tracking-widest text-xs text-forest hover:bg-gold/20 transition-colors flex items-center justify-between"
-                      >
-                        <span>USE A TEMPLATE</span>
-                        <span className="text-sage/60">▾</span>
-                      </button>
-                      {showTemplateDropdown && (
-                        <div className="absolute z-10 top-full left-0 right-0 bg-white border border-border shadow-lg max-h-48 overflow-y-auto">
-                          {(emailTemplates ?? []).map((t: any) => (
-                            <button
-                              key={t.id}
-                              type="button"
-                              onClick={() => {
-                                const lead = selectedLead ?? {};
-                                const venue = venueSettings ?? {};
-                                const subject = substituteTemplateVars(t.subject, lead, venue);
-                                const body = substituteTemplateVars(t.body, lead, venue);
-                                setEmailForm({ subject, body });
-                                setShowTemplateDropdown(false);
-                              }}
-                              className="w-full text-left px-4 py-3 hover:bg-cream transition-colors border-b border-border/30 last:border-0"
-                            >
-                              <div className="font-bebas tracking-widest text-xs text-forest">{t.name}</div>
-                              <div className="font-dm text-xs text-sage truncate">{t.subject}</div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* Template picker — one click fills subject and body with this
+                      enquiry's details and links; both stay editable. */}
+                  <div>
+                    <div className="font-bebas text-xs tracking-widest text-stone-600 mb-1.5">TEMPLATES</div>
+                    {(emailTemplates ?? []).length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto" role="group" aria-label="Email templates">
+                        {(emailTemplates ?? []).map((t: any) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            aria-pressed={pickedTemplate?.id === t.id}
+                            title={t.subject}
+                            onClick={async () => {
+                              // The drawer opens this modal with a cut-down lead (name +
+                              // email), so fill the rest from the loaded enquiry.
+                              const full: any = (allLeads ?? []).find((x: any) => x?.id === selectedLead?.id);
+                              const lead = { ...(full ?? {}), ...(selectedLead ?? {}) };
+                              const venue = venueSettings ?? {};
+                              let links: any = composeLinks;
+                              if (!links && selectedLead?.id) {
+                                try { links = await utils.leads.getTemplateLinks.fetch({ leadId: selectedLead.id }); } catch { links = undefined; }
+                              }
+                              const leadVars = { ...lead, holdUntil: links?.holdUntil ?? (lead as any).holdUntil };
+                              setEmailForm({
+                                subject: substituteTemplateVars(t.subject, leadVars, venue, links),
+                                body: substituteTemplateVars(t.body, leadVars, venue, links),
+                              });
+                              setPickedTemplate({ id: t.id, blanks: blankTemplateVars(`${t.subject}\n${t.body}`, leadVars, venue, links) });
+                            }}
+                            className={`font-dm text-xs px-2.5 py-1 rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest ${pickedTemplate?.id === t.id ? "bg-forest-dark text-cream border-forest" : "bg-white text-ink border-stone-300 hover:border-forest"}`}
+                          >
+                            {t.name}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-dm text-xs text-stone-600">No templates yet.</span>
+                        <button type="button" onClick={() => addStarterTemplates.mutate()} disabled={addStarterTemplates.isPending}
+                          className="font-bebas tracking-widest text-xs text-forest border border-forest px-2 py-1 hover:bg-linen disabled:opacity-50">
+                          {addStarterTemplates.isPending ? 'ADDING…' : 'ADD STARTER TEMPLATES'}
+                        </button>
+                      </div>
+                    )}
+                    {pickedTemplate && pickedTemplate.blanks.length > 0 && (
+                      <p className="mt-1.5 font-dm text-xs text-amber-950 bg-amber-50 border border-amber-300 px-2 py-1">
+                        This enquiry has nothing for {pickedTemplate.blanks.join(", ")} yet, so {pickedTemplate.blanks.length === 1 ? "it was" : "they were"} left blank. Check the wording before sending.
+                      </p>
+                    )}
+                  </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBJECT</label>
                     <input
@@ -4501,18 +4819,39 @@ export default function Dashboard() {
                       className="w-full border border-border px-3 py-2 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest resize-none"
                       placeholder="Write your message here..."
                     />
-                    {/* Signature preview */}
-                    {(venueSettings?.emailSignature || (venueSettings as any)?.emailSignatureLogo) && (
-                      <div className="mt-1 border-t border-dashed border-gold/30 pt-2">
-                        <p className="font-bebas text-[9px] tracking-widest text-sage/60 mb-1">SIGNATURE (auto-appended)</p>
-                        {(venueSettings as any)?.emailSignatureLogo && (
-                          <img src={(venueSettings as any).emailSignatureLogo} alt="Logo" className="h-8 w-auto object-contain mb-1 opacity-60" />
-                        )}
-                        {venueSettings?.emailSignature && (
-                          <pre className="font-dm text-xs text-ink/60 whitespace-pre-wrap leading-relaxed">{venueSettings.emailSignature}</pre>
-                        )}
-                      </div>
-                    )}
+                    {/* Signature — the exact profile email.send appends (same
+                        shared helper), defaulting to the venue's first one. */}
+                    {(() => {
+                      const sigs = signatureProfiles(venueSettings as any);
+                      if (sigs.length === 0) return null;
+                      const chosen = sigs.find(p => p.id === emailSigId);
+                      return (
+                        <div className="mt-2 border-t border-dashed border-stone-300 pt-2">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <label htmlFor="compose-signature" className="font-bebas text-xs tracking-widest text-sage flex-shrink-0">SIGNATURE</label>
+                            <select id="compose-signature" value={emailSigId} onChange={e => setEmailSigId(e.target.value)}
+                              className="flex-1 min-w-0 border border-border px-2 py-1 font-dm text-sm text-ink bg-white focus:outline-none focus:border-forest">
+                              {sigs.map(s => <option key={s.id} value={s.id}>{signatureLabel(s)}</option>)}
+                              <option value="">No signature</option>
+                            </select>
+                          </div>
+                          {chosen ? (
+                            <div aria-label="Signature preview" className="bg-white border border-stone-200 px-3 py-2">
+                              {chosen.signatureLogo && (
+                                <img src={chosen.signatureLogo} alt="" className="h-8 w-auto object-contain mb-1" />
+                              )}
+                              {chosen.signature?.trim() ? (
+                                <pre className="font-dm text-xs text-stone-700 whitespace-pre-wrap leading-relaxed">{chosen.signature}</pre>
+                              ) : !chosen.signatureLogo ? (
+                                <p className="font-dm text-xs text-stone-600 italic">This signature has no sign-off text — only the sender name is used.</p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <p className="font-dm text-xs text-stone-600">Sent without a signature.</p>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {/* Inline variable hint — shows which {{vars}} are still unreplaced */}
                     {emailForm.body && /\{\{\w+\}\}/.test(emailForm.body) && (
                       <div className="mt-1 px-2 py-1 bg-gold/10 border border-gold/30 font-dm text-xs text-amber-800 flex items-start gap-1.5">
@@ -4577,6 +4916,7 @@ export default function Dashboard() {
                         attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
                         inReplyTo: emailThread?.inReplyTo,
                         references: emailThread?.references,
+                        signatureId: emailSigId || undefined,
                       })}
                       disabled={sendEmail.isPending || !emailForm.subject || !emailForm.body}
                       className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream flex items-center gap-2 disabled:opacity-50">
@@ -4860,6 +5200,8 @@ export default function Dashboard() {
                                 <>
                                   {shown.map((ev: any) => {
                                     const isLead = ev._kind === 'lead';
+                                    // A held date draws as a dashed, hatched "HOLD" chip, never a solid booking.
+                                    const isHold = isLead && holdState(ev) === 'held';
                                     const time = ev.startTime ?? ev.eventTime ?? null;
                                     return (
                                       <div key={`${ev._kind}-${ev.id}`} className="relative group/card w-full">
@@ -4868,8 +5210,9 @@ export default function Dashboard() {
                                           onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ id: ev.id, type: ev._kind, eventDate: ev.eventDate })); e.dataTransfer.effectAllowed = 'move'; }}
                                           onClick={() => isLead ? openEventDrawer({ ...ev, _isLead: true }) : setSelectedBooking(ev)}
                                           style={spaceColor(ev.spaceName) ? { borderLeft: `3px solid ${spaceColor(ev.spaceName)}` } : undefined}
-                                          className={`w-full text-left rounded font-dm ${statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
-                                          title={`${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
+                                          className={`w-full text-left rounded font-dm ${isHold ? 'vf-hold-chip' : statusCard(ev.status)} hover:opacity-80 transition-opacity cursor-move h-6 px-1.5 py-0.5 flex items-center gap-1`}
+                                          title={`${isHold ? `HOLD until ${fmtHoldDay(ev.holdUntil)} — ` : ''}${ev.firstName} ${ev.lastName ?? ''} — ${ev.eventType ?? (isLead ? 'Enquiry' : 'Event')}${ev.guestCount ? ` — ${ev.guestCount} guests` : ''}${ev.spaceName ? ` — ${ev.spaceName}` : ''}${time ? ` — ${time}` : ''} (${getStatusInfo(ev.status).label})`}>
+                                          {isHold && <span className="shrink-0 font-bebas text-[9px] tracking-widest leading-snug">HOLD</span>}
                                           {time && <span className="shrink-0 text-[9px] tabular-nums opacity-70 leading-snug">{time}</span>}
                                           <span className="truncate font-semibold text-[10px] leading-snug">{ev.firstName} {ev.lastName ? ev.lastName[0] + '.' : ''}</span>
                                         </button>
@@ -4890,6 +5233,17 @@ export default function Dashboard() {
                                 </>
                               );
                             })()}
+                            {/* Walkthroughs booked from the enquiry form — a quiet
+                                dashed chip, so they read as appointments, not events. */}
+                            {!isOverflow && (monthWalkthroughs ?? []).filter((w: any) => w.walkthroughAt && new Date(w.walkthroughAt).getDate() === day).map((w: any) => (
+                              <button key={`wt-${w.id}`}
+                                onClick={() => { const l = (allLeads ?? []).find((x: any) => x?.id === w.id); if (l) openEventDrawer({ ...l, _isLead: true }); }}
+                                className="w-full text-left rounded h-6 px-1.5 flex items-center gap-1 border border-dashed border-gold bg-white text-ink hover:bg-linen transition-colors"
+                                title={`Walkthrough — ${w.firstName} ${w.lastName ?? ''} — ${w.walkthroughSlot ?? ''}`}>
+                                <span className="shrink-0 text-[9px] tabular-nums text-stone leading-snug">{new Date(w.walkthroughAt).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).replace(' ', '')}</span>
+                                <span className="truncate font-semibold text-[10px] leading-snug">Walkthrough · {w.firstName} {w.lastName ? w.lastName[0] + '.' : ''}</span>
+                              </button>
+                            ))}
                             {/* Add enquiry on this day — opens the dated quick-create
                                 form (a plus, not a pencil), so a date-first click
                                 lands on a manual form for the day you picked rather
@@ -4965,9 +5319,11 @@ export default function Dashboard() {
                                     {e.spaceName ? ` · ${e.spaceName}` : ''}
                                   </div>
                                 </div>
+                                {e._kind === 'lead' && holdState(e) === 'held' ? <HoldTag until={e.holdUntil} /> : (
                                 <span className={`font-bebas text-[9px] tracking-widest px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(e.status).calClasses}`}>
                                   {getStatusInfo(e.status).label.toUpperCase()}
                                 </span>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -5204,7 +5560,9 @@ export default function Dashboard() {
                                 </div>
                                 {/* Status (+ deposit for bookings) */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-bebas text-[10px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>
+                                  {item._type === 'lead' && holdState(item) === 'held'
+                                    ? <HoldTag until={item.holdUntil} />
+                                    : <span className="font-bebas text-[10px] tracking-widest text-ink/80">{si.label.toUpperCase()}</span>}
                                   {item._type === 'booking' && (
                                     <span className={`font-bebas text-[9px] tracking-widest ${item.depositPaid ? 'text-forest' : 'text-amber-700'}`}>{item.depositPaid ? '· PAID' : '· PENDING'}</span>
                                   )}
@@ -5322,11 +5680,11 @@ export default function Dashboard() {
                           {dayLeads.map((l: any) => (
                             <button key={l.id}
                               onClick={() => openEventDrawer({ ...l, _isLead: true })}
-                              className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${statusCard(l.status)} hover:opacity-80 transition-opacity`}>
+                              className={`w-full text-left rounded px-1.5 py-1.5 text-[10px] leading-snug font-dm ${holdState(l) === 'held' ? 'vf-hold-chip' : statusCard(l.status)} hover:opacity-80 transition-opacity`}>
                               <div className="font-semibold truncate">{l.firstName} {l.lastName}</div>
                               {l.eventType && <div className="opacity-95 truncate">{l.eventType}</div>}
                               {l.guestCount && <div className="opacity-95">{l.guestCount} pax</div>}
-                              <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{statusLabel(l.status)}</div>
+                              <div className="opacity-95 font-bebas tracking-widest text-[10px] mt-0.5">{holdState(l) === 'held' ? `HOLD · TO ${fmtHoldDay(l.holdUntil).toUpperCase()}` : statusLabel(l.status)}</div>
                             </button>
                           ))}
                           {dayBookings.length === 0 && dayLeads.length === 0 && (
@@ -5449,7 +5807,7 @@ export default function Dashboard() {
                         {dayLeads.map((l: any) => (
                           <button key={l.id}
                             onClick={() => openEventDrawer({ ...l, _isLead: true })}
-                            className={`w-full text-left p-4 ${statusCard(l.status)} hover:opacity-90 transition-opacity`}>
+                            className={`w-full text-left p-4 ${holdState(l) === 'held' ? 'vf-hold-chip rounded-sm' : statusCard(l.status)} hover:opacity-90 transition-opacity`}>
                             <div className="flex items-start gap-3">
                               <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${statusDot(l.status)}`} />
                               <div className="flex-1 min-w-0">
@@ -5468,9 +5826,11 @@ export default function Dashboard() {
                                   {l.spaceName && <span>{l.spaceName}</span>}
                                 </div>
                               </div>
+                              {holdState(l) === 'held' ? <HoldTag until={l.holdUntil} /> : (
                               <div className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getStatusInfo(l.status).calClasses}`}>
                                 {getStatusInfo(l.status).label.toUpperCase()}
                               </div>
+                              )}
                             </div>
                           </button>
                         ))}
@@ -5791,11 +6151,41 @@ export default function Dashboard() {
                       {/* pt-6 only makes sense next to a field that has a label
                           above it — in the single-column phone layout it was
                           just a gap. */}
-                      <div className="flex items-start gap-3 md:pt-6">
-                        <input type="checkbox" id="autoCancelTentative" checked={settingsForm.autoCancelTentative === 1}
-                          onChange={e => setSettingsForm((f: any) => ({ ...f, autoCancelTentative: e.target.checked ? 1 : 0 }))}
-                          className="w-5 h-5 mt-0.5 flex-none accent-forest" />
-                        <label htmlFor="autoCancelTentative" className="font-dm text-sm text-ink">Automatically cancel tentative events after their event date</label>
+                      <div aria-hidden="true" className="hidden md:block" />
+                      {/* ── Date holds ── */}
+                      <div className="md:col-span-2 border-t border-gold pt-4 mt-2">
+                        <h3 className="font-bebas text-xs tracking-widest text-sage mb-1">DATE HOLDS</h3>
+                        <p className="font-dm text-xs text-stone-600 mb-3">Hold a date for an enquiry from its panel. Holds show on the calendar and warn anyone booking the same space that day. You get an alert the day before a hold ends.</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label htmlFor="vs-default-hold-days" className="font-bebas text-xs tracking-widest text-sage block mb-1">DEFAULT HOLD LENGTH (DAYS)</label>
+                            <Input id="vs-default-hold-days" type="number" min={1} max={90} value={settingsForm.defaultHoldDays ?? 7}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, defaultHoldDays: Math.min(90, Math.max(1, parseInt(e.target.value) || 7)) }))}
+                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                          </div>
+                          <div className="space-y-3 md:pt-1">
+                            <div className="flex items-start gap-3">
+                              <input type="checkbox" id="autoCancelTentative" checked={settingsForm.autoCancelTentative === 1}
+                                onChange={e => setSettingsForm((f: any) => ({ ...f, autoCancelTentative: e.target.checked ? 1 : 0 }))}
+                                aria-describedby="autoCancelTentative-help"
+                                className="w-5 h-5 mt-0.5 flex-none accent-forest" />
+                              <div>
+                                <label htmlFor="autoCancelTentative" className="font-dm text-sm text-ink">Release holds automatically when they end</label>
+                                <p id="autoCancelTentative-help" className="font-dm text-xs text-stone-600 mt-0.5">The date is freed and the enquiry goes back to the status it had before. Off: holds stay on the calendar and you're told they've lapsed.</p>
+                              </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <input type="checkbox" id="holdClientReminderEnabled" checked={settingsForm.holdClientReminderEnabled === 1}
+                                onChange={e => setSettingsForm((f: any) => ({ ...f, holdClientReminderEnabled: e.target.checked ? 1 : 0 }))}
+                                aria-describedby="holdClientReminderEnabled-help"
+                                className="w-5 h-5 mt-0.5 flex-none accent-forest" />
+                              <div>
+                                <label htmlFor="holdClientReminderEnabled" className="font-dm text-sm text-ink">Remind clients before a hold expires</label>
+                                <p id="holdClientReminderEnabled-help" className="font-dm text-xs text-stone-600 mt-0.5">Emails the client the day before their hold ends, asking if they'd like to go ahead. Needs your email (SMTP) set up in Settings → Email.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       <div className="md:col-span-2">
                         <label htmlFor="vs-payment-instructions" className="font-bebas text-xs tracking-widest text-sage block mb-1">PAYMENT INSTRUCTIONS</label>
@@ -6085,12 +6475,15 @@ export default function Dashboard() {
                           <div className="font-dm text-xs text-ink/60">
                             {s.minCapacity && s.maxCapacity ? `${s.minCapacity}–${s.maxCapacity} guests` : s.maxCapacity ? `Up to ${s.maxCapacity} guests` : ""}
                             {Number(s.minSpend) > 0 ? ` · Min spend $${Number(s.minSpend).toLocaleString()}` : ""}
+                            {Number(s.minSpendWeekend) > 0 ? ` · Fri & Sat $${Number(s.minSpendWeekend).toLocaleString()}` : ""}
+                            {Number(s.packagesFromPp) > 0 ? ` · From $${Number(s.packagesFromPp).toLocaleString()} pp` : ""}
+                            {s.showPricingOnForm ? " · Pricing shown on enquiry form" : ""}
                           </div>
                           {s.description && <div className="font-dm text-xs text-ink/60 mt-0.5">{s.description}</div>}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => { setEditingSpace(s); setEditSpaceForm({ name: s.name, description: s.description ?? '', minCapacity: s.minCapacity ? String(s.minCapacity) : '', maxCapacity: s.maxCapacity ? String(s.maxCapacity) : '', minSpend: s.minSpend ? String(s.minSpend) : '' }); setShowEditSpace(true); }}
+                            onClick={() => { setEditingSpace(s); setEditSpaceForm({ name: s.name, description: s.description ?? '', minCapacity: s.minCapacity ? String(s.minCapacity) : '', maxCapacity: s.maxCapacity ? String(s.maxCapacity) : '', minSpend: s.minSpend ? String(s.minSpend) : '', minSpendWeekend: s.minSpendWeekend ? String(Number(s.minSpendWeekend)) : '', packagesFromPp: s.packagesFromPp ? String(Number(s.packagesFromPp)) : '', showPricingOnForm: !!s.showPricingOnForm }); setShowEditSpace(true); }}
                             className="text-sage hover:text-forest-dark p-1"
                             title="Edit space"
                           >
@@ -6231,6 +6624,7 @@ export default function Dashboard() {
 
               {/* ── Email inbox (client replies → enquiry timeline) ──────── */}
               <InboxSettingsCard />
+              <ProposalEmailSettings />
 
               {/* ── Email Signatures ────────────────────────────────────── */}
               <div className="mt-8">
@@ -6354,86 +6748,8 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Email Templates */}
-              <div className="mt-8">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="font-cormorant text-xl font-semibold text-ink">Email Templates</h2>
-                    <p className="font-dm text-xs text-sage">Save reusable email templates to one-click populate the compose modal.</p>
-                  </div>
-                  <button onClick={() => setShowTemplateForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
-                    <Plus className="w-3 h-3" /> NEW TEMPLATE
-                  </button>
-                </div>
-                {(emailTemplates ?? []).length === 0 ? (
-                  <div className="border border-dashed border-gold/20 p-6 text-center">
-                    <p className="font-dm text-sage text-sm">No templates yet. Create your first template to speed up email replies.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {(emailTemplates ?? []).map((t: any) => (
-                      <div key={t.id} className="dante-card p-4 flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-cormorant font-semibold text-base text-ink">{t.name}</div>
-                          <div className="font-bebas tracking-widest text-xs text-forest mt-0.5">{t.subject}</div>
-                          <div className="font-dm text-xs text-ink/70 mt-1 line-clamp-2">{t.body}</div>
-                        </div>
-                        <button aria-label="Delete template" onClick={() => deleteTemplate.mutate({ id: t.id })} className="text-sage/40 hover:text-tomato transition-colors flex-shrink-0 mt-1">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {/* New Template Form */}
-                {showTemplateForm && (
-                  <div className="mt-4 dante-card p-5 border-2 border-gold/30">
-                    <div className="font-cormorant text-lg font-semibold text-ink mb-4">New Template</div>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TEMPLATE NAME</label>
-                        <Input value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Function Pack Follow-Up" className="rounded-none border-border font-dm text-sm" />
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBJECT LINE</label>
-                        <Input value={templateForm.subject} onChange={e => setTemplateForm(f => ({ ...f, subject: e.target.value }))} placeholder="e.g. Following up on your enquiry" className="rounded-none border-border font-dm text-sm" />
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MESSAGE BODY</label>
-                        <Textarea value={templateForm.body} onChange={e => setTemplateForm(f => ({ ...f, body: e.target.value }))} rows={6} placeholder="Write your template message here..." className="rounded-none border-border font-dm text-sm resize-none" />
-                      </div>
-                      {/* Variable cheatsheet */}
-                      <details className="group">
-                        <summary className="font-bebas tracking-widest text-xs text-forest/70 cursor-pointer hover:text-forest select-none list-none flex items-center gap-1">
-                          <span className="group-open:rotate-90 transition-transform inline-block">▶</span> AVAILABLE VARIABLES
-                        </summary>
-                        <div className="mt-2 p-3 bg-cream/60 border border-gold/20 grid grid-cols-2 gap-x-4 gap-y-1">
-                          {TEMPLATE_VARIABLES.map(v => (
-                            <button
-                              key={v.token}
-                              type="button"
-                              onClick={() => setTemplateForm(f => ({ ...f, body: f.body + v.token }))}
-                              title={`Insert ${v.label} — e.g. "${v.example}"`}
-                              className="text-left group/var"
-                            >
-                              <span className="font-mono text-xs text-forest group-hover/var:text-gold transition-colors">{v.token}</span>
-                              <span className="font-dm text-xs text-ink/60 ml-1">{v.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </details>
-                      <div className="flex gap-2 pt-1">
-                        <button onClick={() => { setShowTemplateForm(false); setTemplateForm({ name: '', subject: '', body: '' }); }}
-                          className="border border-border font-bebas tracking-widest text-xs px-4 py-2 text-ink/60 hover:text-ink transition-colors">CANCEL</button>
-                        <button onClick={() => createTemplate.mutate(templateForm)} disabled={!templateForm.name || !templateForm.subject || !templateForm.body || createTemplate.isPending}
-                          className="btn-forest font-bebas tracking-widest text-xs px-6 py-2 text-cream disabled:opacity-50">
-                          {createTemplate.isPending ? 'SAVING...' : 'SAVE TEMPLATE'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Email Templates — create, edit, delete, starter set */}
+              <EmailTemplatesSettings />
               </div>
               )}
 
@@ -6755,6 +7071,13 @@ export default function Dashboard() {
                   formSuccessMessage: settingsForm.formSuccessMessage || undefined,
                   enquiryAutoReplyEnabled: settingsForm.enquiryAutoReplyEnabled ? 1 : 0,
                   enquiryAutoReplyMessage: settingsForm.enquiryAutoReplyMessage || undefined,
+                  showAvailabilityOnForm: settingsForm.showAvailabilityOnForm ? 1 : 0,
+                  walkthroughEnabled: settingsForm.walkthroughEnabled ? 1 : 0,
+                  walkthroughDays: [...(settingsForm.walkthroughDays ?? [])].sort().join(","),
+                  walkthroughStart: settingsForm.walkthroughStart,
+                  walkthroughEnd: settingsForm.walkthroughEnd,
+                  walkthroughSlotMinutes: Number(settingsForm.walkthroughSlotMinutes) || 30,
+                  walkthroughDaysAhead: Number(settingsForm.walkthroughDaysAhead) || 14,
                   ...(formFields ? { customFormFields: JSON.stringify(formFields) } : {}),
                 });
               }} className="space-y-4">
@@ -6976,7 +7299,7 @@ export default function Dashboard() {
                     value={settingsForm.formSuccessMessage ?? ''}
                     onChange={e => setSettingsForm((f: any) => ({ ...f, formSuccessMessage: e.target.value }))}
                     aria-label="Success message"
-                    placeholder={`Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.`}
+                    placeholder={DEFAULT_FORM_SUCCESS_MESSAGE}
                     rows={3}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none" />
                 </div>
@@ -7000,10 +7323,100 @@ export default function Dashboard() {
                       value={settingsForm.enquiryAutoReplyMessage ?? ''}
                       onChange={e => setSettingsForm((f: any) => ({ ...f, enquiryAutoReplyMessage: e.target.value }))}
                       aria-label="Auto-reply message"
-                      placeholder={`Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch within one business day.`}
+                      placeholder={DEFAULT_AUTO_REPLY_INTRO}
                       rows={3}
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none" />
                   )}
+                </div>
+
+                {/* ── AVAILABILITY & WALKTHROUGHS ── */}
+                <div className="dante-card p-5 space-y-4">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage">AVAILABILITY &amp; WALKTHROUGHS</h2>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-dm text-sm text-ink">Show availability on enquiry form</div>
+                      <p className="font-dm text-xs text-stone mt-0.5">Booked dates are crossed out on the date picker and busy ones get a small dot. Clients only see dates — never who&rsquo;s booked. Uses confirmed events.</p>
+                    </div>
+                    <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                      <input type="checkbox" checked={!!settingsForm.showAvailabilityOnForm}
+                        onChange={e => setSettingsForm((f: any) => ({ ...f, showAvailabilityOnForm: e.target.checked }))}
+                        aria-label="Show availability on enquiry form"
+                        className="w-4 h-4 accent-forest" />
+                      <span className="font-bebas text-xs tracking-widest text-ink">{settingsForm.showAvailabilityOnForm ? 'ON' : 'OFF'}</span>
+                    </label>
+                  </div>
+
+                  <div className="border-t border-gold pt-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-dm text-sm text-ink">Walkthrough booking</div>
+                        <p className="font-dm text-xs text-stone mt-0.5">After sending an enquiry, clients can book a real walkthrough. Times already taken by another walkthrough or an event are left out. You get a task and an alert; the client gets an email confirmation with a calendar invite (needs your SMTP set up).</p>
+                      </div>
+                      <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                        <input type="checkbox" checked={!!settingsForm.walkthroughEnabled}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughEnabled: e.target.checked }))}
+                          aria-label="Walkthrough booking"
+                          className="w-4 h-4 accent-forest" />
+                        <span className="font-bebas text-xs tracking-widest text-ink">{settingsForm.walkthroughEnabled ? 'ON' : 'OFF'}</span>
+                      </label>
+                    </div>
+                    {settingsForm.walkthroughEnabled && (
+                      <div className="space-y-3">
+                        <div>
+                          <div id="wt-days-label" className="font-bebas text-xs tracking-widest text-sage mb-1.5">DAYS</div>
+                          <div role="group" aria-labelledby="wt-days-label" className="flex flex-wrap gap-1.5">
+                            {[1, 2, 3, 4, 5, 6, 0].map(d => {
+                              const on = (settingsForm.walkthroughDays ?? []).includes(d);
+                              return (
+                                <button key={d} type="button" aria-pressed={on}
+                                  onClick={() => setSettingsForm((f: any) => ({ ...f, walkthroughDays: on ? (f.walkthroughDays ?? []).filter((x: number) => x !== d) : [...(f.walkthroughDays ?? []), d] }))}
+                                  className={`w-12 py-1.5 border font-dm text-xs transition-colors ${on ? 'bg-forest text-cream border-forest' : 'bg-white text-ink border-gold hover:bg-linen'}`}>
+                                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <label htmlFor="wt-start" className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM</label>
+                            <Input id="wt-start" type="time" step={900} value={settingsForm.walkthroughStart ?? '10:00'}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughStart: e.target.value }))}
+                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                          </div>
+                          <div>
+                            <label htmlFor="wt-end" className="font-bebas text-xs tracking-widest text-sage block mb-1">UNTIL</label>
+                            <Input id="wt-end" type="time" step={900} value={settingsForm.walkthroughEnd ?? '16:00'}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughEnd: e.target.value }))}
+                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                          </div>
+                          <div>
+                            <label htmlFor="wt-slot" className="font-bebas text-xs tracking-widest text-sage block mb-1">LENGTH</label>
+                            <select id="wt-slot" value={settingsForm.walkthroughSlotMinutes ?? 30}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughSlotMinutes: Number(e.target.value) }))}
+                              className="w-full h-9 px-2 bg-white rounded-none border border-gold/30 font-dm text-sm">
+                              {[15, 20, 30, 45, 60].map(m => <option key={m} value={m}>{m} min</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label htmlFor="wt-ahead" className="font-bebas text-xs tracking-widest text-sage block mb-1">BOOK UP TO</label>
+                            <select id="wt-ahead" value={settingsForm.walkthroughDaysAhead ?? 14}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughDaysAhead: Number(e.target.value) }))}
+                              className="w-full h-9 px-2 bg-white rounded-none border border-gold/30 font-dm text-sm">
+                              {[7, 14, 21, 28, 42, 60].map(d => <option key={d} value={d}>{d} days ahead</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        {(settingsForm.walkthroughDays ?? []).length === 0 && (
+                          <p className="font-dm text-xs text-tomato">Pick at least one day, or turn walkthroughs off.</p>
+                        )}
+                        {settingsForm.walkthroughStart >= settingsForm.walkthroughEnd && (
+                          <p className="font-dm text-xs text-tomato">The finish time needs to be after the start time.</p>
+                        )}
+                        <p className="font-dm text-xs text-stone">Times are New Zealand time. Clients can book from tomorrow onwards.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* ── PHOTOS ── */}
@@ -7114,7 +7527,7 @@ export default function Dashboard() {
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">FORM SUBTITLE</label>
                     <Textarea value={settingsForm.leadFormSubtitle ?? ''} onChange={e => setSettingsForm((f: any) => ({ ...f, leadFormSubtitle: e.target.value }))}
-                      placeholder="Tell us about your event and we'll get back to you within 24 hours."
+                      placeholder={DEFAULT_LEAD_FORM_SUBTITLE}
                       rows={2} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold resize-none text-sm" />
                   </div>
                 </div>
@@ -7895,28 +8308,31 @@ export default function Dashboard() {
 
               {/* ── AUTOMATED TASKS ─────────────────────────────── */}
               {settingsSubTab === "automated-tasks" && (() => {
-                const taskRules: { name: string; trigger: string; daysOffset: string; priority: string }[] = (() => {
-                  try { return JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); } catch { return []; }
+                // Saved as-is (raw) so deleting one rule never rewrites the
+                // others; parsed per row for the plain-language "When" column.
+                const taskRules: any[] = (() => {
+                  try { const v = JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
                 })();
-                const TRIGGER_LABELS: Record<string, string> = {
-                  days_before_event: 'Days before event',
-                  on_booking_confirmed: 'On booking confirmed',
-                  on_function_pack_sent: 'On function pack sent',
-                  on_enquiry_received: 'On new enquiry',
-                };
+                const statusLabel = (key: string) => pipelineStages.find(s => s.key === key)?.label ?? key.replace(/_/g, ' ');
                 const saveRules = (rules: typeof taskRules) => {
-                  updateSettings.mutate({ automatedTaskRules: JSON.stringify(rules) });
+                  updateSettings.mutate({ automatedTaskRules: JSON.stringify(rules) }, { onSuccess: () => utils.tasks.invalidate() });
                 };
+                const hasPackStatus = pipelineStages.some(s => s.key === FUNCTION_PACK_STATUS);
+                const packRuleOverridden = parseTaskRules(taskRules).some(r => r.trigger === 'on_status_change' && r.status === FUNCTION_PACK_STATUS);
                 return (
                 <div className="max-w-3xl mx-auto">
                   <div className="flex items-center justify-between mb-6">
                     <h1 className="font-cormorant text-3xl font-semibold text-ink">Automated Tasks</h1>
                   </div>
-                  <p className="font-dm text-sm text-ink/60 mb-4">When a trigger fires, a task is automatically created and linked to the event.</p>
+                  <p className="font-dm text-sm text-stone-700 mb-1">When something happens on an enquiry or booking, a task is added to your Tasks list, linked to it.</p>
+                  <p className="font-dm text-sm text-stone-700 mb-4">Each rule makes its task once per enquiry or booking — moving a lead back and forth won't double up.</p>
+                  {hasPackStatus && !packRuleOverridden && (
+                    <p className="font-dm text-xs text-stone-600 mb-4">Built in: moving an enquiry to {statusLabel(FUNCTION_PACK_STATUS)} adds a "Follow up" task due 5 days later. Add your own rule for that status to replace it.</p>
+                  )}
                   <div className="bg-white border border-gray-200 rounded">
                     <div className="flex items-center justify-between p-4 border-b border-gray-200">
                       <h2 className="font-semibold text-gray-800">Task Rules</h2>
-                      <button onClick={() => { setTaskRuleForm({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium' }); setShowAddTaskRule(true); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add Rule</button>
+                      <button onClick={() => { setTaskRuleForm({ name: '', trigger: 'days_before_event', daysOffset: '3', priority: 'medium', status: '' }); setShowAddTaskRule(true); }} className="btn-forest text-cream text-xs font-bebas tracking-widest px-4 py-2">Add Rule</button>
                     </div>
                     {taskRules.length === 0 ? (
                       <div className="p-8 text-center">
@@ -7924,29 +8340,31 @@ export default function Dashboard() {
                       </div>
                     ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[600px]">
+                      <table className="w-full">
                       <thead>
                         <tr className="border-b border-gray-100">
-                          <th className="text-left p-3 text-xs font-medium text-gray-500">Task Name</th>
-                          <th className="text-left p-3 text-xs font-medium text-gray-500">Trigger</th>
-                          <th className="text-left p-3 text-xs font-medium text-gray-500">Priority</th>
-                          <th className="p-3"></th>
+                          <th className="text-left p-3 text-xs font-medium text-gray-600">Task</th>
+                          <th className="text-left p-3 text-xs font-medium text-gray-600">When</th>
+                          <th className="text-left p-3 text-xs font-medium text-gray-600">Priority</th>
+                          <th className="p-3"><span className="sr-only">Actions</span></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {taskRules.map((row, i) => (
-                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                        {taskRules.map((row, i) => {
+                          const parsed = parseTaskRules([row])[0];
+                          return (
+                          <tr key={row.id ?? i} className="border-b border-gray-50 hover:bg-gray-50">
                             <td className="p-3 text-sm text-gray-700">{row.name}</td>
-                            <td className="p-3 text-sm text-gray-500">
-                              {TRIGGER_LABELS[row.trigger] || row.trigger}
-                              {row.trigger === 'days_before_event' && row.daysOffset ? ` (${row.daysOffset}d)` : ''}
+                            <td className="p-3 text-sm text-gray-600">
+                              {parsed ? describeTaskRule(parsed, statusLabel) : <span className="text-red-700">Can't run — delete and re-add this rule</span>}
                             </td>
-                            <td className="p-3 text-sm text-gray-500 capitalize">{row.priority}</td>
+                            <td className="p-3 text-sm text-gray-600 capitalize">{row.priority}</td>
                             <td className="p-3 text-right">
-                              <button aria-label="Delete rule" onClick={() => { const next = taskRules.filter((_, j) => j !== i); saveRules(next); }} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                              <button aria-label={`Delete rule ${row.name}`} onClick={() => { const next = taskRules.filter((_, j) => j !== i); saveRules(next); }} className="text-red-600 hover:text-red-800"><Trash2 className="w-4 h-4" /></button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                     </div>
@@ -9347,6 +9765,7 @@ export default function Dashboard() {
           )}
         </main>
 
+        <ClashDialogHost />
         <XeroPushModal
           open={xeroInvoiceFor !== null}
           onClose={() => setXeroInvoiceFor(null)}
@@ -9507,6 +9926,41 @@ export default function Dashboard() {
               {selectedBooking._isLead && !isStaff && (
                 <LeadResponseInfo leadId={selectedBooking.id} readOnly={isTeamMember}
                   onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("follow-ups"); }} />
+              )}
+              {/* Enquiry follow-up: when to chase next, plus whether anyone
+                  has replied yet (separate from the unread badge). */}
+              {selectedBooking._isLead && !CLOSED_FOLLOWUP_STATUSES.includes(selectedBooking.status) && !isStaff && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`${DRAWER_LABEL} flex-shrink-0`}>Follow-up</span>
+                  <FollowUpDateControl
+                    leadId={selectedBooking.id}
+                    value={selectedBooking.followUpDate}
+                    onChanged={next => setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === selectedBooking.id ? { ...prev, followUpDate: next } : prev)}
+                  />
+                  {leadNeedsReply(selectedBooking) && <NeedsReplyChip />}
+                </div>
+              )}
+              {/* Date hold (enquiries): hold / held-until / extend / release,
+                  plus a "Date clash" warning when the date + space is taken. */}
+              {selectedBooking._isLead && !isStaff && (
+                <HoldPanel
+                  key={selectedBooking.id}
+                  lead={selectedBooking}
+                  defaultHoldDays={(venueSettings as any)?.defaultHoldDays}
+                  onChanged={(patch) => {
+                    setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === selectedBooking.id ? { ...prev, ...patch } : prev);
+                    refetchLeads();
+                  }}
+                />
+              )}
+              {/* Owner, returning-client / duplicate flags, client history, merge. */}
+              {!isStaff && (selectedBooking._isLead || selectedBooking.leadId) && (
+                <LeadClientPanel key={`${selectedBooking._isLead ? 'l' : 'b'}${selectedBooking.id}`}
+                  leadId={selectedBooking._isLead ? selectedBooking.id : selectedBooking.leadId}
+                  isLead={!!selectedBooking._isLead}
+                  assignedTo={selectedBooking._isLead ? selectedBooking.assignedTo : null}
+                  onOpenLead={openLeadById} onMerged={openLeadById}
+                  onOwnerChanged={v => setSelectedBooking((prev: any) => prev ? { ...prev, assignedTo: v } : prev)} />
               )}
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
@@ -9693,6 +10147,18 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+                {/* WALKTHROUGH — booked by the client from the enquiry form. */}
+                {selectedBooking._isLead && selectedBooking.walkthroughSlot && (
+                  <div className="flex items-start gap-3 sm:col-span-2">
+                    <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className={`${DRAWER_LABEL} mb-1`}>Walkthrough</div>
+                      <div className="font-dm text-sm text-ink">
+                        {selectedBooking.walkthroughSlot}{selectedBooking.walkthroughAt ? '' : ' (requested, not confirmed)'}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* EMAIL */}
                 <div className="flex items-start gap-3 sm:col-span-2">
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
@@ -10061,6 +10527,7 @@ export default function Dashboard() {
                     </>
                   )}
                 </div>
+                {selectedBooking._isLead && !isStaff && <LeadProposals leadId={selectedBooking.id} compact onNavigate={() => setSelectedBooking(null)} />}
               </SectionOrPlain>
               {selectedBooking._isLead && !isStaff && (
                 <LeadConversation leadId={selectedBooking.id} clientFirstName={selectedBooking.firstName}
@@ -10331,32 +10798,55 @@ export default function Dashboard() {
           <form onSubmit={e => {
             e.preventDefault();
             if (!taskRuleForm.name.trim()) return;
-            const existing: any[] = (() => { try { return JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); } catch { return []; } })();
-            const next = [...existing, { name: taskRuleForm.name.trim(), trigger: taskRuleForm.trigger, daysOffset: taskRuleForm.daysOffset, priority: taskRuleForm.priority }];
-            updateSettings.mutate({ automatedTaskRules: JSON.stringify(next) }, { onSuccess: () => { refetchSettings(); setShowAddTaskRule(false); toast.success('Task rule added!'); } });
+            if (taskRuleForm.trigger === 'on_status_change' && !taskRuleForm.status) { toast.error('Pick which status starts this rule.'); return; }
+            const existing: any[] = (() => { try { const v = JSON.parse((venueSettings as any)?.automatedTaskRules || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } })();
+            const days = Math.max(0, parseInt(taskRuleForm.daysOffset || '0', 10) || 0);
+            const next = [...existing, {
+              id: newTaskRuleId(),
+              name: taskRuleForm.name.trim(),
+              trigger: taskRuleForm.trigger,
+              daysOffset: String(days),
+              priority: taskRuleForm.priority,
+              ...(taskRuleForm.trigger === 'on_status_change' ? { status: taskRuleForm.status } : {}),
+            }];
+            updateSettings.mutate({ automatedTaskRules: JSON.stringify(next) }, { onSuccess: () => { refetchSettings(); utils.tasks.invalidate(); setShowAddTaskRule(false); toast.success('Task rule added.'); } });
           }} className="space-y-3">
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TASK NAME *</label>
-              <Input required value={taskRuleForm.name} onChange={e => setTaskRuleForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Confirm final guest numbers" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+              <label htmlFor="task-rule-name" className="font-bebas text-xs tracking-widest text-sage block mb-1">TASK NAME *</label>
+              <Input id="task-rule-name" required value={taskRuleForm.name} onChange={e => setTaskRuleForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Confirm final guest numbers" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TRIGGER</label>
-              <select value={taskRuleForm.trigger} onChange={e => setTaskRuleForm(f => ({ ...f, trigger: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
-                <option value="days_before_event">Days before event</option>
-                <option value="on_booking_confirmed">On booking confirmed</option>
-                <option value="on_function_pack_sent">On function pack sent</option>
-                <option value="on_enquiry_received">On new enquiry received</option>
+              <label htmlFor="task-rule-trigger" className="font-bebas text-xs tracking-widest text-sage block mb-1">WHEN</label>
+              <select id="task-rule-trigger" value={taskRuleForm.trigger} onChange={e => setTaskRuleForm(f => ({ ...f, trigger: e.target.value, daysOffset: e.target.value === 'days_before_event' ? '3' : '0' }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
+                {TASK_RULE_TRIGGERS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
               </select>
             </div>
-            {taskRuleForm.trigger === 'days_before_event' && (
+            {taskRuleForm.trigger === 'on_status_change' && (
               <div>
-                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DAYS BEFORE EVENT</label>
-                <Input type="number" min="1" value={taskRuleForm.daysOffset} onChange={e => setTaskRuleForm(f => ({ ...f, daysOffset: e.target.value }))} className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                <label htmlFor="task-rule-status" className="font-bebas text-xs tracking-widest text-sage block mb-1">STATUS</label>
+                <select id="task-rule-status" value={taskRuleForm.status} onChange={e => setTaskRuleForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
+                  <option value="">Pick a status…</option>
+                  {/* New is covered by "new enquiry"; confirmed statuses by "booking is confirmed". */}
+                  {pipelineStages.filter(s => s.key !== 'new' && !BOOKED_STATUSES.includes(s.key)).map(s => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </select>
               </div>
             )}
             <div>
-              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRIORITY</label>
-              <select value={taskRuleForm.priority} onChange={e => setTaskRuleForm(f => ({ ...f, priority: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
+              <label htmlFor="task-rule-days" className="font-bebas text-xs tracking-widest text-sage block mb-1">
+                {taskRuleForm.trigger === 'days_before_event' ? 'DAYS BEFORE THE EVENT' : 'DUE (DAYS LATER)'}
+              </label>
+              <Input id="task-rule-days" type="number" min="0" max="365" value={taskRuleForm.daysOffset} onChange={e => setTaskRuleForm(f => ({ ...f, daysOffset: e.target.value }))} aria-describedby="task-rule-days-hint" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+              <p id="task-rule-days-hint" className="font-dm text-xs text-stone-600 mt-1">
+                {taskRuleForm.trigger === 'days_before_event'
+                  ? 'For confirmed bookings. The task appears in your list a week before it’s due.'
+                  : '0 means due the same day.'}
+              </p>
+            </div>
+            <div>
+              <label htmlFor="task-rule-priority" className="font-bebas text-xs tracking-widest text-sage block mb-1">PRIORITY</label>
+              <select id="task-rule-priority" value={taskRuleForm.priority} onChange={e => setTaskRuleForm(f => ({ ...f, priority: e.target.value }))} className="w-full border border-gold/30 bg-white text-sm px-3 py-2 focus:outline-none focus:border-gold">
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
@@ -10377,7 +10867,7 @@ export default function Dashboard() {
               <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add Event Space</DialogTitle>
             </div>
           </DialogHeader>
-          <form onSubmit={e => { e.preventDefault(); createSpace.mutate({ name: spaceForm.name, description: spaceForm.description || undefined, minCapacity: spaceForm.minCapacity ? parseInt(spaceForm.minCapacity) : undefined, maxCapacity: spaceForm.maxCapacity ? parseInt(spaceForm.maxCapacity) : undefined, minSpend: spaceForm.minSpend ? parseFloat(spaceForm.minSpend) : undefined }); }} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); createSpace.mutate({ name: spaceForm.name, description: spaceForm.description || undefined, minCapacity: spaceForm.minCapacity ? parseInt(spaceForm.minCapacity) : undefined, maxCapacity: spaceForm.maxCapacity ? parseInt(spaceForm.maxCapacity) : undefined, minSpend: spaceForm.minSpend ? parseFloat(spaceForm.minSpend) : undefined, minSpendWeekend: spaceForm.minSpendWeekend ? parseFloat(spaceForm.minSpendWeekend) : undefined, packagesFromPp: spaceForm.packagesFromPp ? parseFloat(spaceForm.packagesFromPp) : undefined, showPricingOnForm: spaceForm.showPricingOnForm }); }} className="space-y-3">
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
               <Input required value={spaceForm.name} onChange={e => setSpaceForm(f => ({ ...f, name: e.target.value }))}
@@ -10400,6 +10890,7 @@ export default function Dashboard() {
               <Input type="number" value={spaceForm.minSpend} onChange={e => setSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
                 placeholder="2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
+            <SpacePricingFields form={spaceForm} setForm={setSpaceForm} />
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
               <Textarea value={spaceForm.description} onChange={e => setSpaceForm(f => ({ ...f, description: e.target.value }))}
@@ -10421,7 +10912,7 @@ export default function Dashboard() {
               <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Edit Event Space</DialogTitle>
             </div>
           </DialogHeader>
-          <form onSubmit={e => { e.preventDefault(); if (!editingSpace) return; updateSpace.mutate({ id: editingSpace.id, name: editSpaceForm.name, description: editSpaceForm.description || null, minCapacity: editSpaceForm.minCapacity ? parseInt(editSpaceForm.minCapacity) : null, maxCapacity: editSpaceForm.maxCapacity ? parseInt(editSpaceForm.maxCapacity) : null, minSpend: editSpaceForm.minSpend ? parseFloat(editSpaceForm.minSpend) : null }); }} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); if (!editingSpace) return; updateSpace.mutate({ id: editingSpace.id, name: editSpaceForm.name, description: editSpaceForm.description || null, minCapacity: editSpaceForm.minCapacity ? parseInt(editSpaceForm.minCapacity) : null, maxCapacity: editSpaceForm.maxCapacity ? parseInt(editSpaceForm.maxCapacity) : null, minSpend: editSpaceForm.minSpend ? parseFloat(editSpaceForm.minSpend) : null, minSpendWeekend: editSpaceForm.minSpendWeekend ? parseFloat(editSpaceForm.minSpendWeekend) : null, packagesFromPp: editSpaceForm.packagesFromPp ? parseFloat(editSpaceForm.packagesFromPp) : null, showPricingOnForm: editSpaceForm.showPricingOnForm }); }} className="space-y-3">
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
               <Input required value={editSpaceForm.name} onChange={e => setEditSpaceForm(f => ({ ...f, name: e.target.value }))}
@@ -10444,6 +10935,7 @@ export default function Dashboard() {
               <Input type="number" value={editSpaceForm.minSpend} onChange={e => setEditSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
                 placeholder="2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
+            <SpacePricingFields form={editSpaceForm} setForm={setEditSpaceForm} />
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
               <Textarea value={editSpaceForm.description} onChange={e => setEditSpaceForm(f => ({ ...f, description: e.target.value }))}
@@ -10577,6 +11069,10 @@ export default function Dashboard() {
       </Dialog>
 
       {/* Bulk Delete Confirmation */}
+      {lostPrompt && (
+        <LostReasonDialog count={lostPrompt.bulkIds?.length} name={lostPrompt.name} onConfirm={confirmLost} onCancel={cancelLost} />
+      )}
+
       {showBulkDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div role="dialog" aria-modal="true" className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
@@ -10893,7 +11389,9 @@ export default function Dashboard() {
           ) : (
             <form onSubmit={e => {
               e.preventDefault();
-              if (!addEnquiryForm.spaceName.trim()) { setAddEnquirySpaceError(true); toast.error('Please pick an event space.'); return; }
+              // A space is only needed once it's a live event (the server
+              // enforces the same rule); an enquiry can be logged without one.
+              if (addEnquiryNeedsSpace && !addEnquiryForm.spaceName.trim()) { setAddEnquirySpaceError(true); toast.error('Pick an event space — confirmed events need one.'); return; }
               setAddEnquirySpaceError(false);
               createEnquiry.mutate({
                 firstName: addEnquiryForm.firstName,
@@ -10907,8 +11405,8 @@ export default function Dashboard() {
                 budget: addEnquiryForm.budget ? parseFloat(addEnquiryForm.budget) : undefined,
                 message: addEnquiryForm.message || undefined,
                 status: addEnquiryForm.status,
-                source: 'manual',
-                spaceName: addEnquiryForm.spaceName,
+                source: addEnquiryForm.source || 'manual',
+                spaceName: addEnquiryForm.spaceName.trim() || undefined,
               });
             }} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -10984,8 +11482,21 @@ export default function Dashboard() {
                   </Select>
                 </div>
               </div>
+              <div>
+                <label htmlFor={`${addEnquiryFormId}-source`} className="font-bebas text-xs tracking-widest text-sage block mb-1">HOW DID THEY FIND YOU?</label>
+                <select id={`${addEnquiryFormId}-source`} value={addEnquiryForm.source}
+                  onChange={e => setAddEnquiryForm(f => ({ ...f, source: e.target.value }))}
+                  className="w-full h-9 rounded-none border border-gold/30 bg-white px-3 font-dm text-sm text-ink focus:outline-none focus:border-gold">
+                  <option value="">Not sure / skip</option>
+                  {MANUAL_ENQUIRY_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
               <fieldset>
-                <legend className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE <span className="text-red-500">*</span></legend>
+                <legend className="font-bebas text-xs tracking-widest text-sage block mb-1">
+                  SPACE {addEnquiryNeedsSpace
+                    ? <span className="text-red-500">*</span>
+                    : <span className="font-dm normal-case tracking-normal text-xs text-stone-600">(optional — you can pick one later)</span>}
+                </legend>
                 {spaces && spaces.length > 0 ? (
                   <SpaceMultiSelect value={addEnquiryForm.spaceName}
                     onChange={v => { setAddEnquiryForm(f => ({ ...f, spaceName: v })); if (v.trim()) setAddEnquirySpaceError(false); }}
@@ -10997,8 +11508,8 @@ export default function Dashboard() {
                     aria-invalid={addEnquirySpaceError}
                     className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
                 )}
-                {addEnquirySpaceError && (
-                  <p role="alert" className="font-dm text-xs text-red-600 mt-1">Please pick an event space.</p>
+                {addEnquirySpaceError && addEnquiryNeedsSpace && (
+                  <p role="alert" className="font-dm text-xs text-red-600 mt-1">Confirmed events need a space — pick one, or save it as an enquiry for now.</p>
                 )}
               </fieldset>
               <div>

@@ -5,6 +5,12 @@ import type { TrpcContext } from "./context";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  // A date-clash CONFLICT (server/availability.ts) carries the clash list so
+  // the UI can show what's in the way and offer "Book anyway".
+  errorFormatter({ shape, error }) {
+    const clashes = (error.cause as { clashes?: unknown } | undefined)?.clashes;
+    return Array.isArray(clashes) ? { ...shape, data: { ...shape.data, clashes } } : shape;
+  },
 });
 
 export const router = t.router;
@@ -50,6 +56,8 @@ const STAFF_BLOCKED_READ_PREFIXES = [
   "notifications.",  // alerts name clients and quote values
   "followUps.",      // client email wording + per-lead response times
   "inbox.",          // client email conversations + mailbox settings
+  "holds.",          // date holds and clash checks name enquiries
+  "winBack.",        // lost/quiet client lists with contact details
 ];
 /** Mutations a staff login MAY perform (none today — read-only by choice). */
 const STAFF_ALLOWED_MUTATIONS: string[] = [];

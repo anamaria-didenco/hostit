@@ -525,6 +525,21 @@ export async function pushBookingToNbi(
       return { pushed: true, nbiBookingId: result.nbiBookingId };
     }
     console.warn(`[NBI push:${opts.source}] booking ${bookingId} push FAILED: ${result.error}`);
+    // A second 409 means NowBookIt already has something in that slot — a
+    // possible double booking the venue needs to see even when the push ran
+    // in the background (proposal accept, mark booked).
+    if (result.error?.includes('(409)')) {
+      const { notifyVenue, bookingLink } = await import('./notify');
+      const who = [booking.firstName, booking.lastName].filter(Boolean).join(' ') || 'A booking';
+      await notifyVenue(ownerId, {
+        kind: 'double_booking',
+        title: `NowBookIt slot already taken: ${who}`,
+        body: `${who} couldn't be added to NowBookIt because that time is already taken there. Check the NowBookIt diary for an overlapping booking.`,
+        bookingId,
+        link: bookingLink(bookingId),
+        dedupeKey: `nbi_409:${bookingId}`,
+      });
+    }
     return { pushed: false, reason: `nbi_error: ${result.error}`, error: result.error };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

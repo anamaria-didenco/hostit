@@ -23,6 +23,7 @@ describe("staff login permissions", () => {
       "reports.revenue", "dashboard.stats",
       "accountLogins.list", "proposals.list", "contacts.list", "leads.list",
       "inbox.forLead", "inbox.replyStatus", "inbox.getSettings",
+      "winBack.list", "winBack.preview", "leads.getClientHistory", "leads.getTemplateLinks",
     ]) {
       expect(staffMayCall(path, "query"), path).toBe(false);
     }

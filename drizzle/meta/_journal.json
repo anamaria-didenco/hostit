@@ -485,6 +485,20 @@
       "breakpoints": true
     },
     {
+      "idx": 69,
+      "version": "7",
+      "when": 1779801512069,
+      "tag": "0069_proposal_responses",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1779801512070,
+      "tag": "0070_lead_activity_tracking",
+      "breakpoints": true
+    },
+    {
       "idx": 71,
       "version": "7",
       "when": 1779801512071,
@@ -492,10 +506,31 @@
       "breakpoints": true
     },
     {
+      "idx": 72,
+      "version": "7",
+      "when": 1779801512072,
+      "tag": "0072_date_holds",
+      "breakpoints": true
+    },
+    {
       "idx": 73,
       "version": "7",
       "when": 1779801512073,
       "tag": "0073_lead_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1779801512074,
+      "tag": "0074_enquiry_conversion",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1779801512075,
+      "tag": "0075_lead_retention",
       "breakpoints": true
     }
   ]
