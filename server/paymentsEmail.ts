@@ -36,8 +36,10 @@ export async function buildVenueMailer(ownerId: number): Promise<
     auth: { user: vs.smtpUser, pass: vs.smtpPass },
     tls: smtpTls(),
   });
-  const fromName = (vs.smtpFromName ?? vs.name ?? "VenueFlowHQ") as string;
-  const fromEmail = (vs.smtpFromEmail ?? vs.smtpUser) as string;
+  // `||` not `??`: a cleared Settings field saves as "", which used to send
+  // under a blank display name (inboxes then show the mailbox owner's name).
+  const fromName = (vs.smtpFromName?.trim() || vs.name?.trim() || "VenueFlowHQ") as string;
+  const fromEmail = (vs.smtpFromEmail?.trim() || vs.smtpUser) as string;
   return { transporter, fromName, fromEmail, venue: vs };
 }
 

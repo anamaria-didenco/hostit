@@ -32,6 +32,7 @@ const AUTOCOMPLETE: Record<string, string> = {
   company: "organization",
 };
 
+import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE } from "@shared/enquiryCopy";
 import { DEFAULT_FORM_FIELDS, mergeFormFields, EVENT_FORMAT_OPTIONS, BUDGET_RANGE_OPTIONS, eventFormatLabel, budgetRangeLabel, type FormFieldDef } from "@shared/formFields";
 
 const FONT_MAP: Record<string, string> = {
@@ -529,6 +530,10 @@ export default function LeadForm() {
   // startCapture): that one only ever fires in the step-wizard's step 1.
   const [submittedLeadId, setSubmittedLeadId] = useState<number | null>(null);
   const [submittedLeadToken, setSubmittedLeadToken] = useState<string | null>(null);
+  // Whether the server actually sent the "we've got your enquiry" email (off
+  // in Settings, or email not set up, means it didn't) — the success screen
+  // only tells people to check their inbox when there's something in it.
+  const [autoReplySent, setAutoReplySent] = useState(false);
   // Post-submit walkthrough: null = not yet answered, 'skip' = declined, or
   // the chosen slot. Cosmetic — see leads.bookWalkthrough.
   const [walkthrough, setWalkthrough] = useState<{ key: string; label: string } | "skip" | null>(null);
@@ -566,6 +571,7 @@ export default function LeadForm() {
     setCapturedLeadToken(null);
     setSubmittedLeadId(null);
     setSubmittedLeadToken(null);
+    setAutoReplySent(false);
     setWalkthrough(null);
     setTouchedInvalid(new Set());
     setSubmitted(false);
@@ -603,6 +609,7 @@ export default function LeadForm() {
       setSubmitted(true);
       setSubmittedLeadId(data?.id ?? null);
       setSubmittedLeadToken(data?.leadToken ?? null);
+      setAutoReplySent(data?.autoReplySent === true);
       clearDraft();
       // ── Conversion signal ───────────────────────────────────────────────
       // Embedding pages (and tag managers on them) need to know a submission
@@ -762,7 +769,7 @@ export default function LeadForm() {
 
   const venueName    = venue?.name ?? "VenueFlowHQ Venue";
   const formTitle    = venue?.leadFormTitle ?? "Book Your Event";
-  const formSubtitle = venue?.leadFormSubtitle ?? "Tell us about your event and we'll get back to you within 24 hours.";
+  const formSubtitle = venue?.leadFormSubtitle ?? DEFAULT_LEAD_FORM_SUBTITLE;
   const accentOverride = hexParam(paramAccent);
   const bgOverride = hexParam(paramBg);
   const bgTransparent = paramBg === "transparent";
@@ -789,7 +796,11 @@ export default function LeadForm() {
     : (FONT_MAP[formFont] ?? FONT_MAP.hanken);
   const textOnPrimary = isLight(primaryColor) ? "#1a1a1a" : "#ffffff";
   const galleryPhotoHeight = (venue as any)?.galleryPhotoHeight ?? 128;
-  const successMsg   = (venue as any)?.formSuccessMessage || "Thank you for your enquiry. The team at {venueName} will be in touch within 24 hours.";
+  const successMsg   = (venue as any)?.formSuccessMessage || DEFAULT_FORM_SUCCESS_MESSAGE;
+  // Only point people at their inbox when the confirmation email really went.
+  const inboxNote = autoReplySent
+    ? "We've emailed you a copy — check your inbox (and junk folder)."
+    : null;
   // Warm cream/linen defaults — a venue's own formPageBg/formCardBg still wins.
   const formPageBg      = bgTransparent ? "transparent" : (bgOverride || (venue as any)?.formPageBg || "#f4efe6");
   const formPageBgImage = bgTransparent ? null : ((venue as any)?.formPageBgImage || null);
@@ -1183,6 +1194,7 @@ export default function LeadForm() {
             <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: formButtonColor }} />
             <p className="font-semibold text-gray-800 text-sm mb-1" style={{ fontFamily: HEADING_FONT }}>Enquiry Received!</p>
             <p className="text-xs text-gray-600 leading-snug">{successMsg.replace('{venueName}', venueName)}</p>
+            {inboxNote && <p className="text-xs text-gray-600 leading-snug mt-1">{inboxNote}</p>}
             {renderWalkthroughStep('sm')}
             <button type="button" onClick={resetForm}
               className="mt-5 h-9 px-4 border border-gray-200 rounded text-xs font-bold tracking-wide uppercase text-gray-600 hover:border-gray-300">
@@ -1477,7 +1489,7 @@ export default function LeadForm() {
             <p className="text-gray-500 mb-2">
               {successMsg.replace('{venueName}', venueName)}
             </p>
-            <p className="text-sm text-gray-600">Please check your email for updates.</p>
+            {inboxNote && <p className="text-sm text-gray-600">{inboxNote}</p>}
             {renderWalkthroughStep('lg')}
             <button type="button" onClick={resetForm}
               className="mt-6 h-11 px-6 border border-gray-200 rounded text-sm font-bold tracking-wide uppercase text-gray-600 hover:border-gray-300">

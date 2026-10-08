@@ -189,7 +189,8 @@ export async function createLead(data: InsertLead) {
 export async function updateLeadStatus(id: number, ownerId: number, status: string, internalNotes?: string) {
   const db = await getDb();
   if (!db) return;
-  const updateData: Record<string, any> = { status };
+  const now = new Date();
+  const updateData: Record<string, any> = { status, updatedAt: now, lastActivityAt: now };
   if (internalNotes !== undefined) updateData.internalNotes = internalNotes;
   await db.update(leads).set(updateData)
     .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
@@ -198,21 +199,49 @@ export async function updateLeadStatus(id: number, ownerId: number, status: stri
 export async function updateLead(id: number, ownerId: number, data: Partial<InsertLead>) {
   const db = await getDb();
   if (!db) return;
-  await db.update(leads).set(data)
+  await db.update(leads).set({ updatedAt: new Date(), ...data })
     .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
 }
 
-// ─── Lead Activity ────────────────────────────────────────────────────────────
-export async function getLeadActivity(leadId: number) {
+/**
+ * Record that something happened on a lead: bumps lastActivityAt (drives
+ * "gone quiet") and updatedAt, and — when the venue replied (outbound email,
+ * call, status change) — stamps respondedAt the first time (drives "needs
+ * reply"). addLeadActivity calls this; call it directly for changes that don't
+ * log an activity row.
+ */
+export async function touchLead(leadId: number, ownerId: number, opts: { replied?: boolean } = {}) {
   const db = await getDb();
-  if (!db) return [];
-  return db.select().from(leadActivity).where(eq(leadActivity.leadId, leadId)).orderBy(desc(leadActivity.createdAt));
+  if (!db) return;
+  const now = new Date();
+  const set: Record<string, any> = { lastActivityAt: now, updatedAt: now };
+  // Same UTC wall-clock convention drizzle uses for Date values.
+  if (opts.replied) set.respondedAt = sql`COALESCE(${leads.respondedAt}, ${now.toISOString()}::timestamp)`;
+  await db.update(leads).set(set).where(and(eq(leads.id, leadId), eq(leads.ownerId, ownerId)));
 }
 
-export async function addLeadActivity(data: { leadId: number; ownerId: number; type: "note" | "status_change" | "proposal_sent" | "email" | "call" | "booking_created"; content?: string }) {
+// ─── Lead Activity ────────────────────────────────────────────────────────────
+export async function getLeadActivity(leadId: number, ownerId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(leadActivity)
+    .where(and(eq(leadActivity.leadId, leadId), eq(leadActivity.ownerId, ownerId)))
+    .orderBy(desc(leadActivity.createdAt));
+}
+
+// Activity types that mean the venue has replied to the enquirer.
+const REPLY_ACTIVITY_TYPES = new Set(["email", "call", "status_change", "proposal_sent", "booking_created"]);
+
+export async function addLeadActivity(
+  data: { leadId: number; ownerId: number; type: "note" | "status_change" | "proposal_sent" | "email" | "call" | "booking_created"; content?: string },
+  // countsAsReply: override for automatic messages (e.g. the enquiry
+  // auto-reply is an email, but nobody at the venue has replied yet).
+  opts: { countsAsReply?: boolean } = {},
+) {
   const db = await getDb();
   if (!db) return;
   await db.insert(leadActivity).values(data);
+  await touchLead(data.leadId, data.ownerId, { replied: opts.countsAsReply ?? REPLY_ACTIVITY_TYPES.has(data.type) });
 }
 
 // ─── Proposals ────────────────────────────────────────────────────────────────

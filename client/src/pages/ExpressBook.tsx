@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Calendar, Users, CheckCircle, ChevronRight, MapPin, Star } from "lucide-react";
+import { ENQUIRY_RESPONSE_PROMISE } from "@shared/enquiryCopy";
 
 const EVENT_TYPES = [
   "Wedding", "Birthday", "Corporate", "Engagement", "Anniversary",
@@ -109,7 +110,7 @@ export default function ExpressBook() {
           <div>
             <h1 className="font-cormorant text-3xl font-semibold text-ink mb-2">Enquiry Received!</h1>
             <p className="font-dm text-ink/60">
-              Thank you, {firstName}. We've received your enquiry and will be in touch within 24 hours to discuss your event.
+              Thank you, {firstName}. We've received your enquiry and will be in touch {ENQUIRY_RESPONSE_PROMISE} to discuss your event.
             </p>
           </div>
           <div className="bg-white border border-border p-5 text-left space-y-2">
@@ -503,7 +504,7 @@ export default function ExpressBook() {
 
             <div className="bg-amber/10 border border-amber/30 p-4 text-sm font-dm text-ink/70">
               <Star className="w-4 h-4 text-amber inline mr-2" />
-              By submitting this enquiry, our team will contact you within 24 hours to confirm availability and discuss your event in detail.
+              Once you send this, our team will be in touch {ENQUIRY_RESPONSE_PROMISE} to confirm availability and talk through the details.
             </div>
 
             <div className="flex gap-3">

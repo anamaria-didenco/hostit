@@ -127,6 +127,9 @@ function buildServer(ctx: { ownerId: number }): McpServer {
           leadId: id, ownerId: ctx.ownerId, type: "status_change", content: note, createdAt: Date.now(),
         } as any);
       }
+      // Keeps "gone quiet" / "needs reply" in step with the status change.
+      const { touchLead } = await import("./db");
+      await touchLead(id, ctx.ownerId, { replied: true });
       return ok({ success: true });
     }
   );
@@ -148,6 +151,8 @@ function buildServer(ctx: { ownerId: number }): McpServer {
       await db.insert(leadActivity).values({
         leadId, ownerId: ctx.ownerId, type: "note", content, createdAt: Date.now(),
       } as any);
+      const { touchLead } = await import("./db");
+      await touchLead(leadId, ctx.ownerId);
       return ok({ success: true });
     }
   );

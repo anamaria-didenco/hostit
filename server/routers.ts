@@ -265,7 +265,14 @@ export const appRouter = router({
           }
           data.slug = unique;
         }
-        return upsertVenueSettings(ctx.user.id, data);
+        const saved = await upsertVenueSettings(ctx.user.id, data);
+        // A new "before the event" rule should cover events already booked
+        // now, not at the next hourly sweep.
+        if (input.automatedTaskRules !== undefined) {
+          const { sweepDaysBeforeEvent } = await import('./automatedTasks');
+          await sweepDaysBeforeEvent(ctx.user.id);
+        }
+        return saved;
       }),
     getOwn: protectedProcedure.query(async ({ ctx }) => {      return getVenueSettings(ctx.user.id);
     }),
@@ -504,7 +511,7 @@ export const appRouter = router({
         if (['booked', 'confirmed', 'tentative', 'finished'].includes(incomingStatus) && !input.spaceName?.trim()) {
           throw new Error('Please select an event space before saving this event.');
         }
-        return createLead({
+        const created = await createLead({
           ownerId: ctx.user.id,
           firstName: input.firstName,
           lastName: input.lastName,
@@ -516,10 +523,15 @@ export const appRouter = router({
           guestCount: input.guestCount,
           budget: input.budget?.toString() as any,
           message: input.message,
-          source: input.source ?? "manual",
+          source: input.source?.trim() || "manual",
           status: incomingStatus,
           spaceName: input.spaceName?.trim() || undefined,
         });
+        if (created && !['booked', 'confirmed', 'finished'].includes(incomingStatus)) {
+          const { fireTaskRules } = await import('./automatedTasks');
+          await fireTaskRules(ctx.user.id, { trigger: 'on_enquiry_received', leadId: created.id });
+        }
+        return created;
       }),
 
     list: protectedProcedure
@@ -879,7 +891,9 @@ export const appRouter = router({
         // they're not left wondering whether the form worked. This is a
         // transactional confirmation the enquirer initiated by submitting (like
         // a receipt), on by default and switchable in Settings; it never blocks
-        // the submit if SMTP is down.
+        // the submit if SMTP is down. Whether it actually went out is returned
+        // so the success screen doesn't tell them to check an empty inbox.
+        let autoReplySent = false;
         try {
           const { getDb } = await import('./db');
           const { venueSettings } = await import('../drizzle/schema');
@@ -893,13 +907,12 @@ export const appRouter = router({
               const mailer = await buildVenueMailer(input.ownerId);
               if (mailer) {
                 const { escapeHtml: esc } = await import('./sanitizeHtml');
+                const { DEFAULT_AUTO_REPLY_INTRO } = await import('../shared/enquiryCopy');
                 const venueName = String(vs.name ?? mailer.fromName ?? 'our venue');
                 const accent = (vs.primaryColor && /^#[0-9a-fA-F]{6}$/.test(vs.primaryColor)) ? vs.primaryColor : '#2D4A3E';
                 const firstName = esc(input.firstName);
                 const introRaw = vs.enquiryAutoReplyMessage?.trim();
-                const intro = introRaw
-                  ? esc(introRaw)
-                  : `Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch within one business day.`;
+                const intro = introRaw ? esc(introRaw) : DEFAULT_AUTO_REPLY_INTRO;
                 const fmtDate = input.eventDate
                   ? (() => {
                       const raw = String(input.eventDate);
@@ -926,16 +939,28 @@ export const appRouter = router({
     <p style="font-size:15px;margin:16px 0 0">Warm regards,<br/><strong>${esc(venueName)}</strong></p>
   </div>
 </div>`;
-                const text = `Hi ${input.firstName},\n\n${introRaw ?? "Thanks so much for your enquiry — it's landed with us and a member of the team will be in touch within one business day."}\n\n${[input.eventType && `Event: ${input.eventType}`, fmtDate && `Date: ${fmtDate}`, input.guestCount && `Guests: ${input.guestCount}`].filter(Boolean).join('\n')}\n\nWarm regards,\n${venueName}`;
+                const text = `Hi ${input.firstName},\n\n${introRaw || DEFAULT_AUTO_REPLY_INTRO}\n\n${[input.eventType && `Event: ${input.eventType}`, fmtDate && `Date: ${fmtDate}`, input.guestCount && `Guests: ${input.guestCount}`].filter(Boolean).join('\n')}\n\nWarm regards,\n${venueName}`;
+                const subject = `We've received your enquiry — ${venueName}`;
                 await mailer.transporter.sendMail({
                   from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
                   to: input.email,
                   replyTo: mailer.fromEmail,
-                  subject: `We've received your enquiry — ${venueName}`,
+                  subject,
                   html,
                   text,
                 });
+                autoReplySent = true;
                 console.log(`[LeadSubmit] Auto-reply sent to ${input.email}`);
+                // On the lead's timeline, but it isn't a reply from the team —
+                // the lead still shows "needs reply".
+                if (lead) {
+                  await addLeadActivity({
+                    leadId: lead.id,
+                    ownerId: input.ownerId,
+                    type: 'email',
+                    content: `Automatic reply sent to ${input.email}\n\nSubject: ${subject}\n\n${text}`,
+                  }, { countsAsReply: false });
+                }
               }
             }
           }
@@ -943,7 +968,13 @@ export const appRouter = router({
           console.error('[LeadSubmit] Auto-reply error:', autoErr?.message ?? autoErr);
         }
 
-        return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id) } : lead;
+        // Synthetic health-check pings never become real work.
+        if (lead && lead.source !== 'healthcheck') {
+          const { fireTaskRules } = await import('./automatedTasks');
+          await fireTaskRules(input.ownerId, { trigger: 'on_enquiry_received', leadId: lead.id });
+        }
+
+        return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id), autoReplySent } : lead;
       }),
 
     // Public: after a successful submit, the confirmation screen offers a
@@ -1056,43 +1087,26 @@ export const appRouter = router({
             }
           }
         }
-        // When function/event pack is sent, auto-schedule a 5-day follow-up task
-        if (input.status === "function_pack_sent") {
-          const { getDb } = await import('./db');
-          const { tasks } = await import('../drizzle/schema');
-          const db = await getDb();
-          if (db) {
-            const lead = await getLeadById(input.id, ctx.user.id);
-            const leadName = lead ? `${lead.firstName}${lead.lastName ? ' ' + lead.lastName : ''}` : 'client';
-            const fiveDaysFromNow = Date.now() + 5 * 24 * 60 * 60 * 1000;
-            const now = Date.now();
-            await db.insert(tasks).values({
-              ownerId: ctx.user.id,
-              title: `Follow up with ${leadName}`,
-              description: `Function pack was sent — check in with ${leadName} to confirm they've received it and answer any questions.`,
-              dueDate: fiveDaysFromNow,
-              linkedLeadId: input.id,
-              priority: 'high',
-              completed: false,
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
-        }
-        return { success: true };
+        // Automated task rules (Settings → Automated Tasks). Includes the
+        // built-in 5-day follow-up when a lead moves to "function_pack_sent"
+        // (unless the venue has its own rule for that status).
+        const { onLeadStatusChanged } = await import('./automatedTasks');
+        const tasksCreated = await onLeadStatusChanged(ctx.user.id, input.id, priorLead.status, input.status);
+        return { success: true, tasksCreated };
       }),
 
     addNote: protectedProcedure
       .input(z.object({ leadId: z.number(), content: z.string().min(1) }))
       .mutation(async ({ input, ctx }) => {
+        if (!(await getLeadById(input.leadId, ctx.user.id))) throw new Error('Lead not found');
         await addLeadActivity({ leadId: input.leadId, ownerId: ctx.user.id, type: "note", content: input.content });
         return { success: true };
       }),
 
     getActivity: protectedProcedure
       .input(z.object({ leadId: z.number() }))
-      .query(async ({ input }) => {
-        return getLeadActivity(input.leadId);
+      .query(async ({ input, ctx }) => {
+        return getLeadActivity(input.leadId, ctx.user.id);
       }),
 
     update: protectedProcedure
@@ -1137,8 +1151,8 @@ export const appRouter = router({
 
     activity: protectedProcedure
       .input(z.object({ leadId: z.number() }))
-      .query(async ({ input }) => {
-        return getLeadActivity(input.leadId);
+      .query(async ({ input, ctx }) => {
+        return getLeadActivity(input.leadId, ctx.user.id);
       }),
 
     delete: protectedProcedure
@@ -1175,6 +1189,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const { updateLead, addLeadActivity } = await import('./db');
+        if (!(await getLeadById(input.id, ctx.user.id))) throw new Error('Lead not found');
         await updateLead(input.id, ctx.user.id, {
           followUpDate: input.followUpDate ? new Date(input.followUpDate) : null as any,
         });
@@ -1182,8 +1197,10 @@ export const appRouter = router({
           leadId: input.id,
           ownerId: ctx.user.id,
           type: 'note',
+          // NZ calendar day — the server runs in UTC, where a local-noon date
+          // would print as the day before.
           content: input.followUpDate
-            ? `Follow-up date set to ${new Date(input.followUpDate).toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}`
+            ? `Follow-up date set to ${new Date(input.followUpDate).toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Pacific/Auckland' })}`
             : 'Follow-up date cleared',
         });
         return { success: true };
@@ -1219,7 +1236,7 @@ export const appRouter = router({
       const rows = await db.select().from(leads).where(
         and(eq(leads.ownerId, ctx.user.id), ne(leads.source, 'healthcheck')),
       );
-      const { leadFollowUpState } = await import('../shared/followUp');
+      const { leadFollowUpState, leadLastActivityMs } = await import('../shared/followUp');
       const nowMs = Date.now();
       return rows
         .map(l => ({ lead: l, fu: leadFollowUpState(l, nowMs) }))
@@ -1228,8 +1245,8 @@ export const appRouter = router({
         // Overdue (has a date that passed) before idle; within each, oldest first.
         .sort((a, b) => {
           if (a.followUpReason !== b.followUpReason) return a.followUpReason === 'overdue' ? -1 : 1;
-          const ka = a.followUpDate ? new Date(a.followUpDate).getTime() : (a.updatedAt ? new Date(a.updatedAt).getTime() : 0);
-          const kb = b.followUpDate ? new Date(b.followUpDate).getTime() : (b.updatedAt ? new Date(b.updatedAt).getTime() : 0);
+          const ka = a.followUpDate ? new Date(a.followUpDate).getTime() : (leadLastActivityMs(a) ?? 0);
+          const kb = b.followUpDate ? new Date(b.followUpDate).getTime() : (leadLastActivityMs(b) ?? 0);
           return ka - kb;
         });
     }),
@@ -1253,7 +1270,7 @@ export const appRouter = router({
         const mailer = await buildVenueMailer(ctx.user.id);
         if (!mailer) return { sent: false as const, reason: 'smtp_not_configured' as const };
         const { escapeHtml: esc } = await import('./sanitizeHtml');
-        const [vs] = await db.select({ name: venueSettings.name, primaryColor: venueSettings.primaryColor })
+        const [vs] = await db.select({ name: venueSettings.name, primaryColor: venueSettings.primaryColor, notificationEmail: venueSettings.notificationEmail })
           .from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
         const venueName = String(vs?.name ?? mailer.fromName);
         const accent = (vs?.primaryColor && /^#[0-9a-fA-F]{6}$/.test(vs.primaryColor)) ? vs.primaryColor : '#2D4A3E';
@@ -1283,11 +1300,15 @@ export const appRouter = router({
   </div>
 </div>`;
         const text = `Hi ${lead.firstName ?? 'there'},\n\n${bodyText}\n\nWarm regards,\n${venueName}`;
+        // BCC the venue's notification inbox, same as email.send, so the
+        // owner keeps a copy of every client email that goes out.
+        const bcc = (vs?.notificationEmail || mailer.fromEmail).split(/[,;]+/).map(s => s.trim()).filter(Boolean);
         try {
           await mailer.transporter.sendMail({
             from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
             to: `"${clientName}" <${lead.email}>`,
             replyTo: mailer.fromEmail,
+            bcc,
             subject, html, text,
           });
         } catch (err) {
@@ -1295,10 +1316,34 @@ export const appRouter = router({
           return { sent: false as const, reason: 'send_failed' as const };
         }
         // Push the next follow-up out a week so this lead clears the list.
+        const nextFollowUp = new Date(Date.now() + 7 * 86_400_000);
         await db.update(leads)
-          .set({ followUpDate: new Date(Date.now() + 7 * 86_400_000), updatedAt: new Date() })
+          .set({ followUpDate: nextFollowUp })
           .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
-        return { sent: true as const, to: lead.email };
+        // Log it on the timeline (this also bumps lastActivityAt, so the lead
+        // stops reading as "gone quiet").
+        await addLeadActivity({
+          leadId: input.leadId,
+          ownerId: ctx.user.id,
+          type: 'email',
+          content: `Follow-up email sent to ${lead.email}\n\nSubject: ${subject}\n\n${text}`,
+        });
+        // Same rule as replying from the compose modal: a "new" lead you've
+        // emailed is now contacted.
+        let statusAdvanced = false;
+        if (lead.status === 'new') {
+          await updateLeadStatus(input.leadId, ctx.user.id, 'contacted');
+          await addLeadActivity({
+            leadId: input.leadId,
+            ownerId: ctx.user.id,
+            type: 'status_change',
+            content: 'Status auto-advanced to contacted after follow-up email.',
+          });
+          statusAdvanced = true;
+          const { onLeadStatusChanged } = await import('./automatedTasks');
+          await onLeadStatusChanged(ctx.user.id, input.leadId, 'new', 'contacted');
+        }
+        return { sent: true as const, to: lead.email, nextFollowUp, statusAdvanced };
       }),
     // Returns leads with a followUpDate in the given month (for calendar display)
     followUpsByMonth: protectedProcedure
@@ -1368,19 +1413,24 @@ export const appRouter = router({
           }
         }
         // Only update leads owned by this user
+        const owned = await db.select({ id: leads.id, status: leads.status })
+          .from(leads)
+          .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
         await db.update(leads)
           .set({ status: input.status })
           .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
-        // Log activity for each lead
-        await Promise.all(input.ids.map(leadId =>
+        // Log activity for each lead (also bumps lastActivityAt)
+        await Promise.all(owned.map(row =>
           addLeadActivity({
-            leadId,
+            leadId: row.id,
             ownerId: ctx.user.id,
             type: 'status_change',
             content: `Bulk status update: changed to ${input.status}`,
           })
         ));
-        return { updated: input.ids.length };
+        const { onLeadStatusChanged } = await import('./automatedTasks');
+        for (const row of owned) await onLeadStatusChanged(ctx.user.id, row.id, row.status, input.status);
+        return { updated: owned.length };
       }),
 
     // Bulk import leads from CSV
@@ -1608,6 +1658,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const proposal = await getProposalById(input.id, ctx.user.id);
         let emailSent = false;
         if (proposal) {
+          const priorStatus = (await getLeadById(proposal.leadId, ctx.user.id))?.status;
           await updateLeadStatus(proposal.leadId, ctx.user.id, "proposal_sent");
           await addLeadActivity({
             leadId: proposal.leadId,
@@ -1615,6 +1666,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             type: "proposal_sent",
             content: `Proposal "${proposal.title}" sent to client`,
           });
+          const { onLeadStatusChanged } = await import('./automatedTasks');
+          await onLeadStatusChanged(ctx.user.id, proposal.leadId, priorStatus, "proposal_sent");
           // Set a follow-up a few days out so a quoted lead doesn't go cold —
           // sending a quote previously set no reminder at all. Only set one if
           // the lead doesn't already have a (future) follow-up pending.
@@ -1870,6 +1923,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               type: "booking_created",
               content: `Client accepted proposal "${proposal.title}" — booking confirmed!`,
             });
+            const { fireTaskRules } = await import('./automatedTasks');
+            await fireTaskRules(proposal.ownerId, { trigger: 'on_booking_confirmed', leadId: proposal.leadId, bookingId: newId ?? null });
           }
         }
         return { success: true, status: input.action };
@@ -1915,6 +1970,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           spaceName: lead.spaceName,
           status: lead.status === 'finished' ? 'finished' : 'confirmed',
         } as any);
+        // A lead added straight in as Confirmed lands here (no status change
+        // fired the rule). Keyed by lead, so a lead already confirmed via
+        // updateStatus doesn't get the task twice. Past events (legacy rows
+        // backfilled on open) are skipped.
+        const eventAhead = !lead.eventDate || new Date(lead.eventDate).getTime() >= Date.now() - 86_400_000;
+        if (created && lead.status !== 'finished' && eventAhead) {
+          const { fireTaskRules } = await import('./automatedTasks');
+          await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', leadId: input.leadId, bookingId: (created as any).id });
+        }
         return created;
       }),
 
@@ -2192,7 +2256,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               finished: 'finished',
             };
             const mapped = statusMap[rest.status];
-            if (mapped) leadUpdates.status = mapped;
+            if (mapped) { leadUpdates.status = mapped; leadUpdates.lastActivityAt = new Date(); }
           }
           if (Object.keys(leadUpdates).length > 0) {
             leadUpdates.updatedAt = new Date();
@@ -2218,6 +2282,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           if (priorBookingStatus !== 'confirmed') {
             const { sendDepositPromptEmail } = await import('./depositPrompt');
             await sendDepositPromptEmail(id, ctx.user.id, { source: 'bookings.update' });
+            const { fireTaskRules } = await import('./automatedTasks');
+            await fireTaskRules(ctx.user.id, { trigger: 'on_booking_confirmed', bookingId: id });
           }
         }
         return { success: true };
@@ -2647,7 +2713,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           throw new Error('Team members cannot send emails. Contact your venue manager.');
         }
         const { getDb } = await import('./db');
-        const { venueSettings, leadActivity, bookings: bookingsTable } = await import('../drizzle/schema');
+        const { venueSettings, bookings: bookingsTable } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
         const nodemailer = await import('nodemailer');
         const db = await getDb();
@@ -2671,10 +2737,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // authenticated SMTP account, but the sender picks a profile whose
         // From display name, Reply-To and signature are used — so a team
         // member's email shows their name/reply address, not the owner's.
-        const sigProfiles: any[] = Array.isArray((settings as any).emailSignatures)
-          ? (settings as any).emailSignatures : [];
+        // Profiles come from the same helper the compose modal uses (incl. the
+        // older single venue signature), so the preview matches what's sent.
+        const { signatureProfiles, effectiveFromName } = await import('../shared/emailSignatures');
+        const sigProfiles = signatureProfiles(settings as any);
         const sigProfile = input.signatureId
-          ? sigProfiles.find((p: any) => p && p.id === input.signatureId)
+          ? sigProfiles.find(p => p.id === input.signatureId)
           : undefined;
         // A chosen signature that no longer exists (deleted/renamed) must not
         // silently fall back to the owner's identity — surface it so the sender
@@ -2683,9 +2751,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           throw new Error('That email signature no longer exists — please pick another and resend.');
         }
 
-        const fromName = (sigProfile?.fromName?.trim())
-          || settings.smtpFromName || settings.name || 'VenueFlowHQ';
-        const fromEmail = settings.smtpFromEmail ?? settings.smtpUser;
+        const fromName = effectiveFromName(settings as any, sigProfile);
+        const fromEmail = settings.smtpFromEmail || settings.smtpUser;
 
         // Build HTML from the message body, appending the chosen profile's
         // signature (logo + text) when one is selected. With no profile the
@@ -2771,34 +2838,34 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .limit(1);
           if (b?.leadId) activityLeadId = b.leadId;
         }
-        // Log as lead activity if we have a leadId
-        if (activityLeadId) {
-          await db.insert(leadActivity).values({
+        // Log as lead activity if we have a leadId (only the venue's own lead).
+        // addLeadActivity also bumps lastActivityAt and marks it replied.
+        const ownLead = activityLeadId ? await getLeadById(activityLeadId, ctx.user.id) : null;
+        if (activityLeadId && ownLead) {
+          await addLeadActivity({
             leadId: activityLeadId,
             ownerId: ctx.user.id,
             type: 'email',
-            content: `Email sent to ${toForLog}\n\nSubject: ${input.subject}\n\n${input.body}`,
+            content: `Email sent to ${toForLog}${sigProfile ? ` (signature: ${sigProfile.label || sigProfile.fromName || 'untitled'})` : ''}\n\nSubject: ${input.subject}\n\n${input.body}`,
           });
           // Auto-advance: if lead is still "new", move it to "contacted"
-          const { leads } = await import('../drizzle/schema');
-          const [currentLead] = await db.select({ status: leads.status, followUpDate: leads.followUpDate })
-            .from(leads).where(eq(leads.id, activityLeadId)).limit(1);
-          if (currentLead?.status === 'new') {
+          if (ownLead.status === 'new') {
             // Set status to contacted and set a default follow-up in 3 days if none set
-            const followUpDate = currentLead.followUpDate ?? (() => {
+            const followUpDate = ownLead.followUpDate ?? (() => {
               const d = new Date();
               d.setDate(d.getDate() + 3);
               return d;
             })();
-            await db.update(leads)
-              .set({ status: 'contacted', followUpDate })
-              .where(eq(leads.id, activityLeadId));
-            await db.insert(leadActivity).values({
+            await updateLeadStatus(activityLeadId, ctx.user.id, 'contacted');
+            await updateLead(activityLeadId, ctx.user.id, { followUpDate });
+            await addLeadActivity({
               leadId: activityLeadId,
               ownerId: ctx.user.id,
               type: 'status_change',
-              content: `Status auto-advanced to contacted after email reply. Follow-up set for ${followUpDate.toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}.`,
+              content: `Status auto-advanced to contacted after email reply. Follow-up set for ${followUpDate.toLocaleDateString('en-NZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Pacific/Auckland' })}.`,
             });
+            const { onLeadStatusChanged } = await import('./automatedTasks');
+            await onLeadStatusChanged(ctx.user.id, activityLeadId, 'new', 'contacted');
           }
         }
         return { success: true, beoRequested, beoAttached, beoFailed: beoRequested - beoAttached };

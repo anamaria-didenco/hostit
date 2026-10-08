@@ -262,6 +262,13 @@ export const leads = pgTable("leads", {
   internalNotes: text("internalNotes"),
   followUpDate: timestamp("followUpDate"),
   readAt: timestamp("readAt"),
+  // Bumped whenever something happens on the lead (an activity is logged, its
+  // status changes, an email goes out). Drives "gone quiet" — updatedAt was
+  // never touched after creation, so it couldn't.
+  lastActivityAt: timestamp("lastActivityAt").defaultNow(),
+  // First time the venue replied (outbound email, call or status change).
+  // Null on a new enquiry nobody has answered yet — see shared/needsReply.ts.
+  respondedAt: timestamp("respondedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -822,6 +829,18 @@ export const tasks = pgTable("tasks", {
 });
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = typeof tasks.$inferInsert;
+
+// One row per (automated task rule × lead/booking) that has fired, so a rule
+// creates its task once per subject even if the trigger happens again (e.g. a
+// lead bounced back into the same status). See server/automatedTasks.ts.
+export const automatedTaskRuns = pgTable("automated_task_runs", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  ruleKey: varchar("ruleKey", { length: 160 }).notNull(),
+  subjectKey: varchar("subjectKey", { length: 60 }).notNull(),
+  taskId: integer("taskId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
 
 // ─── Taxes & Fees ─────────────────────────────────────────────────────────────
 export const taxesFees = pgTable("taxes_fees", {
