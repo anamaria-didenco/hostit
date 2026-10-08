@@ -31,6 +31,8 @@ export const DEFAULT_STATUSES: StatusDef[] = [
   { key: "contacted",     label: "Contacted",     colorId: "sky"     },
   { key: "proposal_sent", label: "Proposal Sent", colorId: "amber"   },
   { key: "negotiating",   label: "Negotiating",   colorId: "orange"  },
+  // A date hold (server/holds.ts): the date is kept for the client until an expiry.
+  { key: "tentative",     label: "On Hold",       colorId: "yellow"  },
   { key: "booked",        label: "Confirmed",     colorId: "forest"  },
   { key: "finished",      label: "Finished",      colorId: "gray"    },
   { key: "lost",          label: "Lost",          colorId: "red"     },
@@ -58,13 +60,12 @@ export function getStatusDayClasses(colorId: string): string {
 // alias) to the venue's configured colour, falling back to DEFAULT_STATUSES.
 //
 // Aliases map statuses that aren't first-class pipeline stages onto one that
-// is: a booking's `confirmed` reads as `booked` (the lead equivalent),
-// `tentative` borrows the amber "in progress" of `proposal_sent`, and a
+// is: a booking's `confirmed` reads as `booked` (the lead equivalent), and a
 // `cancelled` booking takes the neutral grey of `finished` — distinct from a
 // `lost` enquiry (red), since one is called off and the other never landed.
+// `tentative` (a date hold) is a default stage of its own, so needs no alias.
 const STATUS_ALIASES: Record<string, string> = {
   confirmed: "booked",
-  tentative: "proposal_sent",
   cancelled: "finished",
 };
 

@@ -114,7 +114,14 @@ export const venueSettings = pgTable("venue_settings", {
   eventTimeStart: varchar("eventTimeStart", { length: 10 }).default("08:00"),
   eventTimeEnd: varchar("eventTimeEnd", { length: 10 }).default("22:00"),
   minGroupSize: integer("minGroupSize").default(0),
+  // Date holds: when a hold reaches its expiry and this is on, the hold job
+  // releases it (status back to what it was, date freed). Off = the venue is
+  // only told the hold has lapsed.
   autoCancelTentative: integer("autoCancelTentative").default(1),
+  // Default length of a new date hold, in days (the hold dialog can change it).
+  defaultHoldDays: integer("defaultHoldDays").default(7),
+  // Email the client a day before their hold expires. Off by default.
+  holdClientReminderEnabled: integer("holdClientReminderEnabled").default(0),
   bannerImageUrl: text("bannerImageUrl"),
   venueType: varchar("venueType", { length: 100 }),
   priceCategory: varchar("priceCategory", { length: 10 }).default("$$$"),
@@ -310,6 +317,14 @@ export const leads = pgTable("leads", {
   utmContent: varchar("utmContent", { length: 255 }),
   internalNotes: text("internalNotes"),
   followUpDate: timestamp("followUpDate"),
+  // Date hold: the lead "holds" its date and space while status is
+  // `tentative` and holdUntil is in the future. statusBeforeHold is what the
+  // lead goes back to when the hold is released; holdReminderSentAt stops the
+  // expiry job emailing the client twice for the same hold.
+  holdUntil: timestamp("holdUntil"),
+  holdNote: text("holdNote"),
+  statusBeforeHold: text("statusBeforeHold"),
+  holdReminderSentAt: timestamp("holdReminderSentAt"),
   readAt: timestamp("readAt"),
   // Speed-to-lead: the first time staff responded (an email sent from the
   // app, a proposal sent, or a manual status change away from "new").
@@ -432,6 +447,9 @@ export const bookings = pgTable("bookings", {
   actualSpendRecordedAt: timestamp("actualSpendRecordedAt"),
   spendPromptDismissedAt: timestamp("spendPromptDismissedAt"),
   beoShareToken: varchar("beoShareToken", { length: 64 }).unique(),
+  // Set when a client accepted a proposal for a date/space that was already
+  // taken. The public accept is never blocked; the venue is alerted instead.
+  clashFlaggedAt: timestamp("clashFlaggedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

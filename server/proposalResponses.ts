@@ -302,6 +302,14 @@ export async function respondToProposal(input: {
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "We couldn't confirm your booking just now. Please try again, or contact the venue." });
   }
 
+  // Date clash → flag the booking + urgent venue alert; never blocks the
+  // client (they accepted what the venue offered). Also ends any date hold.
+  try {
+    await (await import("./holds")).afterProposalAccepted(proposal.ownerId, bookingId, proposal.leadId);
+  } catch (err) {
+    console.error("[proposals] clash check after accept failed (non-fatal):", err);
+  }
+
   // Push to NBI so accepted proposals appear in the NBI diary too.
   try {
     const { pushBookingToNbi } = await import("./nowbookit");

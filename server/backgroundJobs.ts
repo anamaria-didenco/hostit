@@ -10,5 +10,6 @@ export async function startBackgroundJobs() {
   (await import("./inbox")).registerInboxJobs();
   (await import("./proposalExpiry")).registerProposalExpiryJob();
   (await import("./automatedTasks")).registerAutomatedTaskJobs();
+  (await import("./holds")).registerHoldJobs();
   startJobs();
 }

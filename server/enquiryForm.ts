@@ -102,12 +102,19 @@ export async function getPublicFormConfig(ownerId: number) {
 // ─── Availability ────────────────────────────────────────────────────────────
 
 /**
- * Active date holds. TODO(holds): another track adds `leads.holdUntil`; once
- * it's on main, return leads with holdUntil > now and an eventDate in
- * [from, to) as occupancies here — { at: eventDate, spaceName }.
+ * Active date holds (server/holds.ts): enquiries pencilled in with a
+ * holdUntil still in the future. Only the date and space leave here.
  */
-async function activeHolds(_ownerId: number, _from: Date, _to: Date): Promise<Occupancy[]> {
-  return [];
+async function activeHolds(ownerId: number, from: Date, to: Date): Promise<Occupancy[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ at: leads.eventDate, spaceName: leads.spaceName }).from(leads)
+    .where(and(
+      eq(leads.ownerId, ownerId), eq(leads.status, "tentative"),
+      isNotNull(leads.holdUntil), gte(leads.holdUntil, new Date()),
+      isNotNull(leads.eventDate), gte(leads.eventDate, from), lt(leads.eventDate, to),
+    ));
+  return rows.filter((r): r is Occupancy => r.at != null) as Occupancy[];
 }
 
 export async function getMonthAvailability(ownerId: number, monthKey: string, spaceId?: number | null) {
