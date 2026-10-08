@@ -57,7 +57,7 @@ describe.skipIf(!hasDb)("win-back sending", () => {
 
     const after = await getLeadById(lead.id, OWNER);
     expect(after?.lastWinBackAt).toBeTruthy();
-    const acts = await getLeadActivity(lead.id);
+    const acts = await getLeadActivity(lead.id, OWNER);
     expect(acts.some(a => a.type === "email" && a.content?.startsWith("Win-back email sent"))).toBe(true);
 
     const second = await sendWinBack(OWNER, [lead.id], "Hello again", "Hi {{firstName}}");
@@ -101,7 +101,7 @@ describe.skipIf(!hasDb)("merging duplicate enquiries", () => {
     expect(await getLeadById(dupe.id, OWNER)).toBeNull();
     const kept = await getLeadById(keep.id, OWNER);
     expect(kept?.phone).toBe("021 555 0199");
-    const acts = await getLeadActivity(keep.id);
+    const acts = await getLeadActivity(keep.id, OWNER);
     expect(acts.some(a => a.content === "Called them")).toBe(true);
     expect(acts.some(a => a.content?.includes(`Merged in enquiry #${dupe.id}`) && a.content.includes("Second go"))).toBe(true);
   });
@@ -122,13 +122,13 @@ describe.skipIf(!hasDb)("markLeadLost", () => {
     const a = (await createLead({ ownerId: OWNER, firstName: "I", email: "i@example.nz", status: "proposal_sent" }))!;
     expect(await markLeadLost(OWNER, a.id, "price", "Over budget")).toBe(true);
     expect(await getLeadById(a.id, OWNER)).toMatchObject({ status: "lost", lostReason: "price", lostReasonNote: "Over budget" });
-    const acts = await getLeadActivity(a.id);
+    const acts = await getLeadActivity(a.id, OWNER);
     expect(acts[0].content).toBe("Status changed to lost — Price / budget: Over budget");
 
     const b = (await createLead({ ownerId: OWNER, firstName: "J", email: "j@example.nz", status: "proposal_sent" }))!;
     await markLeadLost(OWNER, b.id, "Client declined the proposal", null, { logActivity: false });
     expect(await getLeadById(b.id, OWNER)).toMatchObject({ lostReason: "other", lostReasonNote: "Client declined the proposal" });
-    expect(await getLeadActivity(b.id)).toHaveLength(0);
+    expect(await getLeadActivity(b.id, OWNER)).toHaveLength(0);
 
     expect(await markLeadLost(OWNER + 1, a.id, "price", null)).toBe(false);
   });

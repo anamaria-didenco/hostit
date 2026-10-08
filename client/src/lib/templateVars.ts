@@ -64,6 +64,9 @@ export interface TemplateLinkVars {
   depositAmount?: string | null;
   /** Format dates in this zone (the server runs UTC). Default: the browser's. */
   timeZone?: string;
+  /** Replace any variable outright, e.g. the automatic follow-ups' "there"
+   *  when there's no first name. */
+  overrides?: Record<string, string>;
 }
 
 function formatNZDate(raw: Date | string | number | null | undefined, timeZone?: string): string {
@@ -121,6 +124,7 @@ export function templateVarValues(
     enquiryFormLink: links?.enquiryFormLink ?? "",
     depositAmount: links?.depositAmount ?? "",
     holdUntil: formatNZDate(lead.holdUntil, tz),
+    ...links?.overrides,
   };
 }
 

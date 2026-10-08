@@ -60,7 +60,7 @@ export function renderFollowUpEmail(opts: {
     proposalLink: opts.proposalLink ?? "",
     enquiryFormLink: opts.enquiryFormLink ?? "",
   };
-  const fill = (s: string) => substituteTemplateVars(s, lead as any, venue, extra);
+  const fill = (s: string) => substituteTemplateVars(s, lead as any, venue, { timeZone: TZ, overrides: extra });
   const subject = fill(opts.subject).replace(/[\r\n]+/g, " ").trim().slice(0, 255);
   const text = fill(opts.body).trim();
   const linkify = (escaped: string) =>
