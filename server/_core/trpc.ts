@@ -41,6 +41,7 @@ const STAFF_BLOCKED_READ_PREFIXES = [
   "accountLogins.",  // could mint themselves an owner login
   "reports.",        // revenue reporting
   "dashboard.",      // revenue tiles
+  "analytics.",      // revenue + conversion analytics
   "proposals.",      // pricing sent to clients
   "quote",           // quote settings/items — pricing
   "contacts.",       // full client contact book

@@ -5177,6 +5177,18 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }
       return { success: true };
     }),
+    // Conversion picture for one NZ-calendar period (shared definition in
+    // shared/conversion.ts). Under `reports.` so staff logins can't read it.
+    conversion: protectedProcedure
+      .input(z.object({
+        preset: z.enum(['month', '3m', '12m']).optional(),
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      }).optional())
+      .query(async ({ input, ctx }) => {
+        const { buildConversionReport } = await import('./conversionReport');
+        return buildConversionReport(ctx.user.id, input);
+      }),
   }),
 
   // ─── Analytics ────────────────────────────────────────────────────────────
@@ -5189,54 +5201,59 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { eq, and, gte, lt } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return [];
-        const start = new Date(input.year, 0, 1);
-        const end = new Date(input.year + 1, 0, 1);
+        // Months are NZ calendar months — the server runs in UTC, so a
+        // 1 Feb 9am NZ event used to land in January.
+        const { venueTimezone } = await import('./conversionReport');
+        const { zonedDayBoundUtc } = await import('../shared/tz');
+        const { dayKeyInTz, isImportedBooking } = await import('../shared/conversion');
+        const tz = await venueTimezone(ctx.user.id);
+        const start = zonedDayBoundUtc(`${input.year}-01-01`, tz, 'start');
+        const end = zonedDayBoundUtc(`${input.year}-12-31`, tz, 'end');
         const rows = await db.select().from(bookings)
           .where(and(eq(bookings.ownerId, ctx.user.id), gte(bookings.eventDate, start), lt(bookings.eventDate, end)));
         const byMonth = Array.from({ length: 12 }, (_, i) => ({
           month: i + 1,
-          label: new Date(input.year, i, 1).toLocaleString('en-NZ', { month: 'short' }),
+          label: new Date(Date.UTC(input.year, i, 1)).toLocaleString('en-NZ', { month: 'short', timeZone: 'UTC' }),
           revenue: 0,
           count: 0,
         }));
         for (const b of rows) {
-          if (b.status === 'cancelled') continue;
-          const m = new Date(b.eventDate).getMonth();
+          // NowBookIt diary imports are table bookings, not events.
+          if (b.status === 'cancelled' || isImportedBooking(b)) continue;
+          const m = Number(dayKeyInTz(b.eventDate, tz).slice(5, 7)) - 1;
           byMonth[m].revenue += Number(b.totalNzd ?? 0);
           byMonth[m].count += 1;
         }
         return byMonth;
       }),
     // Year-scoped funnel. Everything is counted for the ENQUIRIES received in
-    // `year` (a cohort), so each stage is a subset of the one before it and
-    // the conversion rate can never pass 100% — the old version divided
-    // all-time bookings (incl. ones that never came through the form) by
-    // enquiries and showed 139%.
+    // `year` (a cohort, NZ calendar), using the same rules as Reports and the
+    // dashboard (shared/conversion.ts), so each stage is a subset of the one
+    // before it and the conversion rate can never pass 100%.
     pipeline: protectedProcedure
       .input(z.object({ year: z.number().int() }).optional())
       .query(async ({ input, ctx }) => {
-      const { getDb } = await import('./db');
-      const { leads, proposals, bookings } = await import('../drizzle/schema');
-      const { eq, and, ne } = await import('drizzle-orm');
-      const db = await getDb();
+      const { loadConversionData, venueTimezone } = await import('./conversionReport');
+      const { zonedDayBoundUtc } = await import('../shared/tz');
+      const { enquiryCohort, isRealEnquiry, tally, conversionFunnel } = await import('../shared/conversion');
       const empty = { enquiries: 0, proposals: 0, confirmed: 0, pipeline: 0, confirmed_revenue: 0 };
-      if (!db) return empty;
+      const data = await loadConversionData(ctx.user.id);
+      if (!data) return empty;
+      const tz = await venueTimezone(ctx.user.id);
       const year = input?.year;
-      const allLeads = await db.select().from(leads).where(and(eq(leads.ownerId, ctx.user.id), ne(leads.source, 'healthcheck')));
-      const cohort = year == null ? allLeads : allLeads.filter(l => new Date(l.createdAt).getFullYear() === year);
+      const cohort = year == null
+        ? data.leads.filter(isRealEnquiry)
+        : enquiryCohort(data.leads, { start: zonedDayBoundUtc(`${year}-01-01`, tz, 'start'), end: zonedDayBoundUtc(`${year}-12-31`, tz, 'end') });
       const ids = new Set(cohort.map(l => l.id));
-      const allProposals = await db.select().from(proposals).where(eq(proposals.ownerId, ctx.user.id));
-      const allBookings = await db.select().from(bookings).where(eq(bookings.ownerId, ctx.user.id));
-      const proposalLeads = new Set(allProposals.filter(p => p.status !== 'draft' && ids.has(p.leadId)).map(p => p.leadId));
-      const bookedLeads = new Set(allBookings.filter(b => b.status !== 'cancelled' && b.leadId != null && ids.has(b.leadId)).map(b => b.leadId as number));
-      const confirmedRevenue = allBookings.filter(b => b.status !== 'cancelled' && b.leadId != null && ids.has(b.leadId)).reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);
-      const pipelineRevenue = allProposals.filter(p => (p.status === 'sent' || p.status === 'viewed') && ids.has(p.leadId)).reduce((s, p) => s + Number(p.totalNzd ?? 0), 0);
+      const t = tally(cohort, data.bookings);
+      const funnel = conversionFunnel(cohort, data.proposals, [], data.bookings);
+      const pipelineRevenue = data.proposals.filter(p => (p.status === 'sent' || p.status === 'viewed') && ids.has(p.leadId)).reduce((s, p) => s + Number(p.totalNzd ?? 0), 0);
       return {
-        enquiries: cohort.length,
-        proposals: proposalLeads.size,
-        confirmed: bookedLeads.size,
+        enquiries: t.enquiries,
+        proposals: funnel.find(f => f.key === 'proposal_sent')?.count ?? 0,
+        confirmed: t.won,
         pipeline: pipelineRevenue,
-        confirmed_revenue: confirmedRevenue,
+        confirmed_revenue: t.wonValue,
       };
     }),
     topEventTypes: protectedProcedure
@@ -5248,10 +5265,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       const db = await getDb();
       if (!db) return [];
       const rows = await db.select().from(bookings).where(eq(bookings.ownerId, ctx.user.id));
+      const { venueTimezone } = await import('./conversionReport');
+      const { dayKeyInTz, isImportedBooking } = await import('../shared/conversion');
+      const tz = await venueTimezone(ctx.user.id);
       const map: Record<string, { count: number; revenue: number }> = {};
       for (const b of rows) {
-        if (b.status === 'cancelled') continue;
-        if (input?.year != null && new Date(b.eventDate).getFullYear() !== input.year) continue;
+        if (b.status === 'cancelled' || isImportedBooking(b)) continue;
+        if (input?.year != null && dayKeyInTz(b.eventDate, tz).slice(0, 4) !== String(input.year)) continue;
         const k = b.eventType ?? 'Other';
         if (!map[k]) map[k] = { count: 0, revenue: 0 };
         map[k].count += 1;
@@ -5296,10 +5316,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       const { eq, and, ne } = await import('drizzle-orm');
       const db = await getDb();
       if (!db) return [];
-      const rows = await db.select().from(leads).where(and(eq(leads.ownerId, ctx.user.id), ne(leads.source, 'healthcheck')));
+      const rows = await db.select().from(leads).where(eq(leads.ownerId, ctx.user.id));
+      const { venueTimezone } = await import('./conversionReport');
+      const { dayKeyInTz, isRealEnquiry } = await import('../shared/conversion');
+      const tz = await venueTimezone(ctx.user.id);
       const map: Record<string, number> = {};
       for (const lead of rows) {
-        if (input?.year != null && new Date(lead.createdAt).getFullYear() !== input.year) continue;
+        if (!isRealEnquiry(lead)) continue;
+        if (input?.year != null && dayKeyInTz(lead.createdAt, tz).slice(0, 4) !== String(input.year)) continue;
         const src = lead.source ?? 'Unknown';
         map[src] = (map[src] ?? 0) + 1;
       }

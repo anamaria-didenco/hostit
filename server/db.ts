@@ -360,9 +360,10 @@ export async function getDashboardStats(ownerId: number) {
   // Overdue tasks
   const allTasks = await db.select().from(tasks).where(eq(tasks.ownerId, ownerId));
   const overdueTasks = allTasks.filter(t => !t.completed && t.dueDate && t.dueDate < now.getTime()).length;
-  // Conversion rate (leads -> booked)
-  const bookedLeads = allLeads.filter(l => WON.includes(l.status ?? '')).length;
-  const conversionRate = allLeads.length > 0 ? Math.round((bookedLeads / allLeads.length) * 100) : 0;
+  // Conversion rate: of the last 12 months' real enquiries (NZ calendar), how
+  // many are won now — the shared definition Reports and the weekly email use.
+  const { conversionHeadline } = await import('./conversionReport');
+  const conversionRate = (await conversionHeadline(ownerId))?.rate ?? 0;
   // Total revenue all time
   const totalRevenueAllTime = allBookings.filter(b => b.status === 'confirmed' || b.status === 'finished').reduce((s, b) => s + Number(b.totalNzd ?? 0), 0);
   // Pending payments (bookings with outstanding balance)
