@@ -722,6 +722,14 @@ async function compressToDataUrl(file: File, maxW: number, maxH: number, quality
   });
 }
 
+// Event side panel field styling. Field labels are quiet sentence-case so the
+// values carry the eye; only section titles keep the tracked-caps brand style.
+// The pencil gets padding (and matching negative margin, so layout doesn't
+// shift) to lift its hit area from 12px to the 24px minimum.
+const DRAWER_LABEL = "font-dm text-xs font-medium text-ink/60";
+const DRAWER_PENCIL = "p-1.5 -m-1.5 rounded text-ink/55 hover:text-forest hover:bg-linen";
+const DRAWER_VALUE_BTN = "text-left rounded-sm hover:bg-linen/70 -mx-1 px-1 transition-colors";
+
 /**
  * One collapsible block of the event side panel. The header is a single
  * full-width button (title + a one-line summary shown only while collapsed +
@@ -1216,7 +1224,16 @@ export default function Dashboard() {
     };
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setSelectedBooking(null); return; }
+      if (e.key === "Escape") {
+        // An open dropdown/popover inside the panel handles its own Escape
+        // (Radix marks it defaultPrevented); an open inline field edit is
+        // cancelled. Only a bare Escape closes the whole panel — otherwise
+        // backing out of one field threw the whole panel away.
+        if (e.defaultPrevented) return;
+        if (drawerEditRef.current) { setDrawerEdit(null); return; }
+        setSelectedBooking(null);
+        return;
+      }
       if (e.key !== "Tab") return;
       const focusable = getFocusable();
       if (focusable.length === 0) return;
@@ -1675,6 +1692,12 @@ export default function Dashboard() {
   // `value` is held as a string while editing (forms only deal in strings) and
   // coerced to the right type at save.
   const [drawerEdit, setDrawerEdit] = useState<{ field: string; value: string } | null>(null);
+  const drawerEditRef = useRef(drawerEdit);
+  drawerEditRef.current = drawerEdit;
+  // Enter saves / Escape cancels on every inline field editor in the panel.
+  const drawerEditKeys = (field: string) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") { e.preventDefault(); saveDrawerField(field, e.currentTarget.value); }
+  };
   function saveDrawerField(field: string, raw: string) {
     if (!selectedBooking) return;
     // Email and eventDate are non-nullable on the server schemas — silently
@@ -9308,18 +9331,32 @@ export default function Dashboard() {
             aria-modal="true"
             aria-labelledby="event-drawer-title"
             tabIndex={-1}
-            className="w-full md:max-w-md bg-cream md:border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl outline-none"
+            className="w-full md:max-w-lg bg-cream md:border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl outline-none"
           >
-            {/* Header */}
-            <div className="bg-forest-dark px-4 md:px-5 py-4 flex items-center justify-between">
-              <div>
-                <div className="font-bebas tracking-widest text-xs text-cream mb-0.5">
+            {/* Header — sticky, so the name, the when/who summary and the close
+                button stay in view however far down the panel you scroll. */}
+            <div className="sticky top-0 z-10 flex-shrink-0 bg-forest-dark px-4 md:px-5 py-4 flex items-start justify-between gap-3 shadow-sm">
+              <div className="min-w-0">
+                {/* text-cream/NN opacity modifiers don't compile in this theme
+                    (they fall back to dark ink on navy) — use opacity-* instead. */}
+                <div className="font-bebas tracking-widest text-xs text-cream opacity-75 mb-0.5">
                   {selectedBooking._isLead && !['confirmed','booked','finished'].includes(selectedBooking.status) ? 'ENQUIRY' : 'BOOKING'}
                 </div>
-                <h2 id="event-drawer-title" className="font-cormorant text-cream font-semibold text-lg">{selectedBooking.firstName} {selectedBooking.lastName}</h2>
+                <h2 id="event-drawer-title" className="font-cormorant text-cream font-semibold text-xl leading-tight">{selectedBooking.firstName} {selectedBooking.lastName}</h2>
+                {(() => {
+                  const bits = [
+                    selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : null,
+                    fmtEventTime(selectedBooking.eventDate) || null,
+                    selectedBooking.guestCount ? `${selectedBooking.guestCount} guests` : null,
+                    selectedBooking.eventType || null,
+                  ].filter(Boolean);
+                  return bits.length > 0
+                    ? <p className="font-dm text-sm text-cream opacity-90 mt-1 [font-variant-numeric:tabular-nums_lining-nums]">{bits.join(' · ')}</p>
+                    : null;
+                })()}
               </div>
               <button onClick={() => setSelectedBooking(null)} aria-label="Close details"
-                className="text-cream/80 hover:text-cream rounded-sm p-1 -mr-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
+                className="flex-shrink-0 text-cream opacity-85 hover:opacity-100 hover:bg-forest rounded-sm p-1.5 -mr-1.5 -mt-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -9354,7 +9391,7 @@ export default function Dashboard() {
                   already shows as the dropdown's value, so the old standalone
                   status badge was redundant and has been removed. */}
               <div className="flex items-center gap-2">
-                <label htmlFor="drawer-status" className="font-bebas text-[10px] tracking-widest text-ink/70 flex-shrink-0">STATUS</label>
+                <label htmlFor="drawer-status" className={`${DRAWER_LABEL} flex-shrink-0`}>Status</label>
                 <Select
                   value={selectedBooking.status ?? ''}
                   onValueChange={(newStatus) => {
@@ -9401,7 +9438,6 @@ export default function Dashboard() {
                       )}
                   </SelectContent>
                 </Select>
-                {selectedBooking.eventType && <span className="font-dm text-xs text-ink/70 flex-shrink-0 truncate max-w-[9rem]">{selectedBooking.eventType}</span>}
                 {!isStaff && (
                   <Popover>
                     <PopoverTrigger asChild>
@@ -9458,37 +9494,40 @@ export default function Dashboard() {
                   <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <div className="font-bebas text-xs tracking-widest text-ink/70">DATE</div>
+                      <div className={DRAWER_LABEL}>Date</div>
                       {drawerEdit?.field !== "eventDate" && (
                         <button onClick={() => setDrawerEdit({ field: "eventDate", value: toDatetimeLocal(selectedBooking.eventDate) })}
-                          className="text-ink/55 hover:text-forest" aria-label="Edit date">
+                          className={DRAWER_PENCIL} aria-label="Edit date">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
                     </div>
                     {drawerEdit?.field === "eventDate" ? (
-                      <div className="flex items-center gap-1 mt-1">
+                      <div className="flex items-center gap-1 mt-1 flex-wrap">
                         <Input type="datetime-local" value={drawerEdit.value}
                           onChange={e => setDrawerEdit({ field: "eventDate", value: e.target.value })}
+                          onKeyDown={drawerEditKeys("eventDate")}
                           className="h-8 text-xs" autoFocus />
                         <button onClick={() => saveDrawerField("eventDate", drawerEdit.value)}
-                          className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                          className="px-2.5 py-1 rounded-sm bg-forest text-cream text-xs">Save</button>
                         <button onClick={() => setDrawerEdit(null)}
-                          className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
+                          className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
                       </div>
                     ) : (
                       <>
-                        <div className="font-dm text-sm text-ink">
+                        <button type="button" tabIndex={-1}
+                          onClick={() => setDrawerEdit({ field: "eventDate", value: toDatetimeLocal(selectedBooking.eventDate) })}
+                          className={`${DRAWER_VALUE_BTN} font-dm text-sm text-ink`}>
                           {selectedBooking.eventDate ? new Date(selectedBooking.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : '—'}
-                        </div>
+                        </button>
                         {/* Always-on inline START / END time editors — change saves immediately.
                             The DATE cell is half the panel wide, so two 90px time
                             inputs side by side were crushed to ~30px each (the
                             browser showed a sliver of "--:--"). Let them wrap and
                             never shrink. */}
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <span className="font-bebas text-[10px] tracking-widest text-ink/70">START</span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span className={DRAWER_LABEL}>Start</span>
                             <Input
                               type="time"
                               aria-label="Event start time"
@@ -9498,11 +9537,11 @@ export default function Dashboard() {
                                 const combined = combineDateAndTime(selectedBooking.eventDate, e.target.value);
                                 if (combined) saveDrawerField("eventDate", combined);
                               }}
-                              className="h-7 text-xs px-2 w-[110px] flex-shrink-0"
+                              className="h-7 text-xs px-2 w-[124px] flex-shrink-0"
                             />
                           </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <span className="font-bebas text-[10px] tracking-widest text-ink/70">END</span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span className={DRAWER_LABEL}>End</span>
                             <Input
                               type="time"
                               aria-label="Event end time"
@@ -9516,7 +9555,7 @@ export default function Dashboard() {
                                 const combined = combineDateAndTime(selectedBooking.eventEndDate, e.target.value, selectedBooking.eventDate);
                                 if (combined) saveDrawerField("eventEndDate", combined);
                               }}
-                              className="h-7 text-xs px-2 w-[110px] flex-shrink-0"
+                              className="h-7 text-xs px-2 w-[124px] flex-shrink-0"
                             />
                           </div>
                         </div>
@@ -9529,10 +9568,10 @@ export default function Dashboard() {
                   <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <div className="font-bebas text-xs tracking-widest text-ink/70">GUESTS</div>
+                      <div className={DRAWER_LABEL}>Guests</div>
                       {drawerEdit?.field !== "guestCount" && (
                         <button onClick={() => setDrawerEdit({ field: "guestCount", value: selectedBooking.guestCount?.toString() ?? "" })}
-                          className="text-ink/55 hover:text-forest" aria-label="Edit guests">
+                          className={DRAWER_PENCIL} aria-label="Edit guests">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
@@ -9541,14 +9580,17 @@ export default function Dashboard() {
                       <div className="flex items-center gap-1 mt-1">
                         <Input type="number" min="0" value={drawerEdit.value}
                           onChange={e => setDrawerEdit({ field: "guestCount", value: e.target.value })}
+                          onKeyDown={drawerEditKeys("guestCount")}
                           className="h-8 text-xs w-24" autoFocus />
                         <button onClick={() => saveDrawerField("guestCount", drawerEdit.value)}
-                          className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                          className="px-2.5 py-1 rounded-sm bg-forest text-cream text-xs">Save</button>
                         <button onClick={() => setDrawerEdit(null)}
-                          className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
+                          className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
                       </div>
                     ) : (
-                      <div className="font-dm text-sm text-ink">{selectedBooking.guestCount ?? '—'}</div>
+                      <button type="button" tabIndex={-1}
+                        onClick={() => setDrawerEdit({ field: "guestCount", value: selectedBooking.guestCount?.toString() ?? "" })}
+                        className={`${DRAWER_VALUE_BTN} font-dm text-sm text-ink`}>{selectedBooking.guestCount ?? '—'}</button>
                     )}
                   </div>
                 </div>
@@ -9557,10 +9599,10 @@ export default function Dashboard() {
                   <DollarSign className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <div className="font-bebas text-xs tracking-widest text-ink/70">MINIMUM SPEND</div>
+                      <div className={DRAWER_LABEL}>Minimum spend</div>
                       {drawerEdit?.field !== "minimumSpend" && (
                         <button onClick={() => setDrawerEdit({ field: "minimumSpend", value: selectedBooking.minimumSpend != null ? String(selectedBooking.minimumSpend) : "" })}
-                          className="text-ink/55 hover:text-forest" aria-label="Edit minimum spend">
+                          className={DRAWER_PENCIL} aria-label="Edit minimum spend">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
@@ -9569,18 +9611,21 @@ export default function Dashboard() {
                       <div className="flex items-center gap-1 mt-1">
                         <Input type="number" min="0" step="0.01" value={drawerEdit.value}
                           onChange={e => setDrawerEdit({ field: "minimumSpend", value: e.target.value })}
+                          onKeyDown={drawerEditKeys("minimumSpend")}
                           placeholder="e.g. 2500" className="h-8 text-xs flex-1" autoFocus />
                         <button onClick={() => saveDrawerField("minimumSpend", drawerEdit.value)}
-                          className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                          className="px-2.5 py-1 rounded-sm bg-forest text-cream text-xs">Save</button>
                         <button onClick={() => setDrawerEdit(null)}
-                          className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
+                          className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
                       </div>
                     ) : (
-                      <div className="font-dm text-sm text-ink">
+                      <button type="button" tabIndex={-1}
+                        onClick={() => setDrawerEdit({ field: "minimumSpend", value: selectedBooking.minimumSpend != null ? String(selectedBooking.minimumSpend) : "" })}
+                        className={`${DRAWER_VALUE_BTN} font-dm text-sm text-ink`}>
                         {selectedBooking.minimumSpend != null && selectedBooking.minimumSpend !== ""
                           ? `${currency(Number(selectedBooking.minimumSpend))}`
-                          : <span className="text-ink/55 italic">Not set</span>}
-                      </div>
+                          : <span className="text-ink/55">Add a minimum spend</span>}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -9592,7 +9637,7 @@ export default function Dashboard() {
                 <div className="flex items-start gap-3 sm:col-span-2">
                   <MapPin className={`w-4 h-4 mt-0.5 flex-shrink-0 ${!selectedBooking.spaceName?.trim() ? 'text-amber-600' : 'text-gold'}`} />
                   <div className="flex-1 min-w-0">
-                    <div className="font-bebas text-xs tracking-widest text-ink/70 mb-1">SPACE {!selectedBooking.spaceName?.trim() && <span className="text-amber-600 normal-case">— required to confirm</span>}</div>
+                    <div className={`${DRAWER_LABEL} mb-1`}>Space {!selectedBooking.spaceName?.trim() && <span className="text-amber-700">— needed before you can confirm</span>}</div>
                     {/* Always-on space picker (no click-to-edit dance) so the
                         user can never get stuck unable to set one. */}
                     {spaces && spaces.length > 0 ? (
@@ -9612,10 +9657,10 @@ export default function Dashboard() {
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <div className="font-bebas text-xs tracking-widest text-ink/70">EMAIL</div>
+                      <div className={DRAWER_LABEL}>Email</div>
                       {drawerEdit?.field !== "email" && (
                         <button onClick={() => setDrawerEdit({ field: "email", value: selectedBooking.email ?? "" })}
-                          className="text-ink/55 hover:text-forest" aria-label="Edit email">
+                          className={DRAWER_PENCIL} aria-label="Edit email">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
@@ -9624,14 +9669,20 @@ export default function Dashboard() {
                       <div className="flex items-center gap-1 mt-1">
                         <Input type="email" value={drawerEdit.value}
                           onChange={e => setDrawerEdit({ field: "email", value: e.target.value })}
+                          onKeyDown={drawerEditKeys("email")}
                           className="h-8 text-xs flex-1" autoFocus />
                         <button onClick={() => saveDrawerField("email", drawerEdit.value)}
-                          className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                          className="px-2.5 py-1 rounded-sm bg-forest text-cream text-xs">Save</button>
                         <button onClick={() => setDrawerEdit(null)}
-                          className="px-2 py-1 border border-ink/20 text-xs">Cancel</button>
+                          className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
                       </div>
+                    ) : selectedBooking.email ? (
+                      <a href={`mailto:${selectedBooking.email}`}
+                        className="block font-dm text-sm text-forest underline decoration-forest/30 underline-offset-2 hover:decoration-forest truncate">
+                        {selectedBooking.email}
+                      </a>
                     ) : (
-                      <div className="font-dm text-sm text-ink truncate">{selectedBooking.email || '—'}</div>
+                      <div className="font-dm text-sm text-ink">—</div>
                     )}
                   </div>
                 </div>
@@ -9640,111 +9691,88 @@ export default function Dashboard() {
               {/* Financials + billing terms — bookings only, one collapsible block. */}
               {!selectedBooking._isLead && (
               <DrawerSection id="money" title="FINANCIALS & BILLING" icon={<DollarSign />}
-                summary={isStaff ? undefined : `Total $${Number(selectedBooking.totalNzd ?? 0).toLocaleString()} · Deposit ${selectedBooking.depositPaid ? 'paid' : 'pending'}`}
+                summary={isStaff ? undefined : `Total ${currency(Number(selectedBooking.totalNzd ?? 0))} · Deposit ${selectedBooking.depositRequired === false ? 'not needed' : selectedBooking.depositPaid ? 'paid' : 'pending'}`}
                 open={secOpen('money')} onToggle={() => toggleDrawerSection('money')}>
               <div className="space-y-3">
               {/* Financials — bookings only. Total/Deposit are click-to-edit;
                   the deposit-paid badge toggles on click. */}
               {!selectedBooking._isLead && !isStaff && (
-                <div className="bg-forest-dark/5 p-3 rounded-sm">
-                  <div className="font-bebas text-xs tracking-widest text-ink/70 mb-3">FINANCIALS</div>
+                <div className="bg-forest-dark/5 p-3 rounded-sm space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    {/* TOTAL */}
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <div className="font-bebas text-xs tracking-widest text-ink/70">TOTAL</div>
-                        {drawerEdit?.field !== "totalNzd" && (
-                          <button onClick={() => setDrawerEdit({ field: "totalNzd", value: selectedBooking.totalNzd != null ? String(selectedBooking.totalNzd) : "" })}
-                            className="text-ink/55 hover:text-forest" aria-label="Edit total">
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                      {drawerEdit?.field === "totalNzd" ? (
-                        <div className="flex items-center gap-1 mt-1">
-                          <Input type="number" min="0" step="0.01" value={drawerEdit.value}
-                            onChange={e => setDrawerEdit({ field: "totalNzd", value: e.target.value })}
-                            className="h-8 text-sm" autoFocus />
-                          <button onClick={() => saveDrawerField("totalNzd", drawerEdit.value)}
-                            className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
+                    {([
+                      { field: 'totalNzd', label: 'Total' },
+                      { field: 'depositNzd', label: 'Deposit' },
+                    ] as const).map(({ field, label }) => {
+                      const raw = (selectedBooking as any)[field];
+                      const startEdit = () => setDrawerEdit({ field, value: raw != null ? String(raw) : "" });
+                      return (
+                        <div key={field}>
+                          <div className="flex items-center justify-between">
+                            <div className={DRAWER_LABEL}>{label}</div>
+                            {drawerEdit?.field !== field && (
+                              <button onClick={startEdit} className={DRAWER_PENCIL} aria-label={`Edit ${label.toLowerCase()}`}>
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                          {drawerEdit?.field === field ? (
+                            <div className="flex items-center gap-1 mt-1 flex-wrap">
+                              <Input type="number" min="0" step="0.01" value={drawerEdit.value}
+                                onChange={e => setDrawerEdit({ field, value: e.target.value })}
+                                onKeyDown={drawerEditKeys(field)}
+                                className="h-8 text-sm w-28" autoFocus />
+                              <button onClick={() => saveDrawerField(field, drawerEdit.value)}
+                                className="px-2.5 py-1 rounded-sm bg-forest text-cream text-xs">Save</button>
+                              <button onClick={() => setDrawerEdit(null)}
+                                className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
+                            </div>
+                          ) : (
+                            <button type="button" tabIndex={-1} onClick={startEdit}
+                              className={`${DRAWER_VALUE_BTN} font-cormorant text-2xl font-semibold text-ink [font-variant-numeric:tabular-nums_lining-nums]`}>
+                              {currency(Number(raw ?? 0))}
+                            </button>
+                          )}
                         </div>
-                      ) : (
-                        <div className="font-cormorant text-xl font-semibold text-ink">{currency(Number(selectedBooking.totalNzd ?? 0))}</div>
-                      )}
-                    </div>
-                    {/* DEPOSIT */}
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <div className="font-bebas text-xs tracking-widest text-ink/70">DEPOSIT</div>
-                        {drawerEdit?.field !== "depositNzd" && (
-                          <button onClick={() => setDrawerEdit({ field: "depositNzd", value: selectedBooking.depositNzd != null ? String(selectedBooking.depositNzd) : "" })}
-                            className="text-ink/55 hover:text-forest" aria-label="Edit deposit">
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                      {drawerEdit?.field === "depositNzd" ? (
-                        <div className="flex items-center gap-1 mt-1">
-                          <Input type="number" min="0" step="0.01" value={drawerEdit.value}
-                            onChange={e => setDrawerEdit({ field: "depositNzd", value: e.target.value })}
-                            className="h-8 text-sm" autoFocus />
-                          <button onClick={() => saveDrawerField("depositNzd", drawerEdit.value)}
-                            className="px-2 py-1 bg-forest text-cream text-xs">Save</button>
-                        </div>
-                      ) : (
-                        <div className="font-cormorant text-xl font-semibold text-ink">{currency(Number(selectedBooking.depositNzd ?? 0))}</div>
-                      )}
-                    </div>
+                      );
+                    })}
                   </div>
-                  {/* Three states: NOT REQUIRED · PENDING · PAID. The
-                      "deposit not taken" case (mates rates, internal
-                      events) silences the amber warning so the drawer
-                      doesn't nag the user about a deposit they were
-                      never going to collect. */}
-                  {selectedBooking.depositRequired === false ? (
-                    <div className="mt-3 flex items-center justify-between gap-2 px-3 py-2 border border-gold/25 bg-linen/40">
-                      <span className="font-bebas text-xs tracking-widest text-ink/70">Deposit not required</span>
-                      <button
-                        onClick={() => {
-                          setSelectedBooking((prev: any) => prev ? { ...prev, depositRequired: true } : prev);
-                          rescheduleBooking.mutate({ id: selectedBooking.id, depositRequired: true } as any);
-                        }}
-                        className="font-bebas text-[10px] tracking-widest text-forest hover:underline flex-shrink-0"
-                        title="Click to start tracking a deposit again">
-                        REQUIRE
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-3 space-y-1.5">
-                      <button
-                        onClick={() => {
-                          const next = !selectedBooking.depositPaid;
-                          setSelectedBooking((prev: any) => prev ? { ...prev, depositPaid: next } : prev);
-                          rescheduleBooking.mutate({ id: selectedBooking.id, depositPaid: next } as any);
-                        }}
-                        className={`w-full flex items-center gap-2 px-3 py-2 border text-left transition-colors hover:opacity-90 ${
-                          selectedBooking.depositPaid
-                            ? 'border-forest/30 bg-forest/5 text-forest'
-                            : 'border-amber-300 bg-amber-50 text-amber-700'
-                        }`}
-                        title="Click to toggle deposit paid / unpaid">
-                        <span className="text-sm leading-none flex-shrink-0">{selectedBooking.depositPaid ? '✓' : '⚠'}</span>
-                        <span className="font-bebas text-xs tracking-widest flex-1">{selectedBooking.depositPaid ? 'DEPOSIT PAID' : 'DEPOSIT PENDING'}</span>
-                        <span className="font-dm text-[11px] opacity-80 flex-shrink-0">tap to {selectedBooking.depositPaid ? 'mark unpaid' : 'mark paid'}</span>
-                      </button>
-                      <div className="text-right">
-                        <button
-                          onClick={() => {
-                            setSelectedBooking((prev: any) => prev ? { ...prev, depositRequired: false, depositPaid: false } : prev);
-                            rescheduleBooking.mutate({ id: selectedBooking.id, depositRequired: false } as any);
-                          }}
-                          className="font-bebas text-[10px] tracking-widest text-ink/70 hover:text-ink"
-                          title="This booking doesn't require a deposit at all">
-                          MARK — NO DEPOSIT NEEDED
-                        </button>
+                  {/* Deposit state as one three-way switch. "Not needed" covers
+                      mates rates / internal events, so the panel stops nagging
+                      about a deposit nobody was ever going to collect. */}
+                  {(() => {
+                    const depositState: 'none' | 'pending' | 'paid' =
+                      selectedBooking.depositRequired === false ? 'none' : selectedBooking.depositPaid ? 'paid' : 'pending';
+                    const setDepositState = (next: 'none' | 'pending' | 'paid') => {
+                      if (next === depositState) return;
+                      const patch = next === 'none'
+                        ? { depositRequired: false, depositPaid: false }
+                        : { depositRequired: true, depositPaid: next === 'paid' };
+                      setSelectedBooking((prev: any) => prev ? { ...prev, ...patch } : prev);
+                      rescheduleBooking.mutate({ id: selectedBooking.id, ...patch } as any);
+                    };
+                    const opts = [
+                      { key: 'none', label: 'Not needed', on: 'bg-white text-ink border-ink/30' },
+                      { key: 'pending', label: 'Pending', on: 'bg-amber-50 text-amber-800 border-amber-400' },
+                      { key: 'paid', label: 'Paid', on: 'bg-forest text-cream border-forest' },
+                    ] as const;
+                    return (
+                      <div>
+                        <div id="drawer-deposit-state" className={`${DRAWER_LABEL} mb-1.5`}>Deposit status</div>
+                        <div role="radiogroup" aria-labelledby="drawer-deposit-state" className="grid grid-cols-3 gap-1.5">
+                          {opts.map(o => {
+                            const on = depositState === o.key;
+                            return (
+                              <button key={o.key} type="button" role="radio" aria-checked={on}
+                                onClick={() => setDepositState(o.key)}
+                                className={`min-h-[36px] px-2 rounded-sm border font-dm text-xs font-medium transition-colors ${on ? `${o.on} shadow-sm` : 'bg-transparent text-ink/70 border-gold/30 hover:bg-white hover:text-ink'}`}>
+                                {o.key === 'paid' && on ? '✓ ' : ''}{o.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
               {/* ── How this event is billed ─────────────────────────────
@@ -9757,7 +9785,7 @@ export default function Dashboard() {
                   refused server-side, so an editable control would just fail. */}
               {!selectedBooking._isLead && (
                 <div>
-                  <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">HOW THIS EVENT IS BILLED</div>
+                  <div className={`${DRAWER_LABEL} mb-2`}>How this event is billed</div>
                   <div className="space-y-2">
                     {([
                       { key: 'billingFood', label: 'Food', opts: FOOD_BILLING_OPTIONS, fallback: 'invoiced_prior' },
