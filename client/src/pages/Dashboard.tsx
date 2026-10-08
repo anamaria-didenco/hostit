@@ -546,6 +546,51 @@ function WaitlistPanel() {
   );
 }
 
+/** Space price guidance shown on the public enquiry form — shared by the
+ *  Add and Edit space dialogs. Off by default: prices only go public when
+ *  the venue switches them on. */
+type SpacePricingForm = { minSpend: string; minSpendWeekend: string; packagesFromPp: string; showPricingOnForm: boolean; name: string };
+function SpacePricingFields<T extends SpacePricingForm>({ form, setForm }: { form: T; setForm: (fn: (f: T) => T) => void }) {
+  const money = (v: string) => `$${Number(v).toLocaleString('en-NZ')}`;
+  const preview = [
+    form.name || 'This space',
+    form.minSpend && form.minSpendWeekend ? `minimum spend from ${money(form.minSpend)} (${money(form.minSpendWeekend)} Fri & Sat)`
+      : form.minSpend ? `minimum spend ${money(form.minSpend)}`
+      : form.minSpendWeekend ? `minimum spend ${money(form.minSpendWeekend)} Fri & Sat` : '',
+    form.packagesFromPp ? `packages from ${money(form.packagesFromPp)} pp` : '',
+  ].filter(Boolean).join(' · ');
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 items-end">
+        <div>
+          <label htmlFor="space-min-spend-weekend" className="font-bebas text-xs tracking-widest text-sage block mb-1">FRI &amp; SAT MIN SPEND</label>
+          <Input id="space-min-spend-weekend" type="number" min={0} inputMode="decimal" value={form.minSpendWeekend}
+            onChange={e => setForm(f => ({ ...f, minSpendWeekend: e.target.value }))}
+            placeholder="Optional" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+        </div>
+        <div>
+          <label htmlFor="space-packages-from" className="font-bebas text-xs tracking-widest text-sage block mb-1">PACKAGES FROM ($PP)</label>
+          <Input id="space-packages-from" type="number" min={0} inputMode="decimal" value={form.packagesFromPp}
+            onChange={e => setForm(f => ({ ...f, packagesFromPp: e.target.value }))}
+            placeholder="65" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+        </div>
+      </div>
+      <label className="flex items-start gap-2.5 cursor-pointer">
+        <input type="checkbox" checked={form.showPricingOnForm}
+          onChange={e => setForm(f => ({ ...f, showPricingOnForm: e.target.checked }))}
+          className="w-4 h-4 mt-0.5 accent-forest shrink-0" />
+        <span>
+          <span className="font-dm text-sm text-ink block">Show pricing on the enquiry form</span>
+          <span className="font-dm text-xs text-stone block mt-0.5">Clients see one short line when they pick this space or enter guests, so they can self-qualify.</span>
+        </span>
+      </label>
+      {form.showPricingOnForm && preview.includes('·') && (
+        <p className="font-dm text-xs italic text-stone bg-linen px-3 py-2">{preview}</p>
+      )}
+    </div>
+  );
+}
+
 function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLogoUrl }: {
   settingsSubTab: string;
   setSettingsSubTab: (t: any) => void;
@@ -1202,10 +1247,10 @@ export default function Dashboard() {
     navCalendar(dx > 0 ? -1 : 1);
   };
   const [showAddSpace, setShowAddSpace] = useState(false);
-  const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
+  const [spaceForm, setSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false });
   const [showEditSpace, setShowEditSpace] = useState(false);
   const [editingSpace, setEditingSpace] = useState<any>(null);
-  const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" });
+  const [editSpaceForm, setEditSpaceForm] = useState({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false });
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   // Xero invoice modal, opened straight from the event drawer — invoicing an
   // event used to mean leaving for the Payments board and finding it again.
@@ -1567,6 +1612,11 @@ export default function Dashboard() {
   const { data: monthLeadEvents, refetch: refetchMonthLeadEvents } = trpc.leads.eventsByMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
+  );
+  // Walkthroughs clients booked from the enquiry form — month view chips.
+  const { data: monthWalkthroughs } = trpc.leads.walkthroughsByMonth.useQuery(
+    { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
+    { enabled: !!user?.id && tab === 'calendar' && calendarView === 'month' }
   );
   // Adjacent month data for week/day view (handles month boundaries)
   const adjNextMonthDate = new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1);
@@ -2102,7 +2152,7 @@ export default function Dashboard() {
     onError: (err) => toast.error(err.message || "Failed to clear sync"),
   });
   const createSpace = trpc.spaces.create.useMutation({
-    onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "" }); toast.success("Space added!"); },
+    onSuccess: () => { refetchSpaces(); setShowAddSpace(false); setSpaceForm({ name: "", description: "", minCapacity: "", maxCapacity: "", minSpend: "", minSpendWeekend: "", packagesFromPp: "", showPricingOnForm: false }); toast.success("Space added!"); },
   });
   const updateSpace = trpc.spaces.update.useMutation({
     onSuccess: () => { refetchSpaces(); setShowEditSpace(false); setEditingSpace(null); toast.success("Space updated!"); },
@@ -2600,6 +2650,13 @@ export default function Dashboard() {
         formSuccessMessage: (vs as any)?.formSuccessMessage ?? "",
         enquiryAutoReplyEnabled: ((vs as any)?.enquiryAutoReplyEnabled ?? 1) !== 0,
         enquiryAutoReplyMessage: (vs as any)?.enquiryAutoReplyMessage ?? "",
+        showAvailabilityOnForm: ((vs as any)?.showAvailabilityOnForm ?? 1) !== 0,
+        walkthroughEnabled: ((vs as any)?.walkthroughEnabled ?? 1) !== 0,
+        walkthroughDays: String((vs as any)?.walkthroughDays ?? "2,3,4,5,6").split(",").filter(Boolean).map(Number),
+        walkthroughStart: (vs as any)?.walkthroughStart ?? "10:00",
+        walkthroughEnd: (vs as any)?.walkthroughEnd ?? "16:00",
+        walkthroughSlotMinutes: (vs as any)?.walkthroughSlotMinutes ?? 30,
+        walkthroughDaysAhead: (vs as any)?.walkthroughDaysAhead ?? 14,
         operatingHours: vs?.operatingHours ?? JSON.stringify([
           { day: "Sunday", enabled: true, start: "08:00", end: "22:00" },
           { day: "Monday", enabled: true, start: "08:00", end: "22:00" },
@@ -4102,6 +4159,9 @@ export default function Dashboard() {
                             ["Guests", selectedLead.guestCount],
                             ["Budget", selectedLead.budget ? `$${Number(selectedLead.budget).toLocaleString()} NZD` : null],
                             ["Company", selectedLead.company],
+                            // Booked from the enquiry form (a slot label with no
+                            // time is a pre-booking-era request, never confirmed).
+                            ["Walkthrough", selectedLead.walkthroughSlot ? `${selectedLead.walkthroughSlot}${selectedLead.walkthroughAt ? '' : ' (requested)'}` : null],
                           ].filter(([, v]) => v).map(([label, value]) => (
                             <div key={label as string} className="flex gap-2">
                               <span className="text-ink/60 w-24 flex-shrink-0">{label}:</span>
@@ -4893,6 +4953,17 @@ export default function Dashboard() {
                                 </>
                               );
                             })()}
+                            {/* Walkthroughs booked from the enquiry form — a quiet
+                                dashed chip, so they read as appointments, not events. */}
+                            {!isOverflow && (monthWalkthroughs ?? []).filter((w: any) => w.walkthroughAt && new Date(w.walkthroughAt).getDate() === day).map((w: any) => (
+                              <button key={`wt-${w.id}`}
+                                onClick={() => { const l = (allLeads ?? []).find((x: any) => x?.id === w.id); if (l) openEventDrawer({ ...l, _isLead: true }); }}
+                                className="w-full text-left rounded h-6 px-1.5 flex items-center gap-1 border border-dashed border-gold bg-white text-ink hover:bg-linen transition-colors"
+                                title={`Walkthrough — ${w.firstName} ${w.lastName ?? ''} — ${w.walkthroughSlot ?? ''}`}>
+                                <span className="shrink-0 text-[9px] tabular-nums text-stone leading-snug">{new Date(w.walkthroughAt).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).replace(' ', '')}</span>
+                                <span className="truncate font-semibold text-[10px] leading-snug">Walkthrough · {w.firstName} {w.lastName ? w.lastName[0] + '.' : ''}</span>
+                              </button>
+                            ))}
                             {/* Add enquiry on this day — opens the dated quick-create
                                 form (a plus, not a pencil), so a date-first click
                                 lands on a manual form for the day you picked rather
@@ -6088,12 +6159,15 @@ export default function Dashboard() {
                           <div className="font-dm text-xs text-ink/60">
                             {s.minCapacity && s.maxCapacity ? `${s.minCapacity}–${s.maxCapacity} guests` : s.maxCapacity ? `Up to ${s.maxCapacity} guests` : ""}
                             {Number(s.minSpend) > 0 ? ` · Min spend $${Number(s.minSpend).toLocaleString()}` : ""}
+                            {Number(s.minSpendWeekend) > 0 ? ` · Fri & Sat $${Number(s.minSpendWeekend).toLocaleString()}` : ""}
+                            {Number(s.packagesFromPp) > 0 ? ` · From $${Number(s.packagesFromPp).toLocaleString()} pp` : ""}
+                            {s.showPricingOnForm ? " · Pricing shown on enquiry form" : ""}
                           </div>
                           {s.description && <div className="font-dm text-xs text-ink/60 mt-0.5">{s.description}</div>}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => { setEditingSpace(s); setEditSpaceForm({ name: s.name, description: s.description ?? '', minCapacity: s.minCapacity ? String(s.minCapacity) : '', maxCapacity: s.maxCapacity ? String(s.maxCapacity) : '', minSpend: s.minSpend ? String(s.minSpend) : '' }); setShowEditSpace(true); }}
+                            onClick={() => { setEditingSpace(s); setEditSpaceForm({ name: s.name, description: s.description ?? '', minCapacity: s.minCapacity ? String(s.minCapacity) : '', maxCapacity: s.maxCapacity ? String(s.maxCapacity) : '', minSpend: s.minSpend ? String(s.minSpend) : '', minSpendWeekend: s.minSpendWeekend ? String(Number(s.minSpendWeekend)) : '', packagesFromPp: s.packagesFromPp ? String(Number(s.packagesFromPp)) : '', showPricingOnForm: !!s.showPricingOnForm }); setShowEditSpace(true); }}
                             className="text-sage hover:text-forest-dark p-1"
                             title="Edit space"
                           >
@@ -6759,6 +6833,13 @@ export default function Dashboard() {
                   formSuccessMessage: settingsForm.formSuccessMessage || undefined,
                   enquiryAutoReplyEnabled: settingsForm.enquiryAutoReplyEnabled ? 1 : 0,
                   enquiryAutoReplyMessage: settingsForm.enquiryAutoReplyMessage || undefined,
+                  showAvailabilityOnForm: settingsForm.showAvailabilityOnForm ? 1 : 0,
+                  walkthroughEnabled: settingsForm.walkthroughEnabled ? 1 : 0,
+                  walkthroughDays: [...(settingsForm.walkthroughDays ?? [])].sort().join(","),
+                  walkthroughStart: settingsForm.walkthroughStart,
+                  walkthroughEnd: settingsForm.walkthroughEnd,
+                  walkthroughSlotMinutes: Number(settingsForm.walkthroughSlotMinutes) || 30,
+                  walkthroughDaysAhead: Number(settingsForm.walkthroughDaysAhead) || 14,
                   ...(formFields ? { customFormFields: JSON.stringify(formFields) } : {}),
                 });
               }} className="space-y-4">
@@ -7008,6 +7089,96 @@ export default function Dashboard() {
                       rows={3}
                       className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold font-dm text-sm resize-none" />
                   )}
+                </div>
+
+                {/* ── AVAILABILITY & WALKTHROUGHS ── */}
+                <div className="dante-card p-5 space-y-4">
+                  <h2 className="font-bebas text-xs tracking-widest text-sage">AVAILABILITY &amp; WALKTHROUGHS</h2>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-dm text-sm text-ink">Show availability on enquiry form</div>
+                      <p className="font-dm text-xs text-stone mt-0.5">Booked dates are crossed out on the date picker and busy ones get a small dot. Clients only see dates — never who&rsquo;s booked. Uses confirmed events.</p>
+                    </div>
+                    <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                      <input type="checkbox" checked={!!settingsForm.showAvailabilityOnForm}
+                        onChange={e => setSettingsForm((f: any) => ({ ...f, showAvailabilityOnForm: e.target.checked }))}
+                        aria-label="Show availability on enquiry form"
+                        className="w-4 h-4 accent-forest" />
+                      <span className="font-bebas text-xs tracking-widest text-ink">{settingsForm.showAvailabilityOnForm ? 'ON' : 'OFF'}</span>
+                    </label>
+                  </div>
+
+                  <div className="border-t border-gold pt-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-dm text-sm text-ink">Walkthrough booking</div>
+                        <p className="font-dm text-xs text-stone mt-0.5">After sending an enquiry, clients can book a real walkthrough. Times already taken by another walkthrough or an event are left out. You get a task and an alert; the client gets an email confirmation with a calendar invite (needs your SMTP set up).</p>
+                      </div>
+                      <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                        <input type="checkbox" checked={!!settingsForm.walkthroughEnabled}
+                          onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughEnabled: e.target.checked }))}
+                          aria-label="Walkthrough booking"
+                          className="w-4 h-4 accent-forest" />
+                        <span className="font-bebas text-xs tracking-widest text-ink">{settingsForm.walkthroughEnabled ? 'ON' : 'OFF'}</span>
+                      </label>
+                    </div>
+                    {settingsForm.walkthroughEnabled && (
+                      <div className="space-y-3">
+                        <div>
+                          <div id="wt-days-label" className="font-bebas text-xs tracking-widest text-sage mb-1.5">DAYS</div>
+                          <div role="group" aria-labelledby="wt-days-label" className="flex flex-wrap gap-1.5">
+                            {[1, 2, 3, 4, 5, 6, 0].map(d => {
+                              const on = (settingsForm.walkthroughDays ?? []).includes(d);
+                              return (
+                                <button key={d} type="button" aria-pressed={on}
+                                  onClick={() => setSettingsForm((f: any) => ({ ...f, walkthroughDays: on ? (f.walkthroughDays ?? []).filter((x: number) => x !== d) : [...(f.walkthroughDays ?? []), d] }))}
+                                  className={`w-12 py-1.5 border font-dm text-xs transition-colors ${on ? 'bg-forest text-cream border-forest' : 'bg-white text-ink border-gold hover:bg-linen'}`}>
+                                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <label htmlFor="wt-start" className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM</label>
+                            <Input id="wt-start" type="time" step={900} value={settingsForm.walkthroughStart ?? '10:00'}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughStart: e.target.value }))}
+                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                          </div>
+                          <div>
+                            <label htmlFor="wt-end" className="font-bebas text-xs tracking-widest text-sage block mb-1">UNTIL</label>
+                            <Input id="wt-end" type="time" step={900} value={settingsForm.walkthroughEnd ?? '16:00'}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughEnd: e.target.value }))}
+                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
+                          </div>
+                          <div>
+                            <label htmlFor="wt-slot" className="font-bebas text-xs tracking-widest text-sage block mb-1">LENGTH</label>
+                            <select id="wt-slot" value={settingsForm.walkthroughSlotMinutes ?? 30}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughSlotMinutes: Number(e.target.value) }))}
+                              className="w-full h-9 px-2 bg-white rounded-none border border-gold/30 font-dm text-sm">
+                              {[15, 20, 30, 45, 60].map(m => <option key={m} value={m}>{m} min</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label htmlFor="wt-ahead" className="font-bebas text-xs tracking-widest text-sage block mb-1">BOOK UP TO</label>
+                            <select id="wt-ahead" value={settingsForm.walkthroughDaysAhead ?? 14}
+                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughDaysAhead: Number(e.target.value) }))}
+                              className="w-full h-9 px-2 bg-white rounded-none border border-gold/30 font-dm text-sm">
+                              {[7, 14, 21, 28, 42, 60].map(d => <option key={d} value={d}>{d} days ahead</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        {(settingsForm.walkthroughDays ?? []).length === 0 && (
+                          <p className="font-dm text-xs text-tomato">Pick at least one day, or turn walkthroughs off.</p>
+                        )}
+                        {settingsForm.walkthroughStart >= settingsForm.walkthroughEnd && (
+                          <p className="font-dm text-xs text-tomato">The finish time needs to be after the start time.</p>
+                        )}
+                        <p className="font-dm text-xs text-stone">Times are New Zealand time. Clients can book from tomorrow onwards.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* ── PHOTOS ── */}
@@ -9697,6 +9868,18 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+                {/* WALKTHROUGH — booked by the client from the enquiry form. */}
+                {selectedBooking._isLead && selectedBooking.walkthroughSlot && (
+                  <div className="flex items-start gap-3 sm:col-span-2">
+                    <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className={`${DRAWER_LABEL} mb-1`}>Walkthrough</div>
+                      <div className="font-dm text-sm text-ink">
+                        {selectedBooking.walkthroughSlot}{selectedBooking.walkthroughAt ? '' : ' (requested, not confirmed)'}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* EMAIL */}
                 <div className="flex items-start gap-3 sm:col-span-2">
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
@@ -10382,7 +10565,7 @@ export default function Dashboard() {
               <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Add Event Space</DialogTitle>
             </div>
           </DialogHeader>
-          <form onSubmit={e => { e.preventDefault(); createSpace.mutate({ name: spaceForm.name, description: spaceForm.description || undefined, minCapacity: spaceForm.minCapacity ? parseInt(spaceForm.minCapacity) : undefined, maxCapacity: spaceForm.maxCapacity ? parseInt(spaceForm.maxCapacity) : undefined, minSpend: spaceForm.minSpend ? parseFloat(spaceForm.minSpend) : undefined }); }} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); createSpace.mutate({ name: spaceForm.name, description: spaceForm.description || undefined, minCapacity: spaceForm.minCapacity ? parseInt(spaceForm.minCapacity) : undefined, maxCapacity: spaceForm.maxCapacity ? parseInt(spaceForm.maxCapacity) : undefined, minSpend: spaceForm.minSpend ? parseFloat(spaceForm.minSpend) : undefined, minSpendWeekend: spaceForm.minSpendWeekend ? parseFloat(spaceForm.minSpendWeekend) : undefined, packagesFromPp: spaceForm.packagesFromPp ? parseFloat(spaceForm.packagesFromPp) : undefined, showPricingOnForm: spaceForm.showPricingOnForm }); }} className="space-y-3">
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
               <Input required value={spaceForm.name} onChange={e => setSpaceForm(f => ({ ...f, name: e.target.value }))}
@@ -10405,6 +10588,7 @@ export default function Dashboard() {
               <Input type="number" value={spaceForm.minSpend} onChange={e => setSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
                 placeholder="2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
+            <SpacePricingFields form={spaceForm} setForm={setSpaceForm} />
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
               <Textarea value={spaceForm.description} onChange={e => setSpaceForm(f => ({ ...f, description: e.target.value }))}
@@ -10426,7 +10610,7 @@ export default function Dashboard() {
               <DialogTitle className="font-cormorant text-xl text-cream font-semibold">Edit Event Space</DialogTitle>
             </div>
           </DialogHeader>
-          <form onSubmit={e => { e.preventDefault(); if (!editingSpace) return; updateSpace.mutate({ id: editingSpace.id, name: editSpaceForm.name, description: editSpaceForm.description || null, minCapacity: editSpaceForm.minCapacity ? parseInt(editSpaceForm.minCapacity) : null, maxCapacity: editSpaceForm.maxCapacity ? parseInt(editSpaceForm.maxCapacity) : null, minSpend: editSpaceForm.minSpend ? parseFloat(editSpaceForm.minSpend) : null }); }} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); if (!editingSpace) return; updateSpace.mutate({ id: editingSpace.id, name: editSpaceForm.name, description: editSpaceForm.description || null, minCapacity: editSpaceForm.minCapacity ? parseInt(editSpaceForm.minCapacity) : null, maxCapacity: editSpaceForm.maxCapacity ? parseInt(editSpaceForm.maxCapacity) : null, minSpend: editSpaceForm.minSpend ? parseFloat(editSpaceForm.minSpend) : null, minSpendWeekend: editSpaceForm.minSpendWeekend ? parseFloat(editSpaceForm.minSpendWeekend) : null, packagesFromPp: editSpaceForm.packagesFromPp ? parseFloat(editSpaceForm.packagesFromPp) : null, showPricingOnForm: editSpaceForm.showPricingOnForm }); }} className="space-y-3">
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SPACE NAME *</label>
               <Input required value={editSpaceForm.name} onChange={e => setEditSpaceForm(f => ({ ...f, name: e.target.value }))}
@@ -10449,6 +10633,7 @@ export default function Dashboard() {
               <Input type="number" value={editSpaceForm.minSpend} onChange={e => setEditSpaceForm(f => ({ ...f, minSpend: e.target.value }))}
                 placeholder="2000" className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
             </div>
+            <SpacePricingFields form={editSpaceForm} setForm={setEditSpaceForm} />
             <div>
               <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DESCRIPTION</label>
               <Textarea value={editSpaceForm.description} onChange={e => setEditSpaceForm(f => ({ ...f, description: e.target.value }))}

@@ -234,6 +234,14 @@ export const appRouter = router({
         enquiryAutoReplyEnabled: z.coerce.number().optional(),
         enquiryAutoReplyMessage: z.string().optional(),
         proposalAcceptEmailEnabled: z.coerce.number().optional(),
+        // Enquiry form: availability on the date picker + walkthrough booking.
+        showAvailabilityOnForm: z.coerce.number().int().min(0).max(1).optional(),
+        walkthroughEnabled: z.coerce.number().int().min(0).max(1).optional(),
+        walkthroughDays: z.string().regex(/^([0-6](,[0-6])*)?$/).optional(),
+        walkthroughStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+        walkthroughEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+        walkthroughSlotMinutes: z.coerce.number().int().min(10).max(240).optional(),
+        walkthroughDaysAhead: z.coerce.number().int().min(1).max(90).optional(),
         nbiApiKey: z.string().optional(),
         nbiVenueId: z.string().optional(),
         nbiAccountId: z.string().optional(),
@@ -448,6 +456,10 @@ export const appRouter = router({
         minCapacity: z.number().optional(),
         maxCapacity: z.number().optional(),
         minSpend: z.number().optional(),
+        // Enquiry-form price guidance (shown only when showPricingOnForm).
+        minSpendWeekend: z.number().min(0).optional(),
+        packagesFromPp: z.number().min(0).optional(),
+        showPricingOnForm: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         return createEventSpace({ ownerId: ctx.user.id, ...input });
@@ -460,6 +472,9 @@ export const appRouter = router({
         minCapacity: z.number().optional().nullable(),
         maxCapacity: z.number().optional().nullable(),
         minSpend: z.number().optional().nullable(),
+        minSpendWeekend: z.number().min(0).optional().nullable(),
+        packagesFromPp: z.number().min(0).optional().nullable(),
+        showPricingOnForm: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
@@ -468,6 +483,10 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) return;
         const { id, ...fields } = input;
+        // Decimal columns take strings; null clears.
+        for (const k of ['minSpendWeekend', 'packagesFromPp'] as const) {
+          if (fields[k] != null) (fields as any)[k] = String(fields[k]);
+        }
         await db.update(eventSpaces).set(fields as any).where(and(eq(eventSpaces.id, id), eq(eventSpaces.ownerId, ctx.user.id)));
         return { success: true };
       }),
@@ -578,9 +597,16 @@ export const appRouter = router({
         utmCampaign: z.string().max(255).optional(),
         utmTerm: z.string().max(255).optional(),
         utmContent: z.string().max(255).optional(),
+        // Spam checks: a hidden field only bots fill in, and the signed
+        // "form opened at" token from leads.formConfig.
+        hp: z.string().max(500).optional(),
+        formToken: z.string().max(80).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         await enforceLeadRateLimit(ctx, input.ownerId);
+        const { isBotSubmission } = await import('./enquiryForm');
+        // A bot gets a convincing "saved" and nothing is stored.
+        if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { leadId: 0, leadToken: "" };
         const lead = await createLead({
           ownerId: input.ownerId,
           firstName: input.firstName,
@@ -653,9 +679,28 @@ export const appRouter = router({
         utmCampaign: z.string().max(255).optional(),
         utmTerm: z.string().max(255).optional(),
         utmContent: z.string().max(255).optional(),
+        // The event space the client picked, when the form asks for one.
+        spaceId: z.number().int().positive().optional(),
+        // Spam checks — see startCapture. turnstileToken only when the
+        // TURNSTILE_* env vars are set.
+        hp: z.string().max(500).optional(),
+        formToken: z.string().max(80).optional(),
+        turnstileToken: z.string().max(2048).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         await enforceLeadRateLimit(ctx, input.ownerId);
+        const { isBotSubmission, verifyTurnstile } = await import('./enquiryForm');
+        // A bot gets a convincing success and nothing is stored or sent.
+        if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { id: 0, leadToken: "" } as any;
+        if (!(await verifyTurnstile(input.turnstileToken, getRequestIp(ctx?.req)))) {
+          throw new Error("Please complete the quick security check above the button, then send again.");
+        }
+        // Only a space this venue actually has — never trust the id alone.
+        let space: { id: number; name: string } | undefined;
+        if (input.spaceId) {
+          const all = await getEventSpaces(input.ownerId);
+          space = all.find(s => s.id === input.spaceId);
+        }
 
         const leadData = {
           ownerId: input.ownerId,
@@ -685,6 +730,7 @@ export const appRouter = router({
           utmCampaign: input.utmCampaign,
           utmTerm: input.utmTerm,
           utmContent: input.utmContent,
+          ...(space ? { spaceId: space.id, spaceName: space.name } : {}),
         };
 
         let lead = null;
@@ -982,17 +1028,58 @@ export const appRouter = router({
         return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id) } : lead;
       }),
 
-    // Public: after a successful submit, the confirmation screen offers a
-    // 20-minute walkthrough slot (computed client-side — next few Tue–Sat
-    // days, no real availability check). Picking one just records the label
-    // on the lead so staff can see what was offered; it is not a calendar
-    // booking. Rate-limited the same as submit/startCapture since it's a
-    // public write keyed by a client-supplied ownerId.
+    // Public: the enquiry form's settings that the page needs before anyone
+    // types — spaces (with prices only where the venue publishes them),
+    // whether to show availability / walkthroughs, the optional Turnstile site
+    // key, and the signed "form opened at" token the spam check uses.
+    formConfig: publicProcedure
+      .input(z.object({ ownerId: z.number().int().positive() }))
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('enquiry-form-read', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 120, 60_000);
+        const { getPublicFormConfig } = await import('./enquiryForm');
+        return getPublicFormConfig(input.ownerId);
+      }),
+
+    // Public: which dates in a month are fully booked or busy, for the date
+    // picker. Dates and states only — never who booked. Respects the venue's
+    // "Show availability on enquiry form" switch.
+    availability: publicProcedure
+      .input(z.object({
+        ownerId: z.number().int().positive(),
+        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+        spaceId: z.number().int().positive().optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('enquiry-form-read', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 120, 60_000);
+        const { getMonthAvailability } = await import('./enquiryForm');
+        return getMonthAvailability(input.ownerId, input.month, input.spaceId ?? null);
+      }),
+
+    // Public: open walkthrough slots for the thank-you screen, generated in
+    // Pacific/Auckland from the venue's walkthrough settings, minus other
+    // walkthroughs and times an event is on.
+    walkthroughSlots: publicProcedure
+      .input(z.object({ ownerId: z.number().int().positive() }))
+      .query(async ({ input, ctx }) => {
+        enforceRateLimit('enquiry-form-read', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 120, 60_000);
+        const { getWalkthroughSlots } = await import('./enquiryForm');
+        return getWalkthroughSlots(input.ownerId);
+      }),
+
+    // Public: book (or move) the enquirer's walkthrough. The slot is
+    // re-checked on the server under a lock, so a time someone else just took
+    // is refused. Creates a task, logs activity, alerts the venue and emails
+    // the client a confirmation with a calendar file (reported honestly in
+    // `emailed`). Rate-limited like submit since it's a public write keyed by
+    // a client-supplied ownerId, and needs submit()'s leadToken.
     bookWalkthrough: publicProcedure
       .input(z.object({
         ownerId: z.number(),
         leadId: z.number(),
-        slotLabel: z.string().min(1).max(60),
+        // ISO start of a slot from leads.walkthroughSlots.
+        slotStart: z.string().max(40).optional(),
+        // Legacy: a page loaded before real slots shipped sends only a label.
+        slotLabel: z.string().min(1).max(60).optional(),
         // submit()'s proof that this visitor owns leadId (see leadToken.ts).
         leadToken: z.string().max(64),
       }))
@@ -1001,8 +1088,26 @@ export const appRouter = router({
         if (!isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)) throw new Error("Enquiry not found.");
         const existing = await getLeadById(input.leadId, input.ownerId);
         if (!existing) throw new Error("Enquiry not found.");
+        if (input.slotStart) {
+          const { bookWalkthrough, SlotTakenError } = await import('./enquiryForm');
+          try {
+            return await bookWalkthrough(input.ownerId, input.leadId, input.slotStart);
+          } catch (err: any) {
+            if (err instanceof SlotTakenError) throw new TRPCError({ code: "CONFLICT", message: err.message });
+            throw err;
+          }
+        }
+        if (!input.slotLabel) throw new Error("Pick a time first.");
         await updateLead(input.leadId, input.ownerId, { walkthroughSlot: input.slotLabel });
-        return { ok: true };
+        return { ok: true as const, label: input.slotLabel, walkthroughAt: null, ics: null, emailed: false, emailNote: "legacy" };
+      }),
+
+    // The venue's booked walkthroughs for a month — shown on the calendar.
+    walkthroughsByMonth: protectedProcedure
+      .input(z.object({ year: z.number().int(), month: z.number().int().min(1).max(12) }))
+      .query(async ({ input, ctx }) => {
+        const { walkthroughsForMonth } = await import('./enquiryForm');
+        return walkthroughsForMonth(ctx.user.id, input.year, input.month);
       }),
 
     updateStatus: protectedProcedure
