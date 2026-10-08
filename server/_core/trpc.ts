@@ -49,6 +49,7 @@ const STAFF_BLOCKED_READ_PREFIXES = [
   "leads.get",
   "notifications.",  // alerts name clients and quote values
   "followUps.",      // client email wording + per-lead response times
+  "inbox.",          // client email conversations + mailbox settings
 ];
 /** Mutations a staff login MAY perform (none today — read-only by choice). */
 const STAFF_ALLOWED_MUTATIONS: string[] = [];

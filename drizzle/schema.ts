@@ -86,6 +86,22 @@ export const venueSettings = pgTable("venue_settings", {
   smtpFromName: varchar("smtpFromName", { length: 255 }),
   smtpFromEmail: varchar("smtpFromEmail", { length: 320 }),
   smtpSecure: integer("smtpSecure").default(0),
+  // ─── Email inbox (IMAP) ────────────────────────────────────────────────────
+  // Read-only connection to the venue's mailbox so client replies land on the
+  // enquiry timeline (server/inbox.ts polls it). imapPass is never returned to
+  // the browser — see getVenueSettings / VENUE_SECRET_FIELDS. imapLastUid +
+  // imapUidValidity are the poll cursor; reset whenever the account changes.
+  imapEnabled: integer("imapEnabled").default(0),
+  imapHost: varchar("imapHost", { length: 255 }),
+  imapPort: integer("imapPort").default(993),
+  imapSecure: integer("imapSecure").default(1),
+  imapUser: varchar("imapUser", { length: 320 }),
+  imapPass: text("imapPass"),
+  imapFolder: varchar("imapFolder", { length: 255 }).default("INBOX"),
+  imapLastUid: bigint("imapLastUid", { mode: "number" }),
+  imapUidValidity: bigint("imapUidValidity", { mode: "number" }),
+  imapLastCheckedAt: timestamp("imapLastCheckedAt"),
+  imapLastError: text("imapLastError"),
   internalName: varchar("internalName", { length: 255 }),
   notificationEmail: varchar("notificationEmail", { length: 320 }),
   addressLine1: varchar("addressLine1", { length: 500 }),
@@ -1279,3 +1295,34 @@ export const leadSequenceSends = pgTable("lead_sequence_sends", {
   sendUnique: uniqueIndex("lead_sequence_sends_uq").on(t.leadId, t.sequenceKey, t.step, t.refId),
 }));
 export type LeadSequenceSend = typeof leadSequenceSends.$inferSelect;
+// ─── Lead conversation (emails in and out) ───────────────────────────────────
+// Every client email we send about an enquiry ("out") and every reply matched
+// back to it from the venue's inbox ("in"), so the enquiry shows the whole
+// conversation. Unique on (ownerId, messageId) so re-polling is idempotent.
+// Inbound content is attacker-controlled: the app renders bodyText only;
+// bodyHtml is kept sanitised (cleanRichHtml) and is never rendered raw.
+export const leadMessages = pgTable("lead_messages", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  leadId: integer("leadId").notNull(),
+  direction: varchar("direction", { length: 3 }).notNull(), // "in" | "out"
+  fromEmail: varchar("fromEmail", { length: 320 }),
+  fromName: varchar("fromName", { length: 255 }),
+  toEmail: text("toEmail"),
+  subject: varchar("subject", { length: 500 }),
+  // The new text of the message, with quoted history trimmed where we can.
+  bodyText: text("bodyText"),
+  // The whole plain-text body (quoted history included), capped.
+  fullText: text("fullText"),
+  bodyHtml: text("bodyHtml"),
+  // [{ filename, size, contentType }] — names only, the files aren't stored.
+  attachments: jsonb("attachments"),
+  messageId: varchar("messageId", { length: 500 }).notNull(),
+  inReplyTo: varchar("inReplyTo", { length: 500 }),
+  references: text("references"),
+  receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  ownerMessageUnique: uniqueIndex("lead_messages_owner_message_uq").on(t.ownerId, t.messageId),
+}));
+export type LeadMessage = typeof leadMessages.$inferSelect;

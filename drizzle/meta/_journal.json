@@ -490,6 +490,13 @@
       "when": 1779801512071,
       "tag": "0071_speed_to_lead",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1779801512073,
+      "tag": "0073_lead_inbox",
+      "breakpoints": true
     }
   ]
 }

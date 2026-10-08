@@ -91,7 +91,11 @@ export async function getVenueSettings(ownerId: number) {
   const db = await getDb();
   if (!db) return null;
   const result = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, ownerId)).limit(1);
-  return result[0] ?? null;
+  if (!result[0]) return null;
+  // This row is returned to the browser (venue.get / getOwn / update): the
+  // inbox password never leaves the server. server/inbox.ts reads it directly.
+  const { imapPass: _imapPass, ...row } = result[0];
+  return row;
 }
 
 export async function upsertVenueSettings(ownerId: number, data: Partial<Omit<VenueSettings, "id" | "ownerId" | "createdAt" | "updatedAt">>) {

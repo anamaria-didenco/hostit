@@ -40,6 +40,8 @@ import XeroPushModal from "@/components/XeroPushModal";
 import { NotificationBell } from "@/components/NotificationBell";
 import FollowUpSettings from "@/components/FollowUpSettings";
 import { LeadResponseInfo } from "@/components/LeadResponseInfo";
+import InboxSettingsCard from "@/components/InboxSettingsCard";
+import LeadConversation, { RepliedChip, useReplyStatus, type buildReply } from "@/components/LeadConversation";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { leadFollowUpState } from "@shared/followUp";
@@ -1309,6 +1311,7 @@ export default function Dashboard() {
         utils.followUps.leadStatus.invalidate();
         refetchLeads();
         utils.dashboard.invalidate();
+        utils.inbox.invalidate();
       } else {
         toast.error(
           res?.reason === 'smtp_not_configured' ? 'Set up your email (SMTP) in Settings first, then you can send follow-ups.'
@@ -2117,6 +2120,16 @@ export default function Dashboard() {
   // Email compose state
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailForm, setEmailForm] = useState({ subject: "", body: "" });
+  // Set when the composer was opened from a client's email ("Reply"), so the
+  // send threads under it (In-Reply-To / References). Cleared on close.
+  const [emailThread, setEmailThread] = useState<{ inReplyTo: string; references: string[] } | null>(null);
+  useEffect(() => { if (!showEmailModal) setEmailThread(null); }, [showEmailModal]);
+  const replyStatus = useReplyStatus(isAuthenticated && !isStaff);
+  const openEmailReply = (lead: { firstName?: string | null }, reply: ReturnType<typeof buildReply>) => {
+    setEmailForm({ subject: reply.subject, body: `Hi ${lead.firstName ?? ''},\n\n` });
+    setEmailThread({ inReplyTo: reply.inReplyTo, references: reply.references });
+    setShowEmailModal(true);
+  };
   const [emailAttachments, setEmailAttachments] = useState<Array<{ filename: string; content: string; contentType: string }>>([]);
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
   // Email Templates
@@ -2309,6 +2322,7 @@ export default function Dashboard() {
         toast.success('Email sent successfully!');
       }
       if (selectedLead) utils.leads.getActivity.invalidate({ leadId: selectedLead.id });
+      utils.inbox.invalidate();
       refetchLeads();
     },
     onError: (err) => toast.error(err.message || "Failed to send email"),
@@ -3668,6 +3682,7 @@ export default function Dashboard() {
                                   >
                                     {lead.firstName} {lead.lastName}
                                     {isPartialLead(lead) && <PartialChip />}
+                                    {replyStatus.get(lead.id)?.direction === 'in' && <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />}
                                   </button>
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[200px] truncate">{lead.eventType || "—"}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}{budgetRangeLabel((lead as any).budgetRange) ? <span className="ml-1.5 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap">{budgetRangeLabel((lead as any).budgetRange)}</span> : null}</td>
@@ -3782,6 +3797,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 mb-0.5 min-w-0">
                         <div className="font-cormorant font-semibold text-base text-ink truncate flex-1 min-w-0">{lead.firstName} {lead.lastName}</div>
                         {isPartialLead(lead) && <PartialChip />}
+                        {replyStatus.get(lead.id)?.direction === 'in' && <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />}
                         <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
                           {pipelineStages.find(s => s.key === lead.status)?.label ?? String(lead.status ?? "").replace(/_/g, " ").toUpperCase()}
                         </div>
@@ -4193,6 +4209,14 @@ export default function Dashboard() {
                     </div>
                   )}
 
+                  {/* Email conversation (sent from VenueFlow + client replies) */}
+                  {selectedLead.id && (
+                    <div className="dante-card p-4 mb-4">
+                      <LeadConversation leadId={selectedLead.id} clientFirstName={selectedLead.firstName}
+                        onReply={selectedLead.email && !isTeamMember ? (_m, reply) => openEmailReply(selectedLead, reply) : undefined} />
+                    </div>
+                  )}
+
                   {/* Activity Log */}
                   <div className="dante-card p-4 mb-4">
                     <h3 className="font-bebas text-xs tracking-widest text-ink/70 mb-3">ACTIVITY LOG</h3>
@@ -4419,6 +4443,7 @@ export default function Dashboard() {
                   <div>
                     <div className="font-bebas tracking-widest text-sm">COMPOSE EMAIL</div>
                     <div className="font-dm text-xs text-cream/70">To: {selectedLead.firstName} {selectedLead.lastName} &lt;{selectedLead.email}&gt;</div>
+                    {emailThread && <div className="font-dm text-xs text-cream opacity-80 mt-0.5">Replying in the same email thread</div>}
                   </div>
                   <button onClick={() => setShowEmailModal(false)} className="text-cream/60 hover:text-cream text-xl leading-none">&times;</button>
                 </div>
@@ -4550,6 +4575,8 @@ export default function Dashboard() {
                         leadId: selectedLead.id,
                         bookingId: (selectedLead as any)._fromBookingId,
                         attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
+                        inReplyTo: emailThread?.inReplyTo,
+                        references: emailThread?.references,
                       })}
                       disabled={sendEmail.isPending || !emailForm.subject || !emailForm.body}
                       className="btn-forest font-bebas tracking-widest text-xs px-5 py-2 text-cream flex items-center gap-2 disabled:opacity-50">
@@ -6201,6 +6228,9 @@ export default function Dashboard() {
                   </div>
                 </form>
               </div>
+
+              {/* ── Email inbox (client replies → enquiry timeline) ──────── */}
+              <InboxSettingsCard />
 
               {/* ── Email Signatures ────────────────────────────────────── */}
               <div className="mt-8">
@@ -10032,6 +10062,15 @@ export default function Dashboard() {
                   )}
                 </div>
               </SectionOrPlain>
+              {selectedBooking._isLead && !isStaff && (
+                <LeadConversation leadId={selectedBooking.id} clientFirstName={selectedBooking.firstName}
+                  onReply={selectedBooking.email && !isTeamMember ? (_m, reply) => {
+                    // Same hand-off as the drawer's EMAIL button: the composer works on selectedLead.
+                    setSelectedLead({ id: selectedBooking.id, firstName: selectedBooking.firstName, lastName: selectedBooking.lastName, email: selectedBooking.email } as any);
+                    openEmailReply(selectedBooking, reply);
+                    setSelectedBooking(null);
+                  } : undefined} />
+              )}
               {/* ── Inline Payments Panel (bookings only) ─────────────────── */}
               {drawerPaymentsOpen && !selectedBooking._isLead && (
                 <div className="border border-gold/30 bg-linen/30 overflow-hidden">
