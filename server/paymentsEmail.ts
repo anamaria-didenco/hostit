@@ -5,13 +5,11 @@
  * shared sender).
  */
 import { smtpTls } from "./smtpTls";
+import { publicBaseUrl } from "./publicUrl";
 
 /** The app's public base URL, for building client-facing links. */
 export function appBaseUrl(): string {
-  const domain = process.env.REPLIT_DEV_DOMAIN
-    ? process.env.REPLIT_DEV_DOMAIN
-    : (process.env.REPLIT_DOMAINS ?? "").split(",")[0];
-  return domain ? `https://${domain}` : "";
+  return publicBaseUrl();
 }
 
 /**

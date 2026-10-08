@@ -1209,3 +1209,31 @@ export const apiTokens = pgTable("api_tokens", {
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
 export type ApiToken = typeof apiTokens.$inferSelect;
+
+// ─── Staff notifications ─────────────────────────────────────────────────────
+// What the venue needs to know about, as it happens: a client opened, accepted
+// or declined a proposal, an enquiry has waited too long for a reply, a hold is
+// about to lapse, a client replied. Written by server/notify.ts (which also
+// emails the venue's notificationEmail) and shown in the app's bell.
+export const venueNotifications = pgTable("venue_notifications", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  // Machine-readable kind, e.g. "proposal_viewed", "reply_overdue".
+  kind: varchar("kind", { length: 40 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body"),
+  leadId: integer("leadId"),
+  bookingId: integer("bookingId"),
+  // In-app path to open, e.g. "/dashboard?tab=leads&lead=12".
+  link: varchar("link", { length: 500 }),
+  // Optional "only ever once" key (e.g. "reply_overdue:lead:12"), so
+  // scheduled jobs can re-run safely without repeating an alert.
+  dedupeKey: varchar("dedupeKey", { length: 160 }),
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  dedupeUnique: uniqueIndex("venue_notifications_owner_dedupe_uq")
+    .on(t.ownerId, t.dedupeKey)
+    .where(sql`${t.dedupeKey} IS NOT NULL`),
+}));
+export type VenueNotification = typeof venueNotifications.$inferSelect;

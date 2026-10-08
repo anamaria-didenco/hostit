@@ -476,6 +476,13 @@
       "when": 1779801511000,
       "tag": "0067_xero_invoice_sent_by",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1779801512000,
+      "tag": "0068_venue_notifications",
+      "breakpoints": true
     }
   ]
 }
