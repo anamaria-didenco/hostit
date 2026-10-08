@@ -13,6 +13,7 @@ import { Request, Response } from "express";
 import { getDb } from "./db";
 import { bookings, venueSettings, leadActivity } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
+import { NBI_IMPORT_EVENT_TYPE } from "../shared/conversion";
 
 interface NbiWebhookBody {
   event?: string;
@@ -224,7 +225,8 @@ export async function handleNbiWebhook(req: Request, res: Response) {
         firstName: firstName || "Guest",
         lastName: lastName || null,
         email: email || `nbi-${nbiBookingIdStr ?? Date.now()}@unknown.local`,
-        eventType: "Booking (from NowBookIt)",
+        // Reports tell diary imports apart by this exact value (shared/conversion.ts).
+        eventType: NBI_IMPORT_EVENT_TYPE,
         eventDate,
         guestCount: covers,
         spaceName: sectionName || null,

@@ -15,10 +15,10 @@ import { smtpTls } from "./smtpTls";
 import { getDb } from "./db";
 import { leads, bookings, venueSettings } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { bookedLeadIds, isImportedBooking, isRealEnquiry, leadOutcome } from "../shared/conversion";
 
 const NZ_TZ = "Pacific/Auckland";
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const TERMINAL = ["booked", "confirmed", "finished", "lost", "cancelled"];
 
 function esc(s: any): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -38,16 +38,19 @@ async function buildReport(ownerId: number, vs: any) {
   const weekAgo = now - WEEK_MS;
   const in30 = now + 30 * 24 * 60 * 60 * 1000;
 
-  const allLeads = await db.select().from(leads).where(eq(leads.ownerId, ownerId));
+  // Counted with the shared conversion rules (shared/conversion.ts): no
+  // half-finished form autosaves, healthchecks or NowBookIt diary imports.
+  const allLeads = (await db.select().from(leads).where(eq(leads.ownerId, ownerId))).filter(isRealEnquiry);
   const allBookings = await db.select().from(bookings).where(eq(bookings.ownerId, ownerId));
   const t = (d: any) => (d ? new Date(d).getTime() : 0);
 
   const newEnquiries = allLeads.filter(l => { const c = t(l.createdAt); return c >= weekAgo && c <= now; });
   const confirmedThisWeek = allBookings.filter(b => {
     const c = t((b as any).createdAt);
-    return c >= weekAgo && c <= now && (b as any).status !== "cancelled";
+    return c >= weekAgo && c <= now && (b as any).status !== "cancelled" && !isImportedBooking(b);
   });
-  const openEnquiries = allLeads.filter(l => !TERMINAL.includes(l.status));
+  const booked = bookedLeadIds(allBookings);
+  const openEnquiries = allLeads.filter(l => leadOutcome(l, booked) === "open");
   const upcoming = allBookings
     .filter(b => { const e = t(b.eventDate); return e >= now && e <= in30 && (b as any).status !== "cancelled"; })
     .sort((a, b) => t(a.eventDate) - t(b.eventDate));

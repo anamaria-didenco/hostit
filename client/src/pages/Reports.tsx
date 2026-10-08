@@ -4,10 +4,16 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Link } from "wouter";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, Legend
+  PieChart, Pie, Cell, Legend
 } from "recharts";
-import { FileText, TrendingUp, DollarSign, Users, Calendar, ArrowUpRight, Settings, Download, AlertCircle } from "lucide-react";
+import { TrendingUp, DollarSign, Users, Calendar, ArrowUpRight, Settings, Download, AlertCircle } from "lucide-react";
 import { parseCustomStatuses, statusChipClasses, statusSwatch } from "@/components/StatusManager";
+import { currencyWhole } from "@/lib/money";
+import { isRealEnquiry, isImportedBooking, WON_LEAD_STATUSES } from "@shared/conversion";
+import {
+  PeriodPicker, ConversionSummaryCard, FunnelCard, TrendCard, SpeedTiles, BySourceCard,
+  PipelineCard, LostReasonsCard, fmtSource, type PeriodChoice,
+} from "@/components/ConversionReport";
 
 // Soft row/background wash from a status swatch, so a table row's tint matches
 // its badge exactly. Low alpha keeps text comfortably above AA on the wash.
@@ -20,12 +26,14 @@ const tint = (hex: string, a: number) => {
 const TABS = [
   { key: "overview", label: "Overview" },
   { key: "events", label: "Events" },
-  { key: "enquiries", label: "Enquiries" },
+  { key: "enquiries", label: "Conversion" },
   { key: "revenue", label: "Revenue" },
   { key: "proposals", label: "Proposals" },
 ];
 
-const BRAND_COLORS = ["#2f5488", "#4a7dd4", "#8ab2ee", "#2d5fa8", "#b8ccf4"];
+// Same restrained source palette as the Analytics page: navy, amber, teal, then
+// muted supporting hues, so neighbouring slices stay distinguishable.
+const BRAND_COLORS = ["#2f5488", "#d4952b", "#3f8f8f", "#8a94a6", "#b5626a", "#6d5aa0", "#a9b4c8"];
 
 export default function Reports() {
   const { user } = useAuth();
@@ -42,61 +50,56 @@ export default function Reports() {
     try { return new Set(JSON.parse(localStorage.getItem('vfhq_hidden_report_cards') ?? '[]')); }
     catch { return new Set(); }
   });
-  const currentYear = new Date().getFullYear();
+  // The period every conversion figure is for: NZ calendar days, resolved on
+  // the server so a UTC server and an overseas browser agree on "this month".
+  const [period, setPeriod] = useState<PeriodChoice>(() => {
+    let preset: PeriodChoice["preset"] = "3m";
+    try { const v = localStorage.getItem("vfhq_reports_period"); if (v === "month" || v === "3m" || v === "12m") preset = v; } catch {}
+    return { preset, from: "", to: "" };
+  });
+  const changePeriod = (v: PeriodChoice) => {
+    setPeriod(v);
+    if (v.preset !== "custom") { try { localStorage.setItem("vfhq_reports_period", v.preset); } catch {} }
+  };
+  const periodInput = period.preset === "custom"
+    ? (period.from && period.to ? { from: period.from, to: period.to } : undefined)
+    : { preset: period.preset };
+  const { data: conv, isError: convError, refetch: refetchConv } = trpc.reports.conversion.useQuery(periodInput, {
+    placeholderData: (prev) => prev,
+  });
+
+  const { data: allLeadsRaw, isError: leadsError, refetch: refetchLeads } = trpc.leads.list.useQuery({});
+  const { data: allBookingsRaw, isError: bookingsError, refetch: refetchBookings } = trpc.bookings.list.useQuery();
+  const primaryError = leadsError || bookingsError || convError;
+  // Same rules as every conversion figure: no half-finished form autosaves
+  // and no NowBookIt diary imports in these lists either.
+  const allLeads = React.useMemo(() => (allLeadsRaw ?? []).filter((l: any) => isRealEnquiry(l)), [allLeadsRaw]);
+  const allBookings = React.useMemo(() => (allBookingsRaw ?? []).filter((b: any) => !isImportedBooking(b)), [allBookingsRaw]);
+
+  const currentYear = Number(conv?.period.today.slice(0, 4)) || new Date().getFullYear();
   const { data: revenueData } = trpc.analytics.revenueByMonth.useQuery({ year: currentYear });
-  const { data: sourceData } = trpc.analytics.sourceBreakdown.useQuery();
-  const { data: allLeads, isError: leadsError, refetch: refetchLeads } = trpc.leads.list.useQuery({});
-  const { data: allBookings, isError: bookingsError, refetch: refetchBookings } = trpc.bookings.list.useQuery();
-  const primaryError = leadsError || bookingsError;
 
-  const confirmedBookings = (allBookings ?? []).filter((b: any) => b.status === "confirmed" || b.status === "tentative" || b.status === "finished");
-  const totalRevenue = (allBookings ?? []).reduce((sum: number, b: any) => sum + (Number(b.totalNzd) || 0), 0);
-  const avgBookingValue = confirmedBookings.length > 0 ? totalRevenue / confirmedBookings.length : 0;
-
-  // Lead conversion stats
-  const totalLeads = (allLeads ?? []).length;
-  const proposalsSent = (allLeads ?? []).filter((l: any) => ["proposal_sent", "negotiating", "booked"].includes(l.status)).length;
-  const booked = (allLeads ?? []).filter((l: any) => l.status === "booked").length;
-  const conversionRate = totalLeads > 0 ? Math.round((booked / totalLeads) * 100) : 0;
-
-  // Turn raw source keys ("lead_form") into human labels ("Lead Form").
-  const fmtSource = (s: string) => (s || "—").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
-  // Event type breakdown
-  const eventTypeCounts: Record<string, number> = {};
-  (allLeads ?? []).forEach((l: any) => {
-    if (l.eventType) eventTypeCounts[l.eventType] = (eventTypeCounts[l.eventType] || 0) + 1;
-  });
-  const eventTypeData = Object.entries(eventTypeCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([name, value]) => ({ name, value }));
-
-  // Monthly leads
-  const monthlyLeads: Record<string, number> = {};
-  (allLeads ?? []).forEach((l: any) => {
-    if (l.createdAt) {
-      const d = new Date(l.createdAt);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      monthlyLeads[key] = (monthlyLeads[key] || 0) + 1;
-    }
-  });
-  const monthlyLeadData = Object.entries(monthlyLeads)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-6)
-    .map(([key, count]) => ({
-      month: new Date(key + "-01").toLocaleDateString("en-NZ", { month: "short", year: "2-digit" }),
-      leads: count,
-    }));
+  const confirmedBookings = allBookings.filter((b: any) => b.status === "confirmed" || b.status === "tentative" || b.status === "finished");
+  // Cancelled bookings carry a total too — they aren't revenue.
+  const totalRevenue = confirmedBookings.reduce((sum: number, b: any) => sum + (Number(b.totalNzd) || 0), 0);
+  const valuedBookings = confirmedBookings.filter((b: any) => Number(b.totalNzd) > 0).length;
+  const avgBookingValue = valuedBookings > 0 ? totalRevenue / valuedBookings : 0;
+  const statusLabel = (k: string) => statuses.find(s => s.key === k)?.label ?? fmtSource(k);
+  const sourceData = conv?.breakdowns.source ?? [];
+  // Seven hues at most; anything past the sixth source folds into "Other".
+  const sourcePie = sourceData.length <= 7
+    ? sourceData.map(d => ({ name: fmtSource(d.key), value: d.enquiries }))
+    : [...sourceData.slice(0, 6).map(d => ({ name: fmtSource(d.key), value: d.enquiries })),
+       { name: "Other", value: sourceData.slice(6).reduce((n, d) => n + d.enquiries, 0) }];
 
   if (primaryError) return (
     <div className="p-6">
       <h1 className="font-cormorant text-3xl font-semibold text-ink">Reports</h1>
       <div className="mt-8 text-center py-16">
-        <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
+        <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-2" />
         <p className="font-dm text-ink text-sm mb-3">Couldn't load reports.</p>
         <button
-          onClick={() => { refetchLeads(); refetchBookings(); }}
+          onClick={() => { refetchLeads(); refetchBookings(); refetchConv(); }}
           className="font-bebas tracking-widest text-xs px-4 py-2 rounded-md bg-forest text-cream hover:opacity-90"
         >
           RETRY
@@ -126,12 +129,12 @@ export default function Reports() {
             </button>
             {showCustomize && (
               <div className="absolute right-0 top-full mt-1 bg-white border border-border shadow-lg p-3 z-30 w-52">
-                <div className="font-bebas text-xs tracking-widest text-ink/70 mb-2">SHOW / HIDE CARDS</div>
+                <div className="font-bebas text-xs tracking-widest text-sage mb-2">SHOW / HIDE CARDS</div>
                 {[
-                  { id: "total_enquiries", label: "Total Enquiries" },
-                  { id: "confirmed_bookings", label: "Confirmed Bookings" },
-                  { id: "conversion_rate", label: "Conversion Rate" },
-                  { id: "total_revenue", label: "Total Revenue" },
+                  { id: "total_enquiries", label: "Enquiries" },
+                  { id: "confirmed_bookings", label: "Booked" },
+                  { id: "conversion_rate", label: "Conversion" },
+                  { id: "total_revenue", label: "Booked value" },
                 ].map(c => (
                   <label key={c.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-linen px-1">
                     <input type="checkbox" checked={!hiddenCards.has(c.id)} onChange={() => {
@@ -152,12 +155,13 @@ export default function Reports() {
       </div>
 
       {/* Sub-tabs */}
-      <div className="flex gap-0 mb-6 border-b border-border">
+      <div className="flex gap-0 mb-6 border-b border-border overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`font-bebas tracking-widest text-xs px-5 py-3 transition-colors border-b-2 -mb-px ${
+            aria-pressed={tab === t.key}
+            className={`font-bebas tracking-widest text-xs px-4 sm:px-5 py-3 transition-colors border-b-2 -mb-px whitespace-nowrap ${
               tab === t.key
                 ? "border-burgundy text-burgundy"
                 : "border-transparent text-sage hover:text-ink"
@@ -168,16 +172,21 @@ export default function Reports() {
         ))}
       </div>
 
+      {(tab === "overview" || tab === "enquiries" || tab === "proposals") && (
+        <PeriodPicker value={period} onChange={changePeriod} resolved={conv?.period} />
+      )}
+
       {/* ── OVERVIEW ── */}
       {tab === "overview" && (
         <div className="space-y-6">
           {/* KPI cards */}
           {(() => {
+            const sm = conv?.summary;
             const cards = [
-              { id: "total_enquiries", label: "Total Enquiries", value: totalLeads, icon: <Users className="w-5 h-5 text-burgundy" />, sub: "all time" },
-              { id: "confirmed_bookings", label: "Confirmed Bookings", value: confirmedBookings.length, icon: <Calendar className="w-5 h-5 text-blue-500" />, sub: "all time" },
-              { id: "conversion_rate", label: "Conversion Rate", value: `${conversionRate}%`, icon: <TrendingUp className="w-5 h-5 text-forest" />, sub: "enquiry to booking" },
-              { id: "total_revenue", label: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, icon: <DollarSign className="w-5 h-5 text-amber-600" />, sub: "NZD, all bookings" },
+              { id: "total_enquiries", label: "Enquiries", value: sm ? sm.enquiries : "…", icon: <Users className="w-5 h-5 text-burgundy" />, sub: "received in this period" },
+              { id: "confirmed_bookings", label: "Booked", value: sm ? sm.won : "…", icon: <Calendar className="w-5 h-5 text-forest" />, sub: "of those enquiries" },
+              { id: "conversion_rate", label: "Conversion", value: sm ? (sm.rate == null ? "—" : `${sm.rate}%`) : "…", icon: <TrendingUp className="w-5 h-5 text-forest" />, sub: sm ? `${sm.open} still open` : "" },
+              { id: "total_revenue", label: "Booked value", value: sm ? currencyWhole(sm.wonValue) : "…", icon: <DollarSign className="w-5 h-5 text-gold-deep" />, sub: "booking totals, NZD" },
             ].filter(c => !hiddenCards.has(c.id));
             if (cards.length === 0) return null;
             return (
@@ -187,7 +196,7 @@ export default function Reports() {
                     <div className="mb-3">{s.icon}</div>
                     <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
                     <div className="font-bebas text-xs tracking-widest text-sage">{s.label}</div>
-                    <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
+                    <div className="font-dm text-xs text-sage mt-0.5">{s.sub}</div>
                   </div>
                 ))}
               </div>
@@ -198,26 +207,28 @@ export default function Reports() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Revenue by month */}
             <div className="dante-card p-5">
-              <h2 className="font-cormorant text-lg font-semibold text-ink mb-4">Revenue by Month</h2>
-              {revenueData && revenueData.length > 0 ? (
+              <h2 className="font-cormorant text-lg font-semibold text-ink">Revenue by Month</h2>
+              <p className="font-dm text-xs text-sage mt-0.5 mb-4">{currentYear}, by event date. Cancelled events left out.</p>
+              {revenueData && revenueData.some((r: any) => r.revenue > 0) ? (
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={revenueData} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5ddd4" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
-                    <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6a6256" }} />
+                    <YAxis tick={{ fontSize: 11, fill: "#6a6256" }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
                     <Bar dataKey="revenue" fill="#2f5488" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-48 flex items-center justify-center text-sage/40 font-dm text-sm">No revenue data yet</div>
+                <div className="h-48 flex items-center justify-center text-sage font-dm text-sm">No booking totals for {currentYear} yet</div>
               )}
             </div>
 
             {/* Enquiry source */}
             <div className="dante-card p-5">
-              <h2 className="font-cormorant text-lg font-semibold text-ink mb-4">Enquiry Sources</h2>
-              {sourceData && sourceData.length > 0 ? (
+              <h2 className="font-cormorant text-lg font-semibold text-ink">Enquiry Sources</h2>
+              <p className="font-dm text-xs text-sage mt-0.5 mb-4">Where this period's enquiries came from.</p>
+              {sourceData.length > 0 ? (
                 // Recharts marks every pie slice role="img" with no name of its
                 // own. Name the chart once and hide the decorative geometry, so
                 // a screen reader gets the figures rather than a run of
@@ -225,20 +236,21 @@ export default function Reports() {
                 // role="img" makes the subtree a single leaf node to assistive
                 // tech, so the label below is what gets announced rather than a
                 // run of unnamed slice paths.
-                <div role="img" aria-label={`Enquiry sources: ${sourceData.map((d: any) => `${fmtSource(d.source)}, ${d.count}`).join('; ')}`}>
-                <ResponsiveContainer width="100%" height={200}>
+                <div role="img" aria-label={`Enquiry sources: ${sourcePie.map(d => `${d.name}, ${d.value}`).join('; ')}`}>
+                <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
-                    <Pie data={sourceData} dataKey="count" nameKey="source" cx="50%" cy="50%" outerRadius={75} label={({ source, percent }) => `${fmtSource(source)} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {sourceData.map((_: any, i: number) => (
-                        <Cell key={i} fill={BRAND_COLORS[i % BRAND_COLORS.length]} role="presentation" aria-hidden="true" />
+                    <Pie data={sourcePie} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={70} stroke="#fffdf9" strokeWidth={2}>
+                      {sourcePie.map((_, i) => (
+                        <Cell key={i} fill={BRAND_COLORS[i]} role="presentation" aria-hidden="true" />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: any, n: any) => [v, n]} />
+                    <Tooltip formatter={(v: any, n: any) => [`${v} enquir${Number(v) === 1 ? "y" : "ies"}`, n]} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="square" formatter={(v: string) => <span style={{ color: "#211d18" }}>{v}</span>} />
                   </PieChart>
                 </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-48 flex items-center justify-center text-sage/40 font-dm text-sm">No source data yet</div>
+                <div className="h-48 flex items-center justify-center text-sage font-dm text-sm">No enquiries in this period</div>
               )}
             </div>
           </div>
@@ -273,7 +285,7 @@ export default function Reports() {
             <div className="overflow-x-auto">
             <table className="w-full min-w-[720px]">
               <thead>
-                <tr className="border-b border-border bg-linen/60">
+                <tr className="border-b border-border bg-linen">
                   {["Name", "Event", "Date", "Type", "Guests", "Budget", "Status", "Source"].map(h => (
                     <th key={h} className="font-bebas text-xs tracking-widest text-sage text-left px-4 py-3">{h}</th>
                   ))}
@@ -281,7 +293,7 @@ export default function Reports() {
               </thead>
               <tbody className="divide-y divide-border/40">
                 {(allLeads ?? []).length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-8 font-dm text-sm text-sage/60">No enquiries yet</td></tr>
+                  <tr><td colSpan={8} className="text-center py-8 font-dm text-sm text-sage">No enquiries yet</td></tr>
                 ) : (
                   (allLeads ?? []).slice().sort((a: any, b: any) => {
                     const order: Record<string, number> = { booked: 0, negotiating: 1, proposal_sent: 2, contacted: 3, new: 4, lost: 5, cancelled: 6 };
@@ -320,7 +332,7 @@ export default function Reports() {
               </div>
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-border bg-linen/60">
+                  <tr className="border-b border-border bg-linen">
                     {["Event Name", "Date", "Type", "Guests", "Space", "Value", "Status"].map(h => (
                       <th key={h} className="font-bebas text-xs tracking-widest text-sage text-left px-4 py-3">{h}</th>
                     ))}
@@ -350,93 +362,25 @@ export default function Reports() {
         </div>
       )}
 
-      {/* ── ENQUIRIES ── */}
+      {/* ── CONVERSION ── */}
       {tab === "enquiries" && (
-        <div className="space-y-6">
-          {/* Conversion funnel */}
-          <div className="dante-card p-5">
-            <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Conversion Funnel</h2>
-            <div className="space-y-3">
-              {[
-                { label: "Total Enquiries", value: totalLeads, pct: 100 },
-                { label: "Proposals Sent", value: proposalsSent, pct: totalLeads > 0 ? Math.round((proposalsSent / totalLeads) * 100) : 0 },
-                { label: "Confirmed Bookings", value: booked, pct: totalLeads > 0 ? Math.round((booked / totalLeads) * 100) : 0 },
-              ].map(row => (
-                <div key={row.label} className="flex items-center gap-4">
-                  <span className="font-bebas text-xs tracking-widest text-sage w-40 flex-shrink-0">{row.label}</span>
-                  <div className="flex-1 bg-linen h-6 overflow-hidden">
-                    <div className="h-6 bg-burgundy transition-all flex items-center px-2" style={{ width: `${row.pct}%` }}>
-                      <span className="font-bebas text-xs text-cream">{row.value}</span>
-                    </div>
-                  </div>
-                  <span className="font-dm text-xs text-sage w-10 text-right">{row.pct}%</span>
-                </div>
-              ))}
+        !conv ? (
+          <div className="dante-card p-8 text-center font-dm text-sm text-sage">Loading…</div>
+        ) : (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ConversionSummaryCard data={conv} />
+              <FunnelCard data={conv} />
+            </div>
+            <TrendCard data={conv} />
+            <SpeedTiles data={conv} />
+            <BySourceCard data={conv} />
+            <div className={`grid grid-cols-1 gap-6 ${conv.lostReasons ? "lg:grid-cols-2" : ""}`}>
+              <PipelineCard data={conv} statuses={statuses} />
+              <LostReasonsCard data={conv} />
             </div>
           </div>
-
-          {/* Monthly leads chart */}
-          <div className="dante-card p-5">
-            <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Enquiries Over Time</h2>
-            {monthlyLeadData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={monthlyLeadData} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5ddd4" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
-                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="enquiries" stroke="#2f5488" strokeWidth={2} dot={{ fill: "#2f5488", r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-48 flex items-center justify-center text-sage/40 font-dm text-sm">No data yet</div>
-            )}
-          </div>
-
-          {/* Source breakdown */}
-          <div className="dante-card p-5">
-            <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Enquiry Sources</h2>
-            {sourceData && sourceData.length > 0 ? (
-              <div className="space-y-2">
-                {sourceData.map((s: any, i: number) => (
-                  <div key={s.source} className="flex items-center gap-3">
-                    <span className="font-bebas text-xs tracking-widest text-sage w-28 flex-shrink-0">{s.source || "Unknown"}</span>
-                    <div className="flex-1 bg-linen h-4 overflow-hidden">
-                      <div className="h-4 transition-all" style={{
-                        width: `${(s.count / (sourceData[0]?.count || 1)) * 100}%`,
-                        backgroundColor: BRAND_COLORS[i % BRAND_COLORS.length]
-                      }} />
-                    </div>
-                    <span className="font-dm text-xs text-sage w-6 text-right">{s.count}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 font-dm text-sm text-sage/60">No source data yet — add source to your enquiries</div>
-            )}
-          </div>
-
-          {/* Event type breakdown */}
-          {eventTypeData.length > 0 && (
-            <div className="dante-card p-5">
-              <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Top Event Types</h2>
-              <div className="space-y-2">
-                {eventTypeData.map((e, i) => (
-                  <div key={e.name} className="flex items-center gap-3">
-                    <span className="font-bebas text-xs tracking-widest text-sage w-32 flex-shrink-0 truncate">{e.name}</span>
-                    <div className="flex-1 bg-linen h-4 overflow-hidden">
-                      <div className="h-4 transition-all" style={{
-                        width: `${(e.value / (eventTypeData[0]?.value || 1)) * 100}%`,
-                        backgroundColor: BRAND_COLORS[i % BRAND_COLORS.length]
-                      }} />
-                    </div>
-                    <span className="font-dm text-xs text-sage w-6 text-right">{e.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        )
       )}
 
       {/* ── REVENUE ── */}
@@ -444,31 +388,32 @@ export default function Reports() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {[
-              { label: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, sub: "all confirmed bookings" },
-              { label: "Avg Booking Value", value: `$${Math.round(avgBookingValue).toLocaleString()}`, sub: "per confirmed booking" },
+              { label: "Total Revenue", value: currencyWhole(totalRevenue), sub: "all confirmed bookings, all time" },
+              { label: "Avg Booking Value", value: currencyWhole(avgBookingValue), sub: "per booking with a total" },
               { label: "Confirmed Bookings", value: confirmedBookings.length, sub: "events" },
             ].map(s => (
               <div key={s.label} className="dante-card p-5">
                 <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
                 <div className="font-bebas text-xs tracking-widest text-sage">{s.label}</div>
-                <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
+                <div className="font-dm text-xs text-sage mt-0.5">{s.sub}</div>
               </div>
             ))}
           </div>
           <div className="dante-card p-5">
-            <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Monthly Revenue</h2>
+            <h2 className="font-cormorant text-xl font-semibold text-ink">Monthly Revenue</h2>
+            <p className="font-dm text-xs text-sage mt-0.5 mb-4">{currentYear}, by event date. Cancelled events left out.</p>
             {revenueData && revenueData.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={revenueData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5ddd4" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fontFamily: "Bebas Neue" }} />
-                  <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6a6256" }} />
+                  <YAxis tick={{ fontSize: 11, fill: "#6a6256" }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Revenue"]} />
                   <Bar dataKey="revenue" fill="#2f5488" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-64 flex items-center justify-center text-sage/40 font-dm text-sm">No revenue data yet</div>
+              <div className="h-64 flex items-center justify-center text-sage font-dm text-sm">No revenue data yet</div>
             )}
           </div>
           <div className="dante-card overflow-hidden">
@@ -479,7 +424,7 @@ export default function Reports() {
                   const rows = (allBookings ?? []).filter((b: any) => b.totalNzd).sort((a: any, b: any) => (Number(b.totalNzd) || 0) - (Number(a.totalNzd) || 0));
                   const header = ['Event','Date','Guests','Value','Status'];
                   const csvRows = [header, ...rows.map((b: any) => [
-                    b.eventName ?? '',
+                    b.eventName || `${b.firstName ?? ''} ${b.lastName ?? ''}`.trim(),
                     b.eventDate ? new Date(b.eventDate).toLocaleDateString('en-NZ') : '',
                     b.guestCount ?? '',
                     b.totalNzd ?? '',
@@ -507,8 +452,8 @@ export default function Reports() {
               </thead>
               <tbody className="divide-y divide-border/40">
                 {(allBookings ?? []).filter((b: any) => b.totalNzd).sort((a: any, b: any) => (Number(b.totalNzd) || 0) - (Number(a.totalNzd) || 0)).map((b: any) => (
-                  <tr key={b.id} className="hover:bg-linen/50 transition-colors">
-                    <td className="px-4 py-3 font-dm text-sm text-ink">{b.eventName || "—"}</td>
+                  <tr key={b.id} className="hover:bg-linen transition-colors">
+                    <td className="px-4 py-3 font-dm text-sm text-ink">{b.eventName || `${b.firstName ?? ""} ${b.lastName ?? ""}`.trim() || "—"}</td>
                     <td className="px-4 py-3 font-dm text-xs text-sage">{b.eventDate ? new Date(b.eventDate).toLocaleDateString("en-NZ") : "—"}</td>
                     <td className="px-4 py-3 font-dm text-xs text-sage">{b.guestCount || "—"}</td>
                     <td className="px-4 py-3 font-dm text-sm font-semibold text-ink">${Number(b.totalNzd).toLocaleString()}</td>
@@ -525,40 +470,43 @@ export default function Reports() {
 
       {/* ── PROPOSALS ── */}
       {tab === "proposals" && (() => {
-        const lost = (allLeads ?? []).filter((l: any) => l.status === "lost").length;
-        const inNegotiation = (allLeads ?? []).filter((l: any) => l.status === "negotiating").length;
-        const proposalLeads = (allLeads ?? []).filter((l: any) =>
-          ["proposal_sent", "negotiating", "booked", "lost"].includes(l.status)
+        const lost = allLeads.filter((l: any) => l.status === "lost").length;
+        const proposalLeads = allLeads.filter((l: any) =>
+          ["proposal_sent", "negotiating", ...WON_LEAD_STATUSES, "lost"].includes(l.status)
         ).sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        // Pipeline funnel data — bar colours come from the venue's status palette.
+        // Where every enquiry sits right now — bar colours come from the venue's status palette.
+        const countOf = (keys: readonly string[]) => allLeads.filter((l: any) => keys.includes(l.status)).length;
         const funnelData = [
-          { stage: "New Enquiry", count: (allLeads ?? []).filter((l: any) => l.status === "new").length, color: statusSwatch("new", statuses) },
-          { stage: "Contacted", count: (allLeads ?? []).filter((l: any) => l.status === "contacted").length, color: statusSwatch("contacted", statuses) },
-          { stage: "Proposal Sent", count: (allLeads ?? []).filter((l: any) => l.status === "proposal_sent").length, color: statusSwatch("proposal_sent", statuses) },
-          { stage: "Negotiating", count: inNegotiation, color: statusSwatch("negotiating", statuses) },
-          { stage: "Booked", count: booked, color: statusSwatch("booked", statuses) },
-          { stage: "Lost", count: lost, color: statusSwatch("lost", statuses) },
+          { stage: statusLabel("new"), count: countOf(["new"]), color: statusSwatch("new", statuses) },
+          { stage: statusLabel("contacted"), count: countOf(["contacted"]), color: statusSwatch("contacted", statuses) },
+          { stage: statusLabel("proposal_sent"), count: countOf(["proposal_sent"]), color: statusSwatch("proposal_sent", statuses) },
+          { stage: statusLabel("negotiating"), count: countOf(["negotiating"]), color: statusSwatch("negotiating", statuses) },
+          { stage: statusLabel("booked"), count: countOf(WON_LEAD_STATUSES), color: statusSwatch("booked", statuses) },
+          { stage: statusLabel("lost"), count: lost, color: statusSwatch("lost", statuses) },
         ];
         const maxCount = Math.max(...funnelData.map(f => f.count), 1);
+        const stage = (k: string) => conv?.funnel.find(f => f.key === k)?.count ?? 0;
+        const sent = stage("proposal_sent"), viewed = stage("proposal_viewed"), accepted = stage("accepted");
         return (
         <div className="space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "Proposals Sent", value: proposalsSent, sub: "total" },
-              { label: "In Negotiation", value: inNegotiation, sub: "active" },
-              { label: "Accepted (Booked)", value: booked, sub: "converted" },
-              { label: "Acceptance Rate", value: `${proposalsSent > 0 ? Math.round((booked / proposalsSent) * 100) : 0}%`, sub: "proposal to booking" },
+              { label: "Proposals Sent", value: conv ? sent : "…", sub: "to this period's enquiries" },
+              { label: "Viewed", value: conv ? viewed : "…", sub: "opened by the client" },
+              { label: "Accepted", value: conv ? accepted : "…", sub: "accepted online" },
+              { label: "Acceptance Rate", value: conv ? (sent > 0 ? `${Math.round((accepted / sent) * 100)}%` : "—") : "…", sub: "accepted ÷ sent" },
             ].map(s => (
               <div key={s.label} className="dante-card p-5">
                 <div className="font-cormorant text-4xl font-semibold text-ink mb-1">{s.value}</div>
                 <div className="font-bebas text-xs tracking-widest text-sage">{s.label}</div>
-                <div className="font-dm text-xs text-sage/60 mt-0.5">{s.sub}</div>
+                <div className="font-dm text-xs text-sage mt-0.5">{s.sub}</div>
               </div>
             ))}
           </div>
           {/* Pipeline funnel */}
           <div className="dante-card p-5">
-            <h2 className="font-cormorant text-xl font-semibold text-ink mb-4">Enquiry Pipeline Funnel</h2>
+            <h2 className="font-cormorant text-xl font-semibold text-ink">Enquiries by Stage</h2>
+            <p className="font-dm text-xs text-sage mt-0.5 mb-4">Where every enquiry sits right now, all time.</p>
             <div className="space-y-2">
               {funnelData.map(f => (
                 <div key={f.stage} className="flex items-center gap-3">
@@ -587,17 +535,14 @@ export default function Reports() {
                 </thead>
                 <tbody className="divide-y divide-border/40">
                   {proposalLeads.slice(0, 20).map((l: any) => (
-                    <tr key={l.id} className="hover:bg-linen/50 transition-colors">
+                    <tr key={l.id} className="hover:bg-linen transition-colors">
                       <td className="px-4 py-3 font-dm text-sm text-ink">{l.firstName} {l.lastName}</td>
                       <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventType || "—"}</td>
                       <td className="px-4 py-3 font-dm text-xs text-sage">{l.eventDate ? new Date(l.eventDate).toLocaleDateString("en-NZ") : "—"}</td>
                       <td className="px-4 py-3 font-dm text-xs text-sage">{l.guestCount || "—"}</td>
                       <td className="px-4 py-3">
-                        <span className={`font-bebas text-[10px] tracking-widest px-2 py-0.5 border ${statusChipClasses(l.status, statuses)}`}>
-                          {l.status === "proposal_sent" ? "PROPOSAL SENT" :
-                           l.status === "negotiating" ? "NEGOTIATING" :
-                           l.status === "booked" ? "BOOKED" :
-                           (l.status ?? "").replace(/_/g, " ").toUpperCase()}
+                        <span className={`font-bebas text-xs tracking-widest px-2 py-0.5 border ${statusChipClasses(l.status, statuses)}`}>
+                          {statusLabel(l.status ?? "").toUpperCase()}
                         </span>
                       </td>
                     </tr>
