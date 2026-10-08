@@ -116,7 +116,9 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
         )).returning({ id: payments.id });
         if (removed.length > 0) {
           const { syncDepositPaidFlag } = await import("./db");
-          await syncDepositPaidFlag(r.bookingId, ownerId);
+          // Unwinding a voided DEPOSIT invoice can make the deposit unpaid again;
+          // a voided food/drinks invoice must not untick a hand-ticked deposit.
+          await syncDepositPaidFlag(r.bookingId, ownerId, { allowDowngrade: r.stream === "deposit" });
         }
       }
       continue;

@@ -401,7 +401,16 @@ export async function getDashboardStats(ownerId: number) {
 // (sum minus refunds) vs the booking's deposit amount. Called whenever
 // payments are added or removed so the deposit badge stays in sync without
 // the user having to tick a checkbox manually.
-export async function syncDepositPaidFlag(bookingId: number, ownerId: number) {
+/**
+ * Keep bookings.depositPaid in step with deposit-type payments.
+ *
+ * Upgrade-only by default: recording money can tick the deposit paid but never
+ * untick it. It used to recompute both ways on every add, so recording a FINAL
+ * payment on a booking whose deposit had been ticked by hand (no deposit-type
+ * payment row) silently flipped the deposit back to unpaid. Pass
+ * allowDowngrade when a deposit payment itself was removed.
+ */
+export async function syncDepositPaidFlag(bookingId: number, ownerId: number, opts: { allowDowngrade?: boolean } = {}) {
   try {
     const { getDb } = await import('./db');
     const { bookings, payments } = await import('../drizzle/schema');
@@ -424,6 +433,7 @@ export async function syncDepositPaidFlag(bookingId: number, ownerId: number) {
     // reconciled from Xero) could exceed the deposit amount and falsely flip
     // this flag even when no deposit was ever taken.
     const shouldBePaid = covers(depositPaidAmount(pmts), depositAmount);
+    if (!shouldBePaid && !opts.allowDowngrade) return;
     if (Boolean(booking.depositPaid) !== shouldBePaid) {
       await db.update(bookings)
         .set({ depositPaid: shouldBePaid })

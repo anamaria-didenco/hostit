@@ -2195,7 +2195,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // payment was logged. Adding/removing a payment still re-syncs the flag
         // via the payments mutation, so the badge stays correct either way.
         if (rest.depositNzd !== undefined && rest.depositPaid === undefined) {
-          await syncDepositPaidFlag(id, ctx.user.id);
+          await syncDepositPaidFlag(id, ctx.user.id, { allowDowngrade: true });
         }
         // ── NowBookIt sync — fires when the booking transitions into 'confirmed' ──
         if (rest.status === 'confirmed') {
@@ -4269,7 +4269,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           notes: input.notes,
         }).returning({ id: payments.id });
         await syncDepositPaidFlag(input.bookingId, ctx.user.id);
-        return { id: result.id, success: true };
+        // Tell the caller whether this payment cleared the booking, so the UI
+        // can say so (and the board can offer to tick the remaining chips).
+        const { netPaid, covers } = await import('../shared/paymentMath');
+        const [b] = await db.select({ total: bookings.totalNzd }).from(bookings)
+          .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
+        const pmts = await db.select({ amount: payments.amount, type: payments.type }).from(payments)
+          .where(and(eq(payments.bookingId, input.bookingId), eq(payments.ownerId, ctx.user.id)));
+        const fullyPaid = covers(netPaid(pmts as any), Number(b?.total ?? 0));
+        return { id: result.id, success: true, fullyPaid };
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -4280,11 +4288,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         // Capture bookingId before delete so we can re-sync the flag.
-        const [pmt] = await db.select({ bookingId: payments.bookingId })
+        const [pmt] = await db.select({ bookingId: payments.bookingId, type: payments.type })
           .from(payments)
           .where(and(eq(payments.id, input.id), eq(payments.ownerId, ctx.user.id)));
         await db.delete(payments).where(and(eq(payments.id, input.id), eq(payments.ownerId, ctx.user.id)));
-        if (pmt) await syncDepositPaidFlag(pmt.bookingId, ctx.user.id);
+        // Removing a deposit payment may legitimately make the deposit unpaid
+        // again; removing any other payment must not touch a hand-ticked flag.
+        if (pmt) await syncDepositPaidFlag(pmt.bookingId, ctx.user.id, { allowDowngrade: pmt.type === 'deposit' });
         return { success: true };
       }),
     // Owner-triggered: email the client their deposit request (amount + how to
@@ -4759,6 +4769,21 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         return db.select().from(xeroInvoices)
           .where(and(eq(xeroInvoices.bookingId, input.bookingId), eq(xeroInvoices.ownerId, ctx.user.id)))
           .orderBy(desc(xeroInvoices.createdAt));
+      }),
+    // The real lines of one sent draft, read back from Xero for editing.
+    invoiceLines: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { xeroInvoices } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [row] = await db.select().from(xeroInvoices)
+          .where(and(eq(xeroInvoices.id, input.id), eq(xeroInvoices.ownerId, ctx.user.id))).limit(1);
+        if (!row?.xeroInvoiceId) throw new TRPCError({ code: 'NOT_FOUND', message: 'That invoice is no longer tracked by VenueFlow.' });
+        const { getXeroInvoiceLines } = await import('./xero');
+        return getXeroInvoiceLines(ctx.user.id, row.xeroInvoiceId);
       }),
     /**
      * The invoice lines this event's BEO already works out, so the Xero draft
