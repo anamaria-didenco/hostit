@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 // Use a relative path since this test file lives in server/
-import { substituteTemplateVars, TEMPLATE_VARIABLES } from "../client/src/lib/templateVars";
+import { blankTemplateVars, substituteTemplateVars, TEMPLATE_VARIABLES } from "../client/src/lib/templateVars";
 
 const mockLead = {
   firstName: "Jane",
@@ -124,6 +124,38 @@ describe("substituteTemplateVars", () => {
   it("works without venue data (undefined)", () => {
     const result = substituteTemplateVars("{{venueName}} {{venuePhone}}", mockLead, undefined);
     expect(result).toBe(" ");
+  });
+});
+
+describe("link and deposit variables", () => {
+  const links = {
+    proposalLink: "https://venueflowhq.com/proposal/abc",
+    portalLink: "https://venueflowhq.com/portal/xyz",
+    enquiryFormLink: "https://venueflowhq.com/enquire/bar",
+    depositAmount: "$1,250.00",
+    timeZone: "Pacific/Auckland",
+  };
+
+  it("fills the links and deposit passed in from the server", () => {
+    const out = substituteTemplateVars("{{proposalLink}} {{portalLink}} {{enquiryFormLink}} {{depositAmount}}", mockLead, mockVenue, links);
+    expect(out).toBe("https://venueflowhq.com/proposal/abc https://venueflowhq.com/portal/xyz https://venueflowhq.com/enquire/bar $1,250.00");
+  });
+
+  it("formats holdUntil as an NZ date, and leaves it blank when there is none", () => {
+    const held = substituteTemplateVars("{{holdUntil}}", { ...mockLead, holdUntil: new Date("2025-06-20T00:00:00Z") }, mockVenue, links);
+    expect(held).toBe("Friday, 20 June 2025");
+    expect(substituteTemplateVars("[{{holdUntil}}]", mockLead, mockVenue, links)).toBe("[]");
+  });
+
+  it("formats dates in the venue's zone when given one (the server runs UTC)", () => {
+    // 11pm UTC on 13 June is already 14 June in Auckland.
+    const out = substituteTemplateVars("{{eventDate}}", { eventDate: "2025-06-13T23:00:00Z" }, undefined, { timeZone: "Pacific/Auckland" });
+    expect(out).toBe("Saturday, 14 June 2025");
+  });
+
+  it("lists known variables that came out blank", () => {
+    expect(blankTemplateVars("Hi {{firstName}}, {{proposalLink}} {{depositAmount}} {{madeUp}}", mockLead, mockVenue, { proposalLink: "x" }))
+      .toEqual(["{{depositAmount}}"]);
   });
 });
 

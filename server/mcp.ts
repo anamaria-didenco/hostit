@@ -112,9 +112,14 @@ function buildServer(ctx: { ownerId: number }): McpServer {
 
   server.tool(
     "update_lead_status",
-    "Change a lead's pipeline status (new, contacted, proposal_sent, negotiating, booked, lost, cancelled).",
-    { id: z.number(), status: z.string(), note: z.string().optional() },
-    async ({ id, status, note }) => {
+    "Change a lead's pipeline status (new, contacted, proposal_sent, negotiating, booked, lost, cancelled). When marking lost, lostReason may be one of: price, date_unavailable, other_venue, event_cancelled, no_response, size_mismatch, other.",
+    { id: z.number(), status: z.string(), note: z.string().optional(), lostReason: z.string().optional() },
+    async ({ id, status, note, lostReason }) => {
+      if (status === "lost") {
+        const { markLeadLost } = await import("./db");
+        const found = await markLeadLost(ctx.ownerId, id, lostReason ?? null, note ?? null);
+        return ok(found ? { success: true } : { success: false, error: "Lead not found" });
+      }
       const { getDb } = await import("./db");
       const { leads, leadActivity } = await import("../drizzle/schema");
       const { eq, and } = await import("drizzle-orm");

@@ -47,6 +47,7 @@ const STAFF_BLOCKED_READ_PREFIXES = [
   "leads.list",      // enquiry pipeline incl. budgets
   "leads.get",
   "notifications.",  // alerts name clients and quote values
+  "winBack.",        // lost/quiet client lists with contact details
 ];
 /** Mutations a staff login MAY perform (none today — read-only by choice). */
 const STAFF_ALLOWED_MUTATIONS: string[] = [];

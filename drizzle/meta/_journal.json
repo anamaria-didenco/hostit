@@ -483,6 +483,13 @@
       "when": 1779801512000,
       "tag": "0068_venue_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1779801512075,
+      "tag": "0075_lead_retention",
+      "breakpoints": true
     }
   ]
 }

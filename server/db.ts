@@ -179,11 +179,11 @@ export async function getLeadById(id: number, ownerId: number) {
 export async function createLead(data: InsertLead) {
   const db = await getDb();
   if (!db) return null;
-  await db.insert(leads).values(data);
-  const result = await db.select().from(leads)
-    .where(and(eq(leads.ownerId, data.ownerId), eq(leads.email, data.email)))
-    .orderBy(desc(leads.createdAt)).limit(1);
-  return result[0] ?? null;
+  // RETURNING, not a re-select by email: a returning client (or a manual
+  // lead with a blank email) shares that email with other rows, and the
+  // re-select could hand back a different lead.
+  const [row] = await db.insert(leads).values(data).returning();
+  return row ?? null;
 }
 
 export async function updateLeadStatus(id: number, ownerId: number, status: string, internalNotes?: string) {
@@ -200,6 +200,47 @@ export async function updateLead(id: number, ownerId: number, data: Partial<Inse
   if (!db) return;
   await db.update(leads).set(data)
     .where(and(eq(leads.id, id), eq(leads.ownerId, ownerId)));
+}
+
+/**
+ * Mark a lead lost, recording why. Safe for other features to call (e.g. a
+ * client declining a proposal): `reason` should be one of LOST_REASONS' keys
+ * (shared/lostReasons.ts); free text is kept as "other" with the text in the
+ * note. Cancels any live booking for the lead, as a manual status change
+ * does, and logs one activity entry unless `logActivity: false` (when the
+ * caller writes its own). Returns false if the lead isn't this owner's.
+ */
+export async function markLeadLost(
+  ownerId: number,
+  leadId: number,
+  reason?: string | null,
+  note?: string | null,
+  opts: { logActivity?: boolean } = {},
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const lead = await getLeadById(leadId, ownerId);
+  if (!lead) return false;
+  const { isLostReason, lostReasonLabel } = await import("../shared/lostReasons");
+  let key: string | null = null;
+  let noteText = note?.trim() || null;
+  if (reason && isLostReason(reason)) key = reason;
+  else if (reason?.trim()) { key = "other"; noteText = [reason.trim(), noteText].filter(Boolean).join(" — "); }
+  await db.update(leads)
+    .set({ status: "lost", lostReason: key, lostReasonNote: noteText, updatedAt: new Date() })
+    .where(and(eq(leads.id, leadId), eq(leads.ownerId, ownerId)));
+  if (["booked", "confirmed", "finished"].includes(lead.status ?? "")) {
+    await db.update(bookings).set({ status: "cancelled" })
+      .where(and(eq(bookings.leadId, leadId), eq(bookings.ownerId, ownerId), ne(bookings.status, "cancelled")));
+  }
+  if (opts.logActivity !== false) {
+    const label = lostReasonLabel(key);
+    await addLeadActivity({
+      leadId, ownerId, type: "status_change",
+      content: `Status changed to lost${label ? ` — ${label}` : ""}${noteText ? `: ${noteText}` : ""}`,
+    });
+  }
+  return true;
 }
 
 // ─── Lead Activity ────────────────────────────────────────────────────────────

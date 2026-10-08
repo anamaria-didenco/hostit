@@ -22,6 +22,7 @@ describe("staff login permissions", () => {
       "xero.status", "xero.invoicesForBooking",
       "reports.revenue", "dashboard.stats",
       "accountLogins.list", "proposals.list", "contacts.list", "leads.list",
+      "winBack.list", "winBack.preview", "leads.getClientHistory", "leads.getTemplateLinks",
     ]) {
       expect(staffMayCall(path, "query"), path).toBe(false);
     }
