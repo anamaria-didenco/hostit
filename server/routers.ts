@@ -11,15 +11,21 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { smtpTls } from "./smtpTls";
 import { leadAccessToken, isValidLeadAccessToken } from "./leadToken";
 import { publicBaseUrl } from "./publicUrl";
+import { followUpsRouter } from "./followUpsRouter";
+import { markStaffResponse, markBulkStatusResponse } from "./speedToLead";
+import { inboxRouter } from "./inboxRouter";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
 // emailSignature*, autoCancelTentative, automatedTaskRules are owner-only.
 const VENUE_SECRET_FIELDS = [
   "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFromName", "smtpFromEmail", "smtpSecure",
+  "imapEnabled", "imapHost", "imapPort", "imapSecure", "imapUser", "imapPass", "imapFolder",
+  "imapLastUid", "imapUidValidity", "imapLastCheckedAt", "imapLastError",
   "notificationEmail", "internalName",
   "nbiApiKey", "nbiVenueId", "nbiAccountId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret", "nbiServiceMappings",
   "automatedTaskRules", "emailSignature", "emailSignatureLogo", "emailSignatures", "autoCancelTentative",
+  "alertEmailsEnabled", "alertEmailKinds", "replyOverdueEnabled", "replyOverdueHours", "followUpSequences",
 ] as const;
 function stripVenueSecrets<T extends Record<string, any>>(row: T): T {
   const safe: any = { ...row };
@@ -92,6 +98,7 @@ async function enforceLeadRateLimit(ctx: any, ownerId: number) {
 
 export const appRouter = router({
   system: systemRouter,
+  inbox: inboxRouter,
 
   auth: router({
     me: publicProcedure.query(opts => ({
@@ -943,6 +950,21 @@ export const appRouter = router({
           console.error('[LeadSubmit] Auto-reply error:', autoErr?.message ?? autoErr);
         }
 
+        // Into the bell too. email:false — the detailed enquiry email above
+        // already went to the venue.
+        if (lead) {
+          const { notifyVenue } = await import('./notify');
+          const name = [input.firstName, input.lastName].filter(Boolean).join(' ');
+          await notifyVenue(input.ownerId, {
+            kind: 'new_enquiry',
+            title: `New enquiry from ${name}`,
+            body: [input.eventType, input.guestCount ? `${input.guestCount} guests` : null].filter(Boolean).join(' · ') || undefined,
+            leadId: lead.id,
+            dedupeKey: `new_enquiry:${lead.id}`,
+            email: false,
+          });
+        }
+
         return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id) } : lead;
       }),
 
@@ -999,6 +1021,10 @@ export const appRouter = router({
           type: "status_change",
           content: `Status changed to ${input.status}${input.note ? ": " + input.note : ""}`,
         });
+        // Moving a lead on from "new" by hand counts as responding to it.
+        if (priorLead.status === 'new' && input.status !== 'new') {
+          await markStaffResponse(ctx.user.id, input.id, { emailed: false });
+        }
 
         // Inverse cascade: if the lead is moving AWAY from a booked-like state
         // into lost/cancelled/etc., cancel any linked booking so calendars,
@@ -1150,6 +1176,9 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) return;
          await db.delete(leads).where(and(eq(leads.id, input.id), eq(leads.ownerId, ctx.user.id)));
+        // The client's emails go with the enquiry.
+        const { leadMessages } = await import('../drizzle/schema');
+        await db.delete(leadMessages).where(and(eq(leadMessages.leadId, input.id), eq(leadMessages.ownerId, ctx.user.id)));
         return { success: true };
       }),
     // Mark a lead as read (clears the unread badge)
@@ -1283,21 +1312,29 @@ export const appRouter = router({
   </div>
 </div>`;
         const text = `Hi ${lead.firstName ?? 'there'},\n\n${bodyText}\n\nWarm regards,\n${venueName}`;
+        const { leadMailHeaders, recordLeadMessage } = await import('./inbox');
+        const threadHeaders = leadMailHeaders(mailer.venue, { leadId: lead.id, fromEmail: mailer.fromEmail, replyTo: mailer.fromEmail });
         try {
           await mailer.transporter.sendMail({
             from: `"${mailer.fromName}" <${mailer.fromEmail}>`,
             to: `"${clientName}" <${lead.email}>`,
-            replyTo: mailer.fromEmail,
             subject, html, text,
+            ...threadHeaders,
           });
         } catch (err) {
           console.error('[leads.sendFollowUp] send failed', err);
           return { sent: false as const, reason: 'send_failed' as const };
         }
+        await recordLeadMessage({
+          ownerId: ctx.user.id, leadId: lead.id, direction: 'out',
+          fromEmail: mailer.fromEmail, fromName: mailer.fromName, toEmail: lead.email,
+          subject, bodyText: text, messageId: threadHeaders.messageId,
+        });
         // Push the next follow-up out a week so this lead clears the list.
         await db.update(leads)
           .set({ followUpDate: new Date(Date.now() + 7 * 86_400_000), updatedAt: new Date() })
           .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
+        await markStaffResponse(ctx.user.id, input.leadId, { emailed: true });
         return { sent: true as const, to: lead.email };
       }),
     // Returns leads with a followUpDate in the given month (for calendar display)
@@ -1367,6 +1404,7 @@ export const appRouter = router({
             throw new Error(`Please set an event space on ${missing.length} enquir${missing.length === 1 ? 'y' : 'ies'} before bulk-changing status to ${input.status}.`);
           }
         }
+        await markBulkStatusResponse(ctx.user.id, input.ids, input.status);
         // Only update leads owned by this user
         await db.update(leads)
           .set({ status: input.status })
@@ -1450,6 +1488,9 @@ export const appRouter = router({
           inArray(leadActivity.leadId, ownedIds),
           eq(leadActivity.ownerId, ctx.user.id),
         ));
+        const { leadMessages } = await import('../drizzle/schema');
+        await db.delete(leadMessages)
+          .where(and(inArray(leadMessages.leadId, ownedIds), eq(leadMessages.ownerId, ctx.user.id)));
         await db.delete(leads)
           .where(and(inArray(leads.id, ownedIds), eq(leads.ownerId, ctx.user.id)));
         return { deleted: ownedIds.length };
@@ -1661,20 +1702,34 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
                   const fromName = vs.smtpFromName ?? vs.name ?? 'VenueFlowHQ';
                   const fromEmail = vs.smtpFromEmail ?? vs.smtpUser;
                   const clientName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
+                  const subject = `Your event proposal — ${proposal.title}`;
+                  const text = `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`;
+                  // With the inbox connected, replies also reach the polled
+                  // mailbox; without it Reply-To stays unset (replies go to From).
+                  const { leadMailHeaders, recordLeadMessage, inboxAddress } = await import('./inbox');
+                  const threadHeaders = leadMailHeaders(vs, { leadId: proposal.leadId, fromEmail, replyTo: inboxAddress(vs) ? fromEmail : null });
                   await transporter.sendMail({
                     from: `"${fromName}" <${fromEmail}>`,
                     to: `"${clientName}" <${lead.email}>`,
-                    subject: `Your event proposal — ${proposal.title}`,
+                    subject,
                     html: `<p>Hi ${lead.firstName},</p><p>Please find your event proposal below:</p><p><a href="${proposalUrl}" style="background:#4f7942;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">View Proposal</a></p><p>Or copy this link: <a href="${proposalUrl}">${proposalUrl}</a></p><p>This proposal includes pricing, details, and terms for your event. Please don't hesitate to reach out if you have any questions.</p><p>Warm regards,<br>${fromName}</p>`,
-                    text: `Hi ${lead.firstName},\n\nPlease find your event proposal here: ${proposalUrl}\n\nWarm regards,\n${fromName}`,
+                    text,
+                    ...threadHeaders,
                   });
                   emailSent = true;
+                  await recordLeadMessage({
+                    ownerId: ctx.user.id, leadId: proposal.leadId, direction: 'out',
+                    fromEmail, fromName, toEmail: lead.email, subject, bodyText: text,
+                    messageId: threadHeaders.messageId,
+                  });
                 }
               }
             } catch (emailErr) {
               console.error('[ProposalSend] Email error (non-fatal):', emailErr);
             }
           }
+          // Sending a proposal is a response (it moves the lead off "new").
+          await markStaffResponse(ctx.user.id, proposal.leadId, { emailed: emailSent });
         }
         // emailSent is only true when the client was actually emailed — the UI
         // must not claim "sent" when SMTP isn't set up or the send failed.
@@ -2638,6 +2693,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         // profile's signature. The authenticated SMTP account is unchanged, so
         // deliverability isn't affected — only the visible sender/reply differ.
         signatureId: z.string().optional(),
+        // Threading for a reply to a client's email (the conversation's
+        // "Reply" button): the Message-ID being answered, and its chain.
+        inReplyTo: z.string().max(500).regex(/^<[^<>\s]+>$/).optional(),
+        references: z.array(z.string().max(500).regex(/^<[^<>\s]+>$/)).max(30).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Block ephemeral team-link sessions (which mark isTeamMember=true),
@@ -2747,15 +2806,23 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           ? input.to
           : (input.toName ? `"${input.toName}" <${input.to}>` : input.to);
         const toForLog = Array.isArray(input.to) ? input.to.join(', ') : input.to;
+        // A single recipient is a client email (staff briefings send to a
+        // list): give it a threadable Message-ID and, with the inbox
+        // connected, a Reply-To that includes the polled mailbox.
+        const { leadMailHeaders, recordLeadMessage } = await import('./inbox');
+        const isClientEmail = !Array.isArray(input.to);
+        const threadHeaders = isClientEmail
+          ? leadMailHeaders(settings, { leadId: input.leadId, fromEmail, replyTo, inReplyTo: input.inReplyTo, references: input.references })
+          : { replyTo };
         await transporter.sendMail({
           from: `"${fromName}" <${fromEmail}>`,
           to: toForNodemailer,
-          replyTo,
           bcc: bccAddress,
           subject: input.subject,
           html: fullHtml,
           text: input.body,
           attachments,
+          ...threadHeaders,
         });
 
         // Resolve a leadId for activity logging — accept it directly, or look
@@ -2771,6 +2838,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .limit(1);
           if (b?.leadId) activityLeadId = b.leadId;
         }
+        if (activityLeadId && isClientEmail && 'messageId' in threadHeaders) {
+          await recordLeadMessage({
+            ownerId: ctx.user.id, leadId: activityLeadId, direction: 'out',
+            fromEmail, fromName, toEmail: toForLog, subject: input.subject, bodyText: input.body,
+            messageId: threadHeaders.messageId, inReplyTo: input.inReplyTo, references: threadHeaders.references,
+            attachments: attachments.length ? attachments.map(a => ({ filename: a.filename, size: a.content.length, contentType: a.contentType })) : null,
+          });
+        }
         // Log as lead activity if we have a leadId
         if (activityLeadId) {
           await db.insert(leadActivity).values({
@@ -2781,8 +2856,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           });
           // Auto-advance: if lead is still "new", move it to "contacted"
           const { leads } = await import('../drizzle/schema');
-          const [currentLead] = await db.select({ status: leads.status, followUpDate: leads.followUpDate })
+          const [currentLead] = await db.select({ status: leads.status, followUpDate: leads.followUpDate, email: leads.email })
             .from(leads).where(eq(leads.id, activityLeadId)).limit(1);
+          // Speed-to-lead: an email to the client themselves (not, say, a
+          // staff briefing sent from their booking) is a response.
+          const recipients = (Array.isArray(input.to) ? input.to : [input.to]).map(a => a.trim().toLowerCase());
+          if (currentLead?.email && recipients.includes(currentLead.email.trim().toLowerCase())) {
+            await markStaffResponse(ctx.user.id, activityLeadId, { emailed: true });
+          }
           if (currentLead?.status === 'new') {
             // Set status to contacted and set a default follow-up in 3 days if none set
             const followUpDate = currentLead.followUpDate ?? (() => {
@@ -8187,5 +8268,8 @@ Return ONLY valid JSON.`;
         return { success: true };
       }),
   }),
+
+  // ─── Speed-to-lead + automatic follow-ups (Settings → Follow-ups) ──────────
+  followUps: followUpsRouter,
 });
 export type AppRouter = typeof appRouter;

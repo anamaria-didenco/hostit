@@ -54,8 +54,14 @@ export async function notifyVenue(ownerId: number, alert: VenueAlert): Promise<{
     result.created = true;
 
     if (alert.email === false) return result;
-    const [vs] = await db.select({ notificationEmail: venueSettings.notificationEmail })
-      .from(venueSettings).where(eq(venueSettings.ownerId, ownerId)).limit(1);
+    const [vs] = await db.select({
+      notificationEmail: venueSettings.notificationEmail,
+      alertEmailsEnabled: venueSettings.alertEmailsEnabled,
+      alertEmailKinds: venueSettings.alertEmailKinds,
+    }).from(venueSettings).where(eq(venueSettings.ownerId, ownerId)).limit(1);
+    // Settings → Follow-ups → "Email me alerts" (and per-kind mutes).
+    if ((vs?.alertEmailsEnabled ?? 1) === 0) return result;
+    if ((vs?.alertEmailKinds as Record<string, boolean> | null)?.[alert.kind] === false) return result;
     const to = vs?.notificationEmail?.trim();
     if (!to) return result;
     const mailer = await buildVenueMailer(ownerId);
