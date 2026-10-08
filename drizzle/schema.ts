@@ -165,6 +165,17 @@ export const venueSettings = pgTable("venue_settings", {
   // {venueName} placeholders. Null = fall back to the built-in default.
   staffBriefingSubject: text("staffBriefingSubject"),
   staffBriefingBody: text("staffBriefingBody"),
+  // Venue alerts (the bell). Email copies go to notificationEmail unless
+  // switched off here; alertEmailKinds is { [kind]: false } for kinds muted
+  // individually (missing = emailed).
+  alertEmailsEnabled: integer("alertEmailsEnabled").default(1),
+  alertEmailKinds: jsonb("alertEmailKinds"),
+  // Alert when a new enquiry has had no reply for N business hours.
+  replyOverdueEnabled: integer("replyOverdueEnabled").default(1),
+  replyOverdueHours: integer("replyOverdueHours").default(2),
+  // Automatic client follow-up emails, keyed by sequence (see
+  // shared/followUpSequences.ts). Null = every sequence off, built-in wording.
+  followUpSequences: jsonb("followUpSequences"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -262,6 +273,17 @@ export const leads = pgTable("leads", {
   internalNotes: text("internalNotes"),
   followUpDate: timestamp("followUpDate"),
   readAt: timestamp("readAt"),
+  // Speed-to-lead: the first time staff responded (an email sent from the
+  // app, a proposal sent, or a manual status change away from "new").
+  // Automated emails never set it.
+  firstResponseAt: timestamp("firstResponseAt"),
+  // The last time the client emailed us (set by two-way email). Automatic
+  // follow-ups stop once the client has replied after a step's trigger.
+  lastInboundAt: timestamp("lastInboundAt"),
+  // The last email staff sent this client from the app (not automated ones).
+  lastStaffEmailAt: timestamp("lastStaffEmailAt"),
+  // "Stop automatic follow-ups for this lead" from the lead drawer.
+  followUpsPaused: boolean("followUpsPaused").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -1237,3 +1259,23 @@ export const venueNotifications = pgTable("venue_notifications", {
     .where(sql`${t.dedupeKey} IS NOT NULL`),
 }));
 export type VenueNotification = typeof venueNotifications.$inferSelect;
+
+// ─── Automatic follow-up sends ───────────────────────────────────────────────
+// One row per automatic follow-up email that went out (server/followUpSequences.ts).
+// The unique index is the "never send twice" guarantee: a job claims the row
+// before sending and removes it again if the send fails. refId is the
+// proposal id for proposal sequences (0 otherwise).
+export const leadSequenceSends = pgTable("lead_sequence_sends", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  leadId: integer("leadId").notNull(),
+  sequenceKey: varchar("sequenceKey", { length: 40 }).notNull(),
+  step: integer("step").default(1).notNull(),
+  refId: integer("refId").default(0).notNull(),
+  toEmail: varchar("toEmail", { length: 320 }),
+  subject: varchar("subject", { length: 255 }),
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+}, (t) => ({
+  sendUnique: uniqueIndex("lead_sequence_sends_uq").on(t.leadId, t.sequenceKey, t.step, t.refId),
+}));
+export type LeadSequenceSend = typeof leadSequenceSends.$inferSelect;

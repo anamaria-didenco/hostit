@@ -69,11 +69,15 @@ function formatBudget(raw: string | number | null | undefined): string {
  * Replace all {{variable}} placeholders in `text` with values derived from
  * the provided lead and venue data.  Unknown variables are left unchanged so
  * the user can see what still needs to be filled in manually.
+ *
+ * `extra` adds (or overrides) context-specific values, e.g. the automatic
+ * follow-ups' {{proposalLink}} and {{enquiryFormLink}}.
  */
 export function substituteTemplateVars(
   text: string,
   lead: LeadVarData,
-  venue?: VenueVarData
+  venue?: VenueVarData,
+  extra?: Record<string, string>
 ): string {
   const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "";
   const venueAddress = [venue?.address, venue?.city].filter(Boolean).join(", ") || "";
@@ -96,6 +100,7 @@ export function substituteTemplateVars(
     venuePhone: venue?.phone ?? "",
     venueEmail: venue?.email ?? "",
     venueAddress,
+    ...extra,
   };
 
   return text.replace(/\{\{(\w+)\}\}/g, (match, key) => {
@@ -125,4 +130,12 @@ export const TEMPLATE_VARIABLES: { token: string; label: string; example: string
   { token: "{{venuePhone}}",   label: "Venue phone",       example: "+64 9 123 4567" },
   { token: "{{venueEmail}}",   label: "Venue email",       example: "events@venue.co.nz" },
   { token: "{{venueAddress}}", label: "Venue address",     example: "12 Queen St, Auckland" },
+];
+
+/** Variables for the automatic follow-up emails (Settings → Follow-ups). */
+export const FOLLOW_UP_TEMPLATE_VARIABLES: { token: string; label: string; example: string }[] = [
+  ...TEMPLATE_VARIABLES.filter(v =>
+    ["{{firstName}}", "{{contactName}}", "{{eventType}}", "{{eventDate}}", "{{guestCount}}", "{{venueName}}", "{{venuePhone}}", "{{venueEmail}}"].includes(v.token)),
+  { token: "{{proposalLink}}",    label: "Proposal link",     example: "https://venueflowhq.com/proposal/…" },
+  { token: "{{enquiryFormLink}}", label: "Enquiry form link", example: "https://venueflowhq.com/enquire/your-venue" },
 ];

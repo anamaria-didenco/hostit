@@ -37,6 +37,9 @@ import XeroSettingsCard from "@/components/XeroSettingsCard";
 import FloorPlanEditor, { type CanvasData } from "@/components/FloorPlanEditor";
 import EventSpendSection from "@/components/EventSpendSection";
 import XeroPushModal from "@/components/XeroPushModal";
+import { NotificationBell } from "@/components/NotificationBell";
+import FollowUpSettings from "@/components/FollowUpSettings";
+import { LeadResponseInfo } from "@/components/LeadResponseInfo";
 import { eventFormatLabel, budgetRangeLabel } from "@shared/formFields";
 import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { leadFollowUpState } from "@shared/followUp";
@@ -559,6 +562,7 @@ function SettingsSidebar({ settingsSubTab, setSettingsSubTab, venueName, venueLo
       { id: "statuses", label: "Enquiry Statuses" },
       { id: "waitlist", label: "Waitlist" },
       { id: "templates", label: "Templates" },
+      { id: "follow-ups", label: "Follow-ups" },
       { id: "automated-tasks", label: "Automated Tasks" },
     ]},
     { label: "Email & team", items: [
@@ -908,9 +912,9 @@ export default function Dashboard() {
     window.location.href = "/login";
   };
   type DashTab = "overview"|"enquiries"|"pipeline"|"calendar"|"contacts"|"menu"|"settings"|"tasks"|"reports"|"payments"|"expressbook";
-  type SettingsSubTab = "venue"|"brand-pack"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist";
+  type SettingsSubTab = "venue"|"brand-pack"|"lead-form"|"integrations"|"menu"|"templates"|"email"|"staff-emails"|"automated-tasks"|"taxes"|"team"|"billing"|"group-settings"|"profile"|"email-settings"|"floor-plans"|"statuses"|"waitlist"|"follow-ups";
   const DASH_TABS: readonly DashTab[] = ["overview","enquiries","pipeline","calendar","contacts","menu","settings","tasks","reports","payments","expressbook"];
-  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","brand-pack","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist"];
+  const SETTINGS_SUB_TABS: readonly SettingsSubTab[] = ["venue","brand-pack","lead-form","integrations","menu","templates","email","staff-emails","automated-tasks","taxes","team","billing","group-settings","profile","email-settings","floor-plans","statuses","waitlist","follow-ups"];
   const isDashTab = (v: string | null): v is DashTab => v !== null && (DASH_TABS as readonly string[]).includes(v);
   const isSettingsSubTab = (v: string | null): v is SettingsSubTab => v !== null && (SETTINGS_SUB_TABS as readonly string[]).includes(v);
   const _qp = new URLSearchParams(window.location.search);
@@ -1302,6 +1306,7 @@ export default function Dashboard() {
     onSuccess: (res: any) => {
       if (res?.sent) {
         toast.success(`Follow-up sent to ${res.to}`);
+        utils.followUps.leadStatus.invalidate();
         refetchLeads();
         utils.dashboard.invalidate();
       } else {
@@ -1365,6 +1370,17 @@ export default function Dashboard() {
     if (lead) setSelectedLead(lead);
     leadIdParamApplied.current = true;
   }, [allLeads]);
+  // Alerts bell: open an alert's link in place. Enquiry links open that
+  // enquiry (drawer on desktop, detail on mobile); anything else navigates.
+  const openAlertLink = async (link: string) => {
+    const url = new URL(link, window.location.origin);
+    const leadId = Number(url.searchParams.get("leadId"));
+    if (url.pathname !== "/dashboard" || !leadId) { setLocation(`${url.pathname}${url.search}`); return; }
+    setTab("enquiries");
+    const lead = allLeads?.find((l: any) => l && l.id === leadId) ?? await utils.leads.get.fetch({ id: leadId }).catch(() => null);
+    if (!lead) { toast.error("That enquiry no longer exists."); return; }
+    if (leadViewMode === "list") selectLead(lead); else openEventDrawer({ ...lead, _isLead: true });
+  };
   const { data: selectedLeadActivity } = trpc.leads.getActivity.useQuery(
     { leadId: selectedLead?.id ?? 0 },
     { enabled: !!selectedLead?.id }
@@ -1777,6 +1793,7 @@ export default function Dashboard() {
       utils.bookings.invalidate();
       utils.dashboard.invalidate();
       utils.leads.eventsByMonth.invalidate();
+      utils.followUps.leadStatus.invalidate({ leadId: variables.id });
       if (suppressStatusToast.current) {
         suppressStatusToast.current = false;
         return;
@@ -2278,6 +2295,7 @@ export default function Dashboard() {
 
   const sendEmail = trpc.email.send.useMutation({
     onSuccess: (_, vars) => {
+      utils.followUps.leadStatus.invalidate();
       setShowEmailModal(false);
       setEmailForm({ subject: "", body: "" });
       setEmailAttachments([]);
@@ -3038,22 +3056,8 @@ export default function Dashboard() {
         <div className="hidden md:flex flex-1" />
         {/* Right: venue name + avatar */}
         <div className="flex items-center gap-3 flex-shrink-0">
-          {/* Notification bell */}
-          <button
-            onClick={() => { setTab("enquiries" as any); setLeadsSubTab("new"); }}
-            className="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
-            title={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
-            aria-label={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
-          >
-            <Bell className={`w-4.5 h-4.5 ${unreadCount > 0 ? 'text-sage-dark' : 'text-gray-400'}`} aria-hidden="true" />
-            {unreadCount > 0 && (
-              <>
-                <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none animate-pulse">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              </>
-            )}
-          </button>
+          {/* Alerts bell — one instance per viewport so browser alerts never double. Staff logins can't read alerts. */}
+          {!isStaff && !isDesktop && <NotificationBell variant="light" onOpenLink={openAlertLink} side="bottom" align="end" />}
           <ThemeSwitcher />
           <span className="font-inter text-stormy text-sm hidden md:block">{venueSettings?.name ?? "Your Venue"}</span>
           <div className="w-8 h-8 rounded-full bg-sage-green flex items-center justify-center font-inter text-white text-sm font-semibold">
@@ -3109,15 +3113,7 @@ export default function Dashboard() {
         {/* Footer — controls + user */}
         <div className="p-3 border-t flex flex-col gap-1.5" style={{ borderColor: 'rgba(255,255,255,0.10)' }}>
           <div className="flex items-center gap-1 px-1">
-            <button onClick={() => { setTab("enquiries" as any); setLeadsSubTab("new"); }}
-              aria-label={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}
-              className="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
-              title={unreadCount > 0 ? `${unreadCount} unread enquir${unreadCount === 1 ? 'y' : 'ies'}` : "No new enquiries"}>
-              <Bell className="w-4 h-4" aria-hidden="true" style={{ color: unreadCount > 0 ? '#ffffff' : '#bcc8db' }} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none" style={{ background: '#c0392b' }}>{unreadCount > 99 ? '99+' : unreadCount}</span>
-              )}
-            </button>
+            {!isStaff && isDesktop && <NotificationBell variant="sidebar" onOpenLink={openAlertLink} side="right" align="end" />}
             <ThemeSwitcher />
           </div>
           <div className="flex items-center gap-2.5 px-1 py-1">
@@ -4025,6 +4021,13 @@ export default function Dashboard() {
                       </button>
                     </div>
                   </div>
+                  {/* Speed-to-lead + automatic follow-ups for this enquiry. */}
+                  {!isStaff && (
+                    <div className="-mt-1 mb-4 md:-mt-3 md:mb-6">
+                      <LeadResponseInfo leadId={selectedLead.id} readOnly={isTeamMember}
+                        onOpenSettings={() => { setTab("settings"); setSettingsSubTab("follow-ups"); }} />
+                    </div>
+                  )}
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
@@ -9305,6 +9308,9 @@ export default function Dashboard() {
               )}
 
               {settingsSubTab === "waitlist" && <WaitlistPanel />}
+              {settingsSubTab === "follow-ups" && (
+                <FollowUpSettings onOpenEmailSettings={() => setSettingsSubTab("email")} onOpenVenueSettings={() => setSettingsSubTab("venue")} />
+              )}
 
               </div>
             </div>
@@ -9467,6 +9473,11 @@ export default function Dashboard() {
                   </Popover>
                 )}
               </div>
+              {/* Speed-to-lead + automatic follow-ups for this enquiry. */}
+              {selectedBooking._isLead && !isStaff && (
+                <LeadResponseInfo leadId={selectedBooking.id} readOnly={isTeamMember}
+                  onOpenSettings={() => { setSelectedBooking(null); setTab("settings"); setSettingsSubTab("follow-ups"); }} />
+              )}
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
                   Cancel/Esc/blur reverts.
