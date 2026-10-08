@@ -11,6 +11,8 @@ import { PARTIAL_LEAD_NOTE } from "@shared/leadConstants";
 import { smtpTls } from "./smtpTls";
 import { leadAccessToken, isValidLeadAccessToken } from "./leadToken";
 import { publicBaseUrl } from "./publicUrl";
+import { followUpsRouter } from "./followUpsRouter";
+import { markStaffResponse, markBulkStatusResponse } from "./speedToLead";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -20,6 +22,7 @@ const VENUE_SECRET_FIELDS = [
   "notificationEmail", "internalName",
   "nbiApiKey", "nbiVenueId", "nbiAccountId", "nbiServiceId", "nbiSectionId", "nbiSyncEnabled", "nbiWebhookSecret", "nbiServiceMappings",
   "automatedTaskRules", "emailSignature", "emailSignatureLogo", "emailSignatures", "autoCancelTentative",
+  "alertEmailsEnabled", "alertEmailKinds", "replyOverdueEnabled", "replyOverdueHours", "followUpSequences",
 ] as const;
 function stripVenueSecrets<T extends Record<string, any>>(row: T): T {
   const safe: any = { ...row };
@@ -943,6 +946,21 @@ export const appRouter = router({
           console.error('[LeadSubmit] Auto-reply error:', autoErr?.message ?? autoErr);
         }
 
+        // Into the bell too. email:false — the detailed enquiry email above
+        // already went to the venue.
+        if (lead) {
+          const { notifyVenue } = await import('./notify');
+          const name = [input.firstName, input.lastName].filter(Boolean).join(' ');
+          await notifyVenue(input.ownerId, {
+            kind: 'new_enquiry',
+            title: `New enquiry from ${name}`,
+            body: [input.eventType, input.guestCount ? `${input.guestCount} guests` : null].filter(Boolean).join(' · ') || undefined,
+            leadId: lead.id,
+            dedupeKey: `new_enquiry:${lead.id}`,
+            email: false,
+          });
+        }
+
         return lead ? { ...lead, leadToken: leadAccessToken(input.ownerId, lead.id) } : lead;
       }),
 
@@ -999,6 +1017,10 @@ export const appRouter = router({
           type: "status_change",
           content: `Status changed to ${input.status}${input.note ? ": " + input.note : ""}`,
         });
+        // Moving a lead on from "new" by hand counts as responding to it.
+        if (priorLead.status === 'new' && input.status !== 'new') {
+          await markStaffResponse(ctx.user.id, input.id, { emailed: false });
+        }
 
         // Inverse cascade: if the lead is moving AWAY from a booked-like state
         // into lost/cancelled/etc., cancel any linked booking so calendars,
@@ -1298,6 +1320,7 @@ export const appRouter = router({
         await db.update(leads)
           .set({ followUpDate: new Date(Date.now() + 7 * 86_400_000), updatedAt: new Date() })
           .where(and(eq(leads.id, input.leadId), eq(leads.ownerId, ctx.user.id)));
+        await markStaffResponse(ctx.user.id, input.leadId, { emailed: true });
         return { sent: true as const, to: lead.email };
       }),
     // Returns leads with a followUpDate in the given month (for calendar display)
@@ -1367,6 +1390,7 @@ export const appRouter = router({
             throw new Error(`Please set an event space on ${missing.length} enquir${missing.length === 1 ? 'y' : 'ies'} before bulk-changing status to ${input.status}.`);
           }
         }
+        await markBulkStatusResponse(ctx.user.id, input.ids, input.status);
         // Only update leads owned by this user
         await db.update(leads)
           .set({ status: input.status })
@@ -1675,6 +1699,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               console.error('[ProposalSend] Email error (non-fatal):', emailErr);
             }
           }
+          // Sending a proposal is a response (it moves the lead off "new").
+          await markStaffResponse(ctx.user.id, proposal.leadId, { emailed: emailSent });
         }
         // emailSent is only true when the client was actually emailed — the UI
         // must not claim "sent" when SMTP isn't set up or the send failed.
@@ -2781,8 +2807,14 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           });
           // Auto-advance: if lead is still "new", move it to "contacted"
           const { leads } = await import('../drizzle/schema');
-          const [currentLead] = await db.select({ status: leads.status, followUpDate: leads.followUpDate })
+          const [currentLead] = await db.select({ status: leads.status, followUpDate: leads.followUpDate, email: leads.email })
             .from(leads).where(eq(leads.id, activityLeadId)).limit(1);
+          // Speed-to-lead: an email to the client themselves (not, say, a
+          // staff briefing sent from their booking) is a response.
+          const recipients = (Array.isArray(input.to) ? input.to : [input.to]).map(a => a.trim().toLowerCase());
+          if (currentLead?.email && recipients.includes(currentLead.email.trim().toLowerCase())) {
+            await markStaffResponse(ctx.user.id, activityLeadId, { emailed: true });
+          }
           if (currentLead?.status === 'new') {
             // Set status to contacted and set a default follow-up in 3 days if none set
             const followUpDate = currentLead.followUpDate ?? (() => {
@@ -8163,5 +8195,8 @@ Return ONLY valid JSON.`;
         return { success: true };
       }),
   }),
+
+  // ─── Speed-to-lead + automatic follow-ups (Settings → Follow-ups) ──────────
+  followUps: followUpsRouter,
 });
 export type AppRouter = typeof appRouter;
