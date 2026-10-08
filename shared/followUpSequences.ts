@@ -183,4 +183,14 @@ export function applySequenceUpdate(
 export const ALERT_KIND_LABELS: { kind: string; label: string }[] = [
   { kind: "reply_overdue", label: "An enquiry is waiting for a reply" },
   { kind: "proposal_stalled", label: "A proposal was opened but not accepted" },
+  { kind: "proposal_viewed", label: "A client opened a proposal" },
+  { kind: "proposal_accepted", label: "A client accepted a proposal" },
+  { kind: "proposal_declined", label: "A client declined a proposal" },
+  { kind: "contract_signed", label: "A client signed a contract" },
+  { kind: "client_replied", label: "A client replied by email" },
+  { kind: "walkthrough_booked", label: "A walkthrough was booked" },
+  { kind: "hold_expiring", label: "A date hold is about to end" },
+  { kind: "hold_released", label: "A date hold was released automatically" },
+  { kind: "hold_lapsed", label: "A date hold ran out" },
+  { kind: "double_booking", label: "Possible double booking" },
 ];

@@ -15,7 +15,7 @@ import {
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, MoveUp, MoveDown, Lock, Type,
   SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare,
-  Link as LinkIcon, LogOut, MoreHorizontal, Ban
+  Link as LinkIcon, LogOut, MoreHorizontal, Ban, RotateCcw
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
@@ -25,7 +25,11 @@ import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { Spinner } from "@/components/ui/spinner";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
-import { substituteTemplateVars, TEMPLATE_VARIABLES } from "@/lib/templateVars";
+import { substituteTemplateVars, blankTemplateVars } from "@/lib/templateVars";
+import LostReasonDialog from "@/components/LostReasonDialog";
+import EmailTemplatesSettings from "@/components/EmailTemplatesSettings";
+import LeadClientPanel, { LeadRowBadges } from "@/components/LeadClientPanel";
+import WinBackPanel from "@/components/WinBackPanel";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
 import CsvImportModal from "@/components/CsvImportModal";
 import StatusManager, { parseCustomStatuses, getStatusClasses, getStatusCalClasses, getStatusBarClasses, getStatusDayClasses, COLOR_PRESETS, type StatusDef } from "@/components/StatusManager";
@@ -1091,7 +1095,9 @@ export default function Dashboard() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [actionsMenuOpen]);
-  const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all">("new");
+  const [leadsSubTab, setLeadsSubTab] = useState<"new" | "all" | "winback">("new");
+  // Enquiries "Owner" filter: everyone, unassigned, or one team member's id.
+  const [leadOwnerFilter, setLeadOwnerFilter] = useState<"all" | "unassigned" | number>("all");
 
   // ── Events table display prefs — persisted to localStorage ────────────────
   const LEAD_TABLE_PREFS_KEY = "vf_lead_table_prefs_v1";
@@ -1891,7 +1897,7 @@ export default function Dashboard() {
       toast.error("Failed to save event details");
     },
   });
-  const updateStatus = trpc.leads.updateStatus.useMutation({
+  const updateStatusMut = trpc.leads.updateStatus.useMutation({
     onSuccess: (data, variables) => {
       refetchLeads();
       setSelectedLead((prev: any) => prev && prev.id === variables.id ? { ...prev, status: variables.status, respondedAt: prev.respondedAt ?? new Date(), lastActivityAt: new Date() } : prev);
@@ -1935,7 +1941,7 @@ export default function Dashboard() {
       }
     },
   });
-  const bulkUpdateStatus = trpc.leads.bulkUpdateStatus.useMutation({
+  const bulkUpdateStatusMut = trpc.leads.bulkUpdateStatus.useMutation({
     onSuccess: (data) => {
       refetchLeads();
       setSelectedLeadIds(new Set());
@@ -1953,6 +1959,47 @@ export default function Dashboard() {
     },
     onError: (err) => toast.error(err.message || 'Bulk update failed'),
   });
+  // Every move to Lost — status select, drawer, pipeline buttons, bulk bar,
+  // "cancel enquiry" — goes through these two wrappers, which first ask why
+  // (LostReasonDialog). Skip still marks it lost; cancel leaves it as it was.
+  type UpdateStatusVars = Parameters<typeof updateStatusMut.mutate>[0];
+  const [lostPrompt, setLostPrompt] = useState<null | { single?: UpdateStatusVars; bulkIds?: number[]; name?: string; prior?: string }>(null);
+  const updateStatus = {
+    ...updateStatusMut,
+    mutate: (vars: UpdateStatusVars) => {
+      if (vars.status === 'lost' && vars.lostReason === undefined) {
+        const l: any = (allLeads ?? []).find((x: any) => x?.id === vars.id);
+        setLostPrompt({ single: vars, name: l ? `${l.firstName ?? ''} ${l.lastName ?? ''}`.trim() : undefined, prior: l?.status });
+        return;
+      }
+      updateStatusMut.mutate(vars);
+    },
+  };
+  const bulkUpdateStatus = {
+    ...bulkUpdateStatusMut,
+    mutate: (vars: Parameters<typeof bulkUpdateStatusMut.mutate>[0]) => {
+      if (vars.status === 'lost' && vars.lostReason === undefined) { setLostPrompt({ bulkIds: vars.ids }); return; }
+      bulkUpdateStatusMut.mutate(vars);
+    },
+  };
+  const confirmLost = (reason: string | null, note: string | null) => {
+    const p = lostPrompt;
+    setLostPrompt(null);
+    if (!p) return;
+    const extra = { lostReason: (reason ?? undefined) as any, lostReasonNote: note ?? undefined };
+    if (p.single) updateStatusMut.mutate({ ...p.single, ...extra });
+    else if (p.bulkIds) bulkUpdateStatusMut.mutate({ ids: p.bulkIds, status: 'lost', ...extra });
+  };
+  const cancelLost = () => {
+    const p = lostPrompt;
+    setLostPrompt(null);
+    // Undo any optimistic "lost" the caller already showed.
+    if (p?.single && p.prior) {
+      const undo = (prev: any) => prev && prev.id === p.single!.id && prev.status === 'lost' ? { ...prev, status: p.prior } : prev;
+      setSelectedLead(undo);
+      setSelectedBooking((prev: any) => prev?._isLead ? undo(prev) : prev);
+    }
+  };
   const bulkDelete = trpc.leads.bulkDelete.useMutation({
     onSuccess: (data) => {
       utils.leads.list.invalidate();
@@ -2004,6 +2051,14 @@ export default function Dashboard() {
    * full quick-actions set (OPEN EVENT, BEO PDF, FLOOR PLAN, etc.). Otherwise
    * fall back to the lead drawer.
    */
+  // Open an enquiry from somewhere other than its row (client history, Win
+  // back, after a merge): the drawer if one is in use, else the list detail.
+  function openLeadById(id: number) {
+    const l: any = (allLeads ?? []).find((x: any) => x?.id === id);
+    if (!l) { refetchLeads(); toast("That enquiry isn't loaded yet. Try again in a moment."); return; }
+    if (leadViewMode === "list" && !selectedBooking && leadsSubTab !== "winback") { selectLead(l); return; }
+    openEventDrawer({ ...l, _isLead: true });
+  }
   function openEventDrawer(item: any) {
     if (!item) return;
     setDrawerPaymentsOpen(false);
@@ -2277,13 +2332,21 @@ export default function Dashboard() {
   useEffect(() => {
     if (showEmailModal) setEmailSigId(defaultSignatureId(venueSettings as any) ?? '');
   }, [showEmailModal]);
-  const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
   // Email Templates
-  const { data: emailTemplates, refetch: refetchTemplates } = trpc.templates.list.useQuery(undefined, { enabled: isAuthenticated });
-  const createTemplate = trpc.templates.create.useMutation({ onSuccess: () => { refetchTemplates(); setShowTemplateForm(false); setTemplateForm({ name: "", subject: "", body: "" }); toast.success("Template saved!"); } });
-  const deleteTemplate = trpc.templates.delete.useMutation({ onSuccess: () => { refetchTemplates(); toast.success("Template deleted"); } });
-  const [showTemplateForm, setShowTemplateForm] = useState(false);
-  const [templateForm, setTemplateForm] = useState({ name: "", subject: "", body: "" });
+  const { data: emailTemplates } = trpc.templates.list.useQuery(undefined, { enabled: isAuthenticated });
+  // One-click templates in the compose window: links ({{proposalLink}} etc.)
+  // come from the server; `pickedTemplate` remembers which one was used and
+  // which of its variables came out blank for this enquiry.
+  const [pickedTemplate, setPickedTemplate] = useState<{ id: number; blanks: string[] } | null>(null);
+  const { data: composeLinks } = trpc.leads.getTemplateLinks.useQuery(
+    { leadId: selectedLead?.id ?? 0 },
+    { enabled: showEmailModal && !!selectedLead?.id },
+  );
+  useEffect(() => { if (!showEmailModal) setPickedTemplate(null); }, [showEmailModal]);
+  const addStarterTemplates = trpc.templates.addStarters.useMutation({
+    onSuccess: (r) => { utils.templates.list.invalidate(); toast.success(r.added > 0 ? `Added ${r.added} starter templates` : 'You already have the starter templates'); },
+    onError: (e) => toast.error(e.message || "Couldn't add the starter templates"),
+  });
   // ── Weekly runsheet email ─────────────────────────────────────────────────
   const [showWeeklyModal, setShowWeeklyModal] = React.useState(false);
   const getMondayOfWeek = () => {
@@ -2541,6 +2604,7 @@ export default function Dashboard() {
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [teamForm, setTeamForm] = useState({ name: '', email: '', role: 'staff' });
   const { data: teamList, refetch: refetchTeam } = trpc.team.list.useQuery(undefined, { enabled: !!user?.id });
+  const teamById = useMemo(() => new Map<number, { name: string }>((teamList ?? []).map((m: any) => [m.id, m])), [teamList]);
   const createTeamMember = trpc.team.create.useMutation({ onSuccess: () => { refetchTeam(); setTeamForm({ name: '', email: '', role: 'staff' }); setShowTeamForm(false); toast.success('Team member added!'); } });
   const deleteTeamMember = trpc.team.delete.useMutation({ onSuccess: () => { refetchTeam(); toast.success('Team member removed'); } });
 
@@ -2871,6 +2935,7 @@ export default function Dashboard() {
     .filter((l: any) => (leadStatusFilter.length > 0 || followUpOnly || showPartialOnly) ? true : !DEFAULT_HIDDEN.includes(l.status))
     .filter((l: any) => !showPartialOnly || isPartialLead(l))
     .filter((l: any) => !followUpOnly || leadFollowUpState(l, followUpNowMs).needs)
+    .filter((l: any) => leadOwnerFilter === "all" ? true : leadOwnerFilter === "unassigned" ? l.assignedTo == null : l.assignedTo === leadOwnerFilter)
     .filter((l: any) =>
       !leadSearch || `${l.firstName} ${l.lastName} ${l.email} ${l.company ?? ""}`.toLowerCase().includes(leadSearch.toLowerCase())
     )
@@ -3589,6 +3654,12 @@ export default function Dashboard() {
                             className={tabCls(filterIs(['lost']) && !followUpOnly)}>
                             LOST
                           </button>
+                          <button onClick={() => { setLeadStatusFilter([]); setShowPartialOnly(false); setFollowUpOnly(false); setLeadsSubTab("winback"); setSelectedLead(null); }}
+                            title="Lost and quiet enquiries, and last year's clients, to invite back"
+                            aria-pressed={leadsSubTab === "winback"}
+                            className={tabCls(leadsSubTab === "winback")}>
+                            <RotateCcw className="w-3 h-3" /> WIN BACK
+                          </button>
                           </div>
                           {/* Phone-only fade: tells you the row scrolls sideways. */}
                           <div aria-hidden="true" className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-0 w-6 rounded-r-xl bg-gradient-to-l from-muted to-transparent" />
@@ -3697,8 +3768,8 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Row 2: Search + Filters (hidden in kanban) */}
-                {leadViewMode !== "kanban" && (
+                {/* Row 2: Search + Filters (hidden in kanban and Win back) */}
+                {leadViewMode !== "kanban" && leadsSubTab !== "winback" && (
                   <div className="flex items-center gap-2 px-4 pb-3 flex-wrap gap-y-2">
                     <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/65" />
@@ -3736,6 +3807,15 @@ export default function Dashboard() {
                           className="h-8 text-xs border border-gray-200 rounded-lg px-2 bg-white text-ink focus:outline-none focus:border-sage-green" placeholder="To" />
                       </>
                     )}
+                    {(teamList ?? []).length > 0 && (
+                      <select value={String(leadOwnerFilter)} aria-label="Filter by owner" title="Filter by owner"
+                        onChange={e => { const v = e.target.value; setLeadOwnerFilter(v === "all" || v === "unassigned" ? v : Number(v)); }}
+                        className={`h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border px-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-green ${leadOwnerFilter !== "all" ? "border-sage-green bg-emerald-50 text-ink" : "border-gray-200 bg-white text-ink"}`}>
+                        <option value="all">All owners</option>
+                        <option value="unassigned">Unassigned</option>
+                        {(teamList ?? []).map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                    )}
                     <Select value={leadSortBy} onValueChange={(v: any) => setLeadSortBy(v)}>
                       <SelectTrigger aria-label="Sort events" title="Sort events" className="h-8 grow basis-28 sm:flex-none sm:w-36 text-xs font-inter rounded-lg border border-gray-200 bg-white">
                         <SelectValue />
@@ -3755,7 +3835,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 {/* Bulk select all bar */}
-                {bulkSelectMode && filteredLeads.length > 0 && (
+                {bulkSelectMode && leadsSubTab !== "winback" && filteredLeads.length > 0 && (
                   <div className="flex items-center gap-2 px-4 py-2 bg-linen border-t border-gold/10">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox"
@@ -3773,8 +3853,13 @@ export default function Dashboard() {
               {/* ── CONTENT AREA ──────────────────────────────────────────────── */}
               <div className="flex flex-1 overflow-hidden">
 
+                {/* ── WIN BACK ──────────────────────────────────────── */}
+                {leadsSubTab === "winback" && leadViewMode !== "kanban" && (
+                  <WinBackPanel onOpenLead={openLeadById} />
+                )}
+
                 {/* ── TABLE VIEW ─────────────────────────────────────── */}
-                {leadViewMode === "table" && (
+                {leadViewMode === "table" && leadsSubTab !== "winback" && (
                   <div className="flex-1 overflow-auto">
                     {filteredLeads.length === 0 ? (
                       <div className="p-12 text-center">
@@ -3841,6 +3926,7 @@ export default function Dashboard() {
                                       ? <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />
                                       : leadNeedsReply(lead) && <NeedsReplyChip />}
                                   </button>
+                                  {" "}<LeadRowBadges lead={lead} teamById={teamById} />
                                 </td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 max-w-[200px] truncate">{lead.eventType || "—"}{eventFormatLabel((lead as any).eventFormat) ? ` · ${eventFormatLabel((lead as any).eventFormat)}` : ""}{budgetRangeLabel((lead as any).budgetRange) ? <span className="ml-1.5 font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-gold-soft text-gold-deep whitespace-nowrap">{budgetRangeLabel((lead as any).budgetRange)}</span> : null}</td>
                                 <td className="px-4 py-3 font-dm text-xs text-ink/80 whitespace-nowrap">{lead.eventDate ? `${new Date(lead.eventDate).toLocaleDateString("en-NZ", { day:"numeric", month:"short", year:"numeric" })}${fmtEventTime(lead.eventDate) ? ' · ' + fmtEventTime(lead.eventDate) : ''}` : (lead as any).dateFlexible ? <span className="font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="The client hasn't picked a date yet — they said they're flexible">DATE TBC</span> : "—"}
@@ -3915,7 +4001,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 {/* ── LIST VIEW sidebar ─────────────────────────────── */}
-                {leadViewMode === "list" && <div className={`${selectedLead ? "hidden md:flex md:flex-col md:w-[360px] lg:w-[420px] flex-shrink-0" : "flex-1"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
+                {leadViewMode === "list" && leadsSubTab !== "winback" && <div className={`${selectedLead ? "hidden md:flex md:flex-col md:w-[360px] lg:w-[420px] flex-shrink-0" : "flex-1"} border-r border-gold/15 bg-warm-white overflow-y-auto divide-y divide-border/40`}>
                   {leadsError ? (
                     <div className="p-8 text-center">
                       <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-2" />
@@ -3964,6 +4050,7 @@ export default function Dashboard() {
                         {replyStatus.get(lead.id)?.direction === 'in'
                           ? <RepliedChip at={replyStatus.get(lead.id)!.at} name={lead.firstName} />
                           : leadNeedsReply(lead) && <NeedsReplyChip />}
+                        <LeadRowBadges lead={lead} teamById={teamById} />
                         <div className={`font-bebas text-[10px] tracking-widest px-1.5 py-0.5 border flex-shrink-0 ${pipelineStages.find(s => s.key === lead.status)?.color ?? "bg-muted border-border"}`}>
                           {pipelineStages.find(s => s.key === lead.status)?.label ?? String(lead.status ?? "").replace(/_/g, " ").toUpperCase()}
                         </div>
@@ -4075,6 +4162,7 @@ export default function Dashboard() {
                                         {lead.eventType && (
                                           <div className="font-sans text-[11.5px] font-semibold uppercase tracking-[0.04em] mt-1 truncate" style={{ color: '#6e665c' }}>{lead.eventType}</div>
                                         )}
+                                        <div className="mt-1 empty:hidden"><LeadRowBadges lead={lead} teamById={teamById} /></div>
                                       </div>
                                       {lead.status === 'booked' && (
                                         <span className="font-sans text-[9.5px] font-extrabold uppercase tracking-[0.1em] px-2 py-[3px] rounded-[3px] flex-shrink-0" style={{ background: '#e8edf6', color: '#2f5488' }}>BEO</span>
@@ -4133,7 +4221,7 @@ export default function Dashboard() {
                 )}
 
                 {/* Lead Detail — only used in list mode (table mode opens event drawer instead) */}
-                {leadViewMode === "list" && (selectedLead ? (
+                {leadViewMode === "list" && leadsSubTab !== "winback" && (selectedLead ? (
                   <div className="flex-1 overflow-auto p-4 md:p-6">
                   {/* flex-wrap: on a phone the action buttons drop below the
                       name instead of running off the right edge. */}
@@ -4229,6 +4317,13 @@ export default function Dashboard() {
                       />
                     </div>
                   ) : <div className="mb-1 md:mb-3" />}
+
+                  {/* Owner, returning-client / duplicate flags, client history, merge. */}
+                  <div className="mb-4 max-w-2xl">
+                    <LeadClientPanel key={selectedLead.id} leadId={selectedLead.id} assignedTo={selectedLead.assignedTo}
+                      onOpenLead={openLeadById} onMerged={openLeadById}
+                      onOwnerChanged={v => setSelectedLead((prev: any) => prev ? { ...prev, assignedTo: v } : prev)} />
+                  </div>
 
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     {/* Event Details */}
@@ -4656,41 +4751,56 @@ export default function Dashboard() {
                   <button onClick={() => setShowEmailModal(false)} aria-label="Close" className="text-cream opacity-70 hover:opacity-100 text-xl leading-none">&times;</button>
                 </div>
                 <div className="p-6 space-y-4">
-                  {/* Template picker */}
-                  {(emailTemplates ?? []).length > 0 && (
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowTemplateDropdown(v => !v)}
-                        className="w-full border border-gold/40 bg-gold/10 px-3 py-2 font-bebas tracking-widest text-xs text-forest hover:bg-gold/20 transition-colors flex items-center justify-between"
-                      >
-                        <span>USE A TEMPLATE</span>
-                        <span className="text-sage/60">▾</span>
-                      </button>
-                      {showTemplateDropdown && (
-                        <div className="absolute z-10 top-full left-0 right-0 bg-white border border-border shadow-lg max-h-48 overflow-y-auto">
-                          {(emailTemplates ?? []).map((t: any) => (
-                            <button
-                              key={t.id}
-                              type="button"
-                              onClick={() => {
-                                const lead = selectedLead ?? {};
-                                const venue = venueSettings ?? {};
-                                const subject = substituteTemplateVars(t.subject, lead, venue);
-                                const body = substituteTemplateVars(t.body, lead, venue);
-                                setEmailForm({ subject, body });
-                                setShowTemplateDropdown(false);
-                              }}
-                              className="w-full text-left px-4 py-3 hover:bg-cream transition-colors border-b border-border/30 last:border-0"
-                            >
-                              <div className="font-bebas tracking-widest text-xs text-forest">{t.name}</div>
-                              <div className="font-dm text-xs text-sage truncate">{t.subject}</div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* Template picker — one click fills subject and body with this
+                      enquiry's details and links; both stay editable. */}
+                  <div>
+                    <div className="font-bebas text-xs tracking-widest text-stone-600 mb-1.5">TEMPLATES</div>
+                    {(emailTemplates ?? []).length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto" role="group" aria-label="Email templates">
+                        {(emailTemplates ?? []).map((t: any) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            aria-pressed={pickedTemplate?.id === t.id}
+                            title={t.subject}
+                            onClick={async () => {
+                              // The drawer opens this modal with a cut-down lead (name +
+                              // email), so fill the rest from the loaded enquiry.
+                              const full: any = (allLeads ?? []).find((x: any) => x?.id === selectedLead?.id);
+                              const lead = { ...(full ?? {}), ...(selectedLead ?? {}) };
+                              const venue = venueSettings ?? {};
+                              let links: any = composeLinks;
+                              if (!links && selectedLead?.id) {
+                                try { links = await utils.leads.getTemplateLinks.fetch({ leadId: selectedLead.id }); } catch { links = undefined; }
+                              }
+                              const leadVars = { ...lead, holdUntil: links?.holdUntil ?? (lead as any).holdUntil };
+                              setEmailForm({
+                                subject: substituteTemplateVars(t.subject, leadVars, venue, links),
+                                body: substituteTemplateVars(t.body, leadVars, venue, links),
+                              });
+                              setPickedTemplate({ id: t.id, blanks: blankTemplateVars(`${t.subject}\n${t.body}`, leadVars, venue, links) });
+                            }}
+                            className={`font-dm text-xs px-2.5 py-1 rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest ${pickedTemplate?.id === t.id ? "bg-forest-dark text-cream border-forest" : "bg-white text-ink border-stone-300 hover:border-forest"}`}
+                          >
+                            {t.name}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-dm text-xs text-stone-600">No templates yet.</span>
+                        <button type="button" onClick={() => addStarterTemplates.mutate()} disabled={addStarterTemplates.isPending}
+                          className="font-bebas tracking-widest text-xs text-forest border border-forest px-2 py-1 hover:bg-linen disabled:opacity-50">
+                          {addStarterTemplates.isPending ? 'ADDING…' : 'ADD STARTER TEMPLATES'}
+                        </button>
+                      </div>
+                    )}
+                    {pickedTemplate && pickedTemplate.blanks.length > 0 && (
+                      <p className="mt-1.5 font-dm text-xs text-amber-950 bg-amber-50 border border-amber-300 px-2 py-1">
+                        This enquiry has nothing for {pickedTemplate.blanks.join(", ")} yet, so {pickedTemplate.blanks.length === 1 ? "it was" : "they were"} left blank. Check the wording before sending.
+                      </p>
+                    )}
+                  </div>
                   <div>
                     <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBJECT</label>
                     <input
@@ -6638,86 +6748,8 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Email Templates */}
-              <div className="mt-8">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="font-cormorant text-xl font-semibold text-ink">Email Templates</h2>
-                    <p className="font-dm text-xs text-sage">Save reusable email templates to one-click populate the compose modal.</p>
-                  </div>
-                  <button onClick={() => setShowTemplateForm(true)} className="btn-forest font-bebas tracking-widest text-xs px-4 py-2 text-cream flex items-center gap-1">
-                    <Plus className="w-3 h-3" /> NEW TEMPLATE
-                  </button>
-                </div>
-                {(emailTemplates ?? []).length === 0 ? (
-                  <div className="border border-dashed border-gold/20 p-6 text-center">
-                    <p className="font-dm text-sage text-sm">No templates yet. Create your first template to speed up email replies.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {(emailTemplates ?? []).map((t: any) => (
-                      <div key={t.id} className="dante-card p-4 flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-cormorant font-semibold text-base text-ink">{t.name}</div>
-                          <div className="font-bebas tracking-widest text-xs text-forest mt-0.5">{t.subject}</div>
-                          <div className="font-dm text-xs text-ink/70 mt-1 line-clamp-2">{t.body}</div>
-                        </div>
-                        <button aria-label="Delete template" onClick={() => deleteTemplate.mutate({ id: t.id })} className="text-sage/40 hover:text-tomato transition-colors flex-shrink-0 mt-1">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {/* New Template Form */}
-                {showTemplateForm && (
-                  <div className="mt-4 dante-card p-5 border-2 border-gold/30">
-                    <div className="font-cormorant text-lg font-semibold text-ink mb-4">New Template</div>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">TEMPLATE NAME</label>
-                        <Input value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Function Pack Follow-Up" className="rounded-none border-border font-dm text-sm" />
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">SUBJECT LINE</label>
-                        <Input value={templateForm.subject} onChange={e => setTemplateForm(f => ({ ...f, subject: e.target.value }))} placeholder="e.g. Following up on your enquiry" className="rounded-none border-border font-dm text-sm" />
-                      </div>
-                      <div>
-                        <label className="font-bebas text-xs tracking-widest text-sage block mb-1">MESSAGE BODY</label>
-                        <Textarea value={templateForm.body} onChange={e => setTemplateForm(f => ({ ...f, body: e.target.value }))} rows={6} placeholder="Write your template message here..." className="rounded-none border-border font-dm text-sm resize-none" />
-                      </div>
-                      {/* Variable cheatsheet */}
-                      <details className="group">
-                        <summary className="font-bebas tracking-widest text-xs text-forest/70 cursor-pointer hover:text-forest select-none list-none flex items-center gap-1">
-                          <span className="group-open:rotate-90 transition-transform inline-block">▶</span> AVAILABLE VARIABLES
-                        </summary>
-                        <div className="mt-2 p-3 bg-cream/60 border border-gold/20 grid grid-cols-2 gap-x-4 gap-y-1">
-                          {TEMPLATE_VARIABLES.map(v => (
-                            <button
-                              key={v.token}
-                              type="button"
-                              onClick={() => setTemplateForm(f => ({ ...f, body: f.body + v.token }))}
-                              title={`Insert ${v.label} — e.g. "${v.example}"`}
-                              className="text-left group/var"
-                            >
-                              <span className="font-mono text-xs text-forest group-hover/var:text-gold transition-colors">{v.token}</span>
-                              <span className="font-dm text-xs text-ink/60 ml-1">{v.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </details>
-                      <div className="flex gap-2 pt-1">
-                        <button onClick={() => { setShowTemplateForm(false); setTemplateForm({ name: '', subject: '', body: '' }); }}
-                          className="border border-border font-bebas tracking-widest text-xs px-4 py-2 text-ink/60 hover:text-ink transition-colors">CANCEL</button>
-                        <button onClick={() => createTemplate.mutate(templateForm)} disabled={!templateForm.name || !templateForm.subject || !templateForm.body || createTemplate.isPending}
-                          className="btn-forest font-bebas tracking-widest text-xs px-6 py-2 text-cream disabled:opacity-50">
-                          {createTemplate.isPending ? 'SAVING...' : 'SAVE TEMPLATE'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Email Templates — create, edit, delete, starter set */}
+              <EmailTemplatesSettings />
               </div>
               )}
 
@@ -9921,6 +9953,15 @@ export default function Dashboard() {
                   }}
                 />
               )}
+              {/* Owner, returning-client / duplicate flags, client history, merge. */}
+              {!isStaff && (selectedBooking._isLead || selectedBooking.leadId) && (
+                <LeadClientPanel key={`${selectedBooking._isLead ? 'l' : 'b'}${selectedBooking.id}`}
+                  leadId={selectedBooking._isLead ? selectedBooking.id : selectedBooking.leadId}
+                  isLead={!!selectedBooking._isLead}
+                  assignedTo={selectedBooking._isLead ? selectedBooking.assignedTo : null}
+                  onOpenLead={openLeadById} onMerged={openLeadById}
+                  onOwnerChanged={v => setSelectedBooking((prev: any) => prev ? { ...prev, assignedTo: v } : prev)} />
+              )}
               {/* Key Details — every row is click-to-edit. Pencil reveals an
                   inline input; Save commits via bookings.update or leads.update,
                   Cancel/Esc/blur reverts.
@@ -11028,6 +11069,10 @@ export default function Dashboard() {
       </Dialog>
 
       {/* Bulk Delete Confirmation */}
+      {lostPrompt && (
+        <LostReasonDialog count={lostPrompt.bulkIds?.length} name={lostPrompt.name} onConfirm={confirmLost} onCancel={cancelLost} />
+      )}
+
       {showBulkDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div role="dialog" aria-modal="true" className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">

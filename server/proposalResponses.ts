@@ -241,7 +241,11 @@ export async function respondToProposal(input: {
         .where(and(eq(proposals.leadId, lead.id), eq(proposals.ownerId, proposal.ownerId), eq(proposals.status, "accepted")))
         .limit(1);
       if (lead.status !== "booked" && !otherAccepted) {
-        await updateLead(lead.id, proposal.ownerId, { status: "lost", updatedAt: new Date() });
+        // Lost with a reason (shows in Reports → lost reasons and Win back);
+        // also ends any date hold. The activity entry is written below.
+        const { markLeadLost } = await import("./db");
+        await markLeadLost(proposal.ownerId, lead.id, "other",
+          `Declined the proposal${reason ? `: ${reason}` : ""}`, { logActivity: false });
         movedToLost = true;
       }
       await addLeadActivity({

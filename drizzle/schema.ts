@@ -215,6 +215,10 @@ export const venueSettings = pgTable("venue_settings", {
   // Automatic client follow-up emails, keyed by sequence (see
   // shared/followUpSequences.ts). Null = every sequence off, built-in wording.
   followUpSequences: jsonb("followUpSequences"),
+  // JSON array of event types that recur yearly (e.g. ["Birthday",
+  // "Christmas party"]) for the "Same time next year" win-back list. Null =
+  // the built-in defaults in shared/winBack.ts.
+  winBackAnnualTypes: text("winBackAnnualTypes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -344,6 +348,14 @@ export const leads = pgTable("leads", {
   // First time the venue replied (outbound email, call or status change).
   // Null on a new enquiry nobody has answered yet — see shared/needsReply.ts.
   respondedAt: timestamp("respondedAt"),
+  // Why the enquiry was lost — one of LOST_REASONS in shared/lostReasons.ts
+  // (price, date_unavailable, …), plus an optional free-text note. Cleared
+  // when the lead moves back out of `lost`.
+  lostReason: varchar("lostReason", { length: 40 }),
+  lostReasonNote: text("lostReasonNote"),
+  // Last time a win-back email went to this lead. A lead is never sent
+  // another win-back within 90 days of this.
+  lastWinBackAt: timestamp("lastWinBackAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

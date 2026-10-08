@@ -57,6 +57,7 @@ const STAFF_BLOCKED_READ_PREFIXES = [
   "followUps.",      // client email wording + per-lead response times
   "inbox.",          // client email conversations + mailbox settings
   "holds.",          // date holds and clash checks name enquiries
+  "winBack.",        // lost/quiet client lists with contact details
 ];
 /** Mutations a staff login MAY perform (none today — read-only by choice). */
 const STAFF_ALLOWED_MUTATIONS: string[] = [];

@@ -15,6 +15,7 @@ import { followUpsRouter } from "./followUpsRouter";
 import { markStaffResponse, markBulkStatusResponse } from "./speedToLead";
 import { inboxRouter } from "./inboxRouter";
 import { zonedDayBoundUtc } from "@shared/tz";
+import { LOST_REASON_KEYS, lostReasonLabel } from "@shared/lostReasons";
 
 // Fields on venueSettings that MUST NOT leak through any publicProcedure.
 // SMTP creds, NBI keys + webhook secret, notification email, internal name,
@@ -38,7 +39,7 @@ import {
   getVenueSettings, upsertVenueSettings,
   getEventSpaces, createEventSpace,
   getContacts, getContactById, createContact,
-  getLeads, getLeadById, createLead, updateLeadStatus, updateLead,
+  getLeads, getLeadById, createLead, updateLeadStatus, updateLead, markLeadLost,
   getLeadActivity, addLeadActivity,
   getProposals, getProposalById, getProposalByToken, getProposalsByLead, createProposal, updateProposal,
   getBookings, getBookingsByMonth, createBooking,
@@ -562,8 +563,10 @@ export const appRouter = router({
           const { findClashes, assertNoClashes } = await import('./availability');
           assertNoClashes(await findClashes(ctx.user.id, { start: new Date(input.eventDate), spaceName: input.spaceName }), input.allowClash);
         }
+        const { findContactIdFor } = await import('./leadRetention');
         const created = await createLead({
           ownerId: ctx.user.id,
+          contactId: await findContactIdFor(ctx.user.id, input.email, input.phone),
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email || '',
@@ -592,7 +595,13 @@ export const appRouter = router({
     list: protectedProcedure
       .input(z.object({ status: z.string().optional() }))
       .query(async ({ input, ctx }) => {
-        return getLeads(ctx.user.id, input.status);
+        const rows = await getLeads(ctx.user.id, input.status);
+        // Returning-client / possible-duplicate flags, computed on read from
+        // the owner's leads + bookings (one extra query) so they're always
+        // current and need no stored state.
+        const { clientFlagsForOwner } = await import('./leadRetention');
+        const flags = await clientFlagsForOwner(ctx.user.id, input.status ? undefined : rows);
+        return rows.map(l => ({ ...l, clientFlag: flags.get(l.id) ?? null }));
       }),
 
     get: protectedProcedure
@@ -634,8 +643,10 @@ export const appRouter = router({
         const { isBotSubmission } = await import('./enquiryForm');
         // A bot gets a convincing "saved" and nothing is stored.
         if (isBotSubmission(input.ownerId, input.hp, input.formToken)) return { leadId: 0, leadToken: "" };
+        const { findContactIdFor } = await import('./leadRetention');
         const lead = await createLead({
           ownerId: input.ownerId,
+          contactId: await findContactIdFor(input.ownerId, input.email, input.phone),
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email,
@@ -729,8 +740,12 @@ export const appRouter = router({
           space = all.find(s => s.id === input.spaceId);
         }
 
+        // Link an existing client contact (matched by email or phone) so a
+        // returning client's history follows them.
+        const { findContactIdFor } = await import('./leadRetention');
         const leadData = {
           ownerId: input.ownerId,
+          contactId: await findContactIdFor(input.ownerId, input.email, input.phone),
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email,
@@ -1163,6 +1178,10 @@ export const appRouter = router({
         note: z.string().optional(),
         // The user has seen the date-clash warning and chosen to go ahead.
         allowClash: z.boolean().optional(),
+        // Only used when status is 'lost' (see shared/lostReasons.ts). Both
+        // optional: the venue may skip the question.
+        lostReason: z.enum(LOST_REASON_KEYS).optional(),
+        lostReasonNote: z.string().max(500).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Capture the prior status so we can react to transitions (e.g. moving
@@ -1192,23 +1211,33 @@ export const appRouter = router({
           assertNoClashes(await findClashes(ctx.user.id, clashSpace(priorLead)), input.allowClash);
         }
 
-        await updateLeadStatus(input.id, ctx.user.id, input.status, undefined);
-        // Date holds: moving to tentative starts a hold (default length);
-        // moving off it ends one.
         let holdUntil: Date | null = null;
-        if (input.status === 'tentative' && priorLead.status !== 'tentative') {
-          const { startHoldFromStatusChange } = await import('./holds');
-          holdUntil = await startHoldFromStatusChange(ctx.user.id, priorLead);
-        } else if (input.status !== 'tentative' && priorLead.status === 'tentative') {
-          const { clearHoldFields } = await import('./holds');
-          await clearHoldFields(ctx.user.id, [input.id]);
+        if (input.status === 'lost') {
+          // Records the reason, ends any hold and logs the activity (with the reason) too.
+          await markLeadLost(ctx.user.id, input.id, input.lostReason ?? null,
+            [input.lostReasonNote?.trim(), input.note?.trim()].filter(Boolean).join(' — ') || null);
+        } else {
+          await updateLeadStatus(input.id, ctx.user.id, input.status, undefined);
+          // A lead brought back from lost no longer has a lost reason.
+          if (priorLead.lostReason || priorLead.lostReasonNote) {
+            await updateLead(input.id, ctx.user.id, { lostReason: null, lostReasonNote: null });
+          }
+          // Date holds: moving to tentative starts a hold (default length);
+          // moving off it ends one.
+          if (input.status === 'tentative' && priorLead.status !== 'tentative') {
+            const { startHoldFromStatusChange } = await import('./holds');
+            holdUntil = await startHoldFromStatusChange(ctx.user.id, priorLead);
+          } else if (input.status !== 'tentative' && priorLead.status === 'tentative') {
+            const { clearHoldFields } = await import('./holds');
+            await clearHoldFields(ctx.user.id, [input.id]);
+          }
+          await addLeadActivity({
+            leadId: input.id,
+            ownerId: ctx.user.id,
+            type: "status_change",
+            content: `Status changed to ${input.status}${input.note ? ": " + input.note : ""}`,
+          });
         }
-        await addLeadActivity({
-          leadId: input.id,
-          ownerId: ctx.user.id,
-          type: "status_change",
-          content: `Status changed to ${input.status}${input.note ? ": " + input.note : ""}`,
-        });
         // Moving a lead on from "new" by hand counts as responding to it.
         if (priorLead.status === 'new' && input.status !== 'new') {
           await markStaffResponse(ctx.user.id, input.id, { emailed: false });
@@ -1601,11 +1630,48 @@ export const appRouter = router({
           )
         ).orderBy(leads.eventDate);
       }),
+    // ── Client recognition, owners & template links ─────────────────────
+    // Values for {{proposalLink}}, {{portalLink}}, {{enquiryFormLink}},
+    // {{depositAmount}} and {{holdUntil}} in the compose window. Named
+    // getTemplateLinks so staff logins are blocked by the "leads.get" prefix.
+    getTemplateLinks: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const lead = await getLeadById(input.leadId, ctx.user.id);
+        if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'Enquiry not found' });
+        const { resolveTemplateLinks } = await import('./leadRetention');
+        const links = await resolveTemplateLinks(ctx.user.id, lead);
+        return { ...links, holdUntil: links.holdUntil ? links.holdUntil.toISOString() : null };
+      }),
+    // Past enquiries and bookings from the same client (email or phone).
+    getClientHistory: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const { getClientHistory } = await import('./leadRetention');
+        return getClientHistory(ctx.user.id, input.leadId);
+      }),
+    // Fold a duplicate enquiry into another from the same client.
+    merge: protectedProcedure
+      .input(z.object({ keepId: z.number(), mergeId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { mergeLeads } = await import('./leadRetention');
+        return mergeLeads(ctx.user.id, input.keepId, input.mergeId);
+      }),
+    // Who looks after this lead: a team_members id, or null for unassigned.
+    setOwner: protectedProcedure
+      .input(z.object({ leadId: z.number(), teamMemberId: z.number().nullable(), notify: z.boolean().default(false) }))
+      .mutation(async ({ input, ctx }) => {
+        const { setLeadOwner } = await import('./leadRetention');
+        return setLeadOwner(ctx.user.id, input.leadId, input.teamMemberId, input.notify);
+      }),
+
     // Bulk update status for multiple leads
     bulkUpdateStatus: protectedProcedure
       .input(z.object({
         ids: z.array(z.number()).min(1),
         status: z.string(),
+        lostReason: z.enum(LOST_REASON_KEYS).optional(),
+        lostReasonNote: z.string().max(500).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { getDb, addLeadActivity } = await import('./db');
@@ -1630,6 +1696,8 @@ export const appRouter = router({
         // Double-booking guard: when the batch confirms or holds dates, check
         // each lead in turn (so two selected leads on the same date/space are
         // caught too) and skip the clashing ones instead of failing the batch.
+        const isLost = input.status === 'lost';
+        const reasonNote = isLost ? (input.lostReasonNote?.trim() || null) : null;
         let ids = input.ids;
         const skipped: { id: number; name: string; clashes: string[] }[] = [];
         const takesDate = ['booked', 'confirmed', 'tentative'].includes(input.status);
@@ -1657,9 +1725,16 @@ export const appRouter = router({
           ids = owned.map(row => row.id);
           // Only update leads owned by this user
           await db.update(leads)
-            .set({ status: input.status })
+            .set({
+              status: input.status,
+              // Lost carries its reason; any other status clears it.
+              lostReason: isLost ? (input.lostReason ?? null) : null,
+              lostReasonNote: reasonNote,
+              updatedAt: new Date(),
+            })
             .where(and(inArray(leads.id, input.ids), eq(leads.ownerId, ctx.user.id)));
         }
+        const reasonText = isLost && input.lostReason ? ` — ${lostReasonLabel(input.lostReason)}${reasonNote ? `: ${reasonNote}` : ''}` : '';
         // Leaving tentative ends any date hold.
         if (input.status !== 'tentative') {
           const { clearHoldFields } = await import('./holds');
@@ -1672,7 +1747,7 @@ export const appRouter = router({
             leadId: row.id,
             ownerId: ctx.user.id,
             type: 'status_change',
-            content: `Bulk status update: changed to ${input.status}`,
+            content: `Bulk status update: changed to ${input.status}${reasonText}`,
           })
         ));
         const { onLeadStatusChanged } = await import('./automatedTasks');
@@ -2518,6 +2593,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             };
             const mapped = statusMap[rest.status];
             if (mapped) { leadUpdates.status = mapped; leadUpdates.lastActivityAt = new Date(); }
+            // A cancelled booking is a lost lead whose event was cancelled —
+            // which also keeps it out of the Win back list.
+            if (mapped === 'lost') {
+              const { sql } = await import('drizzle-orm');
+              leadUpdates.lostReason = sql`coalesce(${leads.lostReason}, 'event_cancelled')`;
+            }
+            else if (mapped) { leadUpdates.lostReason = null; leadUpdates.lostReasonNote = null; }
           }
           if (Object.keys(leadUpdates).length > 0) {
             leadUpdates.updatedAt = new Date();
@@ -3679,8 +3761,24 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const { id, ...data } = input;
-        await db.update(emailTemplates).set(data).where(and(eq(emailTemplates.id, id), eq(emailTemplates.ownerId, ctx.user.id)));
+        await db.update(emailTemplates).set({ ...data, updatedAt: new Date() }).where(and(eq(emailTemplates.id, id), eq(emailTemplates.ownerId, ctx.user.id)));
         return { success: true };
+      }),
+    // Add the built-in starter set (shared/starterTemplates.ts), skipping any
+    // the venue already has by name — safe to press twice.
+    addStarters: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        const { getDb } = await import('./db');
+        const { emailTemplates } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const { STARTER_TEMPLATES } = await import('@shared/starterTemplates');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const existing = await db.select({ name: emailTemplates.name }).from(emailTemplates).where(eq(emailTemplates.ownerId, ctx.user.id));
+        const have = new Set(existing.map(t => t.name.trim().toLowerCase()));
+        const toAdd = STARTER_TEMPLATES.filter(t => !have.has(t.name.toLowerCase()));
+        if (toAdd.length) await db.insert(emailTemplates).values(toAdd.map(t => ({ ...t, ownerId: ctx.user.id })));
+        return { added: toAdd.length, skipped: STARTER_TEMPLATES.length - toAdd.length };
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -3692,6 +3790,42 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!db) throw new Error('DB not available');
         await db.delete(emailTemplates).where(and(eq(emailTemplates.id, input.id), eq(emailTemplates.ownerId, ctx.user.id)));
         return { success: true };
+      }),
+  }),
+  // ─── Win back ────────────────────────────────────────────────────────────
+  // Lost and gone-quiet enquiries, plus "same time next year" clients, and a
+  // personalised bulk send that never emails a lead twice within 90 days.
+  winBack: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { winBackCandidates, sameTimeNextYear } = await import('./leadRetention');
+      const [cands, annual] = await Promise.all([winBackCandidates(ctx.user.id), sameTimeNextYear(ctx.user.id)]);
+      return { ...cands, annual };
+    }),
+    setAnnualTypes: protectedProcedure
+      .input(z.object({ types: z.array(z.string().max(100)).max(50) }))
+      .mutation(async ({ input, ctx }) => {
+        const { setAnnualTypes } = await import('./leadRetention');
+        return setAnnualTypes(ctx.user.id, input.types);
+      }),
+    // The email exactly as one lead would get it.
+    preview: protectedProcedure
+      .input(z.object({ leadId: z.number(), subject: z.string().max(500), body: z.string().max(20000) }))
+      .query(async ({ input, ctx }) => {
+        const lead = await getLeadById(input.leadId, ctx.user.id);
+        if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'Enquiry not found' });
+        const { renderTemplateForLead } = await import('./leadRetention');
+        const vs = await getVenueSettings(ctx.user.id);
+        return renderTemplateForLead(ctx.user.id, lead, input.subject, input.body, vs);
+      }),
+    send: protectedProcedure
+      .input(z.object({
+        leadIds: z.array(z.number()).min(1).max(200),
+        subject: z.string().trim().min(1).max(500),
+        body: z.string().trim().min(1).max(20000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { sendWinBack } = await import('./leadRetention');
+        return sendWinBack(ctx.user.id, input.leadIds, input.subject, input.body);
       }),
   }),
   // ─── Quote ───────────────────────────────────────────────────────────────
@@ -8357,6 +8491,9 @@ Return ONLY valid JSON.`;
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         await db.delete(teamMembers).where(and(eq(teamMembers.id, input.id), eq(teamMembers.ownerId, ctx.user.id)));
+        // Their enquiries go back to unassigned rather than pointing at nobody.
+        const { leads } = await import('../drizzle/schema');
+        await db.update(leads).set({ assignedTo: null }).where(and(eq(leads.assignedTo, input.id), eq(leads.ownerId, ctx.user.id)));
         return { success: true };
       }),
 
