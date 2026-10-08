@@ -128,6 +128,19 @@ export const venueSettings = pgTable("venue_settings", {
   // line that replaces the default "thanks, we'll be in touch" copy.
   enquiryAutoReplyEnabled: integer("enquiryAutoReplyEnabled").default(1),
   enquiryAutoReplyMessage: text("enquiryAutoReplyMessage"),
+  // Enquiry form shows booked / busy dates on its date picker (dates and
+  // states only — never who booked). On by default.
+  showAvailabilityOnForm: integer("showAvailabilityOnForm").default(1),
+  // Walkthroughs the enquirer can book on the thank-you screen. Slots are
+  // generated server-side in Pacific/Auckland from these settings, minus
+  // other walkthroughs and times an event is running.
+  //   walkthroughDays: comma-separated JS weekdays (0 = Sun … 6 = Sat)
+  walkthroughEnabled: integer("walkthroughEnabled").default(1),
+  walkthroughDays: varchar("walkthroughDays", { length: 20 }).default("2,3,4,5,6"),
+  walkthroughStart: varchar("walkthroughStart", { length: 5 }).default("10:00"),
+  walkthroughEnd: varchar("walkthroughEnd", { length: 5 }).default("16:00"),
+  walkthroughSlotMinutes: integer("walkthroughSlotMinutes").default(30),
+  walkthroughDaysAhead: integer("walkthroughDaysAhead").default(14),
   nbiApiKey: text("nbiApiKey"),
   nbiVenueId: varchar("nbiVenueId", { length: 100 }),
   nbiAccountId: varchar("nbiAccountId", { length: 100 }),
@@ -180,6 +193,12 @@ export const eventSpaces = pgTable("event_spaces", {
   minCapacity: integer("minCapacity"),
   maxCapacity: integer("maxCapacity"),
   minSpend: decimal("minSpend", { precision: 10, scale: 2 }),
+  // Price guidance for the enquiry form: an optional higher Fri/Sat minimum
+  // and a "packages from $X per person". Only shown publicly when
+  // showPricingOnForm is on — off by default, so nothing leaks unasked.
+  minSpendWeekend: decimal("minSpendWeekend", { precision: 10, scale: 2 }),
+  packagesFromPp: decimal("packagesFromPp", { precision: 10, scale: 2 }),
+  showPricingOnForm: boolean("showPricingOnForm").default(false).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -233,11 +252,11 @@ export const leads = pgTable("leads", {
   // Corporate enquiries only: where to send the invoice (accounts email or
   // PO number), separate from `message` for the same reason as eventDetail.
   invoicingNote: varchar("invoicingNote", { length: 255 }),
-  // Label of the post-submit walkthrough slot the enquirer picked (e.g.
-  // "Tue 3 Mar · 10:30am") — cosmetic scheduling, not a real calendar
-  // booking: no availability is checked, this just records the hold so
-  // staff know what was offered.
+  // The walkthrough the enquirer booked on the thank-you screen: the real
+  // start time (checked against other walkthroughs and events when booked)
+  // plus its display label (e.g. "Tue 14 Oct, 10:30am").
   walkthroughSlot: varchar("walkthroughSlot", { length: 60 }),
+  walkthroughAt: timestamp("walkthroughAt"),
   spaceId: integer("spaceId"),
   spaceName: varchar("spaceName", { length: 255 }),
   budget: decimal("budget", { precision: 10, scale: 2 }),

@@ -52,6 +52,9 @@ export const DEFAULT_FORM_FIELDS: FormFieldDef[] = [
   { id: 'phone', label: 'Phone', type: 'tel', required: false, visible: true, isDefault: true },
   { id: 'company', label: 'Company / Organisation', type: 'text', required: false, visible: true, isDefault: true },
   { id: 'eventType', label: 'Type of Event', type: 'select', required: false, visible: true, isDefault: true },
+  // Only shown when the venue has two or more active event spaces; drives
+  // per-space availability and price guidance on the form.
+  { id: 'spaceId', label: 'Preferred space', type: 'select', required: false, visible: true, isDefault: true },
   { id: 'eventDate', label: 'Preferred Date', type: 'date', required: false, visible: true, isDefault: true },
   { id: 'eventTime', label: 'Preferred Time', type: 'time', required: false, visible: true, isDefault: true },
   { id: 'guestCount', label: 'Guest Count', type: 'number', required: true, visible: true, isDefault: true },

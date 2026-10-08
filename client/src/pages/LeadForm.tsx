@@ -1,12 +1,12 @@
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { CheckCircle, MapPin, Phone, Mail, Clock, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle, MapPin, Phone, Mail, Clock, Calendar as CalendarIcon, CalendarPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { combineLocalDateTime } from "@/lib/dateTime";
+import { combineLocalDateTime, toLocalDateInput } from "@/lib/dateTime";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -101,22 +101,6 @@ function perGuestBudget(budgetRange: string, guestCount: string): string | null 
   return b.hi ? `≈ ${f(b.lo)}–${f(b.hi)} per guest` : `from ≈ ${f(b.lo)} per guest`;
 }
 
-// Next four Tue–Sat days, alternating morning/afternoon — a plausible-looking
-// walkthrough slot picker with no real availability check behind it (see
-// leads.bookWalkthrough: it just records the label chosen).
-function walkthroughSlots(): { key: string; label: string }[] {
-  const out: { key: string; label: string }[] = [];
-  const base = new Date(); base.setHours(0, 0, 0, 0);
-  for (let i = 1; i <= 14 && out.length < 4; i++) {
-    const d = new Date(base); d.setDate(base.getDate() + i);
-    if (d.getDay() === 0 || d.getDay() === 1) continue; // skip Sun/Mon
-    const time = out.length % 2 ? "3:00pm" : "10:30am";
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    out.push({ key: iso + " " + time, label: d.toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" }) + " · " + time });
-  }
-  return out;
-}
-
 function hexToRgb(hex: string) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -165,9 +149,25 @@ function formatTime12h(hhmm: string): string {
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-function DatePickerField({ id, value, onChange, min, disabled, ariaInvalid, ariaDescribedby, inputClass, accentColor, accentTextColor }: {
+// Availability for the picker: which dates are fully booked (or, with a space
+// chosen, that space is) and which are busy. Fetched per viewed month from
+// leads.availability — dates and states only, never who booked.
+type DayState = 'booked' | 'limited';
+type AvailabilityOpts = { ownerId: number; spaceId?: number; enabled: boolean };
+const monthKeyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+function useMonthAvailability(opts: AvailabilityOpts | undefined, monthKey: string | null) {
+  const { data } = trpc.leads.availability.useQuery(
+    { ownerId: opts?.ownerId ?? 0, month: monthKey ?? '2000-01', spaceId: opts?.spaceId },
+    { enabled: !!opts?.enabled && !!opts.ownerId && !!monthKey && /^\d{4}-\d{2}$/.test(monthKey), staleTime: 60_000, refetchOnWindowFocus: false },
+  );
+  return (iso: string): DayState | undefined =>
+    !data?.enabled ? undefined : data.booked.includes(iso) ? 'booked' : data.limited.includes(iso) ? 'limited' : undefined;
+}
+
+function DatePickerField({ id, value, onChange, min, disabled, ariaInvalid, ariaDescribedby, inputClass, accentColor, accentTextColor, availability }: {
   id: string; value: string; onChange: (v: string) => void; min?: string; disabled?: boolean;
   ariaInvalid?: boolean; ariaDescribedby?: string; inputClass: string; accentColor: string; accentTextColor: string;
+  availability?: AvailabilityOpts;
 }) {
   const [open, setOpen] = useState(false);
   // A prefill param only has to look date-shaped (see prefillDate's regex) to
@@ -178,6 +178,10 @@ function DatePickerField({ id, value, onChange, min, disabled, ariaInvalid, aria
   const parsed = parsedRaw && !isNaN(parsedRaw.getTime()) ? parsedRaw : null;
   const [viewDate, setViewDate] = useState<Date>(parsed ?? new Date());
   useEffect(() => { if (parsed) setViewDate(parsed); }, [value]);
+  const gridRef = useRef<HTMLDivElement>(null);
+  // Arrow keys can walk off the end of the month; focus lands once the next
+  // month has rendered.
+  const [pendingFocus, setPendingFocus] = useState<string | null>(null);
 
   const minDate = min ? new Date(min + 'T00:00:00') : null;
   const year = viewDate.getFullYear();
@@ -188,6 +192,31 @@ function DatePickerField({ id, value, onChange, min, disabled, ariaInvalid, aria
   const cells: (number | null)[] = Array(mondayOffset).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => i + 1));
   while (cells.length % 7 !== 0) cells.push(null);
   const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const stateOf = useMonthAvailability(availability, open ? monthKeyOf(viewDate) : null);
+  const monthStates = cells.map(day => day == null ? undefined : stateOf(fmt(new Date(year, month, day))));
+  const hasBooked = monthStates.includes('booked');
+  const hasLimited = monthStates.includes('limited');
+
+  const focusDate = (iso: string) => {
+    const el = gridRef.current?.querySelector<HTMLButtonElement>(`[data-date="${iso}"]`);
+    if (el && !el.disabled) { el.focus(); return true; }
+    return false;
+  };
+  useEffect(() => {
+    if (pendingFocus && focusDate(pendingFocus)) setPendingFocus(null);
+  });
+  const onDayKey = (e: React.KeyboardEvent, cellDate: Date) => {
+    const step: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+    if (!(e.key in step)) return;
+    e.preventDefault();
+    const next = new Date(cellDate); next.setDate(cellDate.getDate() + step[e.key]);
+    if (minDate && next < minDate) return;
+    const iso = fmt(next);
+    if (next.getMonth() !== month || next.getFullYear() !== year) {
+      setViewDate(new Date(next.getFullYear(), next.getMonth(), 1));
+      setPendingFocus(iso);
+    } else focusDate(iso);
+  };
 
   return (
     <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
@@ -199,33 +228,66 @@ function DatePickerField({ id, value, onChange, min, disabled, ariaInvalid, aria
           <CalendarIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-3">
+      <PopoverContent align="start" className="w-72 p-3" aria-label="Choose a date"
+        // Land on the chosen (or first open) day so arrow keys work at once.
+        onOpenAutoFocus={e => {
+          e.preventDefault();
+          requestAnimationFrame(() => {
+            const grid = gridRef.current;
+            const target = grid?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')
+              ?? grid?.querySelector<HTMLButtonElement>('button[data-date]:not([disabled]):not([aria-disabled="true"])');
+            target?.focus();
+          });
+        }}>
         <div className="flex items-center justify-between mb-2">
-          <button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} aria-label="Previous month" className="p-1 hover:bg-gray-100 rounded"><ChevronLeft className="w-4 h-4" /></button>
-          <span className="text-sm font-semibold">{viewDate.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })}</span>
-          <button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} aria-label="Next month" className="p-1 hover:bg-gray-100 rounded"><ChevronRight className="w-4 h-4" /></button>
+          <button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} aria-label="Previous month" className="p-1.5 hover:bg-gray-100 rounded"><ChevronLeft className="w-4 h-4" /></button>
+          <span className="text-sm font-semibold" aria-live="polite">{viewDate.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })}</span>
+          <button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} aria-label="Next month" className="p-1.5 hover:bg-gray-100 rounded"><ChevronRight className="w-4 h-4" /></button>
         </div>
-        <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-gray-400 mb-1">
+        <div className="grid grid-cols-7 gap-0.5 text-center text-[11px] text-gray-500 mb-1" aria-hidden="true">
           {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i}>{d}</div>)}
         </div>
-        <div className="grid grid-cols-7 gap-0.5">
+        <div ref={gridRef} className="grid grid-cols-7 gap-0.5">
           {cells.map((day, i) => {
             if (day == null) return <div key={i} />;
             const cellDate = new Date(year, month, day);
             const isPast = minDate ? cellDate < minDate : false;
             const cellIso = fmt(cellDate);
             const isSelected = value === cellIso;
+            const state = isPast ? undefined : monthStates[i];
+            const booked = state === 'booked';
+            const fullLabel = cellDate.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
             return (
-              <button key={i} type="button" disabled={isPast}
-                onClick={() => { onChange(cellIso); setOpen(false); }}
-                aria-current={isSelected ? 'date' : undefined}
-                className={`text-xs py-1.5 rounded transition-colors ${isPast ? 'text-gray-300 cursor-not-allowed' : isSelected ? 'font-semibold' : 'hover:bg-gray-100'}`}
-                style={isSelected ? { backgroundColor: accentColor, color: accentTextColor } : undefined}>
+              <button key={i} type="button" disabled={isPast} data-date={cellIso}
+                // Booked days stay focusable (aria-disabled, not disabled) so
+                // keyboard and screen-reader users still hear why they're out.
+                aria-disabled={booked || undefined}
+                aria-pressed={isSelected}
+                aria-label={`${fullLabel}${booked ? ', Booked' : state === 'limited' ? ', Limited availability' : ''}`}
+                onClick={() => { if (booked) return; onChange(cellIso); setOpen(false); }}
+                onKeyDown={e => onDayKey(e, cellDate)}
+                className={cn(
+                  'relative h-8 text-xs rounded transition-colors focus-visible:outline-2 focus-visible:outline-offset-1',
+                  isPast ? 'text-gray-300 cursor-not-allowed'
+                    : booked ? 'text-gray-400 line-through decoration-gray-400 cursor-not-allowed'
+                    : isSelected ? 'font-semibold' : 'text-gray-800 hover:bg-gray-100',
+                )}
+                style={{ ...(isSelected && !booked ? { backgroundColor: accentColor, color: accentTextColor } : {}), outlineColor: accentColor }}>
                 {day}
+                {state === 'limited' && (
+                  <span aria-hidden="true" className="absolute left-1/2 -translate-x-1/2 bottom-[3px] w-1 h-1 rounded-full"
+                    style={{ backgroundColor: isSelected ? accentTextColor : '#b08d57' }} />
+                )}
               </button>
             );
           })}
         </div>
+        {(hasBooked || hasLimited) && (
+          <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center gap-4 text-[11px] text-gray-500" aria-hidden="true">
+            {hasLimited && <span className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full" style={{ backgroundColor: '#b08d57' }} />Popular</span>}
+            {hasBooked && <span className="line-through decoration-gray-400">Booked</span>}
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -268,6 +330,241 @@ function TimePickerField({ id, value, onChange, ariaInvalid, ariaDescribedby, in
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/* ── Price guidance ───────────────────────────────────────────────────────
+   A venue can publish, per space, a minimum spend (plus an optional higher
+   Fri/Sat one) and "packages from $X pp" (leads.formConfig only returns
+   them when the venue switched pricing on for that space). One short line
+   so clients can self-qualify before they hit send. ─────────────────── */
+type FormSpace = {
+  id: number; name: string; minCapacity: number | null; maxCapacity: number | null;
+  pricing: { minSpend: number | null; minSpendWeekend: number | null; packagesFromPp: number | null } | null;
+};
+const money = (n: number) => '$' + Math.round(n).toLocaleString('en-NZ');
+// Fri/Sat count as the weekend for minimum spends.
+const weekendDay = (iso: string): 'Fridays' | 'Saturdays' | null => {
+  const d = iso ? new Date(iso + 'T12:00:00') : null;
+  if (!d || isNaN(d.getTime())) return null;
+  return d.getDay() === 5 ? 'Fridays' : d.getDay() === 6 ? 'Saturdays' : null;
+};
+/** The minimum spend that applies on that date (or the lowest, undated). */
+function minSpendOn(p: NonNullable<FormSpace['pricing']>, iso: string): number | null {
+  if (iso) return (weekendDay(iso) && p.minSpendWeekend) || p.minSpend || null;
+  return p.minSpend ?? p.minSpendWeekend ?? null;
+}
+function minSpendPhrase(p: NonNullable<FormSpace['pricing']>, iso: string): string | null {
+  const wk = weekendDay(iso);
+  if (iso) {
+    if (wk && p.minSpendWeekend) return `minimum spend ${money(p.minSpendWeekend)} on ${wk}`;
+    return p.minSpend ? `minimum spend ${money(p.minSpend)}` : null;
+  }
+  if (p.minSpend && p.minSpendWeekend && p.minSpendWeekend !== p.minSpend) return `minimum spend from ${money(p.minSpend)} (${money(p.minSpendWeekend)} Fri & Sat)`;
+  if (p.minSpend) return `minimum spend ${money(p.minSpend)}`;
+  return p.minSpendWeekend ? `minimum spend ${money(p.minSpendWeekend)} Fri & Sat` : null;
+}
+function priceGuidance(spaces: FormSpace[], chosen: FormSpace | undefined, guests: number | null, dateIso: string): { hint: string | null; budget: string | null } {
+  if (chosen) {
+    const p = chosen.pricing;
+    const bits = [chosen.name];
+    if (p) {
+      const ms = minSpendPhrase(p, dateIso);
+      if (ms) bits.push(ms);
+      if (p.packagesFromPp) bits.push(`packages from ${money(p.packagesFromPp)} pp`);
+    }
+    const over = guests && chosen.maxCapacity && guests > chosen.maxCapacity
+      ? `${chosen.name} suits up to ${chosen.maxCapacity} guests — we'll suggest the best fit.` : null;
+    const est = p && guests ? Math.max(minSpendOn(p, dateIso) ?? 0, (p.packagesFromPp ?? 0) * guests) : 0;
+    return {
+      hint: over ?? (bits.length > 1 ? bits.join(' · ') : null),
+      budget: est > 0 ? `Guide for ${guests} guests in ${chosen.name}: from about ${money(est)}` : null,
+    };
+  }
+  if (!guests) return { hint: null, budget: null };
+  const priced = spaces.filter(s => s.pricing);
+  if (!priced.length) return { hint: null, budget: null };
+  const fits = priced.filter(s => !s.maxCapacity || guests <= s.maxCapacity);
+  const pool = fits.length ? fits : priced;
+  const lowest = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => !!x); return v.length ? Math.min(...v) : null; };
+  const ms = lowest(pool.map(s => minSpendOn(s.pricing!, dateIso)));
+  const pp = lowest(pool.map(s => s.pricing!.packagesFromPp));
+  const bits = [ms && `Minimum spends from ${money(ms)}`, pp && `packages from ${money(pp)} pp`].filter(Boolean) as string[];
+  if (!bits.length) return { hint: null, budget: null };
+  bits[0] = bits[0].charAt(0).toUpperCase() + bits[0].slice(1);
+  const est = lowest(pool.map(s => Math.max(minSpendOn(s.pricing!, dateIso) ?? 0, (s.pricing!.packagesFromPp ?? 0) * guests) || null));
+  return { hint: bits.join(' · '), budget: est ? `Guide for ${guests} guests: from about ${money(est)}` : null };
+}
+
+/* ── Cloudflare Turnstile (optional) ───────────────────────────────────────
+   Only when the server hands back a site key (TURNSTILE_SITE_KEY and
+   TURNSTILE_SECRET_KEY both set) — otherwise nothing loads from Cloudflare
+   at all. The script is fetched once, on demand. ─────────────────────── */
+let turnstileScript: Promise<void> | null = null;
+function loadTurnstile(): Promise<void> {
+  if ((window as any).turnstile) return Promise.resolve();
+  if (!turnstileScript) {
+    turnstileScript = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      s.async = true; s.defer = true;
+      s.onload = () => resolve();
+      s.onerror = () => { turnstileScript = null; reject(new Error('turnstile')); };
+      document.head.appendChild(s);
+    });
+  }
+  return turnstileScript;
+}
+function TurnstileBox({ siteKey, onToken, resetKey }: { siteKey: string; onToken: (t: string | null) => void; resetKey: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const widgetId = useRef<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadTurnstile().then(() => {
+      const ts = (window as any).turnstile;
+      if (cancelled || !ref.current || !ts) return;
+      widgetId.current = ts.render(ref.current, {
+        sitekey: siteKey,
+        callback: (t: string) => onToken(t),
+        'expired-callback': () => onToken(null),
+        'error-callback': () => onToken(null),
+      });
+    }).catch(() => { /* blocked by an extension etc. — the server says so on send */ });
+    return () => {
+      cancelled = true;
+      try { if (widgetId.current) (window as any).turnstile?.remove(widgetId.current); } catch {}
+      widgetId.current = null;
+    };
+  }, [siteKey]);
+  // After a failed send the token is spent — get a fresh one.
+  useEffect(() => {
+    if (resetKey && widgetId.current) { try { (window as any).turnstile?.reset(widgetId.current); onToken(null); } catch {} }
+  }, [resetKey]);
+  return <div ref={ref} className="flex justify-center min-h-0" />;
+}
+
+/* ── Post-submit walkthrough booking ───────────────────────────────────────
+   Real slots from the server (leads.walkthroughSlots, Pacific/Auckland),
+   re-checked when booked so nobody gets a time someone else just took.
+   Booking creates a task for the venue and emails the client a calendar
+   invite when the venue's email is set up — the confirmation says which. ── */
+function WalkthroughPicker({ ownerId, leadId, leadToken, clientEmail, big, accentColor, accentTextColor, onBooked }: {
+  ownerId: number; leadId: number; leadToken: string; clientEmail: string; big: boolean;
+  accentColor: string; accentTextColor: string; onBooked: (startIso: string) => void;
+}) {
+  const slotsQ = trpc.leads.walkthroughSlots.useQuery({ ownerId }, { staleTime: 30_000, refetchOnWindowFocus: false });
+  const [dayKey, setDayKey] = useState<string | null>(null);
+  const [booked, setBooked] = useState<{ label: string; emailed: boolean; ics: string | null } | null>(null);
+  const [changing, setChanging] = useState(false);
+  const [skipped, setSkipped] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingStart, setPendingStart] = useState<string | null>(null);
+  const book = trpc.leads.bookWalkthrough.useMutation({
+    onSuccess: (r, vars) => {
+      setBooked({ label: r.label, emailed: r.emailed, ics: r.ics ?? null });
+      setChanging(false); setError(null);
+      onBooked(vars.slotStart ?? '');
+      slotsQ.refetch();
+    },
+    onError: (e) => {
+      setError(e.data?.code === 'CONFLICT' ? e.message : "We couldn't book that just now — please try another time.");
+      slotsQ.refetch();
+    },
+    onSettled: () => setPendingStart(null),
+  });
+  const days = slotsQ.data?.days ?? [];
+  const day = days.find(d => d.key === dayKey) ?? days[0];
+
+  const downloadIcs = () => {
+    if (!booked?.ics) return;
+    const url = URL.createObjectURL(new Blob([booked.ics], { type: 'text/calendar;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'walkthrough.ics';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  if (skipped) return null;
+  const wrap = `mt-6 ${big ? 'pt-6' : 'pt-5'} border-t border-gray-200 text-left`;
+  const eyebrow = "font-bold text-[11px] tracking-[0.14em] uppercase";
+
+  if (booked && !changing) {
+    return (
+      <div className={wrap}>
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3.5">
+          <div className={eyebrow} style={{ color: accentColor }}>Walkthrough booked</div>
+          <div className={`font-semibold text-gray-900 mt-0.5 leading-snug ${big ? 'text-lg' : 'text-base'}`} style={{ fontFamily: HEADING_FONT }}>{booked.label}</div>
+          <p className="text-xs text-gray-600 mt-1 leading-snug">
+            {booked.emailed
+              ? <>We&rsquo;ve emailed a confirmation to <span className="font-medium text-gray-800 break-all">{clientEmail}</span>.</>
+              : <>The team has it. Add it to your calendar so it doesn&rsquo;t slip.</>}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+            {booked.ics ? (
+              <button type="button" onClick={downloadIcs}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold rounded-full border border-gray-300 px-3 py-1.5 text-gray-700 hover:border-gray-400 hover:bg-gray-50">
+                <CalendarPlus className="w-3.5 h-3.5" /> Add to calendar
+              </button>
+            ) : <span />}
+            <button type="button" onClick={() => setChanging(true)}
+              className="whitespace-nowrap font-bold text-[11px] tracking-wide uppercase text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline py-1.5">Change time</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (slotsQ.isLoading) return null;
+  if (!slotsQ.data?.enabled || days.length === 0) {
+    // Nothing open — say so only if they were mid-change; otherwise stay quiet.
+    return changing ? <div className={wrap}><p className="text-xs text-gray-600">No other times are open right now — reply to our email and we&rsquo;ll find one.</p></div> : null;
+  }
+
+  return (
+    <div className={wrap}>
+      <div className={`font-semibold text-gray-900 ${big ? 'text-lg' : 'text-base'}`} style={{ fontFamily: HEADING_FONT }}>
+        {changing ? 'Pick a new time' : 'Want to see the space first?'}
+      </div>
+      <p className={`text-gray-600 ${big ? 'text-sm' : 'text-xs'} mt-0.5 mb-3`}>
+        Book a {slotsQ.data.slotMinutes}-minute walkthrough with the team.
+      </p>
+      {/* Day strip — scrolls sideways on a phone. */}
+      <div role="radiogroup" aria-label="Day" className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 pr-8 snap-x [mask-image:linear-gradient(to_right,black_calc(100%_-_32px),transparent)]">
+        {days.map(d => {
+          const sel = d.key === day?.key;
+          const [wd, ...rest] = d.label.split(' ');
+          return (
+            <button key={d.key} type="button" role="radio" aria-checked={sel} aria-label={d.label}
+              onClick={() => { setDayKey(d.key); setError(null); }}
+              className={`snap-start shrink-0 w-[58px] rounded-lg border py-1.5 text-center transition-colors ${sel ? 'shadow-sm' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+              style={sel ? { backgroundColor: accentColor, borderColor: accentColor, color: accentTextColor } : undefined}>
+              <span className={`block text-[11px] font-bold tracking-wider uppercase ${sel ? '' : 'text-gray-500'}`}>{wd}</span>
+              <span className={`block text-sm font-semibold ${sel ? '' : 'text-gray-800'}`} style={{ fontFamily: HEADING_FONT }}>{rest.join(' ')}</span>
+            </button>
+          );
+        })}
+      </div>
+      {day && (
+        <div role="group" aria-label={`Times on ${day.label}`} className={`grid grid-cols-3 ${big ? 'sm:grid-cols-4' : ''} gap-1.5 mt-2.5`}>
+          {day.slots.map(s => (
+            <button key={s.start} type="button" disabled={book.isPending}
+              aria-label={`Book ${s.label}`}
+              onClick={() => {
+                setPendingStart(s.start); setError(null);
+                book.mutate({ ownerId, leadId, leadToken, slotStart: s.start });
+              }}
+              className="rounded-full border border-gray-200 bg-white py-1.5 text-xs text-gray-700 hover:border-gray-400 hover:bg-gray-50 transition-colors disabled:opacity-60 tabular-nums">
+              {pendingStart === s.start ? 'Booking…' : s.timeLabel}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && <p role="alert" className="text-xs text-red-700 mt-2">{error}</p>}
+      <button type="button" onClick={() => changing ? setChanging(false) : setSkipped(true)}
+        className="mt-3 text-xs text-gray-500 underline underline-offset-2 hover:text-gray-700">
+        {changing ? 'Keep my current time' : 'No thanks — email is fine'}
+      </button>
+    </div>
   );
 }
 
@@ -461,6 +758,21 @@ export default function LeadForm() {
   const venue = slug ? venueBySlug : venueDefault;
   const isLoading = slug ? loadingBySlug : loadingDefault;
 
+  // Spaces + published prices, the availability/walkthrough switches, the
+  // optional Turnstile key and the signed "form opened at" token. Fetched
+  // once: refetching would re-issue the token and could make a real person
+  // look like a too-fast bot.
+  const { data: formConfig } = trpc.leads.formConfig.useQuery(
+    { ownerId: venue?.ownerId ?? 0 },
+    { enabled: !!venue?.ownerId, staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false },
+  );
+  const formTokenRef = useRef<string | null>(null);
+  if (formConfig?.formToken && !formTokenRef.current) formTokenRef.current = formConfig.formToken;
+  // Honeypot: a field people never see. Anything typed here is a bot.
+  const [honeypot, setHoneypot] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
+
   // Give the document a real title in both modes. On the standalone page it's
   // the browser-tab title; inside the embed iframe it's the frame's own
   // accessible name (a screen reader announces it when entering the frame), so
@@ -529,9 +841,19 @@ export default function LeadForm() {
   // startCapture): that one only ever fires in the step-wizard's step 1.
   const [submittedLeadId, setSubmittedLeadId] = useState<number | null>(null);
   const [submittedLeadToken, setSubmittedLeadToken] = useState<string | null>(null);
-  // Post-submit walkthrough: null = not yet answered, 'skip' = declined, or
-  // the chosen slot. Cosmetic — see leads.bookWalkthrough.
-  const [walkthrough, setWalkthrough] = useState<{ key: string; label: string } | "skip" | null>(null);
+
+  // Availability of the date already chosen (same cache as the picker's), for
+  // the gentle "this date is popular" note. Per space when one is picked.
+  const formSpaces: FormSpace[] = formConfig?.spaces ?? [];
+  const showSpacePicker = formSpaces.length >= 2;
+  const pickedSpace = formSpaces.find(s => String(s.id) === form.spaceId);
+  const availabilityOpts = venue?.ownerId && formConfig?.showAvailability
+    ? { ownerId: venue.ownerId, spaceId: showSpacePicker ? pickedSpace?.id : undefined, enabled: true }
+    : undefined;
+  const chosenDateState = useMonthAvailability(
+    availabilityOpts,
+    !noDateYet && /^\d{4}-\d{2}-\d{2}$/.test(form.eventDate ?? '') ? form.eventDate!.slice(0, 7) : null,
+  )(form.eventDate ?? '');
 
   // Tell the host page which wizard step is showing, so it can track funnel
   // drop-off. Fires on mount and whenever the step changes; compact/one-scroll
@@ -566,22 +888,8 @@ export default function LeadForm() {
     setCapturedLeadToken(null);
     setSubmittedLeadId(null);
     setSubmittedLeadToken(null);
-    setWalkthrough(null);
     setTouchedInvalid(new Set());
     setSubmitted(false);
-  };
-
-  const bookWalkthroughMut = trpc.leads.bookWalkthrough.useMutation({
-    // No error toast — the slot is shown as "held" locally either way; this
-    // is a courtesy record for staff, not something the visitor needs to
-    // know failed to save.
-  });
-  const pickWalkthrough = (slot: { key: string; label: string }) => {
-    setWalkthrough(slot);
-    if (venue?.ownerId && submittedLeadId && submittedLeadToken) {
-      bookWalkthroughMut.mutate({ ownerId: venue.ownerId, leadId: submittedLeadId, leadToken: submittedLeadToken, slotLabel: slot.label });
-    }
-    postToParent({ type: "vf-walkthrough-booked", slot: slot.key });
   };
 
   // Autosaves a real, contactable lead the moment step 1 (Your Details) is
@@ -640,6 +948,8 @@ export default function LeadForm() {
       // The real reason, not a shrug: "too many submissions" and a validation
       // problem need different reactions from the person filling the form.
       // Either way, give them a route that cannot fail — the venue's email.
+      // A Turnstile token is single-use — fetch a fresh one for the retry.
+      setTurnstileReset(n => n + 1);
       const reason = e?.message?.trim() || "Something went wrong submitting the form.";
       const fallback = (venue as any)?.email ? ` You can also email us directly at ${(venue as any).email}.` : "";
       toast.error(`${reason}${fallback}`, { duration: 12000 });
@@ -705,6 +1015,10 @@ export default function LeadForm() {
       invoicingNote: form.invoicingNote?.trim() || undefined,
       message: fullMessage || undefined,
       source: form.source || "lead_form",
+      spaceId: showSpacePicker && pickedSpace ? pickedSpace.id : (formSpaces.length === 1 ? formSpaces[0].id : undefined),
+      hp: honeypot || undefined,
+      formToken: formTokenRef.current ?? undefined,
+      turnstileToken: turnstileToken ?? undefined,
       ...clickAttribution,
     });
   };
@@ -810,10 +1124,13 @@ export default function LeadForm() {
   try {
     fields = mergeFormFields(JSON.parse((venue as any)?.customFormFields ?? ''));
   } catch {}
-  const visibleFields = fields.filter(f => f.visible);
+  // The space question only makes sense with two or more spaces to choose
+  // from — otherwise it's dropped entirely (so "required" can't block a form
+  // with nothing to pick).
+  const visibleFields = fields.filter(f => f.visible && (f.id !== 'spaceId' || showSpacePicker));
 
   const detailIds = new Set(['firstName', 'lastName', 'email', 'phone', 'company']);
-  const eventIds = new Set(['eventType', 'eventDate', 'eventTime', 'guestCount', 'eventFormat', 'budgetRange', 'budget']);
+  const eventIds = new Set(['eventType', 'spaceId', 'eventDate', 'eventTime', 'guestCount', 'eventFormat', 'budgetRange', 'budget']);
   const detailFields = visibleFields.filter(f => detailIds.has(f.id));
   const eventFields = visibleFields.filter(f => eventIds.has(f.id));
   const sourceField = visibleFields.find(f => f.id === 'source');
@@ -827,6 +1144,42 @@ export default function LeadForm() {
     ? "rounded-sm border border-[#6a7282] focus-visible:ring-1 focus-visible:ring-offset-0 text-base bg-white min-h-[40px] px-2"
     : "rounded-sm border border-[#6a7282] focus-visible:ring-1 focus-visible:ring-offset-0 text-base bg-white";
 
+  // Price guidance once a space or a guest count is chosen (a one-space
+  // venue's space counts as chosen).
+  const guestsN = parseInt(form.guestCount ?? '', 10) >= 1 ? parseInt(form.guestCount!, 10) : null;
+  const guidance = priceGuidance(
+    formSpaces,
+    pickedSpace ?? (formSpaces.length === 1 && guestsN ? formSpaces[0] : undefined),
+    guestsN,
+    noDateYet ? '' : (form.eventDate ?? ''),
+  );
+  const spaceField = eventFields.find(f => f.id === 'spaceId');
+  function renderPriceHint() {
+    return (
+      <div aria-live="polite">
+        {guidance.hint && (
+          <p className="text-xs italic leading-snug" style={{ fontFamily: HEADING_FONT, color: '#6a6256' }}>{guidance.hint}</p>
+        )}
+      </div>
+    );
+  }
+  // Hidden from people (off-screen, not focusable, ignored by screen
+  // readers); form-filling bots fill it in, and the server then drops the
+  // submission while showing them a normal success.
+  function renderHoneypot() {
+    return (
+      <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
+        <label>Leave this empty
+          <input type="text" name="vf-confirm-url" tabIndex={-1} autoComplete="off" value={honeypot} onChange={e => setHoneypot(e.target.value)} />
+        </label>
+      </div>
+    );
+  }
+  function renderTurnstile() {
+    if (!formConfig?.turnstileSiteKey) return null;
+    return <TurnstileBox siteKey={formConfig.turnstileSiteKey} onToken={setTurnstileToken} resetKey={turnstileReset} />;
+  }
+
   function renderField(field: FormFieldDef, isCustom = false) {
     const value = isCustom ? (customFieldValues[field.label] ?? '') : (form[field.id] ?? '');
     const onChange = isCustom
@@ -835,7 +1188,7 @@ export default function LeadForm() {
 
     if (field.id === 'eventType') return renderEventTypeSelect();
     if (field.id === 'source') return renderSourcePills();
-    if (field.id === 'eventFormat' || field.id === 'budgetRange') return renderChoicePills(field);
+    if (field.id === 'eventFormat' || field.id === 'budgetRange' || field.id === 'spaceId') return renderChoicePills(field);
 
     const controlId = fieldElId(field);
     const hasError = fieldHasError(field, isCustom);
@@ -864,7 +1217,8 @@ export default function LeadForm() {
             id={controlId}
             value={value}
             onChange={(v) => { setNoDateYet(false); setForm(p => ({ ...p, eventDate: v })); }}
-            min={new Date().toISOString().split("T")[0]}
+            min={toLocalDateInput(new Date())}
+            availability={availabilityOpts}
             disabled={noDateYet}
             ariaInvalid={hasError}
             ariaDescribedby={describedBy}
@@ -879,6 +1233,19 @@ export default function LeadForm() {
             No date yet — we&rsquo;re flexible
           </label>
           <FieldError field={field} isCustom={isCustom} />
+          {/* Never a block — just a heads-up that we'll confirm. */}
+          <div aria-live="polite">
+            {value && !noDateYet && chosenDateState && (
+              <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-snug" style={{ color: '#7a5c2e' }}>
+                <span aria-hidden="true" className="mt-[5px] w-1 h-1 rounded-full shrink-0" style={{ backgroundColor: '#b08d57' }} />
+                {chosenDateState === 'limited'
+                  ? <>This date is popular — we&rsquo;ll confirm availability.</>
+                  : pickedSpace
+                  ? <>{pickedSpace.name} looks booked that day — we&rsquo;ll confirm and suggest options.</>
+                  : <>This date looks booked — we&rsquo;ll confirm and suggest nearby dates.</>}
+              </p>
+            )}
+          </div>
         </div>
       );
     }
@@ -948,11 +1315,14 @@ export default function LeadForm() {
         reader announces the group's name, how many options, and which one
         (if any) is currently selected. ────────────────────────────────── */
   function renderChoicePills(field: FormFieldDef) {
-    const options = field.id === 'eventFormat' ? EVENT_FORMAT_OPTIONS : BUDGET_RANGE_OPTIONS;
+    const options: ReadonlyArray<{ value: string; label: string }> = field.id === 'eventFormat' ? EVENT_FORMAT_OPTIONS
+      : field.id === 'spaceId' ? formSpaces.map(sp => ({ value: String(sp.id), label: sp.name }))
+      : BUDGET_RANGE_OPTIONS;
     const selected = form[field.id] ?? '';
     // Budget bracket ÷ guest count, live — helps people self-qualify instead
     // of guessing whether their headcount fits the bracket they picked.
     const perGuest = field.id === 'budgetRange' ? perGuestBudget(selected, form.guestCount ?? '') : null;
+    const budgetGuide = field.id === 'budgetRange' ? guidance.budget : null;
     return (
       <>
         <div role="radiogroup" aria-labelledby={`${fieldElId(field)}-label`} id={fieldElId(field)} tabIndex={-1} className="flex gap-2 flex-wrap items-center">
@@ -971,6 +1341,9 @@ export default function LeadForm() {
             <span className="text-xs italic" style={{ fontFamily: HEADING_FONT, color: '#6a6256' }}>{perGuest}</span>
           )}
         </div>
+        {budgetGuide && (
+          <p className="mt-1.5 text-xs italic leading-snug" style={{ fontFamily: HEADING_FONT, color: '#6a6256' }}>{budgetGuide}</p>
+        )}
         <FieldError field={field} />
       </>
     );
@@ -1081,44 +1454,16 @@ export default function LeadForm() {
     );
   }
 
-  /* ── Post-submit walkthrough offer — shared by both the embed and
-        full-page confirmation screens. Purely cosmetic (see
-        leads.bookWalkthrough): no real availability is checked, this just
-        records which slot was offered/picked. ─────────────────────────── */
+  /* ── Post-submit walkthrough booking — shared by both the embed and
+        full-page confirmation screens (see WalkthroughPicker). Needs the
+        lead submit() just created and its proof-of-ownership token. ───── */
   function renderWalkthroughStep(size: 'sm' | 'lg') {
-    const big = size === 'lg';
-    if (walkthrough && walkthrough !== 'skip') {
-      return (
-        <div className={`mt-5 ${big ? 'pt-5' : 'pt-4'} border-t border-dashed border-gray-200 text-left`}>
-          <div className="flex items-center justify-between gap-3 rounded border border-gray-200 bg-gray-50 px-3 py-2.5">
-            <div>
-              <div className="font-bold text-[9px] tracking-widest uppercase" style={{ color: formButtonColor }}>Walkthrough held</div>
-              <div className={`font-semibold text-gray-800 ${big ? 'text-sm' : 'text-xs'}`} style={{ fontFamily: HEADING_FONT }}>{walkthrough.label}</div>
-            </div>
-            <button type="button" onClick={() => setWalkthrough(null)}
-              className="font-bold text-[10px] tracking-wide uppercase text-gray-500 hover:text-gray-700">Change</button>
-          </div>
-        </div>
-      );
-    }
-    if (walkthrough === 'skip') return null;
+    if (!venue?.ownerId || !submittedLeadId || !submittedLeadToken || formConfig?.walkthroughEnabled === false) return null;
     return (
-      <div className={`mt-5 ${big ? 'pt-5' : 'pt-4'} border-t border-dashed border-gray-200 text-left`}>
-        <div className={`font-semibold text-gray-800 ${big ? 'text-base' : 'text-sm'} mb-1`} style={{ fontFamily: HEADING_FONT }}>Want to see the space first?</div>
-        <p className={`text-gray-500 ${big ? 'text-xs' : 'text-[11px]'} mb-3`}>Book a 20-minute walkthrough — pick a time and we&rsquo;ll hold it for you.</p>
-        <div className="flex gap-2 flex-wrap justify-center">
-          {walkthroughSlots().map(slot => (
-            <button key={slot.key} type="button" onClick={() => pickWalkthrough(slot)}
-              className={`rounded-full border border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all ${big ? 'px-3.5 py-1.5 text-xs' : 'px-3 py-2 text-[11px]'}`}>
-              {slot.label}
-            </button>
-          ))}
-        </div>
-        <button type="button" onClick={() => setWalkthrough('skip')}
-          className="mt-3 text-xs text-gray-400 underline underline-offset-2 hover:text-gray-500">
-          No thanks — email is fine
-        </button>
-      </div>
+      <WalkthroughPicker ownerId={venue.ownerId} leadId={submittedLeadId} leadToken={submittedLeadToken}
+        clientEmail={(form.email ?? '').trim()} big={size === 'lg'}
+        accentColor={formButtonColor} accentTextColor={textOnButton}
+        onBooked={start => postToParent({ type: "vf-walkthrough-booked", slot: start })} />
     );
   }
 
@@ -1197,10 +1542,17 @@ export default function LeadForm() {
           // renderField()/reqMark() as the wizard steps — just laid out flat.
           <div className="px-4 pb-4 pt-3 space-y-3">
             {renderDraftNote('sm')}
+            {renderHoneypot()}
             {eventFields.some(f => f.id === 'eventType') && (
               <div>
                 <label htmlFor={eventTypeField ? fieldElId(eventTypeField) : undefined} className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
                 {renderEventTypeSelect()}
+              </div>
+            )}
+            {spaceField && (
+              <div>
+                <label id={`${fieldElId(spaceField)}-label`} className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-600 uppercase">{spaceField.label}{reqMark(spaceField.required)}</label>
+                {renderField(spaceField)}
               </div>
             )}
             {eventDateField && (
@@ -1225,6 +1577,7 @@ export default function LeadForm() {
                 )}
               </div>
             )}
+            {renderPriceHint()}
             {formatField && (
               <div>
                 <label id={`${fieldElId(formatField)}-label`} className="font-semibold text-[10px] tracking-wider block mb-0.5 text-gray-600 uppercase">{formatField.label}{reqMark(formatField.required)}</label>
@@ -1263,6 +1616,7 @@ export default function LeadForm() {
                 {renderSourcePills()}
               </div>
             )}
+            {renderTurnstile()}
             <button type="button" disabled={!(detailsValid && eventStepValid) || submitLead.isPending} onClick={doSubmit}
               className="vf-submit w-full font-bold tracking-widest rounded-md h-9 text-xs shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
@@ -1299,6 +1653,7 @@ export default function LeadForm() {
               {embedStep === 1 && (
                 <div className="space-y-2.5">
                   {renderDraftNote('sm')}
+                  {renderHoneypot()}
                   <div className="grid grid-cols-2 gap-2">
                     {detailFields.map(field => (
                       <div key={field.id} className={field.id === 'company' ? 'col-span-2' : ''}>
@@ -1319,6 +1674,8 @@ export default function LeadForm() {
                         email: (form.email ?? '').trim(),
                         phone: form.phone?.trim() || undefined,
                         company: form.company?.trim() || undefined,
+                        hp: honeypot || undefined,
+                        formToken: formTokenRef.current ?? undefined,
                         ...clickAttribution,
                       });
                     }
@@ -1336,6 +1693,13 @@ export default function LeadForm() {
                     <div>
                       <label htmlFor={eventTypeField ? fieldElId(eventTypeField) : undefined} className="font-semibold text-[10px] tracking-wider block mb-1.5 text-gray-600 uppercase">Event type{reqMark(eventTypeField?.required)}</label>
                       {renderEventTypeSelect()}
+                    </div>
+                  )}
+
+                  {spaceField && (
+                    <div>
+                      <label id={`${fieldElId(spaceField)}-label`} className="font-semibold text-[10px] tracking-wider block mb-1 text-gray-600 uppercase">{spaceField.label}{reqMark(spaceField.required)}</label>
+                      {renderField(spaceField)}
                     </div>
                   )}
 
@@ -1362,6 +1726,7 @@ export default function LeadForm() {
                       )}
                     </div>
                   )}
+                  {renderPriceHint()}
 
                   {/* Qualifying pills — format and budget bracket. */}
                   {formatField && (
@@ -1396,6 +1761,8 @@ export default function LeadForm() {
                     </div>
                   )}
 
+                  {renderHoneypot()}
+                  {renderTurnstile()}
                   <div className="flex gap-2 pt-1">
                     <button type="button" onClick={() => setEmbedStep(1)}
                       className="flex-1 font-bold tracking-widest rounded-md h-9 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50">← BACK</button>
@@ -1488,7 +1855,8 @@ export default function LeadForm() {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5 relative">
+            {renderHoneypot()}
 
             {/* One unified panel — NowBookIt-style: event-type cards first, then details */}
             <div className="rounded-xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-7" style={{ backgroundColor: formCardBg }}>
@@ -1511,14 +1879,23 @@ export default function LeadForm() {
                   them. A plain text/date/number input doesn't have that
                   problem, so only those stay in the compact grid. */}
               {(() => {
-                const gridFields = eventFields.filter(f => f.id !== 'eventType' && f.id !== 'eventFormat' && f.id !== 'budgetRange');
+                const gridFields = eventFields.filter(f => f.id !== 'eventType' && f.id !== 'eventFormat' && f.id !== 'budgetRange' && f.id !== 'spaceId');
                 const pillFields = eventFields.filter(f => f.id === 'eventFormat' || f.id === 'budgetRange');
-                if (gridFields.length === 0 && pillFields.length === 0) return null;
+                if (gridFields.length === 0 && pillFields.length === 0 && !spaceField) return null;
                 return (
                   <div>
                     <label className="font-bold text-xs tracking-widest block mb-3 text-gray-600">EVENT DETAILS</label>
+                    {/* Where first: availability and prices follow the space. */}
+                    {spaceField && (
+                      <div className="mb-4">
+                        <label id={`${fieldElId(spaceField)}-label`} className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">
+                          {spaceField.label.toUpperCase()}{reqMark(spaceField.required)}
+                        </label>
+                        {renderField(spaceField)}
+                      </div>
+                    )}
                     {gridFields.length > 0 && (
-                      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${pillFields.length > 0 ? 'mb-4' : ''}`}>
+                      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${pillFields.length > 0 || guidance.hint ? 'mb-4' : ''}`}>
                         {gridFields.map(field => (
                           <div key={field.id} className={field.id === 'budget' ? 'sm:col-span-2' : ''}>
                             <label htmlFor={fieldElId(field)} className="font-semibold text-[11px] tracking-wide block mb-1 text-gray-600">
@@ -1529,6 +1906,7 @@ export default function LeadForm() {
                         ))}
                       </div>
                     )}
+                    {guidance.hint && <div className="mb-4 -mt-1">{renderPriceHint()}</div>}
                     {pillFields.map(field => (
                       <div key={field.id} className="mb-3 last:mb-0">
                         <label id={`${fieldElId(field)}-label`} className="font-semibold text-[11px] tracking-wide block mb-1.5 text-gray-600">
@@ -1594,6 +1972,7 @@ export default function LeadForm() {
               )}
             </div>
 
+            {renderTurnstile()}
             <Button type="submit" disabled={submitLead.isPending}
               className="w-full font-bold tracking-widest rounded-lg h-14 text-base shadow-sm transition-opacity hover:opacity-90"
               style={{ backgroundColor: formButtonColor, color: textOnButton }}>
