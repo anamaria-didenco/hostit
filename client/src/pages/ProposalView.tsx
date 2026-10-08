@@ -7,6 +7,7 @@ import { CheckCircle, XCircle, Calendar, Users, MapPin, Clock } from "lucide-rea
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { currency } from "@/lib/money";
+import { DRINKS_BY_KEY } from "@shared/drinksMenu";
 
 interface LineItem {
   description: string;
@@ -118,6 +119,8 @@ export default function ProposalView() {
   const [showDecline, setShowDecline] = useState(false);
   const [clientMessage, setClientMessage] = useState("");
   const [responded, setResponded] = useState<"accepted" | "declined" | null>(null);
+  // Only true when the server actually emailed the client a confirmation.
+  const [confirmationEmailed, setConfirmationEmailed] = useState(false);
 
   const { data, isLoading } = trpc.proposals.getByToken.useQuery(
     { token: token ?? "" },
@@ -150,37 +153,6 @@ export default function ProposalView() {
     ]},
   ];
 
-  const DRINKS_MENU_MAP: Record<string, { name: string; description?: string; price?: number; priceGlass?: number; priceBottle?: number }> = {
-    aperol_spritz: { name: "Aperol Spritz", description: "Aperol, Prosecco, Soda", price: 20 },
-    campari_spritz: { name: "Campari Spritz", description: "Campari, Prosecco, Soda", price: 20 },
-    limoncello_spritz: { name: "Limoncello Spritz", description: "Limoncello, Prosecco, Soda", price: 20 },
-    hugo_spritz: { name: "Hugo Spritz", description: "Elderflower, Prosecco, Soda", price: 20 },
-    classic_negroni: { name: "Classic Negroni", description: "Campari, Rosso Vermouth, Gin", price: 24 },
-    negroni_sbagliato: { name: "Negroni Sbagliato", description: "Campari, Rosso Vermouth, Prosecco", price: 23 },
-    cherry_negroni: { name: "Cherry Negroni", description: "Campari, Amaro, Rosso Vermouth, Gin", price: 25 },
-    americano: { name: "Americano", description: "Campari, Rosso Vermouth, Soda", price: 23 },
-    tallero_prosecco: { name: "Tallero Prosecco Extra Dry", description: "Veneto", priceGlass: 17, priceBottle: 85 },
-    lambrusco: { name: "Paltrinieri Lambrusco Di Soraba Radice", description: "Emiglia Romagna", priceBottle: 105 },
-    sauvignon_blanc: { name: "Mezzacorona Castel Firmian Sauvignon Blanc", description: "Trentino", priceGlass: 17, priceBottle: 85 },
-    malvasia_chardonnay: { name: "Fantini Primo Malvasia Chardonnay", description: "Abruzzo", priceGlass: 16, priceBottle: 80 },
-    pinot_grigio: { name: "Vigneti Romio Pinot Grigio Rubione IGT", description: "Friuli", priceGlass: 16, priceBottle: 80 },
-    grillo: { name: "Parthenium Grillo", description: "Sicilia", priceBottle: 85 },
-    pipoli_bianco: { name: "Pipoli Bianco Basilicata IGT", description: "Basilicata", priceBottle: 90 },
-    rosato: { name: "Fattoria Di Basciano Rosato", description: "Toscana", priceGlass: 17, priceBottle: 85 },
-    sangiovese_merlot: { name: "Primo Sangiovese Merlot", description: "Puglia", priceGlass: 16, priceBottle: 80 },
-    chianti: { name: "Renzo Masi Chianti Cornioletta", description: "Toscana", priceGlass: 17, priceBottle: 85 },
-    montepulciano: { name: "Fantini Montepulciano", description: "Abruzzo", priceGlass: 17, priceBottle: 85 },
-    nebbiolo: { name: "Ascheri Langhe Nebbiolo San Giacomo", description: "Piemonte", priceBottle: 110 },
-    barbaresco: { name: "Fontanabianca Barbaresco DOCG", description: "Piemonte", priceBottle: 165 },
-    peroni_tap: { name: "Peroni Tap", description: "Italia", price: 14 },
-    peroni_330: { name: "Peroni 330ml", description: "Italia", price: 12 },
-    peroni_0: { name: "Peroni 0%", description: "Italia", price: 12 },
-    ginger_ale: { name: "Fever Tree Ginger Ale", price: 8 },
-    cola: { name: "Fever Tree Cola", price: 8 },
-    blood_orange: { name: "Fever Tree Italian Blood Orange", price: 8 },
-    lemonade: { name: "Fever Tree Italian Lemonade", price: 8 },
-  };
-
   const BAR_OPTION_LABELS: Record<string, string> = {
     bar_tab: "Bar Tab",
     cash_bar: "Cash Bar",
@@ -190,12 +162,18 @@ export default function ProposalView() {
 
   const respond = trpc.proposals.respond.useMutation({
     onSuccess: (result) => {
-      setResponded(result.status as any);
+      setResponded(result.status);
+      setConfirmationEmailed(result.confirmationEmailed);
       setShowAccept(false);
       setShowDecline(false);
-      toast.success(result.status === "accepted" ? "Booking confirmed! We'll be in touch soon." : "Response sent. Thank you.");
+      setClientMessage("");
+      // The answer banner sits at the top of the page; bring it into view.
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      toast.success(result.status === "accepted" ? "Booking confirmed." : "Thanks — your reply has been sent.");
     },
-    onError: () => toast.error("Something went wrong. Please try again."),
+    // The server's messages are written for the client (expired, already
+    // answered, not ready yet), so show them as they are.
+    onError: (e) => toast.error(e.message || "Something went wrong. Please try again."),
   });
 
   const venue = data?.venue;
@@ -282,8 +260,12 @@ export default function ProposalView() {
           <div className="p-5 mb-6 flex items-center gap-4 rounded-sm" style={{ backgroundColor: '#f0fdf4', border: `2px solid #86efac` }}>
             <CheckCircle className="w-8 h-8 flex-shrink-0" style={{ color: '#16a34a' }} />
             <div>
-              <div className="font-playfair text-xl font-bold" style={{ color: '#15803d' }}>Booking Confirmed!</div>
-              <p className="font-inter text-sm mt-0.5" style={{ color: '#166534' }}>You've accepted this proposal. The venue team will be in touch shortly to confirm details.</p>
+              <div className="font-playfair text-xl font-bold" style={{ color: '#15803d' }}>You're booked in</div>
+              <p className="font-inter text-sm mt-0.5" style={{ color: '#166534' }}>
+                {responded
+                  ? `Thank you for accepting. We've let the venue team know${confirmationEmailed ? " and emailed you a confirmation" : ""} — they'll be in touch about the next steps.`
+                  : "You've accepted this proposal and your booking is confirmed. The venue team will be in touch about the next steps."}
+              </p>
             </div>
           </div>
         )}
@@ -292,7 +274,7 @@ export default function ProposalView() {
             <XCircle className="w-8 h-8 flex-shrink-0" style={{ color: '#dc2626' }} />
             <div>
               <div className="font-playfair text-xl font-bold" style={{ color: '#b91c1c' }}>Proposal Declined</div>
-              <p className="font-inter text-sm mt-0.5" style={{ color: '#991b1b' }}>You've declined this proposal. The venue team has been notified.</p>
+              <p className="font-inter text-sm mt-0.5" style={{ color: '#991b1b' }}>You've declined this proposal and the venue team has been told. Thanks for letting us know.</p>
             </div>
           </div>
         )}
@@ -416,7 +398,7 @@ export default function ProposalView() {
                   <div className="font-bebas text-xs tracking-widest mb-2" style={{ color: T.stone }}>SELECTED DRINKS</div>
                   <div className="space-y-1.5">
                     {(drinksData.selectedDrinks as string[]).map((key: string) => {
-                      const drink = DRINKS_MENU_MAP[key];
+                      const drink = DRINKS_BY_KEY[key];
                       if (!drink) return null;
                       return (
                         <div key={key} className="flex items-center justify-between py-1.5 border-b border-dashed last:border-0" style={{ borderColor: T.border }}>
@@ -499,7 +481,8 @@ export default function ProposalView() {
           <div className="p-6 mb-8 rounded-sm" style={{ backgroundColor: T.card, border: `1px solid ${T.cardBorder}` }}>
             <h3 className="font-playfair text-xl font-bold mb-2" style={{ color: T.ink }}>Ready to Book?</h3>
             <p className="font-inter text-sm mb-5" style={{ color: T.stone }}>
-              Accept this proposal to confirm your booking. A deposit of {currency(Number(proposal.depositNzd ?? 0))} NZD will be required to secure your date.
+              Accept this proposal to confirm your booking.
+              {Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Button onClick={() => setShowAccept(true)}
@@ -541,7 +524,9 @@ export default function ProposalView() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="font-inter text-sm" style={{ color: T.stone }}>
-              By accepting, you confirm you'd like to proceed with this booking. The venue team will contact you regarding the deposit payment.
+              By confirming, you're booking this event as set out in the proposal.
+              {Number(proposal.depositNzd ?? 0) > 0 && <> A deposit of {currency(Number(proposal.depositNzd))} NZD secures your date.</>}
+              {" "}The venue team is told straight away and will be in touch about the next steps.
             </p>
             <div>
               <label htmlFor="accept-message" className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>MESSAGE TO VENUE (OPTIONAL)</label>
@@ -570,7 +555,7 @@ export default function ProposalView() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="font-inter text-sm" style={{ color: T.stone }}>
-              Please let us know why you're declining so we can improve our proposals.
+              The venue team will be told. If you're happy to, let them know why — it's optional.
             </p>
             <div>
               <label htmlFor="decline-reason" className="font-bebas text-xs tracking-widest block mb-1" style={{ color: T.stone }}>REASON (OPTIONAL)</label>
@@ -578,7 +563,7 @@ export default function ProposalView() {
                 placeholder="e.g. Budget doesn't fit, found another venue, dates changed..."
                 rows={3} className="rounded-none border-2 focus-visible:ring-0 resize-none text-sm font-inter" />
             </div>
-            <Button onClick={() => respond.mutate({ token: token!, action: "declined", clientMessage: clientMessage || undefined })}
+            <Button onClick={() => respond.mutate({ token: token!, action: "declined", declineReason: clientMessage.trim() || undefined })}
               disabled={respond.isPending}
               className="w-full font-bebas tracking-widest rounded-none h-11"
               style={{ backgroundColor: T.accent, color: T.accentText }}>

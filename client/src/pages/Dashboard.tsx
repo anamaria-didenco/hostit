@@ -48,6 +48,8 @@ import { leadFollowUpState } from "@shared/followUp";
 import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
+import LeadProposals from "@/components/LeadProposals";
+import ProposalEmailSettings from "@/components/ProposalEmailSettings";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
 
 // ─── Contact Form Config ─────────────────────────────────────────────────────
@@ -4216,6 +4218,7 @@ export default function Dashboard() {
                         onReply={selectedLead.email && !isTeamMember ? (_m, reply) => openEmailReply(selectedLead, reply) : undefined} />
                     </div>
                   )}
+                  {!isStaff && <LeadProposals leadId={selectedLead.id} />}
 
                   {/* Activity Log */}
                   <div className="dante-card p-4 mb-4">
@@ -6231,6 +6234,7 @@ export default function Dashboard() {
 
               {/* ── Email inbox (client replies → enquiry timeline) ──────── */}
               <InboxSettingsCard />
+              <ProposalEmailSettings />
 
               {/* ── Email Signatures ────────────────────────────────────── */}
               <div className="mt-8">
@@ -10061,6 +10065,7 @@ export default function Dashboard() {
                     </>
                   )}
                 </div>
+                {selectedBooking._isLead && !isStaff && <LeadProposals leadId={selectedBooking.id} compact onNavigate={() => setSelectedBooking(null)} />}
               </SectionOrPlain>
               {selectedBooking._isLead && !isStaff && (
                 <LeadConversation leadId={selectedBooking.id} clientFirstName={selectedBooking.firstName}

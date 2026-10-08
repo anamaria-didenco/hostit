@@ -15,6 +15,7 @@ import {
   quoteItems,
 } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { selectedDrinkItems, drinkPriceLabel } from "../shared/drinksMenu";
 
 // Bar option labels
 const BAR_LABELS: Record<string, string> = {
@@ -24,27 +25,12 @@ const BAR_LABELS: Record<string, string> = {
   unlimited: "Unlimited Bar Tab",
 };
 
-// Standard Franco drinks menu (same as frontend)
-const FRANCO_DRINKS: Record<string, { label: string; description: string }> = {
-  house_wine: { label: "House Wine", description: "Sauvignon Blanc, Pinot Gris, Rosé, Merlot" },
-  sparkling: { label: "Sparkling Wine", description: "Prosecco & NZ Sparkling" },
-  craft_beer: { label: "Craft Beer", description: "Rotating local taps" },
-  bottled_beer: { label: "Bottled Beer", description: "Heineken, Corona, Peroni" },
-  spirits: { label: "Spirits & Mixers", description: "House spirits with soft drink mixers" },
-  cocktails: { label: "Cocktails", description: "Signature cocktail menu" },
-  soft_drinks: { label: "Soft Drinks & Juice", description: "Coke, Sprite, OJ, Soda Water" },
-  mocktails: { label: "Mocktails", description: "Non-alcoholic cocktail options" },
-  tea_coffee: { label: "Tea & Coffee", description: "Plunger coffee, selection of teas" },
-  cash_bar: { label: "Cash Bar", description: "Guests pay for their own drinks" },
-  unlimited: { label: "Unlimited Bar Tab", description: "Unlimited drinks for the event" },
-};
-
 function nzd(val: string | number | null | undefined): string {
   const n = Number(val ?? 0);
   return `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function buildHtml(data: {
+export function buildHtml(data: {
   proposal: any;
   lead: any;
   venue: any;
@@ -135,10 +121,11 @@ function buildHtml(data: {
     const barLabel = BAR_LABELS[drinks.barOption] ?? drinks.barOption;
     const selectedKeys: string[] = drinks.selectedDrinks ?? [];
     const customDrinks: Array<{ name: string; description?: string; price?: number }> = drinks.customDrinks ?? [];
-    const drinkRows = selectedKeys
-      .map((k) => FRANCO_DRINKS[k])
-      .filter(Boolean)
-      .map((d) => `<tr><td class="item-name">${esc(d.label)}</td><td class="item-desc">${esc(d.description)}</td></tr>`)
+    const drinkRows = selectedDrinkItems(selectedKeys)
+      .map((d) => {
+        const price = drinkPriceLabel(d);
+        return `<tr><td class="item-name">${esc(d.name)}${price ? ` — ${esc(price)}` : ""}</td><td class="item-desc">${esc(d.description ?? "")}</td></tr>`;
+      })
       .join("");
     const customRows = customDrinks
       .map((d) => `<tr><td class="item-name">${esc(d.name)}${d.price ? ` — ${nzd(d.price)}` : ""}</td><td class="item-desc">${esc(d.description ?? "")}</td></tr>`)

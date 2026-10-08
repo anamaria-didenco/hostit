@@ -144,6 +144,9 @@ export const venueSettings = pgTable("venue_settings", {
   // line that replaces the default "thanks, we'll be in touch" copy.
   enquiryAutoReplyEnabled: integer("enquiryAutoReplyEnabled").default(1),
   enquiryAutoReplyMessage: text("enquiryAutoReplyMessage"),
+  // Confirmation email to the client when they accept a proposal online
+  // (needs SMTP). On by default — it answers the client's own action.
+  proposalAcceptEmailEnabled: integer("proposalAcceptEmailEnabled").default(1),
   nbiApiKey: text("nbiApiKey"),
   nbiVenueId: varchar("nbiVenueId", { length: 100 }),
   nbiAccountId: varchar("nbiAccountId", { length: 100 }),
@@ -335,6 +338,8 @@ export const proposals = pgTable("proposals", {
   respondedAt: timestamp("respondedAt"),
   expiresAt: timestamp("expiresAt"),
   clientMessage: text("clientMessage"),
+  // Optional "why" the client gave when declining on the public proposal page.
+  declineReason: text("declineReason"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
