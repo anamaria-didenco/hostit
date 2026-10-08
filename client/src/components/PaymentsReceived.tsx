@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Download, AlertCircle, Banknote } from "lucide-react";
 import { currency } from "@/lib/money";
+import { toLocalDateInput } from "@/lib/dateTime";
 
 /**
  * Cross-event log of money actually received, for month-end reconciliation.
@@ -15,7 +16,10 @@ import { currency } from "@/lib/money";
 const fmtNZD = (n: number) => currency(n);
 const fmtDay = (iso: string | Date | null) =>
   iso ? new Date(iso).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—";
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+// LOCAL calendar date. toISOString() is UTC, so in NZ (UTC+12/13) "1 Oct
+// local midnight" came out as "2026-09-30" — "This month" ran 30 Sep–30 Oct
+// and dropped payments on the 31st. The server reads these as venue-local days.
+const iso = (d: Date) => toLocalDateInput(d);
 
 const METHOD_LABEL: Record<string, string> = {
   bank_transfer: "Bank transfer", cash: "Cash", eftpos: "EFTPOS",
@@ -35,7 +39,7 @@ function presetRange(key: string): { from: string; to: string } {
   return { from: "", to: "" }; // all time
 }
 
-export default function PaymentsReceived() {
+export default function PaymentsReceived({ q = "" }: { q?: string }) {
   const [, navigate] = useLocation();
   const [preset, setPreset] = useState("this_month");
   const [range, setRange] = useState(() => presetRange("this_month"));
@@ -44,7 +48,16 @@ export default function PaymentsReceived() {
     from: range.from || undefined,
     to: range.to || undefined,
   });
-  const rows = data ?? [];
+  // The board's search box filters this tab too (client, event type, notes).
+  const rows = useMemo(() => {
+    const all = data ?? [];
+    const needle = q.trim().toLowerCase();
+    if (!needle) return all;
+    return all.filter(r =>
+      (r.client ?? "").toLowerCase().includes(needle)
+      || (r.eventType ?? "").toLowerCase().includes(needle)
+      || (r.notes ?? "").toLowerCase().includes(needle));
+  }, [data, q]);
 
   const totals = useMemo(() => {
     const net = rows.reduce((s, r) => s + r.amount, 0);
@@ -85,7 +98,7 @@ export default function PaymentsReceived() {
       <div className="flex items-end gap-3 flex-wrap mb-4">
         <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Date range preset">
           {[["this_month", "This month"], ["last_month", "Last month"], ["last_90", "Last 90 days"], ["all", "All time"]].map(([k, lbl]) => (
-            <button key={k} onClick={() => applyPreset(k)}
+            <button key={k} aria-pressed={preset === k} onClick={() => applyPreset(k)}
               className={`font-bebas tracking-widest text-xs px-3 py-2 rounded-md transition-colors ${
                 preset === k ? "bg-forest text-cream" : "bg-cream text-sage hover:text-ink border border-gold/20"}`}>
               {lbl}
@@ -94,13 +107,13 @@ export default function PaymentsReceived() {
         </div>
         <div className="flex items-end gap-2">
           <div>
-            <label htmlFor="pr-from" className="font-bebas tracking-widest text-[10px] text-ink/70 block mb-1">FROM</label>
+            <label htmlFor="pr-from" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">FROM</label>
             <input id="pr-from" type="date" value={range.from}
               onChange={e => { setPreset("custom"); setRange(r => ({ ...r, from: e.target.value })); }}
               className="border border-gold/30 px-2.5 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
           </div>
           <div>
-            <label htmlFor="pr-to" className="font-bebas tracking-widest text-[10px] text-ink/70 block mb-1">TO</label>
+            <label htmlFor="pr-to" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">TO</label>
             <input id="pr-to" type="date" value={range.to}
               onChange={e => { setPreset("custom"); setRange(r => ({ ...r, to: e.target.value })); }}
               className="border border-gold/30 px-2.5 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
@@ -115,18 +128,18 @@ export default function PaymentsReceived() {
       {/* Totals */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <div className="bg-white border border-gold/20 rounded-lg p-3.5">
-          <div className="font-bebas tracking-widest text-[11px] text-sage mb-1 flex items-center gap-1.5">
+          <div className="font-bebas tracking-widest text-xs text-sage mb-1 flex items-center gap-1.5">
             <Banknote className="w-4 h-4 text-green-700" /> Received (net)
           </div>
           <div className="font-cormorant text-3xl font-semibold text-green-700 leading-none">{fmtNZD(totals.net)}</div>
-          <div className="font-dm text-[11px] text-sage mt-1">
+          <div className="font-dm text-xs text-sage mt-1">
             {totals.count} payment{totals.count === 1 ? "" : "s"}
             {totals.refunds > 0 && ` · ${fmtNZD(totals.refunds)} refunded`}
           </div>
         </div>
         {totals.byMethod.slice(0, 3).map(([method, amt]) => (
           <div key={method} className="bg-white border border-gold/20 rounded-lg p-3.5">
-            <div className="font-bebas tracking-widest text-[11px] text-sage mb-1">{METHOD_LABEL[method] ?? method}</div>
+            <div className="font-bebas tracking-widest text-xs text-sage mb-1">{METHOD_LABEL[method] ?? method}</div>
             <div className="font-cormorant text-2xl font-semibold text-ink leading-none">{fmtNZD(amt)}</div>
           </div>
         ))}
@@ -143,7 +156,7 @@ export default function PaymentsReceived() {
         <div className="text-center py-14 text-sage font-dm text-sm">Loading payments…</div>
       ) : rows.length === 0 ? (
         <div className="text-center py-14">
-          <p className="font-dm text-sage text-sm">No payments recorded in this period.</p>
+          <p className="font-dm text-sage text-sm">{q.trim() ? "No payments in this period match your search." : "No payments recorded in this period."}</p>
           <p className="font-dm text-xs text-sage/70 mt-1">Record one against an event, or sync from Xero.</p>
         </div>
       ) : (
@@ -152,7 +165,7 @@ export default function PaymentsReceived() {
             <thead>
               <tr className="border-b border-gold/20">
                 {["Date received", "Client", "Event", "Amount", "Type", "Method", "Source"].map((h, i) => (
-                  <th key={h} className={`font-bebas tracking-widest text-[10px] text-ink/70 px-3 py-2.5 ${i === 3 ? "text-right" : ""}`}>{h}</th>
+                  <th key={h} className={`font-bebas tracking-widest text-[11px] text-ink/70 px-3 py-2.5 ${i === 3 ? "text-right" : ""}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -163,7 +176,7 @@ export default function PaymentsReceived() {
                   <td className="px-3 py-2.5">
                     <button onClick={() => navigate(`/event/${r.bookingId}`)}
                       className="font-dm text-sm text-ink hover:underline text-left">{r.client}</button>
-                    {r.notes && <div className="font-dm text-[11px] text-sage truncate max-w-[240px]" title={r.notes}>{r.notes}</div>}
+                    {r.notes && <div className="font-dm text-xs text-sage truncate max-w-[240px]" title={r.notes}>{r.notes}</div>}
                   </td>
                   <td className="px-3 py-2.5 font-dm text-[12px] text-sage whitespace-nowrap">
                     {fmtDay(r.eventDate)}{r.eventType ? ` · ${r.eventType}` : ""}
@@ -174,7 +187,7 @@ export default function PaymentsReceived() {
                   <td className="px-3 py-2.5 font-dm text-[12px] text-sage whitespace-nowrap">{TYPE_LABEL[r.type] ?? r.type}</td>
                   <td className="px-3 py-2.5 font-dm text-[12px] text-sage whitespace-nowrap">{METHOD_LABEL[r.method] ?? r.method}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap">
-                    <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded ${
+                    <span className={`font-bebas tracking-widest text-[11px] px-1.5 py-0.5 rounded ${
                       r.source === "xero" ? "bg-blue-100 text-blue-800" : "bg-stone-100 text-stone-700"}`}>
                       {r.source === "xero" ? "XERO" : "MANUAL"}
                     </span>

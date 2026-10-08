@@ -54,8 +54,11 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // When set, the modal is EDITING that already-sent draft rather than creating
   // a new one (Xero upserts by InvoiceID, so it's the same send path).
   const [editingId, setEditingId] = useState<number | null>(null);
-
-  useEscapeKey(open, onClose);
+  // Loading an existing draft's real lines back from Xero for editing.
+  const [loadingDraft, setLoadingDraft] = useState(false);
+  // Anything the operator typed that would be lost by closing. A stray click on
+  // the backdrop (or Escape) used to throw it all away without a word.
+  const [dirty, setDirty] = useState(false);
 
   const { data: existing } = trpc.xero.invoicesForBooking.useQuery(
     { bookingId: booking?.bookingId ?? 0 },
@@ -119,8 +122,10 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // figures as exclusive would put another 15% on top of amounts that already
   // include it.
   useEffect(() => {
+    // Editing a draft: its own GST treatment (read from Xero) governs.
+    if (editingId !== null) return;
     if (open && suggested && suggested.lines.length > 0) setInclusive(Boolean(suggested.gstInclusive));
-  }, [open, suggested?.source, suggested?.gstInclusive]);
+  }, [open, suggested?.source, suggested?.gstInclusive, editingId]);
 
   const inclusiveRef = useRef(inclusive);
   useEffect(() => { inclusiveRef.current = inclusive; }, [inclusive]);
@@ -130,7 +135,13 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
    *  invoice it must be entered net or Xero adds 15% on top and the client is
    *  over-credited. Convert, don't hand over a raw number and hope. */
   const depositLine = (incl: boolean): Line => {
-    const gross = booking!.depositNzd > 0 ? booking!.depositNzd : 575;
+    // No made-up figure: with no deposit amount on the booking this used to
+    // deduct $575 (one venue's standard deposit). Leave the amount for the
+    // operator to fill in — send() refuses to go with it blank.
+    const gross = booking!.depositNzd > 0 ? booking!.depositNzd : null;
+    if (gross === null) {
+      return { description: "Less deposit received", quantity: "1", unitAmount: "", kind: "deposit" };
+    }
     const amt = incl ? gross : Math.round((gross / 1.15) * 100) / 100;
     return {
       description: `Less deposit received (${fmtNZD(gross)} incl. GST)`,
@@ -143,7 +154,8 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // Seed the editable lines whenever the modal opens, the stream flips, or the
   // BEO figures arrive.
   useEffect(() => {
-    if (!open || !booking) return;
+    // While editing an existing draft, the lines come from Xero, not the BEO.
+    if (!open || !booking || editingId !== null) return;
     const ev = booking.eventDate
       ? new Date(booking.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
       : "";
@@ -162,23 +174,50 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     const onThisStream = suggested ? suggested.depositOnThisStream : stream === "drinks";
     if (onThisStream && booking.depositPaid) seeded.push(depositLine(inclusiveRef.current));
     setLines(seeded);
+    setDirty(false);
     // `inclusive` is deliberately NOT a dependency: flipping the GST toggle used
     // to re-seed and wipe every amount the operator had typed. The toggle now
     // only recomputes the deposit row, below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, stream, booking?.bookingId, suggested]);
+  }, [open, stream, booking?.bookingId, suggested, editingId]);
 
   // Keep the deposit row correct when the GST treatment changes, without
-  // touching anything the operator typed.
+  // touching anything the operator typed (including a deposit amount they had
+  // to type themselves because none is set on the booking).
   useEffect(() => {
-    if (!open || !booking) return;
+    if (!open || !booking || !(booking.depositNzd > 0)) return;
     setLines(prev => prev.some(l => l.kind === "deposit")
       ? prev.map(l => (l.kind === "deposit" ? depositLine(inclusive) : l))
       : prev);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inclusive]);
 
-  useEffect(() => { if (!open) setEditingId(null); }, [open]);
+  useEffect(() => { if (!open) { setEditingId(null); setDirty(false); setDueDate(""); } }, [open]);
+
+  // "Edit" on a sent draft: read its real lines back from Xero and load them.
+  const startEdit = async (inv: any) => {
+    if (dirty && !confirm("Load that draft instead? The lines you've entered here will be replaced.")) return;
+    setEditingId(inv.id);
+    setStream(inv.stream);
+    setLoadingDraft(true);
+    try {
+      const d = await utils.xero.invoiceLines.fetch({ id: inv.id });
+      setLines(d.lines.map(l => ({
+        description: l.description,
+        quantity: String(l.quantity),
+        unitAmount: String(l.unitAmount),
+        ...(l.unitAmount < 0 && /^less deposit received/i.test(l.description) ? { kind: "deposit" as const } : {}),
+      })));
+      setInclusive(d.inclusive);
+      setDueDate(d.dueDate ?? "");
+      setDirty(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Couldn't load that draft from Xero — try again.");
+      setEditingId(null);
+    } finally {
+      setLoadingDraft(false);
+    }
+  };
 
   // Focus management: move focus into the dialog when it opens and restore it to
   // whatever opened it on close, so keyboard/screen-reader users aren't left on
@@ -250,6 +289,13 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     },
     onError: (e) => toast.error(e.message || "Could not delete that invoice"),
   });
+  // Every way out (Escape, backdrop, Cancel, ✕) checks for unsent work first.
+  const requestClose = () => {
+    if (dirty && !push.isPending && !confirm("Close without sending? The invoice lines you've entered will be lost.")) return;
+    onClose();
+  };
+  useEscapeKey(open, requestClose);
+
   const sync = trpc.xero.syncStatuses.useMutation({
     onSuccess: (r) => {
       toast.success(r.updated > 0 ? `Updated ${r.updated} invoice status${r.updated === 1 ? "" : "es"} from Xero` : "Statuses already up to date");
@@ -283,6 +329,12 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       // line) stay too.
       .filter(l => l.description && !isNaN(l.quantity) && l.quantity > 0 && !isNaN(l.unitAmount));
     if (parsed.length === 0) { toast.error("Add at least one line with an amount"); return; }
+    // A deposit deduction with no amount would go out as $0 — the client would
+    // be billed the full amount with their deposit uncredited.
+    if (lines.some(l => l.kind === "deposit" && (l.unitAmount.trim() === "" || Number(l.unitAmount) === 0))) {
+      toast.error("Enter the deposit amount on the “Less deposit received” line (as a negative, e.g. -575), or remove that line.");
+      return;
+    }
     const payload = {
       bookingId: booking.bookingId,
       stream,
@@ -302,7 +354,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   };
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/40" onClick={requestClose}>
       <div role="dialog" aria-modal="true" aria-label={`Send ${stream} invoice to Xero`}
         ref={dialogRef}
         tabIndex={-1}
@@ -312,10 +364,13 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
         {/* Header */}
         <div className="bg-forest-dark px-5 py-3.5 flex items-center justify-between">
           <div>
-            <div className="font-bebas tracking-widest text-xs text-gold">SEND TO XERO · DRAFT</div>
+            {/* text-gold (#b07c25) is ~3.1:1 on navy — under AA; gold-bright is ~5.1:1. */}
+            <div className="font-bebas tracking-widest text-xs text-gold-bright">SEND TO XERO · DRAFT</div>
             <div className="font-cormorant text-cream font-semibold text-lg leading-tight">{contactName.trim() || booking.name}</div>
           </div>
-          <button onClick={onClose} aria-label="Close" className="text-cream/80 hover:text-cream p-1">
+          {/* text-cream/NN opacity classes don't compile in this theme (they fell
+              back to dark ink, invisible on navy) — use opacity-* instead. */}
+          <button onClick={requestClose} aria-label="Close" className="text-cream opacity-85 hover:opacity-100 hover:bg-forest rounded-sm p-1.5">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -341,24 +396,24 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           {/* Who the invoice goes to — the Xero contact's name and email. */}
           <div className="border border-gold/20 bg-linen/50 p-3 space-y-2">
             <div className="flex items-baseline justify-between gap-2 flex-wrap">
-              <span className="font-bebas tracking-widest text-[10px] text-ink/70">INVOICE TO</span>
-              <span className="font-dm text-[10px] text-ink/45">Changes save to the event</span>
+              <span className="font-bebas tracking-widest text-[11px] text-ink/70">INVOICE TO</span>
+              <span className="font-dm text-[11px] text-ink/45">Changes save to the event</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="min-w-0">
-                <label htmlFor="xero-contact-name" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">CLIENT / EVENT NAME</label>
+                <label htmlFor="xero-contact-name" className="font-bebas tracking-widest text-[11px] text-ink/55 block mb-1">CLIENT / EVENT NAME</label>
                 <input id="xero-contact-name" value={contactName} onChange={e => setContactName(e.target.value)}
                   onBlur={saveContactIfDirty} placeholder="Client name"
                   className="w-full border border-gold/30 px-2.5 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
               </div>
               <div className="min-w-0">
-                <label htmlFor="xero-contact-email" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">EMAIL ON THE INVOICE</label>
+                <label htmlFor="xero-contact-email" className="font-bebas tracking-widest text-[11px] text-ink/55 block mb-1">EMAIL ON THE INVOICE</label>
                 <input id="xero-contact-email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)}
                   onBlur={saveContactIfDirty} placeholder="client@example.com"
                   className="w-full border border-gold/30 px-2.5 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
               </div>
             </div>
-            <p className="font-dm text-[10px] text-ink/50">
+            <p className="font-dm text-[11px] text-ink/50">
               Xero files the invoice under this contact. It emails nothing until you approve the draft there.
             </p>
           </div>
@@ -366,8 +421,8 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           {editingId !== null && (
             <div className="border border-blue-300 bg-blue-50 text-blue-900 font-dm text-xs p-2.5 flex items-center justify-between flex-wrap gap-y-2 gap-2">
               <span>Editing an existing draft — sending will <b>replace</b> its contents in Xero.</span>
-              <button onClick={() => setEditingId(null)}
-                className="font-bebas tracking-widest text-[10px] text-blue-900 hover:underline flex-shrink-0">
+              <button onClick={() => { if (!dirty || confirm("Start a new invoice instead? Your changes to this draft will be lost.")) setEditingId(null); }}
+                className="font-bebas tracking-widest text-[11px] text-blue-900 hover:underline flex-shrink-0">
                 CREATE NEW INSTEAD
               </button>
             </div>
@@ -378,7 +433,13 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
             {/* Deposits are their own invoice type. They used to go out as
                 "food", so a paid deposit marked the food bill as settled. */}
             {(["deposit", "food", "drinks"] as const).map(s => (
-              <button key={s} role="radio" aria-checked={stream === s} onClick={() => setStream(s)}
+              <button key={s} role="radio" aria-checked={stream === s}
+                onClick={() => {
+                  if (s === stream) return;
+                  // Switching type re-fills the lines — don't silently wipe typed work.
+                  if (dirty && !confirm("Switch invoice type? The lines you've entered will be replaced.")) return;
+                  setStream(s);
+                }}
                 className={`font-bebas tracking-widest text-xs px-4 py-2 border transition-colors ${
                   stream === s ? "bg-forest text-cream border-forest" : "border-gold/30 text-ink/70 hover:bg-gold/10"}`}>
                 {s === "food" ? "FOOD (PRE-EVENT)" : s === "drinks" ? "DRINKS (AFTER)" : "DEPOSIT"}
@@ -390,9 +451,9 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           {existing && existing.length > 0 && (
             <div className="border border-gold/20 bg-linen/50 p-3">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="font-bebas tracking-widest text-[10px] text-ink/70">ALREADY SENT FOR THIS EVENT</span>
+                <span className="font-bebas tracking-widest text-[11px] text-ink/70">ALREADY SENT FOR THIS EVENT</span>
                 <button onClick={() => sync.mutate({ bookingId: booking.bookingId })} disabled={sync.isPending}
-                  className="font-bebas tracking-widest text-[10px] text-forest inline-flex items-center gap-1 hover:underline disabled:opacity-50">
+                  className="font-bebas tracking-widest text-[11px] text-forest inline-flex items-center gap-1 hover:underline disabled:opacity-50">
                   <RefreshCw className={`w-3 h-3 ${sync.isPending ? "animate-spin" : ""}`} /> CHECK STATUS
                 </button>
               </div>
@@ -403,7 +464,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                   <span>{inv.invoiceNumber ?? "(no number yet)"}</span>
                   {inv.sentBy && <span className="text-ink/55">· sent by {inv.sentBy}</span>}
                   <span className="ml-auto">{inv.total != null ? fmtNZD(Number(inv.total)) : ""}</span>
-                  <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 rounded ${
+                  <span className={`font-bebas tracking-widest text-[11px] px-1.5 py-0.5 rounded ${
                     isGone(inv.status) ? "bg-ink/10 text-ink/50 line-through"
                       : inv.status === "PAID" ? "bg-green-100 text-green-700"
                       : inv.status === "AUTHORISED" ? "bg-blue-100 text-blue-700"
@@ -417,23 +478,24 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                       return and must be handled in Xero. */}
                   {(!inv.status || inv.status === "DRAFT" || inv.status === "SUBMITTED") ? (
                     <>
-                      <button onClick={() => { setStream(inv.stream); setEditingId(inv.id); }}
-                        className="font-bebas tracking-widest text-[10px] text-forest hover:underline"
-                        title="Load this draft's details below and update it in Xero">EDIT</button>
+                      <button onClick={() => startEdit(inv)} disabled={loadingDraft}
+                        aria-label={`Edit draft ${inv.invoiceNumber ?? ""}`.trim()}
+                        className="font-bebas tracking-widest text-[11px] text-forest hover:underline disabled:opacity-50"
+                        title="Load this draft's lines from Xero and update it">EDIT</button>
                       <button
                         onClick={() => { if (confirm(`Delete draft ${inv.invoiceNumber ?? ""} in Xero? This cannot be undone.`)) del.mutate({ id: inv.id }); }}
                         disabled={del.isPending}
-                        className="font-bebas tracking-widest text-[10px] text-red-700 hover:underline disabled:opacity-50"
+                        className="font-bebas tracking-widest text-[11px] text-red-700 hover:underline disabled:opacity-50"
                         title="Delete this draft in Xero">DELETE</button>
                     </>
                   ) : isGone(inv.status) ? (
                     <button
                       onClick={() => { if (confirm(`Remove ${inv.invoiceNumber ?? "this invoice"} from VenueFlow? It is already ${String(inv.status).toLowerCase()} in Xero — nothing there changes.`)) del.mutate({ id: inv.id }); }}
                       disabled={del.isPending}
-                      className="font-bebas tracking-widest text-[10px] text-red-700 hover:underline disabled:opacity-50"
+                      className="font-bebas tracking-widest text-[11px] text-red-700 hover:underline disabled:opacity-50"
                       title={`Already ${String(inv.status).toLowerCase()} in Xero — remove it from this list`}>REMOVE</button>
                   ) : (
-                    <span className="font-dm text-[10px] text-ink/50" title="Approved in Xero — void or credit it there">locked</span>
+                    <span className="font-dm text-[11px] text-ink/50" title="Approved in Xero — void or credit it there">locked</span>
                   )}
                 </div>
               ))}
@@ -443,20 +505,24 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           {/* Line editor */}
           <div>
             <div className="flex items-baseline justify-between gap-2 mb-1.5 flex-wrap">
-              <span className="font-bebas tracking-widest text-[10px] text-ink/70">INVOICE LINES (NZD)</span>
+              <span className="font-bebas tracking-widest text-[11px] text-ink/70">INVOICE LINES (NZD)</span>
               {/* Where the numbers came from. An amount that arrived from the
                   BEO and one typed by hand look identical otherwise, and the
                   operator needs to know which they are checking. */}
-              {loadingSuggested ? (
-                <span className="font-dm text-[10px] text-ink/50">Reading the BEO…</span>
+              {loadingDraft ? (
+                <span className="font-dm text-[11px] text-ink/60" role="status">Loading this draft from Xero…</span>
+              ) : editingId !== null ? (
+                <span className="font-dm text-[11px] text-ink/60">The draft&rsquo;s current lines, read from Xero — edit, then update</span>
+              ) : loadingSuggested ? (
+                <span className="font-dm text-[11px] text-ink/50">Reading the BEO…</span>
               ) : suggested?.source === "beo" ? (
-                <span className="font-dm text-[10px] text-ink/60">
+                <span className="font-dm text-[11px] text-ink/60">
                   {stream === "deposit"
                     ? "From the deposit set on this event · amount includes GST"
                     : `Pulled from this event\u2019s BEO ${suggested.gstInclusive ? "· amounts include GST" : "· amounts exclude GST"} — edit anything before sending`}
                 </span>
               ) : (
-                <span className="font-dm text-[10px] text-ink/50">
+                <span className="font-dm text-[11px] text-ink/50">
                   {stream === "food"
                     ? "Nothing priced on the BEO yet — enter the amount"
                     : stream === "drinks"
@@ -469,22 +535,22 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
               {lines.map((l, i) => (
                 <div key={i} className="flex gap-1.5 items-center">
                   <input value={l.description} aria-label={`Line ${i + 1} description`}
-                    onChange={e => setLines(p => p.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
+                    onChange={e => { setDirty(true); setLines(p => p.map((x, j) => j === i ? { ...x, description: e.target.value } : x)); }}
                     className="flex-1 min-w-0 border border-gold/30 px-2.5 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
                   <input value={l.quantity} aria-label={`Line ${i + 1} quantity`} type="number" min="1"
-                    onChange={e => setLines(p => p.map((x, j) => j === i ? { ...x, quantity: e.target.value } : x))}
+                    onChange={e => { setDirty(true); setLines(p => p.map((x, j) => j === i ? { ...x, quantity: e.target.value } : x)); }}
                     className="w-14 border border-gold/30 px-2 py-2 font-dm text-sm bg-white text-right focus:outline-none focus:border-forest" />
                   <input value={l.unitAmount} aria-label={`Line ${i + 1} amount`} type="number" step="0.01" placeholder="0.00"
-                    onChange={e => setLines(p => p.map((x, j) => j === i ? { ...x, unitAmount: e.target.value } : x))}
+                    onChange={e => { setDirty(true); setLines(p => p.map((x, j) => j === i ? { ...x, unitAmount: e.target.value } : x)); }}
                     className="w-24 border border-gold/30 px-2 py-2 font-dm text-sm bg-white text-right focus:outline-none focus:border-forest" />
-                  <button onClick={() => setLines(p => p.filter((_, j) => j !== i))} aria-label={`Remove line ${i + 1}`}
+                  <button onClick={() => { setDirty(true); setLines(p => p.filter((_, j) => j !== i)); }} aria-label={`Remove line ${i + 1}`}
                     className="text-ink/40 hover:text-red-600 p-1">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
             </div>
-            <button onClick={() => setLines(p => [...p, { description: "", quantity: "1", unitAmount: "" }])}
+            <button onClick={() => { setDirty(true); setLines(p => [...p, { description: "", quantity: "1", unitAmount: "" }]); }}
               className="mt-2 font-bebas tracking-widest text-[11px] text-forest inline-flex items-center gap-1 hover:underline">
               <Plus className="w-3 h-3" /> ADD LINE
             </button>
@@ -493,15 +559,15 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           {/* Due date + GST treatment */}
           <div className="flex items-end justify-between gap-3 flex-wrap">
             <div>
-              <label htmlFor="xero-due" className="font-bebas tracking-widest text-[10px] text-ink/70 block mb-1">DUE DATE (OPTIONAL)</label>
-              <input id="xero-due" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+              <label htmlFor="xero-due" className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">DUE DATE (OPTIONAL)</label>
+              <input id="xero-due" type="date" value={dueDate} onChange={e => { setDirty(true); setDueDate(e.target.value); }}
                 className="border border-gold/30 px-3 py-2 font-dm text-sm bg-white focus:outline-none focus:border-forest" />
             </div>
             <div>
-              <span className="font-bebas tracking-widest text-[10px] text-ink/70 block mb-1">AMOUNTS ENTERED ABOVE ARE</span>
+              <span className="font-bebas tracking-widest text-[11px] text-ink/70 block mb-1">AMOUNTS ENTERED ABOVE ARE</span>
               <div className="flex gap-1.5" role="radiogroup" aria-label="GST treatment">
                 {([[false, "EXCL. GST"], [true, "INCL. GST"]] as const).map(([v, lbl]) => (
-                  <button key={lbl} role="radio" aria-checked={inclusive === v} onClick={() => setInclusive(v)}
+                  <button key={lbl} role="radio" aria-checked={inclusive === v} onClick={() => { if (inclusive !== v) setDirty(true); setInclusive(v); }}
                     className={`font-bebas tracking-widest text-[11px] px-3 py-2 border transition-colors ${
                       inclusive === v ? "bg-forest text-cream border-forest" : "border-gold/30 text-ink/70 hover:bg-gold/10"}`}>
                     {lbl}
@@ -527,11 +593,11 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
 
           {/* Actions */}
           <div className="flex gap-2 justify-end pt-1">
-            <button onClick={onClose}
+            <button onClick={requestClose}
               className="font-bebas tracking-widest text-xs px-4 py-2 border border-gold/30 text-ink/70 hover:bg-gold/10">
               CANCEL
             </button>
-            <button onClick={send} disabled={push.isPending || saveContact.isPending || !xeroStatus?.connected || xeroStatus?.tenantMissing}
+            <button onClick={send} disabled={push.isPending || saveContact.isPending || loadingDraft || !xeroStatus?.connected || xeroStatus?.tenantMissing}
               className="font-bebas tracking-widest text-xs px-5 py-2 bg-forest text-cream hover:opacity-90 disabled:opacity-50">
               {push.isPending ? "SENDING…" : editingId !== null ? "UPDATE DRAFT IN XERO" : "SEND DRAFT TO XERO"}
             </button>
