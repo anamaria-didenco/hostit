@@ -5309,6 +5309,31 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           return { connected: true as const, rows: [], error: String(err?.message ?? 'Xero didn\'t answer') };
         }
       }),
+    // Payments → Received: money Xero recorded against EVENT invoices in a
+    // date range (venue-local "YYYY-MM-DD", inclusive), read live.
+    eventPayments: protectedProcedure
+      .input(z.object({
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        fresh: z.boolean().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { xeroConnections } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { connected: false as const, rows: [], error: null as string | null };
+        const [conn] = await db.select({ tenantId: xeroConnections.tenantId })
+          .from(xeroConnections).where(eq(xeroConnections.ownerId, ctx.user.id)).limit(1);
+        if (!conn?.tenantId) return { connected: false as const, rows: [], error: null as string | null };
+        try {
+          const { listXeroEventPayments } = await import('./xero');
+          return { connected: true as const, rows: await listXeroEventPayments(ctx.user.id, input, { fresh: input.fresh }), error: null as string | null };
+        } catch (err: any) {
+          console.error('[xero.eventPayments] failed:', err?.message ?? err);
+          return { connected: true as const, rows: [], error: String(err?.message ?? 'Xero didn\'t answer') };
+        }
+      }),
     invoicesForBooking: protectedProcedure
       .input(z.object({ bookingId: z.number() }))
       .query(async ({ input, ctx }) => {
