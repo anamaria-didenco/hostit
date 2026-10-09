@@ -12,7 +12,7 @@
 import { getDb } from "./db";
 import { bookings, payments, xeroInvoices } from "../drizzle/schema";
 import { eq, and, inArray } from "drizzle-orm";
-import { getXeroInvoiceStatuses, getXeroInvoicePayments, getXeroInvoiceStatus } from "./xero";
+import { getXeroInvoiceStatuses, getXeroInvoicePayments, getXeroInvoiceStatus, xeroPatience } from "./xero";
 
 export interface XeroSyncResult {
   statusChanges: number;
@@ -205,7 +205,10 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
  * the reliable floor under it.
  */
 export function startXeroSyncScheduler(): void {
-  const runAll = async () => {
+  // The hourly pass can afford to wait out Xero's rate limit (nobody is
+  // watching); interactive calls fail fast instead — see xeroPatience.
+  const runAll = () => xeroPatience.run({ maxWaitMs: 65_000, attempts: 4 }, runAllPatiently);
+  const runAllPatiently = async () => {
     try {
       const db = await getDb();
       if (!db) return;

@@ -21,6 +21,7 @@ import crypto from "crypto";
 import { getDb } from "./db";
 import { xeroConnections } from "../drizzle/schema";
 import { syncXeroInvoicesForOwner } from "./xeroSync";
+import { xeroPatience } from "./xero";
 
 /** Verify the signature over the raw bytes. Raw means raw: re-serialising the
  *  parsed JSON changes whitespace and the HMAC with it, which is why this route
@@ -46,7 +47,7 @@ function queueSync(ownerId: number): void {
     if (inFlight.has(ownerId)) { queueSync(ownerId); return; }
     inFlight.add(ownerId);
     try {
-      const r = await syncXeroInvoicesForOwner(ownerId);
+      const r = await xeroPatience.run({ maxWaitMs: 65_000, attempts: 4 }, () => syncXeroInvoicesForOwner(ownerId));
       if (r.statusChanges > 0 || r.paymentsImported > 0) {
         console.log(`[XeroWebhook] owner ${ownerId}: ${r.statusChanges} status change(s), ${r.paymentsImported} payment(s) imported`);
       }

@@ -58,6 +58,10 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // correcting, and sending creates the corrected draft then voids the old one.
   const [replacing, setReplacing] = useState<{ id: number; number: string | null } | null>(null);
   const loadedFromInvoice = editingId !== null || replacing !== null;
+  // Each "Edit / Replace" click gets a number; an answer that arrives after the
+  // window was closed, reopened on another booking or the choice was cancelled
+  // is ignored instead of overwriting what's on screen.
+  const loadReq = useRef(0);
   // Loading an existing draft's real lines back from Xero for editing.
   const [loadingDraft, setLoadingDraft] = useState(false);
   // Anything the operator typed that would be lost by closing. A stray click on
@@ -201,7 +205,14 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inclusive]);
 
-  useEffect(() => { if (!open) { setEditingId(null); setReplacing(null); setDirty(false); setDueDate(""); } }, [open]);
+  // Closing, or opening a different booking, abandons any invoice still being
+  // read from Xero — otherwise "Loading…" (and a disabled Send button) carried
+  // over to the next booking when Xero was slow.
+  useEffect(() => {
+    loadReq.current++;
+    setLoadingDraft(false);
+    if (!open) { setEditingId(null); setReplacing(null); setDirty(false); setDueDate(""); }
+  }, [open, booking?.bookingId]);
 
   // "Edit" on a sent draft: read its real lines back from Xero and load them.
   const startEdit = async (inv: any, mode: "edit" | "replace" = "edit") => {
@@ -210,8 +221,14 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     else { setReplacing(null); setEditingId(inv.id); }
     setStream(inv.stream);
     setLoadingDraft(true);
+    const req = ++loadReq.current;
     try {
-      const d = await utils.xero.invoiceLines.fetch({ id: inv.id });
+      // Never wait on Xero forever: the server gives up after ~25s, and so do we.
+      const d = await Promise.race([
+        utils.xero.invoiceLines.fetch({ id: inv.id }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Xero is taking too long to answer — try again in a moment.")), 30_000)),
+      ]);
+      if (req !== loadReq.current) return; // abandoned while loading
       setLines(d.lines.map(l => ({
         description: l.description,
         quantity: String(l.quantity),
@@ -222,11 +239,12 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       setDueDate(d.dueDate ?? "");
       setDirty(false);
     } catch (e: any) {
-      toast.error(e?.message || "Couldn't load that draft from Xero — try again.");
+      if (req !== loadReq.current) return;
+      toast.error(e?.message || "Couldn't load that draft from Xero — try again.", { duration: 10000 });
       setEditingId(null);
       setReplacing(null);
     } finally {
-      setLoadingDraft(false);
+      if (req === loadReq.current) setLoadingDraft(false);
     }
   };
 
@@ -437,7 +455,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           {replacing && (
             <div className="border border-amber-300 bg-amber-50 text-amber-900 font-dm text-xs p-2.5 flex items-center justify-between flex-wrap gap-y-2 gap-2">
               <span>Replacing <b>{replacing.number ?? "the old invoice"}</b> (approved in Xero). Correct the lines below — sending creates a new draft and <b>voids the old invoice</b>.</span>
-              <button onClick={() => { if (!dirty || confirm("Stop replacing? Your changes will be lost.")) { setReplacing(null); setDirty(false); } }}
+              <button onClick={() => { if (!dirty || confirm("Stop replacing? Your changes will be lost.")) { loadReq.current++; setLoadingDraft(false); setReplacing(null); setDirty(false); } }}
                 className="font-bebas tracking-widest text-[11px] text-amber-900 hover:underline flex-shrink-0">
                 CANCEL REPLACE
               </button>
@@ -446,7 +464,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
           {editingId !== null && (
             <div className="border border-blue-300 bg-blue-50 text-blue-900 font-dm text-xs p-2.5 flex items-center justify-between flex-wrap gap-y-2 gap-2">
               <span>Editing an existing draft — sending will <b>replace</b> its contents in Xero.</span>
-              <button onClick={() => { if (!dirty || confirm("Start a new invoice instead? Your changes to this draft will be lost.")) setEditingId(null); }}
+              <button onClick={() => { if (!dirty || confirm("Start a new invoice instead? Your changes to this draft will be lost.")) { loadReq.current++; setLoadingDraft(false); setEditingId(null); } }}
                 className="font-bebas tracking-widest text-[11px] text-blue-900 hover:underline flex-shrink-0">
                 CREATE NEW INSTEAD
               </button>
