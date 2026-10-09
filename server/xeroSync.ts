@@ -45,6 +45,20 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
   let statusBudget = 40;
   let paymentBudget = 40;
 
+  // What we already hold per invoice (payments imported from Xero, refunds
+  // netted off). Fetching an invoice's payments is one Xero request EACH, and
+  // used to happen on every sync for every invoice with money on it — the
+  // main reason a Payments page open could burn the whole per-minute limit.
+  // Now an invoice is only asked about when Xero's paid total differs from
+  // what's already in the ledger.
+  const importedNet = new Map<string, number>();
+  const heldRows = await db.select({ id: payments.xeroInvoiceId, amount: payments.amount, type: payments.type })
+    .from(payments).where(and(eq(payments.ownerId, ownerId), eq(payments.source, "xero"), inArray(payments.xeroInvoiceId, ids)));
+  for (const h of heldRows) {
+    if (!h.id) continue;
+    importedNet.set(h.id, (importedNet.get(h.id) ?? 0) + (h.type === "refund" ? -1 : 1) * Number(h.amount ?? 0));
+  }
+
   for (const r of rows) {
     let s = r.xeroInvoiceId ? statuses[r.xeroInvoiceId] : undefined;
     // Xero OMITS deleted and voided invoices from the batched IDs response, so
@@ -127,6 +141,7 @@ export async function syncXeroInvoicesForOwner(ownerId: number, bookingId?: numb
     // Any money received (including part-payments) gets mirrored into the ledger.
     const hasMoney = Number(s.amountPaid ?? 0) > 0;
     if (!hasMoney || !r.xeroInvoiceId || paymentBudget <= 0) continue;
+    if (Math.abs((importedNet.get(r.xeroInvoiceId) ?? 0) - Number(s.amountPaid ?? 0)) < 0.005) continue; // already have it all
     paymentBudget--;
 
     let xeroPayments;
