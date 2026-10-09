@@ -3,7 +3,13 @@
  * Proposal Builder (which stores the keys), the client's proposal page and the
  * proposal PDF — the PDF used to carry its own list whose keys never matched,
  * so every selected drink silently disappeared from it.
+ *
+ * The current list is Bar Franco's Event menus 2026 (shared/eventMenus2026.ts,
+ * prices excl. GST). The list it replaced is kept below, unchanged, so a
+ * proposal saved before the update still shows exactly what was offered.
  */
+import { DRINK_CATEGORIES_2026 } from "./eventMenus2026";
+
 export type DrinkMenuItem = {
   key: string;
   name: string;
@@ -11,9 +17,25 @@ export type DrinkMenuItem = {
   price?: number;
   priceGlass?: number;
   priceBottle?: number;
+  /** Prices exclude GST (the 2026 menu). Unset on the previous list. */
+  exGst?: boolean;
+  /** On the previous menu only — never offered for new proposals. */
+  retired?: boolean;
 };
 
-export const DRINKS_MENU: { category: string; items: DrinkMenuItem[] }[] = [
+export const DRINKS_MENU: { category: string; items: DrinkMenuItem[] }[] = DRINK_CATEGORIES_2026.map(c => ({
+  category: c.name,
+  items: c.items.map(d => ({
+    key: d.key,
+    name: d.name,
+    description: d.description,
+    ...(c.unit === "bottle" ? { priceBottle: d.price } : { price: d.price }),
+    exGst: true,
+  })),
+}));
+
+// The pre-2026 list. Keys are what older proposals saved; never re-use them.
+const PREVIOUS_DRINKS_MENU: { category: string; items: DrinkMenuItem[] }[] = [
   { category: "Aperitivo", items: [
     { key: "aperol_spritz", name: "Aperol Spritz", description: "Aperol, Prosecco, Soda", price: 20 },
     { key: "campari_spritz", name: "Campari Spritz", description: "Campari, Prosecco, Soda", price: 20 },
@@ -56,10 +78,10 @@ export const DRINKS_MENU: { category: string; items: DrinkMenuItem[] }[] = [
     { key: "blood_orange", name: "Fever Tree Italian Blood Orange", price: 8 },
     { key: "lemonade", name: "Fever Tree Italian Lemonade", price: 8 },
   ]},
-];
+].map(c => ({ ...c, items: c.items.map(i => ({ ...i, retired: true })) }));
 
 export const DRINKS_BY_KEY: Record<string, DrinkMenuItem> = Object.fromEntries(
-  DRINKS_MENU.flatMap(c => c.items.map(i => [i.key, i])),
+  [...DRINKS_MENU, ...PREVIOUS_DRINKS_MENU].flatMap(c => c.items.map(i => [i.key, i])),
 );
 
 /** "$17 glass · $85 bottle", "$20", or "" when the item has no price. */
@@ -71,8 +93,8 @@ export function drinkPriceLabel(d: DrinkMenuItem): string {
   return parts.join(" · ");
 }
 
-/** The selected drinks in menu order, skipping any key no longer on the list. */
+/** The selected drinks in menu order (current menu, then the previous one), skipping unknown keys. */
 export function selectedDrinkItems(keys: readonly string[] | null | undefined): DrinkMenuItem[] {
   const set = new Set(keys ?? []);
-  return DRINKS_MENU.flatMap(c => c.items.filter(i => set.has(i.key)));
+  return [...DRINKS_MENU, ...PREVIOUS_DRINKS_MENU].flatMap(c => c.items.filter(i => set.has(i.key)));
 }

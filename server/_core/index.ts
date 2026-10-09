@@ -526,8 +526,15 @@ async function startServer() {
     startXeroSyncScheduler();
     // Follow-ups, reply-overdue alerts, hold expiry, inbox polling… (server/backgroundJobs.ts)
     void (async () => { const { startBackgroundJobs } = await import("../backgroundJobs"); await startBackgroundJobs(); })();
-    // Backfill missing beer / non-alcoholic categories into drink catalogues.
-    void (async () => { const { seedDrinksCatalog } = await import("../seedDrinksCatalog"); await seedDrinksCatalog(); })();
+    // Bar Franco's Event menus 2026 (once per venue), then the general backfill
+    // of missing beer / non-alcoholic categories — in that order, so the
+    // backfill sees the updated catalogue.
+    void (async () => {
+      const { runEventMenus2026Backfill } = await import("../eventMenus2026Backfill");
+      await runEventMenus2026Backfill();
+      const { seedDrinksCatalog } = await import("../seedDrinksCatalog");
+      await seedDrinksCatalog();
+    })();
   });
 }
 
