@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import XeroPushModal from "@/components/XeroPushModal";
 import PaymentsReceived from "@/components/PaymentsReceived";
 import XeroEventInvoices from "@/components/XeroEventInvoices";
+import XeroEventPayments from "@/components/XeroEventPayments";
 import { invoiceState, STREAM_LABEL } from "@/lib/xeroInvoice";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem,
@@ -330,7 +331,7 @@ export default function PaymentsBoard() {
       </div>
 
       <div role="tabpanel" id="pay-tabpanel" aria-labelledby={`pay-tab-${view}`}>
-      {view === "received" ? <PaymentsReceived q={q} /> : view === "deposits" ? (
+      {view === "received" ? (xeroStatus?.connected ? <XeroEventPayments q={q} /> : <PaymentsReceived q={q} />) : view === "deposits" ? (
         <DepositsSent rows={all} q={q} loading={isLoading}
           onOpen={r => navigate(`/event/${r.bookingId}`)} onRecord={r => navigate(recordUrl(r))} />
       ) : view === "invoices" ? (

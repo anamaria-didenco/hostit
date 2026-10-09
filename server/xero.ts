@@ -683,3 +683,112 @@ export async function listXeroEventInvoices(ownerId: number, opts: { fresh?: boo
   eventInvoiceCache.set(ownerId, { at: Date.now(), rows: all });
   return all;
 }
+
+// ─── Event payments, mirrored from Xero ──────────────────────────────────────
+// Payments → Received: money Xero has recorded against EVENT invoices (the
+// same event filter as above), laid out the way Xero lists payments.
+
+export type XeroEventPayment = {
+  paymentId: string;
+  date: string | null;          // "YYYY-MM-DD"
+  amount: number;
+  reference: string | null;
+  status: string;               // AUTHORISED | DELETED
+  reconciled: boolean;
+  invoiceId: string;
+  invoiceNumber: string | null;
+  contactName: string;
+  accountName: string | null;
+  accountCode: string | null;
+  bookingId: number | null;
+  currency: string;
+};
+
+/** Xero's "/Date(1696204800000+0000)/" → "YYYY-MM-DD" (the payment's own calendar date). */
+export function xeroJsonDate(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const m = /\/Date\((-?\d+)/.exec(v);
+  if (m) return new Date(Number(m[1])).toISOString().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null;
+}
+
+/** Pure: keep only payments on event invoices. */
+export function pickEventPayments(
+  raw: any[],
+  eventInvoices: Map<string, number | null>, // Xero InvoiceID → bookingId
+  accounts: Map<string, { name: string; code: string | null }>,
+): XeroEventPayment[] {
+  const out: XeroEventPayment[] = [];
+  for (const p of raw) {
+    if (p?.Status === "DELETED") continue;
+    const inv = p?.Invoice;
+    if (!inv?.InvoiceID || (inv.Type && inv.Type !== "ACCREC")) continue;
+    if (!eventInvoices.has(inv.InvoiceID)) continue;
+    const acct = p?.Account?.AccountID ? accounts.get(p.Account.AccountID) : undefined;
+    out.push({
+      paymentId: p.PaymentID,
+      date: xeroJsonDate(p.Date),
+      amount: Number(p.Amount ?? 0),
+      reference: p.Reference ?? null,
+      status: p.Status ?? "AUTHORISED",
+      reconciled: Boolean(p.IsReconciled),
+      invoiceId: inv.InvoiceID,
+      invoiceNumber: inv.InvoiceNumber ?? null,
+      contactName: inv?.Contact?.Name ?? "",
+      accountName: acct?.name ?? null,
+      accountCode: acct?.code ?? p?.Account?.Code ?? null,
+      bookingId: eventInvoices.get(inv.InvoiceID) ?? null,
+      currency: inv?.CurrencyCode ?? "NZD",
+    });
+  }
+  return out;
+}
+
+const bankAccountCache = new Map<number, { at: number; map: Map<string, { name: string; code: string | null }> }>();
+async function bankAccounts(ownerId: number) {
+  const hit = bankAccountCache.get(ownerId);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.map;
+  const json = await xeroApi(ownerId, "GET", `/Accounts?where=${encodeURIComponent('Type=="BANK"')}`);
+  const map = new Map<string, { name: string; code: string | null }>();
+  for (const a of json?.Accounts ?? []) map.set(a.AccountID, { name: a.Name ?? "Bank", code: a.Code ?? null });
+  bankAccountCache.set(ownerId, { at: Date.now(), map });
+  return map;
+}
+
+const eventPaymentCache = new Map<string, { at: number; rows: XeroEventPayment[] }>();
+
+/** Payments on event invoices dated within [from, to] ("YYYY-MM-DD", inclusive), newest first. */
+export async function listXeroEventPayments(ownerId: number, range: { from?: string; to?: string }, opts: { fresh?: boolean } = {}): Promise<XeroEventPayment[]> {
+  const key = `${ownerId}|${range.from ?? ""}|${range.to ?? ""}`;
+  const hit = eventPaymentCache.get(key);
+  if (!opts.fresh && hit && Date.now() - hit.at < EVENT_INVOICE_TTL_MS) return hit.rows;
+
+  const invoices = await listXeroEventInvoices(ownerId, opts);
+  const eventInvoices = new Map<string, number | null>(invoices.map(i => [i.invoiceId, i.bookingId]));
+  // Older event invoices that fell outside the 12-month window are still in our ledger.
+  const { getDb } = await import("./db");
+  const { xeroInvoices } = await import("../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  const db = await getDb();
+  if (db) {
+    const rows = await db.select({ id: xeroInvoices.xeroInvoiceId, bookingId: xeroInvoices.bookingId })
+      .from(xeroInvoices).where(eq(xeroInvoices.ownerId, ownerId));
+    for (const r of rows) if (r.id && !eventInvoices.has(r.id)) eventInvoices.set(r.id, r.bookingId);
+  }
+  const accounts = await bankAccounts(ownerId).catch(() => new Map<string, { name: string; code: string | null }>());
+
+  const dt = (ymd: string) => { const [y, m, d] = ymd.split("-").map(Number); return `DateTime(${y},${m},${d})`; };
+  const clauses = ['PaymentType=="ACCRECPAYMENT"'];
+  if (range.from) clauses.push(`Date>=${dt(range.from)}`);
+  if (range.to) clauses.push(`Date<=${dt(range.to)}`);
+  const where = encodeURIComponent(clauses.join(" && "));
+  const all: XeroEventPayment[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const json = await xeroApi(ownerId, "GET", `/Payments?where=${where}&order=Date%20DESC&page=${page}`);
+    const batch: any[] = json?.Payments ?? [];
+    all.push(...pickEventPayments(batch, eventInvoices, accounts));
+    if (batch.length < 100) break;
+  }
+  eventPaymentCache.set(key, { at: Date.now(), rows: all });
+  return all;
+}
