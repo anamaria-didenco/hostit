@@ -1063,6 +1063,19 @@ export const menuCategoryItems = pgTable("menu_category_items", {
 export type MenuCategoryItem = typeof menuCategoryItems.$inferSelect;
 export type InsertMenuCategoryItem = typeof menuCategoryItems.$inferInsert;
 
+// ─── One-off data updates ─────────────────────────────────────────────────────
+// "Already applied" marker per venue for boot-time data updates (e.g. the
+// Event menus 2026 catalogue refresh), so each runs exactly once.
+export const dataUpdates = pgTable("data_updates", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  key: varchar("key", { length: 100 }).notNull(),
+  summary: json("summary"),
+  appliedAt: timestamp("appliedAt").defaultNow().notNull(),
+}, (t) => ({
+  ownerKeyUnique: uniqueIndex("data_updates_owner_key_idx").on(t.ownerId, t.key),
+}));
+
 // ─── Contracts ────────────────────────────────────────────────────────────────
 export const contracts = pgTable("contracts", {
   id: serial("id").primaryKey(),

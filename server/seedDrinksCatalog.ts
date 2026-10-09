@@ -12,13 +12,19 @@
  * catalogue), and it never modifies an existing category — if a "Birra" or
  * "Non Alcolico" category exists in any casing, that category is theirs and is
  * left entirely alone.
+ *
+ * A venue whose catalogue was refreshed by a one-off menu update (Bar Franco's
+ * Event menus 2026, server/eventMenus2026Backfill.ts) is skipped: that update
+ * owns its drinks list, and this backfill would otherwise re-add the retired
+ * Fever Trees under the old category name.
  */
 import { getDb } from "./db";
 import { menuCategories, menuCategoryItems } from "../drizzle/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { hasEventMenus2026 } from "./eventMenus2026Backfill";
 
 // Prices in DOLLARS here; stored ×100 like menuCatalog.createItem does.
-const SEED: Array<{ category: string; items: Array<{ name: string; description?: string; price: number }> }> = [
+const SEED: Array<{ category: string; aliases?: string[]; items: Array<{ name: string; description?: string; price: number }> }> = [
   {
     category: "Birra",
     items: [
@@ -29,6 +35,7 @@ const SEED: Array<{ category: string; items: Array<{ name: string; description?:
   },
   {
     category: "Non Alcolico",
+    aliases: ["non-alc", "non alcoholic", "non-alcoholic"],
     items: [
       { name: "Fever Tree Ginger Ale", price: 8 },
       { name: "Fever Tree Cola", price: 8 },
@@ -50,10 +57,11 @@ export async function seedDrinksCatalog(): Promise<void> {
       byOwner.set(c.ownerId, arr);
     }
     for (const [ownerId, cats] of byOwner) {
+      if (await hasEventMenus2026(db, ownerId)) continue;
       const have = new Set(cats.map(c => c.name.trim().toLowerCase()));
       let sortOrder = Math.max(0, ...cats.map(c => c.sortOrder ?? 0));
       for (const seed of SEED) {
-        if (have.has(seed.category.toLowerCase())) continue;
+        if ([seed.category, ...(seed.aliases ?? [])].some(n => have.has(n.toLowerCase()))) continue;
         sortOrder += 1;
         const [cat] = await db.insert(menuCategories).values({
           ownerId,
