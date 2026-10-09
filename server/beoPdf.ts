@@ -187,8 +187,9 @@ function groupByCourse(items: any[]) {
 // course headings inside the text we split it into proper course columns +
 // individual dishes so the BEO menu matches the rest of the document.
 const MENU_COURSE_MAP: { kw: string; label: string }[] = [
-  { kw: "canap[eé]s?|to start|nibbles?", label: "Canapés" },
-  { kw: "entr[eé]es?|antipasti?|antipasto|primi|primo|first courses?|starters?", label: "Entrée" },
+  { kw: "canap[eé]s?|nibbles?", label: "Canapés" },
+  // "To start" is Shared Franco's starter course (Event menus 2026), not canapés.
+  { kw: "entr[eé]es?|antipasti?|antipasto|primi|primo|first courses?|starters?|to start", label: "Entrée" },
   { kw: "mains?|main courses?|secondi|secondo", label: "Main" },
   { kw: "sides?|contorni?|contorno", label: "Sides" },
   { kw: "desserts?|dolci?|dolce|sweets?|puddings?", label: "Dessert" },

@@ -11,7 +11,9 @@ import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { COLOUR_THEMES } from "@/contexts/ThemeContext";
 import { currency, currencyWhole } from "@/lib/money";
-import { DRINKS_MENU } from "@shared/drinksMenu";
+import { DRINKS_MENU, DRINKS_BY_KEY, drinkPriceLabel } from "@shared/drinksMenu";
+import { SHARED_MENU_SECTIONS, selectedSharedMenuSections } from "@shared/proposalSharedMenu";
+import { catalogueDefaultQty, catalogueLineDescription, cataloguePriceLabel } from "@shared/menuCatalogue";
 import { toLocalDateInput } from "@/lib/dateTime";
 
 interface LineItem {
@@ -131,21 +133,25 @@ export default function ProposalBuilder() {
   const groupedFoodCatalogue = groupItemsByCategory(catalogueFoodItems, 'food');
   const groupedDrinkCatalogue = groupItemsByCategory(catalogueDrinkItems, 'drink');
 
-  // ── Food items state ───────────────────────────────────────────────────────
+  // ── Food items ─────────────────────────────────────────────────────────────
+  // Picked food goes straight onto the Pricing lines, so it's saved with the
+  // proposal and totalled, with GST added on top (catalogue prices exclude
+  // GST). It used to sit in a list here that was never saved.
   const [foodSectionOpen, setFoodSectionOpen] = useState(false);
-  const [customFoodItems, setCustomFoodItems] = useState<{ name: string; description?: string; pricePerHead?: number }[]>([]);
   const [newFoodItem, setNewFoodItem] = useState({ name: "", description: "", pricePerHead: "" });
-
+  const covers = parseInt(guestCount) || 0;
+  const lineDescriptions = new Set(lineItems.map(li => li.description));
+  const addPricingLine = (description: string, qty: number, unitPrice: number) =>
+    setLineItems(prev => [...prev, { description, qty, unitPrice, total: qty * unitPrice }]);
   const addFoodItem = () => {
     if (!newFoodItem.name.trim()) return;
-    setCustomFoodItems(prev => [...prev, {
-      name: newFoodItem.name.trim(),
-      description: newFoodItem.description.trim() || undefined,
-      pricePerHead: newFoodItem.pricePerHead ? parseFloat(newFoodItem.pricePerHead) : undefined,
-    }]);
+    const description = [newFoodItem.name.trim(), newFoodItem.description.trim()].filter(Boolean).join(", ");
+    addPricingLine(description, covers || 1, newFoodItem.pricePerHead ? parseFloat(newFoodItem.pricePerHead) || 0 : 0);
     setNewFoodItem({ name: "", description: "", pricePerHead: "" });
   };
-  const removeFoodItem = (i: number) => setCustomFoodItems(prev => prev.filter((_, idx) => idx !== i));
+  const foodLinesAdded = groupedFoodCatalogue
+    .flatMap(g => g.items)
+    .filter((it: any) => lineDescriptions.has(catalogueLineDescription(it))).length;
 
   // ── Drinks selection state ─────────────────────────────────────────────────
   const [drinksSectionOpen, setDrinksSectionOpen] = useState(false);
@@ -156,28 +162,9 @@ export default function ProposalBuilder() {
   const [newCustomDrink, setNewCustomDrink] = useState({ name: "", description: "", price: "" });
   const [selectedSampleItems, setSelectedSampleItems] = useState<string[]>([]);
 
-  // ── Sample Shared Menu (food, all "to share" except Dolce) ────────────────
-  const SAMPLE_MENU = [
-    { category: "Antipasto", note: "To share", items: [
-      { key: "antipasto_focaccia", name: "Focaccia with rosemary and olive oil" },
-      { key: "antipasto_olives", name: "Citrus-thyme olives" },
-      { key: "antipasto_salumi", name: "Salumi selection" },
-      { key: "antipasto_ricotta", name: "Ricotta montata with pickled tomato and basil oil" },
-    ]},
-    { category: "Secondi", note: "To share", items: [
-      { key: "secondi_spaghetti", name: "Spaghetti al Ragù Toscano with free farmed pork" },
-      { key: "secondi_risotto", name: "Cavolo Nero risotto with parmigiano cream and grilled kale" },
-      { key: "secondi_milanese", name: "Chicken Milanese with tomato sugo and grilled peppers" },
-    ]},
-    { category: "Contorno", note: "To share", items: [
-      { key: "contorno_greens", name: "Mixed greens with mint and almond" },
-      { key: "contorno_cos", name: "Fresh cos salad with citrus and pecorino" },
-      { key: "contorno_potatoes", name: "Triple cooked potatoes with parsley mayonnaise" },
-    ]},
-    { category: "Dolce", note: "", items: [
-      { key: "dolce_tiramisu", name: "Tiramisu with Amaretto, coffee, mascarpone" },
-    ]},
-  ] as const;
+  // Ticked on the proposal from the previous menu (kept so they can be unticked).
+  const previousSampleSections = selectedSharedMenuSections(selectedSampleItems).filter(sec => sec.retired);
+  const previousDrinks = selectedDrinks.map(k => DRINKS_BY_KEY[k]).filter(d => d?.retired);
 
   const toggleSampleItem = (key: string) => {
     setSelectedSampleItems(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -249,6 +236,13 @@ export default function ProposalBuilder() {
   };
 
   const selectedPackages = (menuPackages ?? []).filter(p => selectedMenuPackageIds.includes(p.id));
+  // Retired packages stay on file for past events but aren't offered.
+  const offeredPackages = (menuPackages ?? []).filter(p => p.isActive || selectedMenuPackageIds.includes(p.id));
+  const PACKAGE_GROUPS = [
+    { type: 'food', label: 'FOOD PACKAGES', icon: UtensilsCrossed, text: 'text-primary', on: 'border-primary bg-primary/5', hover: 'hover:border-primary/40' },
+    { type: 'beverages', label: 'BEVERAGES PACKAGES', icon: Wine, text: 'text-sage-green', on: 'border-sage-green bg-sage-tint/50', hover: 'hover:border-sage-green/40' },
+    { type: 'food_and_beverages', label: 'FOOD & BEVERAGES PACKAGES', icon: ChefHat, text: 'text-forest', on: 'border-forest bg-blue-50', hover: 'hover:border-forest/40' },
+  ] as const;
 
   // New proposal: start from the enquiry. (The client's budget is NOT a
   // price — it used to be dropped straight into Venue Hire.)
@@ -592,7 +586,7 @@ export default function ProposalBuilder() {
 
             {menuSectionOpen && (
               <div className="px-5 pb-5">
-                {!menuPackages || menuPackages.length === 0 ? (
+                {offeredPackages.length === 0 ? (
                   <div className="text-center py-6 border-2 border-dashed border-border">
                     <ChefHat className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                     <p className="font-dm text-sm text-muted-foreground">No menu packages yet.</p>
@@ -600,119 +594,50 @@ export default function ProposalBuilder() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {/* Food Packages */}
-                    {menuPackages.filter(p => p.type === 'food').length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <UtensilsCrossed className="w-3.5 h-3.5 text-primary" />
-                          <span className="font-bebas text-xs tracking-widest text-primary">FOOD PACKAGES</span>
-                        </div>
-                        <div className="grid gap-2">
-                          {menuPackages.filter(p => p.type === 'food').map(pkg => (
-                            <button
-                              key={pkg.id}
-                              onClick={() => toggleMenuPackage(pkg.id)}
-                              className={`w-full text-left p-3 border-2 transition-all ${
-                                selectedMenuPackageIds.includes(pkg.id)
-                                  ? 'border-primary bg-primary/5'
-                                  : 'border-border hover:border-primary/40'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <div className="font-bebas text-sm tracking-wide text-ink">{pkg.name}</div>
-                                  {pkg.description && <div className="font-dm text-xs text-muted-foreground mt-0.5">{pkg.description}</div>}
-                                </div>
-                                <div className="text-right shrink-0">
-                                  {pkg.pricePerHead && (
-                                    <div className="font-alfa text-sm text-primary">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
-                                  )}
-                                  {selectedMenuPackageIds.includes(pkg.id) && (
-                                    <div className="font-bebas text-xs text-primary tracking-widest mt-0.5">✓ SELECTED</div>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Beverages Packages */}
-                    {menuPackages.filter(p => p.type === 'beverages').length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Wine className="w-3.5 h-3.5 text-sage-green" />
-                          <span className="font-bebas text-xs tracking-widest text-sage-green">BEVERAGES PACKAGES</span>
-                        </div>
-                        <div className="grid gap-2">
-                          {menuPackages.filter(p => p.type === 'beverages').map(pkg => (
-                            <button
-                              key={pkg.id}
-                              onClick={() => toggleMenuPackage(pkg.id)}
-                              className={`w-full text-left p-3 border-2 transition-all ${
-                                selectedMenuPackageIds.includes(pkg.id)
-                                  ? 'border-sage-green bg-sage-tint/50'
-                                  : 'border-border hover:border-sage-green/40'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <div className="font-bebas text-sm tracking-wide text-ink">{pkg.name}</div>
-                                  {pkg.description && <div className="font-dm text-xs text-muted-foreground mt-0.5">{pkg.description}</div>}
-                                </div>
-                                <div className="text-right shrink-0">
-                                  {pkg.pricePerHead && (
-                                    <div className="font-alfa text-sm text-sage-green">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
-                                  )}
-                                  {selectedMenuPackageIds.includes(pkg.id) && (
-                                    <div className="font-bebas text-xs text-sage-green tracking-widest mt-0.5">✓ SELECTED</div>
+                    {PACKAGE_GROUPS.map(g => {
+                      const pkgs = offeredPackages.filter(p => p.type === g.type);
+                      if (pkgs.length === 0) return null;
+                      const Icon = g.icon;
+                      return (
+                        <div key={g.type}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Icon className={`w-3.5 h-3.5 ${g.text}`} />
+                            <span className={`font-bebas text-xs tracking-widest ${g.text}`}>{g.label}</span>
+                          </div>
+                          <div className="grid gap-2">
+                            {pkgs.map(pkg => {
+                              const selected = selectedMenuPackageIds.includes(pkg.id);
+                              return (
+                                <div key={pkg.id} className={`border-2 transition-all ${selected ? g.on : `border-border ${g.hover}`}`}>
+                                  <button type="button" aria-pressed={selected} onClick={() => toggleMenuPackage(pkg.id)} className="w-full text-left p-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <div className="font-bebas text-sm tracking-wide text-ink">{pkg.name}</div>
+                                        {pkg.description && <div className="font-dm text-xs text-muted-foreground mt-0.5">{pkg.description}</div>}
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        {pkg.pricePerHead && (
+                                          <div className={`font-alfa text-sm ${g.text}`}>${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head + GST</span></div>
+                                        )}
+                                        {selected && (
+                                          <div className={`font-bebas text-xs tracking-widest mt-0.5 ${g.text}`}>✓ SELECTED</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </button>
+                                  {pkg.chefNotes && (
+                                    <details className="px-3 pb-3">
+                                      <summary className="cursor-pointer font-bebas text-xs tracking-widest text-muted-foreground hover:text-ink">WHAT&rsquo;S ON IT</summary>
+                                      <pre className="mt-1 font-dm text-xs text-ink whitespace-pre-wrap break-words">{pkg.chefNotes}</pre>
+                                    </details>
                                   )}
                                 </div>
-                              </div>
-                            </button>
-                          ))}
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
-
-                    {/* Food & Beverages Packages */}
-                    {menuPackages.filter(p => p.type === 'food_and_beverages').length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <ChefHat className="w-3.5 h-3.5 text-forest" />
-                          <span className="font-bebas text-xs tracking-widest text-forest">FOOD & BEVERAGES PACKAGES</span>
-                        </div>
-                        <div className="grid gap-2">
-                          {menuPackages.filter(p => p.type === 'food_and_beverages').map(pkg => (
-                            <button
-                              key={pkg.id}
-                              onClick={() => toggleMenuPackage(pkg.id)}
-                              className={`w-full text-left p-3 border-2 transition-all ${
-                                selectedMenuPackageIds.includes(pkg.id)
-                                  ? 'border-forest bg-blue-50'
-                                  : 'border-border hover:border-forest/40'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <div className="font-bebas text-sm tracking-wide text-ink">{pkg.name}</div>
-                                  {pkg.description && <div className="font-dm text-xs text-muted-foreground mt-0.5">{pkg.description}</div>}
-                                </div>
-                                <div className="text-right shrink-0">
-                                  {pkg.pricePerHead && (
-                                    <div className="font-alfa text-sm text-forest">${Number(pkg.pricePerHead).toFixed(2)}<span className="font-dm text-xs text-muted-foreground">/head</span></div>
-                                  )}
-                                  {selectedMenuPackageIds.includes(pkg.id) && (
-                                    <div className="font-bebas text-xs text-forest tracking-widest mt-0.5">✓ SELECTED</div>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -813,9 +738,9 @@ export default function ProposalBuilder() {
               <div className="flex items-center gap-2">
                 <UtensilsCrossed className="w-4 h-4 text-primary" />
                 <h2 className="font-bebas text-xs tracking-widest text-muted-foreground">FOOD ITEMS</h2>
-                {customFoodItems.length > 0 && (
+                {foodLinesAdded > 0 && (
                   <span className="bg-primary text-white font-bebas text-xs px-2 py-0.5 tracking-widest">
-                    {customFoodItems.length} ADDED
+                    {foodLinesAdded} ADDED
                   </span>
                 )}
               </div>
@@ -827,34 +752,31 @@ export default function ProposalBuilder() {
                 {groupedFoodCatalogue.length > 0 && (
                   <div className="pt-4">
                     <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-2">PICK FROM YOUR MENU CATALOGUE</div>
-                    <p className="font-dm text-xs text-muted-foreground mb-3">This list updates automatically when you edit menus in Dashboard → Menu Catalogue.</p>
+                    <p className="font-dm text-xs text-muted-foreground mb-3">Adds a line to Pricing above — set the quantity there. Prices exclude GST; GST is added to the total. This list follows Settings → Menu &amp; Catalogue.</p>
                     <div className="space-y-3 max-h-72 overflow-y-auto border border-border p-3 bg-white/40">
                       {groupedFoodCatalogue.map(g => (
                         <div key={g.category.id}>
                           <div className="font-playfair italic text-sm text-primary mb-1 border-b border-primary/20 pb-1">{g.category.name}</div>
                           <div className="space-y-1">
                             {g.items.map((it: any) => {
-                              const already = customFoodItems.some(ci => ci.name === it.name);
+                              const line = catalogueLineDescription(it);
+                              const already = lineDescriptions.has(line);
                               return (
                                 <div key={it.id} className="flex items-center gap-2 py-1">
                                   <div className="flex-1 min-w-0">
-                                    <div className="font-dm text-sm text-ink truncate">{it.name}</div>
-                                    {it.description && <div className="font-dm text-xs text-muted-foreground truncate">{it.description}</div>}
+                                    <div className="font-dm text-sm text-ink truncate">
+                                      {it.name}
+                                      {it.allergens && <span className="font-dm text-xs text-muted-foreground ml-2">{it.allergens}</span>}
+                                    </div>
+                                    {it.description && <div className="font-dm text-xs text-muted-foreground truncate">{it.description.split('\n').join(' · ')}</div>}
                                   </div>
-                                  <div className="font-dm text-xs text-muted-foreground shrink-0">${(it.price / 100).toFixed(2)}{it.pricingType === 'per_person' ? '/head' : '/item'}</div>
+                                  <div className="font-dm text-xs text-muted-foreground shrink-0">{cataloguePriceLabel(it)}</div>
                                   <Button
                                     size="sm"
                                     variant={already ? 'outline' : 'default'}
                                     disabled={already}
-                                    onClick={() => {
-                                      const dollars = it.price / 100;
-                                      const suffix = it.pricingType === 'per_person' ? ' (per head)' : ' (per item)';
-                                      setCustomFoodItems(prev => [...prev, {
-                                        name: it.name,
-                                        description: (it.description ? it.description + suffix : suffix.trim()),
-                                        pricePerHead: dollars,
-                                      }]);
-                                    }}
+                                    aria-label={already ? `${it.name} added` : `Add ${it.name}`}
+                                    onClick={() => addPricingLine(line, catalogueDefaultQty(it, covers), it.price / 100)}
                                     className="font-bebas tracking-widest rounded-none px-3 text-xs"
                                   >
                                     {already ? 'ADDED' : 'ADD'}
@@ -869,37 +791,26 @@ export default function ProposalBuilder() {
                   </div>
                 )}
                 <div className={groupedFoodCatalogue.length > 0 ? '' : 'pt-4'}>
-                  {customFoodItems.length === 0 && (
-                    <p className="font-dm text-sm text-muted-foreground mb-3">No food items added yet. Pick from the catalogue above or add a custom one below.</p>
-                  )}
-                  {customFoodItems.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 mb-2 p-2 bg-sage-tint border border-sage-green/20">
-                      <div className="flex-1 min-w-0">
-                        <span className="font-dm text-sm text-ink">{item.name}</span>
-                        {item.description && <span className="font-dm text-xs text-muted-foreground ml-2">{item.description}</span>}
-                        {item.pricePerHead && <span className="font-dm text-xs text-primary ml-2">${item.pricePerHead}/head</span>}
-                      </div>
-                      <button onClick={() => removeFoodItem(i)} aria-label={`Remove food item ${item.name || i + 1}`} className="text-muted-foreground/40 hover:text-primary transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" aria-hidden />
-                      </button>
-                    </div>
-                  ))}
+                  <div className="font-bebas text-xs tracking-widest text-muted-foreground">ADD SOMETHING ELSE</div>
                   <div className="grid grid-cols-3 gap-2 mt-2">
                     <Input
                       value={newFoodItem.name}
                       onChange={e => setNewFoodItem(p => ({ ...p, name: e.target.value }))}
                       placeholder="Dish name"
+                      aria-label="Dish name"
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <Input
                       value={newFoodItem.description}
                       onChange={e => setNewFoodItem(p => ({ ...p, description: e.target.value }))}
                       placeholder="Description (optional)"
+                      aria-label="Dish description"
                       className="rounded-none border-2 focus-visible:ring-0 focus-visible:border-primary text-sm"
                     />
                     <div className="flex gap-2">
                       <Input
                         type="number"
+                        aria-label="Price per head, excluding GST"
                         value={newFoodItem.pricePerHead}
                         onChange={e => setNewFoodItem(p => ({ ...p, pricePerHead: e.target.value }))}
                         placeholder="$/head"
@@ -972,6 +883,7 @@ export default function ProposalBuilder() {
                 </div>
 
                 {/* Drinks Menu */}
+                <p className="font-dm text-xs text-muted-foreground">Event menus 2026. Prices exclude GST; wines are per bottle.</p>
                 {DRINKS_MENU.map(cat => (
                   <div key={cat.category}>
                     <div className="font-playfair italic text-sm text-primary mb-2 border-b border-primary/20 pb-1">{cat.category}</div>
@@ -994,9 +906,7 @@ export default function ProposalBuilder() {
                             {item.description && <div className="font-dm text-xs text-muted-foreground">{item.description}</div>}
                           </div>
                           <div className="font-dm text-xs text-muted-foreground shrink-0 text-right">
-                            {item.price ? `$${item.price}` : ''}
-                            {item.priceGlass ? `$${item.priceGlass}/glass` : ''}
-                            {item.priceBottle ? ` · $${item.priceBottle}/btl` : ''}
+                            {drinkPriceLabel(item)}
                           </div>
                         </label>
                       ))}
@@ -1004,15 +914,30 @@ export default function ProposalBuilder() {
                   </div>
                 ))}
 
+                {previousDrinks.length > 0 && (
+                  <div className="border border-border p-3">
+                    <div className="font-bebas text-xs tracking-widest text-muted-foreground mb-1">FROM THE PREVIOUS MENU</div>
+                    <p className="font-dm text-xs text-muted-foreground mb-2">Still on this proposal at the old prices. Untick to remove.</p>
+                    {previousDrinks.map(d => (
+                      <label key={d!.key} className="flex items-start gap-3 p-2 cursor-pointer">
+                        <input type="checkbox" checked onChange={() => toggleDrink(d!.key)} className="mt-0.5 accent-primary" />
+                        <div className="flex-1 min-w-0 font-dm text-sm text-ink">{d!.name}</div>
+                        <div className="font-dm text-xs text-muted-foreground shrink-0">{drinkPriceLabel(d!)}</div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
                 {/* Sample Shared Menu (Food) */}
                 <div className="pt-4 mt-2 border-t-2 border-primary/20">
-                  <div className="font-bebas text-sm tracking-widest text-ink mb-1">SAMPLE SHARED MENU</div>
-                  <div className="font-dm text-xs text-muted-foreground mb-3">Tick any food items to include on the proposal.</div>
-                  {SAMPLE_MENU.map(cat => (
+                  <div className="font-bebas text-sm tracking-widest text-ink mb-1">SHARED FRANCO MENU</div>
+                  <div className="font-dm text-xs text-muted-foreground mb-3">Tick the dishes to show on the proposal. Price it with the Shared Franco or Tutto Franco package above.</div>
+                  {[...SHARED_MENU_SECTIONS, ...previousSampleSections].map(cat => (
                     <div key={cat.category} className="mb-4">
                       <div className="font-playfair italic text-sm text-primary mb-2 border-b border-primary/20 pb-1">
                         {cat.category}
                         {cat.note && <span className="font-dm not-italic text-xs text-muted-foreground ml-2">({cat.note})</span>}
+                        {cat.retired && <span className="font-dm not-italic text-xs text-muted-foreground ml-2">· previous menu, untick to remove</span>}
                       </div>
                       <div className="space-y-1.5">
                         {cat.items.map(item => (
@@ -1056,7 +981,7 @@ export default function ProposalBuilder() {
                                     <div className="font-dm text-sm text-ink truncate">{it.name}</div>
                                     {it.description && <div className="font-dm text-xs text-muted-foreground truncate">{it.description}</div>}
                                   </div>
-                                  <div className="font-dm text-xs text-muted-foreground shrink-0">${(it.price / 100).toFixed(2)}</div>
+                                  <div className="font-dm text-xs text-muted-foreground shrink-0">{cataloguePriceLabel(it)}</div>
                                   <Button
                                     size="sm"
                                     variant={already ? 'outline' : 'default'}

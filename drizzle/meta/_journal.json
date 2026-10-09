@@ -546,6 +546,13 @@
       "when": 1779801512077,
       "tag": "0077_deposit_requested_at",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1779801512078,
+      "tag": "0078_data_updates",
+      "breakpoints": true
     }
   ]
 }

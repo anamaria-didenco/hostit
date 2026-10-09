@@ -342,7 +342,7 @@ export default function ExpressBook() {
                         <div className="font-dm font-semibold text-ink">{pkg.name}</div>
                         {pkg.pricePerHead && (
                           <div className="text-xs font-dm text-ink/70 mt-0.5">
-                            ${pkg.pricePerHead} per head
+                            ${Number(pkg.pricePerHead).toFixed(2)} per head + GST
                           </div>
                         )}
                         {pkg.description && (

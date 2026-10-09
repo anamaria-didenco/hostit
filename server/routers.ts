@@ -5879,7 +5879,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (!db) return null;
         const [venue] = await db.select().from(venueSettings).where(eq(venueSettings.ownerId, input.ownerId));
         const spaces = await db.select().from(eventSpaces).where(eq(eventSpaces.ownerId, input.ownerId));
-        const packages = await db.select().from(menuPackages).where(eq(menuPackages.ownerId, input.ownerId));
+        // Retired packages stay on file for past events but aren't offered.
+        const packages = (await db.select().from(menuPackages).where(eq(menuPackages.ownerId, input.ownerId)))
+          .filter(p => p.isActive);
         // Strip secrets from the venue row before returning — this endpoint
         // is public and previously leaked SMTP creds + NBI webhook secret.
         return { venue: venue ? stripVenueSecrets(venue) : null, spaces, packages };
@@ -6402,16 +6404,23 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
   menuCatalog: router({
     // ── Categories ──
     listCategories: protectedProcedure
-      .input(z.object({ type: z.enum(['food', 'drink', 'all']).optional() }))
+      // pickable: only categories with at least one item still on the menu —
+      // for pickers, so a category whose items were all retired doesn't show.
+      .input(z.object({ type: z.enum(['food', 'drink', 'all']).optional(), pickable: z.boolean().optional() }))
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
-        const { menuCategories } = await import('../drizzle/schema');
+        const { menuCategories, menuCategoryItems } = await import('../drizzle/schema');
         const { eq, and, asc } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) return [];
         const conditions: any[] = [eq(menuCategories.ownerId, ctx.user.id)];
         if (input.type && input.type !== 'all') conditions.push(eq(menuCategories.type, input.type as any));
-        return db.select().from(menuCategories).where(and(...conditions)).orderBy(asc(menuCategories.sortOrder), asc(menuCategories.createdAt));
+        const cats = await db.select().from(menuCategories).where(and(...conditions)).orderBy(asc(menuCategories.sortOrder), asc(menuCategories.createdAt));
+        if (!input.pickable) return cats;
+        const live = await db.selectDistinct({ categoryId: menuCategoryItems.categoryId }).from(menuCategoryItems)
+          .where(and(eq(menuCategoryItems.ownerId, ctx.user.id), eq(menuCategoryItems.available, true)));
+        const liveIds = new Set(live.map(r => r.categoryId));
+        return cats.filter(c => liveIds.has(c.id));
       }),
     createCategory: protectedProcedure
       .input(z.object({
@@ -6471,7 +6480,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       }),
     // ── Items ──
     listItems: protectedProcedure
-      .input(z.object({ categoryId: z.number().optional(), type: z.enum(['food', 'drink', 'all']).optional() }))
+      // availableOnly: hide retired items (pickers). Settings lists them all.
+      .input(z.object({ categoryId: z.number().optional(), type: z.enum(['food', 'drink', 'all']).optional(), availableOnly: z.boolean().optional() }))
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
         const { menuCategoryItems, menuCategories } = await import('../drizzle/schema');
@@ -6479,9 +6489,10 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const db = await getDb();
         if (!db) return [];
         if (input.categoryId) {
-          return db.select().from(menuCategoryItems)
+          const rows = await db.select().from(menuCategoryItems)
             .where(and(eq(menuCategoryItems.categoryId, input.categoryId), eq(menuCategoryItems.ownerId, ctx.user.id)))
             .orderBy(asc(menuCategoryItems.sortOrder), asc(menuCategoryItems.createdAt));
+          return input.availableOnly ? rows.filter(r => r.available) : rows;
         }
         if (input.type && input.type !== 'all') {
           const cats = await db.select({ id: menuCategories.id }).from(menuCategories)

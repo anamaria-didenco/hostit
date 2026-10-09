@@ -7,7 +7,8 @@ import { CheckCircle, XCircle, Calendar, Users, MapPin, Clock } from "lucide-rea
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { currency } from "@/lib/money";
-import { DRINKS_BY_KEY } from "@shared/drinksMenu";
+import { DRINKS_BY_KEY, drinkPriceLabel } from "@shared/drinksMenu";
+import { selectedSharedMenuSections } from "@shared/proposalSharedMenu";
 
 interface LineItem {
   description: string;
@@ -130,28 +131,6 @@ export default function ProposalView() {
     { token: token ?? "" },
     { enabled: !!token }
   );
-
-  const SAMPLE_MENU_SECTIONS: { category: string; note: string; items: { key: string; name: string }[] }[] = [
-    { category: "Antipasto", note: "To share", items: [
-      { key: "antipasto_focaccia", name: "Focaccia with rosemary and olive oil" },
-      { key: "antipasto_olives", name: "Citrus-thyme olives" },
-      { key: "antipasto_salumi", name: "Salumi selection" },
-      { key: "antipasto_ricotta", name: "Ricotta montata with pickled tomato and basil oil" },
-    ]},
-    { category: "Secondi", note: "To share", items: [
-      { key: "secondi_spaghetti", name: "Spaghetti al Ragù Toscano with free farmed pork" },
-      { key: "secondi_risotto", name: "Cavolo Nero risotto with parmigiano cream and grilled kale" },
-      { key: "secondi_milanese", name: "Chicken Milanese with tomato sugo and grilled peppers" },
-    ]},
-    { category: "Contorno", note: "To share", items: [
-      { key: "contorno_greens", name: "Mixed greens with mint and almond" },
-      { key: "contorno_cos", name: "Fresh cos salad with citrus and pecorino" },
-      { key: "contorno_potatoes", name: "Triple cooked potatoes with parsley mayonnaise" },
-    ]},
-    { category: "Dolce", note: "", items: [
-      { key: "dolce_tiramisu", name: "Tiramisu with Amaretto, coffee, mascarpone" },
-    ]},
-  ];
 
   const BAR_OPTION_LABELS: Record<string, string> = {
     bar_tab: "Bar Tab",
@@ -407,22 +386,20 @@ export default function ProposalView() {
                             {drink.description && <div className="font-inter text-xs" style={{ color: T.stone }}>{drink.description}</div>}
                           </div>
                           <div className="font-inter text-xs shrink-0 ml-4" style={{ color: T.stone }}>
-                            {drink.price ? `$${drink.price}` : ''}
-                            {drink.priceGlass ? `$${drink.priceGlass}/glass` : ''}
-                            {drink.priceBottle ? ` · $${drink.priceBottle}/btl` : ''}
+                            {drinkPriceLabel(drink)}
                           </div>
                         </div>
                       );
                     })}
                   </div>
+                  {(drinksData.selectedDrinks as string[]).some(k => DRINKS_BY_KEY[k]?.exGst) && (
+                    <div className="font-inter text-xs mt-2" style={{ color: T.stone }}>Drink prices exclude GST.</div>
+                  )}
                 </div>
               )}
 
               {(drinksData as any).selectedSampleItems && ((drinksData as any).selectedSampleItems as string[]).length > 0 && (() => {
-                const selected = new Set((drinksData as any).selectedSampleItems as string[]);
-                const sectionsWithItems = SAMPLE_MENU_SECTIONS
-                  .map(s => ({ ...s, items: s.items.filter(i => selected.has(i.key)) }))
-                  .filter(s => s.items.length > 0);
+                const sectionsWithItems = selectedSharedMenuSections((drinksData as any).selectedSampleItems as string[]);
                 if (sectionsWithItems.length === 0) return null;
                 return (
                   <div>

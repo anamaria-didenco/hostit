@@ -32,6 +32,7 @@ import { SectionHead } from "@/components/ui/section-head";
 import { StatusBadge } from "@/components/ui/badge";
 import { currency } from "@/lib/money";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
+import { catalogueDefaultQty } from "@shared/menuCatalogue";
 import {
   FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS,
   foodBillingSentence, drinksBillingSentence, depositAppliedClause, billingStageLabel,
@@ -139,51 +140,6 @@ const VENUE_SETUP_TEMPLATES = [
   { label: "Boardroom", value: "Single large table, chairs around perimeter. Projector/screen at head. Water/notepads at each seat. Catering station at rear." },
   { label: "Cabaret", value: "Half-round tables facing stage. Chairs on one side only. Dance floor at front. Bar at rear. Stage with AV at front." },
 ];
-
-const DRINKS_MENU = [
-  { category: "Aperitivo", items: [
-    { key: "aperol_spritz", name: "Aperol Spritz", description: "Aperol, Prosecco, Soda", price: 20 },
-    { key: "campari_spritz", name: "Campari Spritz", description: "Campari, Prosecco, Soda", price: 20 },
-    { key: "limoncello_spritz", name: "Limoncello Spritz", description: "Limoncello, Prosecco, Soda", price: 20 },
-    { key: "hugo_spritz", name: "Hugo Spritz", description: "Elderflower, Prosecco, Soda", price: 20 },
-    { key: "classic_negroni", name: "Classic Negroni", description: "Campari, Rosso Vermouth, Gin", price: 24 },
-    { key: "negroni_sbagliato", name: "Negroni Sbagliato", description: "Campari, Rosso Vermouth, Prosecco", price: 23 },
-    { key: "cherry_negroni", name: "Cherry Negroni", description: "Campari, Amaro, Rosso Vermouth, Gin", price: 25 },
-    { key: "americano", name: "Americano", description: "Campari, Rosso Vermouth, Soda", price: 23 },
-  ]},
-  { category: "Vino Spumante", items: [
-    { key: "tallero_prosecco", name: "Tallero Prosecco Extra Dry", description: "Veneto", priceGlass: 17, priceBottle: 85 },
-    { key: "lambrusco", name: "Paltrinieri Lambrusco Di Soraba Radice", description: "Emiglia Romagna", priceBottle: 105 },
-  ]},
-  { category: "Vino Bianco", items: [
-    { key: "sauvignon_blanc", name: "Mezzacorona Castel Firmian Sauvignon Blanc", description: "Trentino", priceGlass: 17, priceBottle: 85 },
-    { key: "malvasia_chardonnay", name: "Fantini Primo Malvasia Chardonnay", description: "Abruzzo", priceGlass: 16, priceBottle: 80 },
-    { key: "pinot_grigio", name: "Vigneti Romio Pinot Grigio Rubione IGT", description: "Friuli", priceGlass: 16, priceBottle: 80 },
-    { key: "grillo", name: "Parthenium Grillo", description: "Sicilia", priceBottle: 85 },
-    { key: "pipoli_bianco", name: "Pipoli Bianco Basilicata IGT", description: "Basilicata", priceBottle: 90 },
-  ]},
-  { category: "Vino Rosato", items: [
-    { key: "rosato", name: "Fattoria Di Basciano Rosato", description: "Toscana", priceGlass: 17, priceBottle: 85 },
-  ]},
-  { category: "Vino Rosso", items: [
-    { key: "sangiovese_merlot", name: "Primo Sangiovese Merlot", description: "Puglia", priceGlass: 16, priceBottle: 80 },
-    { key: "chianti", name: "Renzo Masi Chianti Cornioletta", description: "Toscana", priceGlass: 17, priceBottle: 85 },
-    { key: "montepulciano", name: "Fantini Montepulciano", description: "Abruzzo", priceGlass: 17, priceBottle: 85 },
-    { key: "nebbiolo", name: "Ascheri Langhe Nebbiolo San Giacomo", description: "Piemonte", priceBottle: 110 },
-    { key: "barbaresco", name: "Fontanabianca Barbaresco DOCG", description: "Piemonte", priceBottle: 165 },
-  ]},
-  { category: "Birra", items: [
-    { key: "peroni_tap", name: "Peroni Tap", description: "Italia", price: 14 },
-    { key: "peroni_330", name: "Peroni 330ml", description: "Italia", price: 12 },
-    { key: "peroni_0", name: "Peroni 0%", description: "Italia", price: 12 },
-  ]},
-  { category: "Non Alcolico", items: [
-    { key: "ginger_ale", name: "Fever Tree Ginger Ale", price: 8 },
-    { key: "cola", name: "Fever Tree Cola", price: 8 },
-    { key: "blood_orange", name: "Fever Tree Italian Blood Orange", price: 8 },
-    { key: "lemonade", name: "Fever Tree Italian Lemonade", price: 8 },
-  ]},
-] as const;
 
 const BAR_OPTIONS = [
   { key: "bar_tab" as const, label: "Bar Tab", description: "Set a fixed dollar amount" },
@@ -872,12 +828,14 @@ export default function RunsheetBuilder() {
   const [catalogSelectedItems, setCatalogSelectedItems] = useState<Map<number, { item: any; qty: number; categoryName: string }>>(new Map());
   const catalogPriceDollars = (it: any): number =>
     it?.priceCents != null ? Number(it.priceCents) / 100 : (it?.price != null ? Number(it.price) / 100 : 0);
+  // Pickers only offer what's on the menu: items retired in Settings (e.g. by
+  // a menu update) stay on file for past events but don't show here.
   const { data: catalogCategories } = trpc.menuCatalog.listCategories.useQuery(
-    { type: catalogSelectorType },
+    { type: catalogSelectorType, pickable: true },
     { enabled: showCatalogSelector }
   );
   const { data: catalogItems } = trpc.menuCatalog.listItems.useQuery(
-    { categoryId: catalogSelectorCategoryId ?? undefined },
+    { categoryId: catalogSelectorCategoryId ?? undefined, availableOnly: true },
     { enabled: showCatalogSelector && catalogSelectorCategoryId !== null }
   );
 
@@ -917,7 +875,8 @@ export default function RunsheetBuilder() {
         dishName: e.item.name,
         description: e.item.description ?? '',
         qty: e.qty,
-        dietary: '',
+        // Catalogue dietary tags (V · GFA · DFA) travel with the dish to the BEO.
+        dietary: e.item.allergens ?? '',
         serviceTime: '',
         staffAssigned: '',
         sortOrder: fnbItems.length + i,
@@ -6613,7 +6572,10 @@ export default function RunsheetBuilder() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-gold/30 bg-forest">
               <div>
                 <div className="font-bebas tracking-widest text-gold text-lg">ADD FROM MENU CATALOGUE</div>
-                <div className="font-dm text-white/60 text-xs mt-0.5">Pick across categories — your selection is kept until you add</div>
+                <div className="font-dm text-white/60 text-xs mt-0.5">Pick across categories — your selection is kept until you add. Prices exclude GST.</div>
+                {gstInclusive && (
+                  <div className="font-dm text-gold text-xs mt-1">This runsheet is set to &ldquo;prices include GST&rdquo; — catalogue prices don&rsquo;t, so check the Costs tab.</div>
+                )}
               </div>
               <button onClick={() => setShowCatalogSelector(false)} className="text-white/50 hover:text-white transition-colors">
                 <span className="text-2xl leading-none">&times;</span>
@@ -6676,9 +6638,10 @@ export default function RunsheetBuilder() {
                       const toggle = (item: any) => setCatalogSelectedItems(prev => {
                         const next = new Map(prev);
                         if (next.has(item.id)) next.delete(item.id);
-                        // Food from the catalogue is for the whole room by default;
-                        // drinks are counted per bottle/serve, so they stay at 1.
-                        else next.set(item.id, { item, qty: catalogSelectorType === 'food' ? defaultCovers : 1, categoryName: catName });
+                        // Food from the catalogue is for the whole room by default
+                        // (a set-amount grazing table is one); drinks are counted
+                        // per bottle/serve, so they stay at 1.
+                        else next.set(item.id, { item, qty: catalogSelectorType === 'food' ? catalogueDefaultQty(item, defaultCovers) : 1, categoryName: catName });
                         return next;
                       });
                       const setQty = (item: any, q: number) => setCatalogSelectedItems(prev => {
@@ -6690,7 +6653,7 @@ export default function RunsheetBuilder() {
                       return catalogItems.map((item: any) => {
                         const entry = catalogSelectedItems.get(item.id);
                         const isSelected = !!entry;
-                        const qty = entry?.qty ?? (catalogSelectorType === 'food' ? defaultCovers : 1);
+                        const qty = entry?.qty ?? (catalogSelectorType === 'food' ? catalogueDefaultQty(item, defaultCovers) : 1);
                         return (
                         <div
                           key={item.id}
@@ -6711,7 +6674,7 @@ export default function RunsheetBuilder() {
                           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggle(item)}>
                             <div className="font-dm text-sm font-medium text-ink">{item.name}</div>
                             {item.description && <div className="font-dm text-xs text-ink/70 mt-0.5 truncate">{item.description}</div>}
-                            {item.allergens && <div className="font-dm text-[10px] text-amber-700 mt-0.5">⚠ {item.allergens}</div>}
+                            {item.allergens && <div className="font-dm text-[11px] text-amber-800 mt-0.5">{item.allergens}</div>}
                           </div>
                           {/* Qty input (only when selected) */}
                           {isSelected && (
@@ -6738,7 +6701,7 @@ export default function RunsheetBuilder() {
                           {item.price > 0 && (
                             <div className="text-right flex-shrink-0">
                               <div className="font-dm text-sm font-semibold text-ink">${(item.price / 100).toFixed(2)}</div>
-                              <div className="font-bebas text-[9px] text-ink/65 tracking-widest">{item.pricingType === 'per_person' ? 'PP' : 'EACH'}</div>
+                              <div className="font-bebas text-[11px] text-ink/65 tracking-widest">{item.pricingType === 'per_person' ? 'PP' : item.unit === 'bottle' ? 'BOTTLE' : item.unit === 'table' ? 'SET' : 'EACH'}</div>
                             </div>
                           )}
                         </div>

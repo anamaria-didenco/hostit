@@ -16,6 +16,7 @@ import {
 } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { selectedDrinkItems, drinkPriceLabel } from "../shared/drinksMenu";
+import { selectedSharedMenuSections } from "../shared/proposalSharedMenu";
 
 // Bar option labels
 const BAR_LABELS: Record<string, string> = {
@@ -62,37 +63,12 @@ export function buildHtml(data: {
   const venueLogoUrl = venue?.logoUrl ?? "";
   const primaryColor = venue?.primaryColor ?? "#350513";
 
-  // Sample shared menu (food)
-  const SAMPLE_MENU_SECTIONS: { category: string; note: string; items: { key: string; name: string }[] }[] = [
-    { category: "Antipasto", note: "To share", items: [
-      { key: "antipasto_focaccia", name: "Focaccia with rosemary and olive oil" },
-      { key: "antipasto_olives", name: "Citrus-thyme olives" },
-      { key: "antipasto_salumi", name: "Salumi selection" },
-      { key: "antipasto_ricotta", name: "Ricotta montata with pickled tomato and basil oil" },
-    ]},
-    { category: "Secondi", note: "To share", items: [
-      { key: "secondi_spaghetti", name: "Spaghetti al Ragù Toscano with free farmed pork" },
-      { key: "secondi_risotto", name: "Cavolo Nero risotto with parmigiano cream and grilled kale" },
-      { key: "secondi_milanese", name: "Chicken Milanese with tomato sugo and grilled peppers" },
-    ]},
-    { category: "Contorno", note: "To share", items: [
-      { key: "contorno_greens", name: "Mixed greens with mint and almond" },
-      { key: "contorno_cos", name: "Fresh cos salad with citrus and pecorino" },
-      { key: "contorno_potatoes", name: "Triple cooked potatoes with parsley mayonnaise" },
-    ]},
-    { category: "Dolce", note: "", items: [
-      { key: "dolce_tiramisu", name: "Tiramisu with Amaretto, coffee, mascarpone" },
-    ]},
-  ];
-
   let sampleMenuHtml = "";
   const sampleSelected: string[] = (drinks as any)?.selectedSampleItems ?? [];
   if (sampleSelected.length > 0) {
-    const selectedSet = new Set(sampleSelected);
-    const sectionsHtml = SAMPLE_MENU_SECTIONS
+    const sectionsHtml = selectedSharedMenuSections(sampleSelected)
       .map(sec => {
-        const picked = sec.items.filter(i => selectedSet.has(i.key));
-        if (picked.length === 0) return "";
+        const picked = sec.items;
         const rows = picked
           .map(i => `<tr><td class="item-name">${esc(i.name)}</td><td class="item-desc">${sec.note ? `<em>${esc(sec.note)}</em>` : ""}</td></tr>`)
           .join("");
@@ -121,7 +97,8 @@ export function buildHtml(data: {
     const barLabel = BAR_LABELS[drinks.barOption] ?? drinks.barOption;
     const selectedKeys: string[] = drinks.selectedDrinks ?? [];
     const customDrinks: Array<{ name: string; description?: string; price?: number }> = drinks.customDrinks ?? [];
-    const drinkRows = selectedDrinkItems(selectedKeys)
+    const picked = selectedDrinkItems(selectedKeys);
+    const drinkRows = picked
       .map((d) => {
         const price = drinkPriceLabel(d);
         return `<tr><td class="item-name">${esc(d.name)}${price ? ` — ${esc(price)}` : ""}</td><td class="item-desc">${esc(d.description ?? "")}</td></tr>`;
@@ -140,6 +117,7 @@ export function buildHtml(data: {
           <thead><tr><th>Item</th><th>Description</th></tr></thead>
           <tbody>${drinkRows}${customRows}</tbody>
         </table>` : ""}
+        ${picked.some(d => d.exGst) ? `<p style="font-size:11px; color:#777; margin-top:6px;">Drink prices exclude GST.</p>` : ""}
       </div>`;
   }
 

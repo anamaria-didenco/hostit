@@ -2618,6 +2618,15 @@ export default function Dashboard() {
   const createCatalogItem = trpc.menuCatalog.createItem.useMutation({
     onSuccess: () => { refetchCatalogItems(); setShowCatalogItemForm(false); setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); toast.success('Item added!'); }
   });
+  // On/off the menu without deleting: past events keep showing what was sold.
+  const toggleCatalogItemAvailable = trpc.menuCatalog.updateItem.useMutation({
+    onSuccess: () => refetchCatalogItems(),
+    onError: () => toast.error("Couldn't update that item"),
+  });
+  const togglePackageActive = trpc.menu.updatePackage.useMutation({
+    onSuccess: () => refetchMenuPackages(),
+    onError: () => toast.error("Couldn't update that package"),
+  });
   const updateCatalogItem = trpc.menuCatalog.updateItem.useMutation({
     onSuccess: () => { refetchCatalogItems(); setShowCatalogItemForm(false); setEditingCatalogItemId(null); setCatalogItemForm({ name: '', description: '', pricingType: 'per_person', price: '', unit: 'person', allergens: '' }); toast.success('Item updated!'); }
   });
@@ -9202,11 +9211,12 @@ export default function Dashboard() {
                       <p className="p-6 text-center text-sm text-gray-400">No menu items yet. Click Add to create one.</p>
                     )}
                     {(menuPackages ?? []).map((pkg: any) => (
-                      <div key={pkg.id} className="px-4 py-3 hover:bg-gray-50">
+                      <div key={pkg.id} className={`px-4 py-3 hover:bg-gray-50 ${pkg.isActive ? '' : 'bg-stone-50'}`}>
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-medium text-gray-800">{pkg.name}</span>
+                              <span className={`text-sm font-medium ${pkg.isActive ? 'text-gray-800' : 'text-stone-500 line-through'}`}>{pkg.name}</span>
+                              {!pkg.isActive && <span className="font-bebas tracking-widest text-[11px] px-1.5 py-0.5 bg-stone-200 text-stone-700">NOT OFFERED</span>}
                               {pkg.description && <span className="text-xs text-gray-400">{pkg.description}</span>}
                             </div>
                             {pkg.pdfUrl && (
@@ -9219,8 +9229,18 @@ export default function Dashboard() {
                           <div className="flex items-center gap-3 flex-shrink-0">
                             {pkg.customPriceLabel
                               ? <span className="text-sm font-semibold text-gray-700">{pkg.customPriceLabel}</span>
-                              : pkg.pricePerHead && <span className="text-sm font-semibold text-gray-700">${Number(pkg.pricePerHead).toFixed(2)} <span className="text-xs text-gray-400 font-normal">per person</span></span>
+                              : pkg.pricePerHead && <span className="text-sm font-semibold text-gray-700">${Number(pkg.pricePerHead).toFixed(2)} <span className="text-xs text-gray-500 font-normal">per person + GST</span></span>
                             }
+                            <button
+                              type="button"
+                              aria-pressed={pkg.isActive}
+                              aria-label={`${pkg.name}: ${pkg.isActive ? 'offered — click to stop offering it' : 'not offered — click to offer it again'}`}
+                              title={pkg.isActive ? 'Offered on proposals and the booking page' : 'Not offered; past events still show it'}
+                              onClick={() => togglePackageActive.mutate({ id: pkg.id, isActive: !pkg.isActive })}
+                              disabled={togglePackageActive.isPending}
+                              className={`font-bebas tracking-widest text-[11px] px-2 py-1 border transition-colors ${pkg.isActive ? 'border-forest text-forest hover:bg-emerald-50' : 'border-stone-400 text-stone-600 hover:bg-stone-100'}`}>
+                              {pkg.isActive ? 'OFFERED' : 'NOT OFFERED'}
+                            </button>
                             <button aria-label="Edit package" onClick={() => { setEditingPackageId(pkg.id); setMenuForm({ name: pkg.name, type: pkg.type, description: pkg.description ?? '', pricePerHead: pkg.pricePerHead ? String(pkg.pricePerHead) : '', customPriceLabel: pkg.customPriceLabel ?? '', chefNotes: pkg.chefNotes ?? '', pdfUrl: pkg.pdfUrl ?? '', pdfName: pkg.pdfName ?? '' }); setShowMenuForm(true); }} className="text-blue-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
                             <button onClick={() => deleteMenuPackage.mutate({ id: pkg.id })} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                           </div>
@@ -9241,7 +9261,7 @@ export default function Dashboard() {
 
                 {/* ── CATALOGUE TAB ── */}
                 {menuSettingsSection === 'catalogue' && (<div>
-                <p className="font-dm text-sm text-ink/70 mb-6">Build your food and drink catalogue. Items can be selected when building proposals and runsheets.</p>
+                <p className="font-dm text-sm text-ink/70 mb-6">Build your food and drink catalogue. Items can be selected when building proposals and runsheets. Prices exclude GST. Hide an item to take it off the menu without losing it from past events.</p>
 
                 {/* Type tabs */}
                 <div className="flex gap-0 mb-6 border-b border-gold/20">
@@ -9255,9 +9275,9 @@ export default function Dashboard() {
                   ))}
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex flex-col md:flex-row gap-4">
                   {/* Left: Category list */}
-                  <div className="w-56 flex-shrink-0">
+                  <div className="w-full md:w-56 flex-shrink-0">
                     <div className="bg-white border border-gold/20 rounded">
                       <div className="flex items-center justify-between flex-wrap gap-y-2 px-3 py-2.5 border-b border-gold/10">
                         <span className="font-bebas tracking-widest text-xs text-ink/70">CATEGORIES</span>
@@ -9493,7 +9513,7 @@ export default function Dashboard() {
                                   placeholder="e.g. Smoked Salmon Blini" className="rounded-none border border-gold/30 text-sm h-9" />
                               </div>
                               <div>
-                                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE (NZD)</label>
+                                <label className="font-bebas text-xs tracking-widest text-sage block mb-1">PRICE (NZD, EXCL. GST)</label>
                                 <Input type="number" step="0.01" value={catalogItemForm.price} onChange={e => setCatalogItemForm(f => ({ ...f, price: e.target.value }))}
                                   placeholder="8.50" className="rounded-none border border-gold/30 text-sm h-9" />
                               </div>
@@ -9525,9 +9545,9 @@ export default function Dashboard() {
                               </div>
                             </div>
                             <div>
-                              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">ALLERGENS</label>
+                              <label className="font-bebas text-xs tracking-widest text-sage block mb-1">DIETARY &amp; ALLERGENS</label>
                               <Input value={catalogItemForm.allergens} onChange={e => setCatalogItemForm(f => ({ ...f, allergens: e.target.value }))}
-                                placeholder="e.g. gluten, dairy, nuts" className="rounded-none border border-gold/30 text-sm h-9" />
+                                placeholder="e.g. V · GFA · DFA, contains nuts" className="rounded-none border border-gold/30 text-sm h-9" />
                             </div>
                             <div className="flex gap-2">
                               <button type="submit" disabled={createCatalogItem.isPending || updateCatalogItem.isPending}
@@ -9540,7 +9560,8 @@ export default function Dashboard() {
 
                         {/* Items list */}
                         {(() => {
-                          const items = catalogItems ?? [];
+                          // Items still on the menu first; hidden ones underneath.
+                          const items = [...(catalogItems ?? [])].sort((a: any, b: any) => Number(b.available) - Number(a.available));
                           const guests = parseInt(catalogGuestCount) || 0;
                           const totalCost = items.reduce((sum: number, item: any) => {
                             if (item.price <= 0) return sum;
@@ -9637,7 +9658,7 @@ export default function Dashboard() {
                                   : null;
                                 const isSelected = catalogSelectedIds.has(item.id);
                                 return (
-                                <div key={item.id} className={`flex items-start justify-between px-4 py-3 group ${isSelected ? 'bg-forest/5' : 'hover:bg-linen/30'}`}>
+                                <div key={item.id} className={`flex flex-wrap md:flex-nowrap items-start justify-between gap-y-2 px-4 py-3 group ${isSelected ? 'bg-forest/5' : 'hover:bg-linen/30'} ${item.available ? '' : 'bg-stone-50'}`}>
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
@@ -9646,7 +9667,8 @@ export default function Dashboard() {
                                   />
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="font-dm text-sm font-medium text-ink">{item.name}</span>
+                                      <span className={`font-dm text-sm font-medium ${item.available ? 'text-ink' : 'text-stone-500 line-through'}`}>{item.name}</span>
+                                      {!item.available && <span className="font-bebas tracking-widest text-[11px] px-1.5 py-0.5 bg-stone-200 text-stone-700">NOT ON MENU</span>}
                                       <span className={`font-bebas tracking-widest text-[10px] px-1.5 py-0.5 ${
                                         item.pricingType === 'per_person' ? 'bg-forest/10 text-forest' : 'bg-gold/15 text-amber-700'
                                       }`}>{item.pricingType === 'per_person' ? 'PER PERSON' : 'PER ITEM'}</span>
@@ -9654,7 +9676,17 @@ export default function Dashboard() {
                                     </div>
                                     {item.description && <p className="font-dm text-xs text-ink/70 mt-0.5 truncate">{item.description}</p>}
                                   </div>
-                                  <div className="flex items-center gap-3 ml-3 flex-shrink-0">
+                                  <div className="flex items-center justify-end gap-3 md:ml-3 flex-shrink-0 w-full md:w-auto">
+                                    <button
+                                      type="button"
+                                      aria-pressed={item.available}
+                                      aria-label={`${item.name}: ${item.available ? 'on the menu — click to hide from pickers' : 'hidden — click to put back on the menu'}`}
+                                      title={item.available ? 'Shown in proposal and runsheet pickers' : 'Hidden from pickers; past events still show it'}
+                                      onClick={() => toggleCatalogItemAvailable.mutate({ id: item.id, available: !item.available })}
+                                      disabled={toggleCatalogItemAvailable.isPending}
+                                      className={`font-bebas tracking-widest text-[11px] px-2 py-1 border transition-colors ${item.available ? 'border-forest text-forest hover:bg-emerald-50' : 'border-stone-400 text-stone-600 hover:bg-stone-100'}`}>
+                                      {item.available ? 'ON MENU' : 'HIDDEN'}
+                                    </button>
                                     {item.price > 0 && (
                                       <div className="text-right">
                                         <div className="font-dm text-sm font-semibold text-ink">
