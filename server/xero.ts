@@ -587,3 +587,99 @@ export async function getXeroInvoiceStatuses(ownerId: number, invoiceIds: string
   }
   return out;
 }
+
+// ─── Event invoices, mirrored from Xero ──────────────────────────────────────
+// Payments → Invoices shows the venue's sales invoices exactly as Xero has
+// them, but ONLY the ones that belong to events: invoices VenueFlow raised
+// (tracked in xero_invoices) or whose reference carries "(VenueFlow #<id>)".
+// Everything else in the org (supplier rebates, sponsorships…) stays hidden,
+// so an events person can follow event money without seeing the rest.
+
+export type XeroEventInvoice = {
+  invoiceId: string;
+  number: string | null;
+  reference: string | null;
+  contactName: string;
+  date: string | null;      // "YYYY-MM-DD"
+  dueDate: string | null;   // "YYYY-MM-DD"
+  status: string;           // DRAFT | SUBMITTED | AUTHORISED | PAID | VOIDED
+  total: number;
+  amountPaid: number;
+  amountDue: number;
+  sentToContact: boolean;
+  bookingId: number | null;
+  currency: string;
+};
+
+const VENUEFLOW_REF = /\(VenueFlow #(\d+)\)/;
+
+/** Pure: keep only event invoices from a Xero /Invoices page. */
+export function pickEventInvoices(
+  raw: any[],
+  ledger: Map<string, number>, // Xero InvoiceID → our bookingId
+): XeroEventInvoice[] {
+  const out: XeroEventInvoice[] = [];
+  for (const inv of raw) {
+    if (inv?.Type && inv.Type !== "ACCREC") continue;
+    if (inv?.Status === "DELETED") continue;
+    const ref: string | null = inv?.Reference ?? null;
+    const refMatch = ref ? VENUEFLOW_REF.exec(ref) : null;
+    const fromLedger = ledger.get(inv?.InvoiceID);
+    if (fromLedger == null && !refMatch) continue;
+    out.push({
+      invoiceId: inv.InvoiceID,
+      number: inv.InvoiceNumber ?? null,
+      reference: ref,
+      contactName: inv?.Contact?.Name ?? "",
+      date: typeof inv?.DateString === "string" ? inv.DateString.slice(0, 10) : null,
+      dueDate: typeof inv?.DueDateString === "string" ? inv.DueDateString.slice(0, 10) : null,
+      status: inv?.Status ?? "UNKNOWN",
+      total: Number(inv?.Total ?? 0),
+      amountPaid: Number(inv?.AmountPaid ?? 0),
+      amountDue: Number(inv?.AmountDue ?? 0),
+      sentToContact: Boolean(inv?.SentToContact),
+      bookingId: fromLedger ?? (refMatch ? Number(refMatch[1]) : null),
+      currency: inv?.CurrencyCode ?? "NZD",
+    });
+  }
+  return out;
+}
+
+const eventInvoiceCache = new Map<number, { at: number; rows: XeroEventInvoice[] }>();
+const EVENT_INVOICE_TTL_MS = 60_000;
+
+/**
+ * The org's event invoices from the last 12 months (plus any older ones still
+ * unpaid), newest first. Cached for a minute per venue — Xero allows 60 calls
+ * a minute and several people may have Payments open.
+ */
+export async function listXeroEventInvoices(ownerId: number, opts: { fresh?: boolean } = {}): Promise<XeroEventInvoice[]> {
+  const hit = eventInvoiceCache.get(ownerId);
+  if (!opts.fresh && hit && Date.now() - hit.at < EVENT_INVOICE_TTL_MS) return hit.rows;
+
+  const { getDb } = await import("./db");
+  const { xeroInvoices } = await import("../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  const db = await getDb();
+  const ledger = new Map<string, number>();
+  if (db) {
+    const rows = await db.select({ xeroInvoiceId: xeroInvoices.xeroInvoiceId, bookingId: xeroInvoices.bookingId })
+      .from(xeroInvoices).where(eq(xeroInvoices.ownerId, ownerId));
+    for (const r of rows) if (r.xeroInvoiceId) ledger.set(r.xeroInvoiceId, r.bookingId);
+  }
+
+  const since = new Date(Date.now() - 366 * 86_400_000);
+  const where = encodeURIComponent(
+    `Type=="ACCREC" && (Date>=DateTime(${since.getUTCFullYear()},${since.getUTCMonth() + 1},${since.getUTCDate()}) || Status=="AUTHORISED" || Status=="DRAFT" || Status=="SUBMITTED")`,
+  );
+  const all: XeroEventInvoice[] = [];
+  // 100 per page; 10 pages is ~1,000 sales invoices a year — far beyond a venue's.
+  for (let page = 1; page <= 10; page++) {
+    const json = await xeroApi(ownerId, "GET", `/Invoices?where=${where}&order=Date%20DESC&page=${page}`);
+    const batch: any[] = json?.Invoices ?? [];
+    all.push(...pickEventInvoices(batch, ledger));
+    if (batch.length < 100) break;
+  }
+  eventInvoiceCache.set(ownerId, { at: Date.now(), rows: all });
+  return all;
+}
