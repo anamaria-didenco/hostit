@@ -58,6 +58,7 @@ import { beoUrl, getBeoHide } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
+import WalkthroughPanel from "@/components/WalkthroughPanel";
 import ProposalEmailSettings from "@/components/ProposalEmailSettings";
 import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
 import { ClashDialogHost, promptClashOverride, getClashes } from "@/components/ClashDialog";
@@ -1654,7 +1655,7 @@ export default function Dashboard() {
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id }
   );
-  // Walkthroughs clients booked from the enquiry form — month view chips.
+  // Walkthroughs staff have confirmed (requests have no time yet) — month view chips.
   const { data: monthWalkthroughs } = trpc.leads.walkthroughsByMonth.useQuery(
     { year: calDate.getFullYear(), month: calDate.getMonth() + 1 },
     { enabled: !!user?.id && tab === 'calendar' && calendarView === 'month' }
@@ -4380,9 +4381,6 @@ export default function Dashboard() {
                             ["Guests", selectedLead.guestCount],
                             ["Budget", selectedLead.budget ? `$${Number(selectedLead.budget).toLocaleString()} NZD` : null],
                             ["Company", selectedLead.company],
-                            // Booked from the enquiry form (a slot label with no
-                            // time is a pre-booking-era request, never confirmed).
-                            ["Walkthrough", selectedLead.walkthroughSlot ? `${selectedLead.walkthroughSlot}${selectedLead.walkthroughAt ? '' : ' (requested)'}` : null],
                           ].filter(([, v]) => v).map(([label, value]) => (
                             <div key={label as string} className="flex gap-2">
                               <span className="text-ink/60 w-24 flex-shrink-0">{label}:</span>
@@ -4510,6 +4508,14 @@ export default function Dashboard() {
                     <div className="dante-card p-4 mb-4">
                       <LeadConversation leadId={selectedLead.id} clientFirstName={selectedLead.firstName}
                         onReply={selectedLead.email && !isTeamMember ? (_m, reply) => openEmailReply(selectedLead, reply) : undefined} />
+                    </div>
+                  )}
+                  {/* Walkthrough: the client's request from the enquiry form, and
+                      the time staff confirm once someone's on site. */}
+                  {!isStaff && (
+                    <div className="dante-card p-4 mb-4">
+                      <WalkthroughPanel lead={selectedLead}
+                        onChanged={patch => setSelectedLead((prev: any) => prev && prev.id === selectedLead.id ? { ...prev, ...patch } : prev)} />
                     </div>
                   )}
                   {!isStaff && <LeadProposals leadId={selectedLead.id} />}
@@ -7349,13 +7355,13 @@ export default function Dashboard() {
                   <div className="border-t border-gold pt-4 space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="font-dm text-sm text-ink">Walkthrough booking</div>
-                        <p className="font-dm text-xs text-stone mt-0.5">After sending an enquiry, clients can book a real walkthrough. Times already taken by another walkthrough or an event are left out. You get a task and an alert; the client gets an email confirmation with a calendar invite (needs your SMTP set up).</p>
+                        <div className="font-dm text-sm text-ink">Walkthrough requests</div>
+                        <p className="font-dm text-xs text-stone mt-0.5">After sending an enquiry, clients can ask for a walkthrough and say which days and time of day suit them. Nothing is booked automatically: you get a task and an alert, then confirm a time from the enquiry once you know someone's on site (and can email the client a calendar invite).</p>
                       </div>
                       <label className="flex items-center gap-2 shrink-0 cursor-pointer">
                         <input type="checkbox" checked={!!settingsForm.walkthroughEnabled}
                           onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughEnabled: e.target.checked }))}
-                          aria-label="Walkthrough booking"
+                          aria-label="Walkthrough requests"
                           className="w-4 h-4 accent-forest" />
                         <span className="font-bebas text-xs tracking-widest text-ink">{settingsForm.walkthroughEnabled ? 'ON' : 'OFF'}</span>
                       </label>
@@ -7363,7 +7369,7 @@ export default function Dashboard() {
                     {settingsForm.walkthroughEnabled && (
                       <div className="space-y-3">
                         <div>
-                          <div id="wt-days-label" className="font-bebas text-xs tracking-widest text-sage mb-1.5">DAYS</div>
+                          <div id="wt-days-label" className="font-bebas text-xs tracking-widest text-sage mb-1.5">DAYS CLIENTS CAN SUGGEST</div>
                           <div role="group" aria-labelledby="wt-days-label" className="flex flex-wrap gap-1.5">
                             {[1, 2, 3, 4, 5, 6, 0].map(d => {
                               const on = (settingsForm.walkthroughDays ?? []).includes(d);
@@ -7377,19 +7383,7 @@ export default function Dashboard() {
                             })}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          <div>
-                            <label htmlFor="wt-start" className="font-bebas text-xs tracking-widest text-sage block mb-1">FROM</label>
-                            <Input id="wt-start" type="time" step={900} value={settingsForm.walkthroughStart ?? '10:00'}
-                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughStart: e.target.value }))}
-                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-                          </div>
-                          <div>
-                            <label htmlFor="wt-end" className="font-bebas text-xs tracking-widest text-sage block mb-1">UNTIL</label>
-                            <Input id="wt-end" type="time" step={900} value={settingsForm.walkthroughEnd ?? '16:00'}
-                              onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughEnd: e.target.value }))}
-                              className="rounded-none border border-gold/30 focus-visible:ring-0 focus-visible:border-gold" />
-                          </div>
+                        <div className="grid grid-cols-2 gap-3 max-w-sm">
                           <div>
                             <label htmlFor="wt-slot" className="font-bebas text-xs tracking-widest text-sage block mb-1">LENGTH</label>
                             <select id="wt-slot" value={settingsForm.walkthroughSlotMinutes ?? 30}
@@ -7399,7 +7393,7 @@ export default function Dashboard() {
                             </select>
                           </div>
                           <div>
-                            <label htmlFor="wt-ahead" className="font-bebas text-xs tracking-widest text-sage block mb-1">BOOK UP TO</label>
+                            <label htmlFor="wt-ahead" className="font-bebas text-xs tracking-widest text-sage block mb-1">UP TO</label>
                             <select id="wt-ahead" value={settingsForm.walkthroughDaysAhead ?? 14}
                               onChange={e => setSettingsForm((f: any) => ({ ...f, walkthroughDaysAhead: Number(e.target.value) }))}
                               className="w-full h-9 px-2 bg-white rounded-none border border-gold/30 font-dm text-sm">
@@ -7410,10 +7404,7 @@ export default function Dashboard() {
                         {(settingsForm.walkthroughDays ?? []).length === 0 && (
                           <p className="font-dm text-xs text-tomato">Pick at least one day, or turn walkthroughs off.</p>
                         )}
-                        {settingsForm.walkthroughStart >= settingsForm.walkthroughEnd && (
-                          <p className="font-dm text-xs text-tomato">The finish time needs to be after the start time.</p>
-                        )}
-                        <p className="font-dm text-xs text-stone">Times are New Zealand time. Clients can book from tomorrow onwards.</p>
+                        <p className="font-dm text-xs text-stone">Clients can suggest days from tomorrow onwards. Length is used for the calendar invite when you confirm a time.</p>
                       </div>
                     )}
                   </div>
@@ -10147,15 +10138,14 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-                {/* WALKTHROUGH — booked by the client from the enquiry form. */}
-                {selectedBooking._isLead && selectedBooking.walkthroughSlot && (
+                {/* WALKTHROUGH — requested by the client on the enquiry form;
+                    staff confirm a real time once someone's on site. */}
+                {selectedBooking._isLead && !isStaff && (
                   <div className="flex items-start gap-3 sm:col-span-2">
                     <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className={`${DRAWER_LABEL} mb-1`}>Walkthrough</div>
-                      <div className="font-dm text-sm text-ink">
-                        {selectedBooking.walkthroughSlot}{selectedBooking.walkthroughAt ? '' : ' (requested, not confirmed)'}
-                      </div>
+                      <WalkthroughPanel lead={selectedBooking} labelClassName={`${DRAWER_LABEL} mb-1`}
+                        onChanged={patch => setSelectedBooking((prev: any) => prev && prev._isLead && prev.id === selectedBooking.id ? { ...prev, ...patch } : prev)} />
                     </div>
                   </div>
                 )}

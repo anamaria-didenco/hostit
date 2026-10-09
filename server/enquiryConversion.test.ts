@@ -4,6 +4,7 @@ import {
   spacesCovered, aggregateAvailability,
   parseWalkthroughSettings, generateWalkthroughSlots, DEFAULT_WALKTHROUGH,
   buildIcs, formStartToken, checkFormStartToken, looksLikeBot, MIN_FORM_FILL_MS,
+  walkthroughRequestDays, describeWalkthroughRequest,
 } from "./enquiryConversion";
 
 const SECRET = "test-secret-at-least-16-chars";
@@ -170,5 +171,26 @@ describe("spam checks", () => {
   it("flags a filled honeypot and lets a missing token through", () => {
     expect(looksLikeBot({ honeypot: "http://spam", ownerId: 1, now: Date.now(), secret: SECRET }).bot).toBe(true);
     expect(looksLikeBot({ honeypot: "", formToken: undefined, ownerId: 1, now: Date.now(), secret: SECRET }).bot).toBe(false);
+  });
+});
+
+describe("walkthrough requests", () => {
+  const settings = { ...DEFAULT_WALKTHROUGH, days: [2, 4], daysAhead: 14 }; // Tue + Thu
+  it("offers the venue's weekdays from tomorrow (NZ), within the window", () => {
+    // 11pm Monday NZ time (UTC is still Monday morning) — tomorrow is Tuesday.
+    const now = new Date("2026-10-12T10:00:00Z");
+    const days = walkthroughRequestDays(now, settings);
+    expect(days[0]).toEqual({ key: "2026-10-13", label: "Tue 13 Oct" });
+    expect(days.map(d => d.key)).toEqual(["2026-10-13", "2026-10-15", "2026-10-20", "2026-10-22"]);
+  });
+  it("offers nothing when walkthroughs are off", () => {
+    expect(walkthroughRequestDays(new Date(), { ...settings, enabled: false })).toEqual([]);
+  });
+  it("describes a request in plain words", () => {
+    expect(describeWalkthroughRequest({ dates: ["2026-10-13"], timeOfDay: "morning" })).toBe("Tue 13 Oct · Morning");
+    expect(describeWalkthroughRequest({ dates: ["2026-10-13", "2026-10-15"], timeOfDay: "any" })).toBe("Tue 13 Oct or Thu 15 Oct · Any time");
+    expect(describeWalkthroughRequest({ dates: ["2026-10-13", "2026-10-15", "2026-10-20"], timeOfDay: "evening", note: " after 5 " }))
+      .toBe('Tue 13 Oct, Thu 15 Oct or Tue 20 Oct · Evening — "after 5"');
+    expect(describeWalkthroughRequest({ dates: [], timeOfDay: "afternoon" })).toBe("Any day · Afternoon");
   });
 });

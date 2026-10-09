@@ -196,6 +196,39 @@ export function parseWalkthroughSettings(vs: Record<string, any> | null | undefi
   };
 }
 
+// ─── Walkthrough requests ────────────────────────────────────────────────────
+// Clients ask for a walkthrough and say which days and times suit them; the
+// venue confirms a real time later (staff aren't always on site, so the form
+// never books one by itself).
+
+export const WALKTHROUGH_TIMES = {
+  morning: "Morning",
+  afternoon: "Afternoon",
+  evening: "Evening",
+  any: "Any time",
+} as const;
+export type WalkthroughTimeOfDay = keyof typeof WALKTHROUGH_TIMES;
+
+/** The days a client can suggest: from tomorrow (NZ), on the venue's walkthrough weekdays. */
+export function walkthroughRequestDays(now: Date, settings: WalkthroughSettings): Array<{ key: string; label: string }> {
+  if (!settings.enabled || settings.days.length === 0) return [];
+  const today = dateKeyInTz(now);
+  const out: Array<{ key: string; label: string }> = [];
+  for (let i = 1; i <= settings.daysAhead; i++) {
+    const key = addDaysToKey(today, i);
+    if (settings.days.includes(weekdayOfKey(key))) out.push({ key, label: formatDayLabel(key) });
+  }
+  return out;
+}
+
+/** "Tue 14 Oct or Thu 16 Oct · Morning — note", stored on the lead and shown to staff. */
+export function describeWalkthroughRequest(req: { dates: string[]; timeOfDay: WalkthroughTimeOfDay; note?: string | null }): string {
+  const days = req.dates.length === 0 ? "Any day"
+    : req.dates.map(formatDayLabel).join(req.dates.length === 2 ? " or " : ", ").replace(/, ([^,]*)$/, req.dates.length > 2 ? " or $1" : ", $1");
+  const note = req.note?.trim();
+  return `${days} · ${WALKTHROUGH_TIMES[req.timeOfDay]}${note ? ` — "${note}"` : ""}`;
+}
+
 export type Interval = { start: Date; end: Date };
 export type WalkthroughSlot = { start: Date; end: Date; dayKey: string; label: string; timeLabel: string };
 

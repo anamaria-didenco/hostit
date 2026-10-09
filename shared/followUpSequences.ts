@@ -188,7 +188,7 @@ export const ALERT_KIND_LABELS: { kind: string; label: string }[] = [
   { kind: "proposal_declined", label: "A client declined a proposal" },
   { kind: "contract_signed", label: "A client signed a contract" },
   { kind: "client_replied", label: "A client replied by email" },
-  { kind: "walkthrough_booked", label: "A walkthrough was booked" },
+  { kind: "walkthrough_requested", label: "A client asked for a walkthrough" },
   { kind: "hold_expiring", label: "A date hold is about to end" },
   { kind: "hold_released", label: "A date hold was released automatically" },
   { kind: "hold_lapsed", label: "A date hold ran out" },

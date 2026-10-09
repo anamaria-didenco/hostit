@@ -1116,51 +1116,73 @@ export const appRouter = router({
         return getMonthAvailability(input.ownerId, input.month, input.spaceId ?? null);
       }),
 
-    // Public: open walkthrough slots for the thank-you screen, generated in
-    // Pacific/Auckland from the venue's walkthrough settings, minus other
-    // walkthroughs and times an event is on.
-    walkthroughSlots: publicProcedure
+    // Public: the days a client can suggest for a walkthrough on the
+    // thank-you screen (the venue's walkthrough weekdays, from tomorrow).
+    walkthroughOptions: publicProcedure
       .input(z.object({ ownerId: z.number().int().positive() }))
       .query(async ({ input, ctx }) => {
         enforceRateLimit('enquiry-form-read', `${getRequestIp(ctx?.req)}::${input.ownerId}`, 120, 60_000);
-        const { getWalkthroughSlots } = await import('./enquiryForm');
-        return getWalkthroughSlots(input.ownerId);
+        const { getWalkthroughRequestOptions } = await import('./enquiryForm');
+        return getWalkthroughRequestOptions(input.ownerId);
       }),
 
-    // Public: book (or move) the enquirer's walkthrough. The slot is
-    // re-checked on the server under a lock, so a time someone else just took
-    // is refused. Creates a task, logs activity, alerts the venue and emails
-    // the client a confirmation with a calendar file (reported honestly in
-    // `emailed`). Rate-limited like submit since it's a public write keyed by
-    // a client-supplied ownerId, and needs submit()'s leadToken.
+    // Public: the enquirer asks for a walkthrough and says which days and
+    // times suit them. It's a REQUEST — the venue confirms a real time later
+    // (staff aren't always on site). Creates a task + alert, and emails the
+    // client an acknowledgement when email is set up. Needs submit()'s
+    // leadToken; rate-limited like submit.
+    requestWalkthrough: publicProcedure
+      .input(z.object({
+        ownerId: z.number(),
+        leadId: z.number(),
+        leadToken: z.string().max(64),
+        dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(10),
+        timeOfDay: z.enum(['morning', 'afternoon', 'evening', 'any']),
+        note: z.string().max(300).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await enforceLeadRateLimit(ctx, input.ownerId);
+        if (!isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)) throw new Error("Enquiry not found.");
+        const { requestWalkthrough } = await import('./enquiryForm');
+        return requestWalkthrough(input.ownerId, input.leadId, input);
+      }),
+
+    // Legacy endpoints for enquiry-form pages loaded before walkthroughs
+    // became requests: no slots are offered any more, and a "booking" from
+    // an old page is recorded as a request for that time.
+    walkthroughSlots: publicProcedure
+      .input(z.object({ ownerId: z.number().int().positive() }))
+      .query(() => ({ enabled: false, slotMinutes: 30, days: [] as Array<{ key: string; label: string; slots: Array<{ start: string; label: string; timeLabel: string }> }> })),
     bookWalkthrough: publicProcedure
       .input(z.object({
         ownerId: z.number(),
         leadId: z.number(),
-        // ISO start of a slot from leads.walkthroughSlots.
         slotStart: z.string().max(40).optional(),
-        // Legacy: a page loaded before real slots shipped sends only a label.
         slotLabel: z.string().min(1).max(60).optional(),
-        // submit()'s proof that this visitor owns leadId (see leadToken.ts).
         leadToken: z.string().max(64),
       }))
       .mutation(async ({ input, ctx }) => {
         await enforceLeadRateLimit(ctx, input.ownerId);
         if (!isValidLeadAccessToken(input.ownerId, input.leadId, input.leadToken)) throw new Error("Enquiry not found.");
-        const existing = await getLeadById(input.leadId, input.ownerId);
-        if (!existing) throw new Error("Enquiry not found.");
-        if (input.slotStart) {
-          const { bookWalkthrough, SlotTakenError } = await import('./enquiryForm');
-          try {
-            return await bookWalkthrough(input.ownerId, input.leadId, input.slotStart);
-          } catch (err: any) {
-            if (err instanceof SlotTakenError) throw new TRPCError({ code: "CONFLICT", message: err.message });
-            throw err;
-          }
-        }
-        if (!input.slotLabel) throw new Error("Pick a time first.");
-        await updateLead(input.leadId, input.ownerId, { walkthroughSlot: input.slotLabel });
-        return { ok: true as const, label: input.slotLabel, walkthroughAt: null, ics: null, emailed: false, emailNote: "legacy" };
+        const { requestWalkthrough } = await import('./enquiryForm');
+        const r = await requestWalkthrough(input.ownerId, input.leadId, { dates: [], timeOfDay: 'any', note: input.slotLabel ? `Picked ${input.slotLabel}` : null });
+        return { ok: true as const, label: r.summary, walkthroughAt: null, ics: null, emailed: r.emailed, emailNote: r.emailNote };
+      }),
+
+    // Staff confirm (or move) a walkthrough time for an enquiry, optionally
+    // emailing the client a confirmation with a calendar invite.
+    confirmWalkthrough: protectedProcedure
+      .input(z.object({ leadId: z.number(), at: z.string().max(40), emailClient: z.boolean().default(false) }))
+      .mutation(async ({ input, ctx }) => {
+        const { confirmWalkthrough } = await import('./enquiryForm');
+        return confirmWalkthrough(ctx.user.id, input.leadId, new Date(input.at), { emailClient: input.emailClient });
+      }),
+
+    clearWalkthrough: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const { clearWalkthrough } = await import('./enquiryForm');
+        return clearWalkthrough(ctx.user.id, input.leadId);
       }),
 
     // The venue's booked walkthroughs for a month — shown on the calendar.
