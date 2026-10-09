@@ -31,6 +31,8 @@ interface Row {
   depositNzd: number;
   depositPaid: boolean;
   depositRequired: boolean;
+  // Last deposit request emailed from VenueFlow (null = never).
+  depositRequestedAt: string | null;
   onNightSignal: boolean;
   foodStatus: FoodStatus;
   drinksStatus: DrinksStatus;
@@ -80,7 +82,7 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   to_invoice: "To invoice", awaiting: "Awaiting payment", on_night: "Paying on the night", settled: "Fully settled",
 };
 
-const TABS = [["events", "Bookings"], ["invoices", "Invoices sent"], ["received", "Received"]] as const;
+const TABS = [["events", "Bookings"], ["deposits", "Deposits"], ["invoices", "Invoices sent"], ["received", "Received"]] as const;
 type View = typeof TABS[number][0];
 
 export default function PaymentsBoard() {
@@ -242,10 +244,12 @@ export default function PaymentsBoard() {
     tabRefs.current[n]?.focus();
   };
 
-  const searchLabel = view === "invoices" ? "Search invoices by client or invoice number"
+  const searchLabel = view === "deposits" ? "Search deposits by client, event type or invoice number"
+    : view === "invoices" ? "Search invoices by client or invoice number"
     : view === "received" ? "Search payments received by client or notes"
     : "Search bookings by client, event type or space";
-  const searchPlaceholder = view === "invoices" ? "Search client or invoice #…"
+  const searchPlaceholder = view === "deposits" ? "Search client or invoice #…"
+    : view === "invoices" ? "Search client or invoice #…"
     : view === "received" ? "Search client or notes…"
     : "Search client, type, space…";
 
@@ -311,13 +315,13 @@ export default function PaymentsBoard() {
       </div>
 
       {/* View switcher — a real tab set: arrow keys / Home / End move between tabs. */}
-      <div className="flex gap-1.5 mb-4 border-b border-gold/20" role="tablist" aria-label="Payments view">
+      <div className="flex gap-1.5 mb-4 border-b border-gold/20 overflow-x-auto" role="tablist" aria-label="Payments view">
         {TABS.map(([k, lbl], i) => (
           <button key={k} ref={el => { tabRefs.current[i] = el; }}
             id={`pay-tab-${k}`} role="tab" aria-selected={view === k} aria-controls="pay-tabpanel"
             tabIndex={view === k ? 0 : -1}
             onClick={() => setView(k)} onKeyDown={e => onTabKey(e, i)}
-            className={`font-bebas tracking-widest text-sm px-4 py-2.5 border-b-2 -mb-px transition-colors ${
+            className={`font-bebas tracking-widest text-sm px-3 sm:px-4 py-2.5 border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0 ${
               view === k ? "border-forest text-forest" : "border-transparent text-sage hover:text-ink"}`}>
             {lbl}
           </button>
@@ -325,7 +329,10 @@ export default function PaymentsBoard() {
       </div>
 
       <div role="tabpanel" id="pay-tabpanel" aria-labelledby={`pay-tab-${view}`}>
-      {view === "received" ? <PaymentsReceived q={q} /> : view === "invoices" ? (
+      {view === "received" ? <PaymentsReceived q={q} /> : view === "deposits" ? (
+        <DepositsSent rows={all} q={q} loading={isLoading}
+          onOpen={r => navigate(`/event/${r.bookingId}`)} onRecord={r => navigate(recordUrl(r))} />
+      ) : view === "invoices" ? (
         <SentInvoices rows={all} q={q} loading={isLoading} onOpen={r => setXeroFor(r)} />
       ) : (<>
 
@@ -450,6 +457,166 @@ function jumpLabel(r: Row) {
 
 // Every invoice sent through to Xero, newest first — the "what have we billed
 // and has it been paid" view, across all events.
+/* ── Deposits: every deposit that's been asked for, and whether it's in ──────
+   A deposit counts as "sent" once a request was emailed from VenueFlow
+   (payments.requestDeposit) or a deposit invoice went to Xero. Paid = the
+   booking's deposit is marked paid or its Xero deposit invoice is PAID. ── */
+type DepositEntry = {
+  row: Row;
+  amount: number;
+  sentAt: number;
+  how: string[];
+  paid: boolean;
+  waitingDays: number | null;
+};
+
+const DAY_MS = 86_400_000;
+const CHASE_AFTER_DAYS = 7;
+
+function depositEntries(rows: Row[]): DepositEntry[] {
+  const out: DepositEntry[] = [];
+  for (const r of rows) {
+    if (!r.depositRequired) continue;
+    const inv = r.invoices.find(i => i.stream === "deposit" && i.status !== "VOIDED");
+    const emailedAt = r.depositRequestedAt ? new Date(r.depositRequestedAt).getTime() : null;
+    if (!inv && emailedAt == null) continue;
+    const invAt = inv ? new Date(inv.createdAt).getTime() : null;
+    const sentAt = Math.max(emailedAt ?? 0, invAt ?? 0);
+    const day = (t: number) => new Date(t).toLocaleDateString("en-NZ", { day: "numeric", month: "short" });
+    const how: string[] = [];
+    if (emailedAt != null) how.push(`Request emailed ${day(emailedAt)}`);
+    if (inv) how.push(`Xero ${inv.invoiceNumber ?? "invoice"}${inv.status === "DRAFT" ? " (draft — not sent from Xero yet)" : ""} ${day(invAt!)}`);
+    const paid = r.depositPaid || inv?.status === "PAID";
+    out.push({
+      row: r,
+      amount: inv && inv.total > 0 ? inv.total : r.depositNzd,
+      sentAt,
+      how,
+      paid,
+      waitingDays: paid ? null : Math.floor((Date.now() - sentAt) / DAY_MS),
+    });
+  }
+  return out;
+}
+
+function DepositsSent({ rows, q, loading, onOpen, onRecord }: {
+  rows: Row[]; q: string; loading: boolean; onOpen: (r: Row) => void; onRecord: (r: Row) => void;
+}) {
+  const [only, setOnly] = useState<"waiting" | "paid" | "all">("waiting");
+  const entries = useMemo(() => depositEntries(rows), [rows]);
+  const totals = useMemo(() => {
+    let waiting = 0, waitingN = 0, paid = 0, paidN = 0, chase = 0;
+    for (const e of entries) {
+      if (e.paid) { paid += e.amount; paidN++; }
+      else { waiting += e.amount; waitingN++; if ((e.waitingDays ?? 0) >= CHASE_AFTER_DAYS) chase++; }
+    }
+    return { waiting, waitingN, paid, paidN, chase };
+  }, [entries]);
+  const list = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return entries
+      .filter(e => only === "all" ? true : only === "paid" ? e.paid : !e.paid)
+      .filter(e => !needle || e.row.name.toLowerCase().includes(needle)
+        || (e.row.eventType ?? "").toLowerCase().includes(needle)
+        || e.how.some(h => h.toLowerCase().includes(needle)))
+      // Waiting: longest-waiting first (who to chase). Paid/all: newest first.
+      .sort((a, b) => only === "waiting" ? a.sentAt - b.sentAt : b.sentAt - a.sentAt);
+  }, [entries, only, q]);
+
+  const remind = trpc.payments.requestDeposit.useMutation();
+  const utils = trpc.useUtils();
+  const sendReminder = (r: Row) => remind.mutate({ bookingId: r.bookingId }, {
+    onSuccess: res => {
+      if (res.sent) { toast.success(`Deposit reminder emailed to ${res.to}`); utils.payments.overview.invalidate(); }
+      else toast.error(res.reason === "smtp_not_configured" ? "Email isn't set up yet (Settings → Email), so nothing was sent."
+        : res.reason === "no_client_email" ? "This booking has no client email."
+        : res.reason === "no_deposit_set" ? "Set a deposit amount on the booking first."
+        : "The email didn't send — please try again.");
+    },
+    onError: () => toast.error("The email didn't send — please try again."),
+  });
+
+  if (loading) return <div className="text-center py-16 text-sage font-dm text-sm">Loading deposits…</div>;
+  if (entries.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <FileText className="w-8 h-8 text-stone-400 mx-auto mb-2" aria-hidden="true" />
+        <p className="font-dm text-ink text-sm">No deposits sent yet.</p>
+        <p className="font-dm text-stone-600 text-xs mt-1">Request one from a booking's payment page, or send a deposit invoice with the XERO button — it will show up here.</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-white border border-stone-200 rounded-lg px-4 py-3">
+          <div className="font-bebas tracking-widest text-xs text-sage">WAITING · {totals.waitingN}</div>
+          <div className="font-cormorant text-2xl font-semibold text-ink">{fmtNZD(totals.waiting)}</div>
+          {totals.chase > 0 && <div className="font-dm text-xs text-amber-800 mt-0.5">{totals.chase} waiting {CHASE_AFTER_DAYS}+ days</div>}
+        </div>
+        <div className="bg-white border border-stone-200 rounded-lg px-4 py-3">
+          <div className="font-bebas tracking-widest text-xs text-sage">PAID · {totals.paidN}</div>
+          <div className="font-cormorant text-2xl font-semibold text-green-700">{fmtNZD(totals.paid)}</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 mb-3 flex-wrap" role="group" aria-label="Which deposits to show">
+        {([["waiting", "Waiting"], ["paid", "Paid"], ["all", "All"]] as const).map(([k, lbl]) => (
+          <button key={k} aria-pressed={only === k} onClick={() => setOnly(k)}
+            className={`font-bebas tracking-widest text-xs px-3 py-2 rounded-md transition-colors ${only === k ? "bg-forest text-cream" : "bg-cream text-sage hover:text-ink border border-stone-200"}`}>
+            {lbl}
+          </button>
+        ))}
+        <span className="font-dm text-xs text-sage ml-auto" aria-live="polite">{list.length} deposit{list.length === 1 ? "" : "s"}</span>
+      </div>
+      {list.length === 0 ? (
+        <p className="text-center py-12 font-dm text-sage text-sm">
+          {q ? "No deposits match your search." : only === "waiting" ? "No deposits waiting — everything sent has been paid." : "Nothing here yet."}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2" aria-label="Deposits sent">
+          {list.map(e => {
+            const r = e.row;
+            const chase = !e.paid && (e.waitingDays ?? 0) >= CHASE_AFTER_DAYS;
+            const chip = e.paid
+              ? { label: "PAID", bg: "#dcfce7", text: "#166534" }
+              : chase
+                ? { label: `WAITING ${e.waitingDays} DAYS`, bg: "#fef3c7", text: "#92400e" }
+                : { label: e.waitingDays === 0 ? "SENT TODAY" : `WAITING ${e.waitingDays} DAY${e.waitingDays === 1 ? "" : "S"}`, bg: "#dbeafe", text: "#1e40af" };
+            return (
+              <li key={r.bookingId} className="bg-white border border-stone-200 rounded-lg px-3.5 py-3">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => onOpen(r)} className="min-w-0 flex-1 text-left group" aria-label={`Open ${r.name}'s booking`}>
+                    <div className="font-cormorant text-base font-semibold text-ink truncate group-hover:underline">{r.name}</div>
+                    <div className="font-dm text-xs text-stone-600 truncate">{fmtDate(r.eventDate)}{r.eventType ? ` · ${r.eventType}` : ""}</div>
+                  </button>
+                  <span className="hidden sm:inline font-bebas tracking-widest text-xs px-2.5 py-1 rounded-md whitespace-nowrap" style={{ background: chip.bg, color: chip.text }}>{chip.label}</span>
+                  <span className="font-cormorant text-lg font-semibold text-ink tabular-nums w-20 sm:w-24 text-right">{fmtNZD(e.amount)}</span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-x-4 gap-y-1.5 flex-wrap">
+                  <span className="sm:hidden font-bebas tracking-widest text-xs px-2.5 py-1 rounded-md whitespace-nowrap" style={{ background: chip.bg, color: chip.text }}>{chip.label}</span>
+                  <span className="font-dm text-xs text-stone-600">{e.how.join(" · ")}</span>
+                  {!e.paid && (
+                    <span className="ml-auto flex items-center gap-3">
+                      <button onClick={() => sendReminder(r)} disabled={remind.isPending}
+                        className="font-bebas tracking-widest text-xs text-forest hover:underline underline-offset-2 disabled:opacity-50">
+                        EMAIL REMINDER
+                      </button>
+                      <button onClick={() => onRecord(r)}
+                        className="font-bebas tracking-widest text-xs px-2.5 py-1 rounded-md bg-forest text-cream hover:opacity-90">
+                        RECORD PAYMENT
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function SentInvoices({ rows, q, loading, onOpen }: { rows: Row[]; q: string; loading: boolean; onOpen: (r: Row) => void }) {
   const [only, setOnly] = useState<"all" | "open" | "paid">("all");
   const list = useMemo(() => {
