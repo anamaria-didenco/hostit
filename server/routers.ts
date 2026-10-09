@@ -5237,7 +5237,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .mutation(async ({ input, ctx }) => {
         if (ctx.isTeamMember) throw new Error('Only the venue owner can change the Xero organisation');
         const { listXeroOrganisations } = await import('./xero');
-        const orgs = await listXeroOrganisations(ctx.user.id);
+        const orgs = await listXeroOrganisations(ctx.user.id, { fresh: true });
         const pick = orgs.find(o => o.tenantId === input.tenantId);
         if (!pick) throw new Error('That organisation is no longer authorised — reconnect Xero.');
         const { getDb } = await import('./db');

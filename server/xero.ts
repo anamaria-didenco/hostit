@@ -86,7 +86,17 @@ async function tokenRequest(params: Record<string, string>): Promise<any> {
 /** The orgs this owner's Xero login currently authorises, read LIVE from Xero.
  *  Never cache the list: a connection can be revoked in Xero at any time, and a
  *  stale name is exactly how invoices end up in the wrong books. */
-export async function listXeroOrganisations(ownerId: number): Promise<Array<{ tenantId: string; tenantName: string }>> {
+const orgCache = new Map<number, { at: number; orgs: Array<{ tenantId: string; tenantName: string }> }>();
+/** The organisations the venue has authorised. Cached for 5 minutes: the Xero
+ *  window and the Payments page ask on every open and on every tab focus. */
+export async function listXeroOrganisations(ownerId: number, opts: { fresh?: boolean } = {}): Promise<Array<{ tenantId: string; tenantName: string }>> {
+  const hit = orgCache.get(ownerId);
+  if (!opts.fresh && hit && Date.now() - hit.at < 5 * 60_000) return hit.orgs;
+  const orgs = await fetchXeroOrganisations(ownerId);
+  orgCache.set(ownerId, { at: Date.now(), orgs });
+  return orgs;
+}
+async function fetchXeroOrganisations(ownerId: number): Promise<Array<{ tenantId: string; tenantName: string }>> {
   const { accessToken } = await getXeroAccess(ownerId, { requireTenant: false });
   const res = await fetch(XERO_CONNECTIONS_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) throw new Error(`Xero connections lookup failed (${res.status})`);
@@ -273,6 +283,31 @@ export const xeroPatience = new AsyncLocalStorage<{ maxWaitMs: number; attempts:
 const IMPATIENT = { maxWaitMs: 8_000, attempts: 3 };
 const XERO_REQUEST_TIMEOUT_MS = 25_000;
 
+/**
+ * Pace our own requests so we never hit Xero's limit (60 a minute per
+ * organisation) in the first place. A sliding one-minute window per venue:
+ * background work (the sync) stops at 30 a minute, leaving the rest for
+ * whoever is looking at the screen, whose calls only wait if all 50 are used.
+ */
+const BACKGROUND_PER_MINUTE = 30;
+const INTERACTIVE_PER_MINUTE = 50;
+const sentAt = new Map<number, number[]>();
+async function paceXeroRequests(ownerId: number, patient: boolean, maxWaitMs: number): Promise<void> {
+  const limit = patient ? BACKGROUND_PER_MINUTE : INTERACTIVE_PER_MINUTE;
+  for (;;) {
+    const now = Date.now();
+    const recent = (sentAt.get(ownerId) ?? []).filter(t => now - t < 60_000);
+    if (recent.length < limit) { recent.push(now); sentAt.set(ownerId, recent); return; }
+    const waitMs = recent[recent.length - limit] + 60_000 - now + 50;
+    if (waitMs > maxWaitMs) {
+      sentAt.set(ownerId, recent);
+      throw new Error(`Xero is busy — VenueFlow has used its requests for this minute. Please try again in ${humanWait(Math.max(waitMs, 5_000))}.`);
+    }
+    sentAt.set(ownerId, recent);
+    await sleep(waitMs);
+  }
+}
+
 async function xeroApi(ownerId: number, method: "GET" | "POST" | "PUT", path: string, body?: any): Promise<any> {
   const { accessToken, tenantId } = await getXeroAccess(ownerId);
   // Xero enforces 60 requests/minute per tenant and answers an overrun with
@@ -282,6 +317,7 @@ async function xeroApi(ownerId: number, method: "GET" | "POST" | "PUT", path: st
   const patience = xeroPatience.getStore() ?? IMPATIENT;
   const maxAttempts = patience.attempts;
   for (let attempt = 1; ; attempt++) {
+    await paceXeroRequests(ownerId, patience !== IMPATIENT, patience.maxWaitMs);
     let res: globalThis.Response;
     try {
       res = await fetch(`${XERO_API}${path}`, {
@@ -645,15 +681,19 @@ export async function getXeroInvoiceLines(ownerId: number, invoiceId: string): P
 /** Fetch current status of specific invoices (for paid-state sync). */
 export async function getXeroInvoiceStatuses(ownerId: number, invoiceIds: string[]): Promise<Record<string, { status: string; amountDue: number; amountPaid: number; invoiceNumber: string | null }>> {
   if (invoiceIds.length === 0) return {};
-  const json = await xeroApi(ownerId, "GET", `/Invoices?IDs=${invoiceIds.join(",")}`);
   const out: Record<string, { status: string; amountDue: number; amountPaid: number; invoiceNumber: string | null }> = {};
-  for (const inv of json?.Invoices ?? []) {
-    out[inv.InvoiceID] = {
-      status: inv.Status ?? "UNKNOWN",
-      amountDue: Number(inv.AmountDue ?? 0),
-      amountPaid: Number(inv.AmountPaid ?? 0),
-      invoiceNumber: inv.InvoiceNumber ?? null,
-    };
+  // 30 ids per request keeps the URL well inside length limits (a venue with
+  // hundreds of tracked invoices used to build one enormous URL).
+  for (let i = 0; i < invoiceIds.length; i += 30) {
+    const json = await xeroApi(ownerId, "GET", `/Invoices?IDs=${invoiceIds.slice(i, i + 30).join(",")}`);
+    for (const inv of json?.Invoices ?? []) {
+      out[inv.InvoiceID] = {
+        status: inv.Status ?? "UNKNOWN",
+        amountDue: Number(inv.AmountDue ?? 0),
+        amountPaid: Number(inv.AmountPaid ?? 0),
+        invoiceNumber: inv.InvoiceNumber ?? null,
+      };
+    }
   }
   return out;
 }
@@ -716,7 +756,16 @@ export function pickEventInvoices(
 }
 
 const eventInvoiceCache = new Map<number, { at: number; rows: XeroEventInvoice[] }>();
-const EVENT_INVOICE_TTL_MS = 60_000;
+const EVENT_INVOICE_TTL_MS = 120_000;
+// Two people (or two tabs) opening the screen at once share ONE read of Xero.
+const inFlightReads = new Map<string, Promise<any>>();
+function shareRead<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const hit = inFlightReads.get(key);
+  if (hit) return hit as Promise<T>;
+  const p = run().finally(() => inFlightReads.delete(key));
+  inFlightReads.set(key, p);
+  return p;
+}
 
 /**
  * The org's event invoices from the last 12 months (plus any older ones still
@@ -726,6 +775,10 @@ const EVENT_INVOICE_TTL_MS = 60_000;
 export async function listXeroEventInvoices(ownerId: number, opts: { fresh?: boolean } = {}): Promise<XeroEventInvoice[]> {
   const hit = eventInvoiceCache.get(ownerId);
   if (!opts.fresh && hit && Date.now() - hit.at < EVENT_INVOICE_TTL_MS) return hit.rows;
+  return shareRead(`inv:${ownerId}`, () => loadXeroEventInvoices(ownerId));
+}
+
+async function loadXeroEventInvoices(ownerId: number): Promise<XeroEventInvoice[]> {
 
   const { getDb } = await import("./db");
   const { xeroInvoices } = await import("../drizzle/schema");
@@ -832,6 +885,10 @@ export async function listXeroEventPayments(ownerId: number, range: { from?: str
   const key = `${ownerId}|${range.from ?? ""}|${range.to ?? ""}`;
   const hit = eventPaymentCache.get(key);
   if (!opts.fresh && hit && Date.now() - hit.at < EVENT_INVOICE_TTL_MS) return hit.rows;
+  return shareRead(`pay:${key}`, () => loadXeroEventPayments(ownerId, range, key, opts));
+}
+
+async function loadXeroEventPayments(ownerId: number, range: { from?: string; to?: string }, key: string, opts: { fresh?: boolean }): Promise<XeroEventPayment[]> {
 
   const invoices = await listXeroEventInvoices(ownerId, opts);
   const eventInvoices = new Map<string, number | null>(invoices.map(i => [i.invoiceId, i.bookingId]));
