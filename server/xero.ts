@@ -12,6 +12,7 @@
  * Config needed (Render env): XERO_CLIENT_ID, XERO_CLIENT_SECRET, and the
  * Xero app's redirect URI set to `${PUBLIC_BASE_URL}/api/xero/callback`.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Request, Response } from "express";
 import crypto from "crypto";
 import { ENV } from "./_core/env";
@@ -259,37 +260,67 @@ async function getXeroAccessUncached(ownerId: number, opts: AccessOpts = {}): Pr
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+/**
+ * How long a Xero call may wait out Xero's rate limit before giving up.
+ *
+ * Calls made while someone is looking at the screen must answer quickly — a
+ * 429 with a long Retry-After used to be waited out (up to 4 × 65s), leaving
+ * the Xero window on "Loading…" with its Send button disabled for minutes.
+ * They now fail fast with a plain message. Background jobs (the hourly sync)
+ * run inside `xeroPatience.run(...)` and keep the long, patient behaviour.
+ */
+export const xeroPatience = new AsyncLocalStorage<{ maxWaitMs: number; attempts: number }>();
+const IMPATIENT = { maxWaitMs: 8_000, attempts: 3 };
+const XERO_REQUEST_TIMEOUT_MS = 25_000;
+
 async function xeroApi(ownerId: number, method: "GET" | "POST" | "PUT", path: string, body?: any): Promise<any> {
   const { accessToken, tenantId } = await getXeroAccess(ownerId);
   // Xero enforces 60 requests/minute per tenant and answers an overrun with
   // 429 + a Retry-After header. Honour it with a bounded wait-and-retry (and
   // a short backoff on transient 5xx) so one burst degrades to a brief pause
   // instead of aborting the whole sync run.
-  const maxAttempts = 4;
+  const patience = xeroPatience.getStore() ?? IMPATIENT;
+  const maxAttempts = patience.attempts;
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(`${XERO_API}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "xero-tenant-id": tenantId,
-        Accept: "application/json",
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let res: globalThis.Response;
+    try {
+      res = await fetch(`${XERO_API}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "xero-tenant-id": tenantId,
+          Accept: "application/json",
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(XERO_REQUEST_TIMEOUT_MS),
+      });
+    } catch (err: any) {
+      if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+        throw new Error("Xero didn't answer in time — please try again in a moment.");
+      }
+      throw err;
+    }
     if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts) {
       const retryAfter = Number(res.headers.get("Retry-After"));
       const waitMs = res.status === 429
         ? (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 60_000)
         : Math.min(8_000, 500 * 2 ** (attempt - 1));
-      // Drain the body so the socket is reusable, then wait and retry.
+      // Drain the body so the socket is reusable.
       await res.text().catch(() => {});
-      await sleep(Math.min(waitMs, 65_000));
+      if (res.status === 429 && waitMs > patience.maxWaitMs) {
+        throw new Error(`Xero is busy and asked us to wait ${humanWait(waitMs)} (its rate limit) — please try again then.`);
+      }
+      await sleep(Math.min(waitMs, patience.maxWaitMs));
       continue;
     }
     const text = await res.text();
     let json: any = null;
     try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON error body */ }
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get("Retry-After"));
+      throw new Error(`Xero is busy (its rate limit)${Number.isFinite(retryAfter) && retryAfter > 0 ? ` — try again in ${humanWait(retryAfter * 1000)}` : " — please try again shortly"}.`);
+    }
     if (!res.ok) {
       // Surface Xero's validation messages when present (they're actually useful).
       const detail = json?.Elements?.[0]?.ValidationErrors?.map((v: any) => v.Message).join("; ")
@@ -298,6 +329,13 @@ async function xeroApi(ownerId: number, method: "GET" | "POST" | "PUT", path: st
     }
     return json;
   }
+}
+
+function humanWait(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 90) return `${s} seconds`;
+  const m = Math.round(s / 60);
+  return m < 90 ? `${m} minutes` : `${Math.round(m / 60)} hours`;
 }
 
 /** The org's GST-on-income tax type, read from Xero once and cached on the
