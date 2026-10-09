@@ -4868,6 +4868,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           console.error('[payments.requestDeposit] send failed', err);
           return { sent: false as const, reason: 'send_failed' as const };
         }
+        // Payments → Deposits lists what's been asked for and whether it's in.
+        await db.update(bookings).set({ depositRequestedAt: new Date() })
+          .where(and(eq(bookings.id, input.bookingId), eq(bookings.ownerId, ctx.user.id)));
+        if (booking.leadId) {
+          await addLeadActivity({ leadId: booking.leadId, ownerId: ctx.user.id, type: 'email', content: `Deposit request (${fmtNzd(depositNzd)}) emailed to ${booking.email}` });
+        }
         return { sent: true as const, to: booking.email };
       }),
     // Owner-triggered: email the client a receipt for one recorded payment,
@@ -5140,6 +5146,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               depositNzd: depAmt,
               depositPaid: Boolean(b.depositPaid),
               depositRequired: (b as any).depositRequired !== false,
+              depositRequestedAt: (b as any).depositRequestedAt ?? null,
               onNightSignal,
               stage,
               foodStatus,
@@ -5484,10 +5491,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const result = await createXeroDraftInvoice(ctx.user.id, {
           contactName: clientName,
           contactEmail: booking.email ?? undefined,
-          // A deposit is a fixed gross figure ("$575 means $575"), so force
-          // GST-inclusive regardless of the venue's default — otherwise an
-          // exclusive default would add 15% and bill $661.25 for a $575 deposit.
-          inclusive: input.stream === 'deposit' ? true : input.inclusive,
+          // Send exactly the GST treatment the operator saw in the preview.
+          // Deposits used to be forced GST-inclusive here, so "$500 excl. GST"
+          // (previewed as $575) reached Xero as a $500 invoice. The modal now
+          // seeds a deposit as incl. GST from the booking's gross figure; only
+          // an old client that sends no choice falls back to inclusive.
+          inclusive: input.inclusive ?? (input.stream === 'deposit' ? true : undefined),
           accountCode: streamAccount || undefined,
           invoiceId: targetXeroId,
           reference: `${input.stream === 'food' ? 'Food' : input.stream === 'drinks' ? 'Drinks' : 'Deposit'} — ${clientName}${evDate ? ` · ${evDate}` : ''} (VenueFlow #${booking.id})`,

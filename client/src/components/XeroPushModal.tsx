@@ -115,9 +115,14 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     { bookingId: booking?.bookingId ?? 0, stream },
     { enabled: open && !!booking }
   );
+  // The venue's Xero default — only when there are no pre-filled lines whose
+  // own GST treatment governs (below). Without this guard, the Xero status
+  // arriving after the suggested lines flipped a pre-filled $575 incl. GST
+  // deposit to "excl. GST" and the invoice went out at $661.25.
   useEffect(() => {
+    if (editingId !== null || (suggested && suggested.lines.length > 0)) return;
     if (open && xeroStatus?.connected) setInclusive(Boolean(xeroStatus.lineAmountsInclusive));
-  }, [open, xeroStatus?.connected, xeroStatus?.lineAmountsInclusive]);
+  }, [open, xeroStatus?.connected, xeroStatus?.lineAmountsInclusive, suggested?.lines.length, editingId]);
   // When the BEO has priced lines, its GST treatment governs — sending gross
   // figures as exclusive would put another 15% on top of amounts that already
   // include it.

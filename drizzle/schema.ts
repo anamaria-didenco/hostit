@@ -421,6 +421,10 @@ export const bookings = pgTable("bookings", {
   totalNzd: decimal("totalNzd", { precision: 10, scale: 2 }),
   depositNzd: decimal("depositNzd", { precision: 10, scale: 2 }),
   depositPaid: boolean("depositPaid").default(false).notNull(),
+  // Last time a deposit request was emailed to the client from VenueFlow
+  // (payments.requestDeposit) — drives Payments → Deposits. Xero deposit
+  // invoices are tracked in xero_invoices instead.
+  depositRequestedAt: timestamp("depositRequestedAt"),
   // When false, this booking does not require a deposit at all — the
   // pending warning is hidden and syncDepositPaidFlag won't flip the
   // paid flag from incoming payments. Default true preserves prior

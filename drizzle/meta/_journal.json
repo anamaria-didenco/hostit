@@ -539,6 +539,13 @@
       "when": 1779801512076,
       "tag": "0076_walkthrough_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1779801512077,
+      "tag": "0077_deposit_requested_at",
+      "breakpoints": true
     }
   ]
 }
