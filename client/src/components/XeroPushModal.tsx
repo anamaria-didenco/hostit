@@ -54,6 +54,10 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // When set, the modal is EDITING that already-sent draft rather than creating
   // a new one (Xero upserts by InvoiceID, so it's the same send path).
   const [editingId, setEditingId] = useState<number | null>(null);
+  // An APPROVED, unpaid invoice being replaced: its lines are loaded for
+  // correcting, and sending creates the corrected draft then voids the old one.
+  const [replacing, setReplacing] = useState<{ id: number; number: string | null } | null>(null);
+  const loadedFromInvoice = editingId !== null || replacing !== null;
   // Loading an existing draft's real lines back from Xero for editing.
   const [loadingDraft, setLoadingDraft] = useState(false);
   // Anything the operator typed that would be lost by closing. A stray click on
@@ -120,17 +124,17 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // arriving after the suggested lines flipped a pre-filled $575 incl. GST
   // deposit to "excl. GST" and the invoice went out at $661.25.
   useEffect(() => {
-    if (editingId !== null || (suggested && suggested.lines.length > 0)) return;
+    if (loadedFromInvoice || (suggested && suggested.lines.length > 0)) return;
     if (open && xeroStatus?.connected) setInclusive(Boolean(xeroStatus.lineAmountsInclusive));
-  }, [open, xeroStatus?.connected, xeroStatus?.lineAmountsInclusive, suggested?.lines.length, editingId]);
+  }, [open, xeroStatus?.connected, xeroStatus?.lineAmountsInclusive, suggested?.lines.length, loadedFromInvoice]);
   // When the BEO has priced lines, its GST treatment governs — sending gross
   // figures as exclusive would put another 15% on top of amounts that already
   // include it.
   useEffect(() => {
     // Editing a draft: its own GST treatment (read from Xero) governs.
-    if (editingId !== null) return;
+    if (loadedFromInvoice) return;
     if (open && suggested && suggested.lines.length > 0) setInclusive(Boolean(suggested.gstInclusive));
-  }, [open, suggested?.source, suggested?.gstInclusive, editingId]);
+  }, [open, suggested?.source, suggested?.gstInclusive, loadedFromInvoice]);
 
   const inclusiveRef = useRef(inclusive);
   useEffect(() => { inclusiveRef.current = inclusive; }, [inclusive]);
@@ -160,7 +164,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
   // BEO figures arrive.
   useEffect(() => {
     // While editing an existing draft, the lines come from Xero, not the BEO.
-    if (!open || !booking || editingId !== null) return;
+    if (!open || !booking || loadedFromInvoice) return;
     const ev = booking.eventDate
       ? new Date(booking.eventDate).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
       : "";
@@ -184,7 +188,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     // to re-seed and wipe every amount the operator had typed. The toggle now
     // only recomputes the deposit row, below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, stream, booking?.bookingId, suggested, editingId]);
+  }, [open, stream, booking?.bookingId, suggested, loadedFromInvoice]);
 
   // Keep the deposit row correct when the GST treatment changes, without
   // touching anything the operator typed (including a deposit amount they had
@@ -197,12 +201,13 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inclusive]);
 
-  useEffect(() => { if (!open) { setEditingId(null); setDirty(false); setDueDate(""); } }, [open]);
+  useEffect(() => { if (!open) { setEditingId(null); setReplacing(null); setDirty(false); setDueDate(""); } }, [open]);
 
   // "Edit" on a sent draft: read its real lines back from Xero and load them.
-  const startEdit = async (inv: any) => {
-    if (dirty && !confirm("Load that draft instead? The lines you've entered here will be replaced.")) return;
-    setEditingId(inv.id);
+  const startEdit = async (inv: any, mode: "edit" | "replace" = "edit") => {
+    if (dirty && !confirm("Load that invoice instead? The lines you've entered here will be replaced.")) return;
+    if (mode === "replace") { setEditingId(null); setReplacing({ id: inv.id, number: inv.invoiceNumber ?? null }); }
+    else { setReplacing(null); setEditingId(inv.id); }
     setStream(inv.stream);
     setLoadingDraft(true);
     try {
@@ -219,6 +224,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
     } catch (e: any) {
       toast.error(e?.message || "Couldn't load that draft from Xero — try again.");
       setEditingId(null);
+      setReplacing(null);
     } finally {
       setLoadingDraft(false);
     }
@@ -270,6 +276,10 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
         `Draft ${r.invoiceNumber ?? ""} for ${fmtNZD(r.total)} ${r.updated ? "updated" : "created"} in ${r.tenantName} — approve it in Xero.`.replace("  ", " "),
         { duration: 8000 }
       );
+      if (r.replaced?.voided) toast.success(`${r.replaced.number ?? "The old invoice"} was voided in Xero.`, { duration: 8000 });
+      if (r.replaced && !r.replaced.voided) {
+        toast.warning(`The corrected draft is in Xero, but ${r.replaced.number ?? "the old invoice"} couldn't be voided (${r.replaced.error}). Void it in Xero so the client isn't billed twice.`, { duration: 20000 });
+      }
       utils.xero.invoicesForBooking.invalidate({ bookingId: booking!.bookingId });
       onClose();
     },
@@ -347,6 +357,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
       dueDate: dueDate || undefined,
       inclusive,
       updateInvoiceId: editingId ?? undefined,
+      replaceInvoiceId: replacing?.id,
     };
     lastSendRef.current = payload;
     // The server builds the Xero contact from the BOOKING, so an edited name
@@ -423,6 +434,15 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
             </p>
           </div>
 
+          {replacing && (
+            <div className="border border-amber-300 bg-amber-50 text-amber-900 font-dm text-xs p-2.5 flex items-center justify-between flex-wrap gap-y-2 gap-2">
+              <span>Replacing <b>{replacing.number ?? "the old invoice"}</b> (approved in Xero). Correct the lines below — sending creates a new draft and <b>voids the old invoice</b>.</span>
+              <button onClick={() => { if (!dirty || confirm("Stop replacing? Your changes will be lost.")) { setReplacing(null); setDirty(false); } }}
+                className="font-bebas tracking-widest text-[11px] text-amber-900 hover:underline flex-shrink-0">
+                CANCEL REPLACE
+              </button>
+            </div>
+          )}
           {editingId !== null && (
             <div className="border border-blue-300 bg-blue-50 text-blue-900 font-dm text-xs p-2.5 flex items-center justify-between flex-wrap gap-y-2 gap-2">
               <span>Editing an existing draft — sending will <b>replace</b> its contents in Xero.</span>
@@ -499,8 +519,13 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                       disabled={del.isPending}
                       className="font-bebas tracking-widest text-[11px] text-red-700 hover:underline disabled:opacity-50"
                       title={`Already ${String(inv.status).toLowerCase()} in Xero — remove it from this list`}>REMOVE</button>
+                  ) : inv.status === "AUTHORISED" ? (
+                    <button onClick={() => startEdit(inv, "replace")} disabled={loadingDraft}
+                      aria-label={`Replace ${inv.invoiceNumber ?? "invoice"}`}
+                      className="font-bebas tracking-widest text-[11px] text-amber-800 hover:underline disabled:opacity-50"
+                      title="Approved in Xero: send a corrected draft and void this one (only if nothing has been paid)">REPLACE</button>
                   ) : (
-                    <span className="font-dm text-[11px] text-ink/50" title="Approved in Xero — void or credit it there">locked</span>
+                    <span className="font-dm text-[11px] text-ink/50" title="Paid in Xero — credit or refund it there">locked</span>
                   )}
                 </div>
               ))}
@@ -516,6 +541,8 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
                   operator needs to know which they are checking. */}
               {loadingDraft ? (
                 <span className="font-dm text-[11px] text-ink/60" role="status">Loading this draft from Xero…</span>
+              ) : replacing ? (
+                <span className="font-dm text-[11px] text-ink/60">The old invoice&rsquo;s lines, read from Xero — correct them, then send</span>
               ) : editingId !== null ? (
                 <span className="font-dm text-[11px] text-ink/60">The draft&rsquo;s current lines, read from Xero — edit, then update</span>
               ) : loadingSuggested ? (
@@ -604,7 +631,7 @@ export default function XeroPushModal({ open, onClose, booking, initialStream }:
             </button>
             <button onClick={send} disabled={push.isPending || saveContact.isPending || loadingDraft || !xeroStatus?.connected || xeroStatus?.tenantMissing}
               className="font-bebas tracking-widest text-xs px-5 py-2 bg-forest text-cream hover:opacity-90 disabled:opacity-50">
-              {push.isPending ? "SENDING…" : editingId !== null ? "UPDATE DRAFT IN XERO" : "SEND DRAFT TO XERO"}
+              {push.isPending ? "SENDING…" : replacing ? `VOID ${replacing.number ?? "OLD"} & SEND CORRECTED DRAFT` : editingId !== null ? "UPDATE DRAFT IN XERO" : "SEND DRAFT TO XERO"}
             </button>
           </div>
         </div>

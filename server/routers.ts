@@ -5460,6 +5460,9 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         allowDuplicate: z.boolean().optional(),
         // Our xero_invoices row id to UPDATE rather than creating a new draft.
         updateInvoiceId: z.number().optional(),
+        // Our xero_invoices row id of an APPROVED, unpaid invoice to replace:
+        // a corrected draft is created, then the old one is voided in Xero.
+        replaceInvoiceId: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Team members (e.g. the events manager) raise invoices too; the row
@@ -5481,7 +5484,20 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
           if (!row?.xeroInvoiceId) throw new Error('That invoice is no longer tracked by VenueFlow.');
           targetXeroId = row.xeroInvoiceId;
         }
-        if (!input.allowDuplicate && input.updateInvoiceId === undefined) {
+        // Replacing an approved invoice: it must be voidable BEFORE anything is
+        // created, so a refusal (e.g. already part-paid) leaves the books alone.
+        let replaceRow: { id: number; xeroInvoiceId: string; invoiceNumber: string | null } | null = null;
+        if (input.replaceInvoiceId !== undefined) {
+          if (input.updateInvoiceId !== undefined) throw new Error('Choose either update or replace, not both.');
+          const [row] = await db.select().from(xeroInvoices)
+            .where(and(eq(xeroInvoices.id, input.replaceInvoiceId), eq(xeroInvoices.ownerId, ctx.user.id), eq(xeroInvoices.bookingId, input.bookingId))).limit(1);
+          if (!row?.xeroInvoiceId) throw new Error('That invoice is no longer tracked by VenueFlow.');
+          if (row.stream !== input.stream) throw new Error('The replacement must be for the same invoice type.');
+          const { assertInvoiceReplaceable } = await import('./xero');
+          await assertInvoiceReplaceable(ctx.user.id, row.xeroInvoiceId);
+          replaceRow = { id: row.id, xeroInvoiceId: row.xeroInvoiceId, invoiceNumber: row.invoiceNumber };
+        }
+        if (!input.allowDuplicate && input.updateInvoiceId === undefined && !replaceRow) {
           const dups = await db.select({ id: xeroInvoices.id, invoiceNumber: xeroInvoices.invoiceNumber, xeroInvoiceId: xeroInvoices.xeroInvoiceId, status: xeroInvoices.status })
             .from(xeroInvoices)
             .where(and(
@@ -5519,7 +5535,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               // failed call must never wave a real duplicate through.
             }
             if (stillLive) {
-              throw new Error(`A ${input.stream} invoice${dup.invoiceNumber ? ` (${dup.invoiceNumber})` : ''} was already sent for this event. Void it in Xero first, or confirm sending another.`);
+              throw new Error(`A ${input.stream} invoice${dup.invoiceNumber ? ` (${dup.invoiceNumber})` : ''} was already sent for this event. To correct it, press REPLACE next to it in the invoice list (or void it in Xero first), or confirm sending another.`);
             }
           }
         }
@@ -5584,7 +5600,21 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               inArray(col, ['to_invoice', 'on_night']),
             ));
         }
-        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, tenantName: result.tenantName, updated: input.updateInvoiceId !== undefined };
+        // Replace: now that the corrected draft exists, void the old invoice. If
+        // that step fails the new draft is still there — say so plainly.
+        let replaced: { number: string | null; voided: boolean; error?: string } | null = null;
+        if (replaceRow) {
+          try {
+            const { voidXeroInvoice } = await import('./xero');
+            await voidXeroInvoice(ctx.user.id, replaceRow.xeroInvoiceId);
+            await db.update(xeroInvoices).set({ status: 'VOIDED' }).where(eq(xeroInvoices.id, replaceRow.id));
+            replaced = { number: replaceRow.invoiceNumber, voided: true };
+          } catch (err: any) {
+            console.error('[xero.pushInvoice] created the replacement but could not void the old invoice:', err?.message ?? err);
+            replaced = { number: replaceRow.invoiceNumber, voided: false, error: String(err?.message ?? 'Xero refused') };
+          }
+        }
+        return { success: true, invoiceNumber: result.invoiceNumber, total: result.total, status: result.status, tenantName: result.tenantName, updated: input.updateInvoiceId !== undefined, replaced };
       }),
     /** Delete a DRAFT invoice in Xero and drop it from our ledger. Approved or
      *  paid invoices are refused — those must be voided/credited in Xero. */

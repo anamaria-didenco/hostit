@@ -511,6 +511,38 @@ export async function deleteXeroDraftInvoice(ownerId: number, invoiceId: string)
   }
 }
 
+/**
+ * What must be true before an APPROVED invoice may be voided: still awaiting
+ * payment, and nothing paid or credited against it (Xero refuses otherwise,
+ * and a paid invoice is never VenueFlow's to undo). Pure, so it is testable.
+ */
+export function assertVoidable(inv: { Status?: string; AmountPaid?: number; AmountCredited?: number } | null | undefined): void {
+  if (!inv) throw new Error("Xero couldn't find that invoice.");
+  if (inv.Status === "VOIDED" || inv.Status === "DELETED") return; // already gone — nothing to do
+  if (inv.Status !== "AUTHORISED") {
+    throw new Error(`That invoice is ${String(inv.Status ?? "unknown").toLowerCase()} in Xero, so it can't be replaced from here. Handle it in Xero.`);
+  }
+  if (Number(inv.AmountPaid ?? 0) > 0 || Number(inv.AmountCredited ?? 0) > 0) {
+    throw new Error("Money has already been paid or credited against that invoice, so VenueFlow won't void it. Handle it in Xero (credit note or refund).");
+  }
+}
+
+/** Void an approved, unpaid invoice in Xero (Status = VOIDED). */
+export async function voidXeroInvoice(ownerId: number, invoiceId: string): Promise<void> {
+  const json = await xeroApi(ownerId, "GET", `/Invoices/${encodeURIComponent(invoiceId)}`);
+  const inv = json?.Invoices?.[0];
+  assertVoidable(inv);
+  if (inv.Status === "VOIDED" || inv.Status === "DELETED") return;
+  await xeroApi(ownerId, "POST", "/Invoices", { Invoices: [{ InvoiceID: invoiceId, Status: "VOIDED" }] });
+}
+
+/** Read-only version of the checks above, so nothing is created if the old
+ *  invoice can't be voided afterwards. */
+export async function assertInvoiceReplaceable(ownerId: number, invoiceId: string): Promise<void> {
+  const json = await xeroApi(ownerId, "GET", `/Invoices/${encodeURIComponent(invoiceId)}`);
+  assertVoidable(json?.Invoices?.[0]);
+}
+
 export interface XeroInvoicePayment {
   paymentId: string;
   date: string;      // YYYY-MM-DD
