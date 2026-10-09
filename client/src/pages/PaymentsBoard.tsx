@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import XeroPushModal from "@/components/XeroPushModal";
 import PaymentsReceived from "@/components/PaymentsReceived";
+import XeroEventInvoices from "@/components/XeroEventInvoices";
 import { invoiceState, STREAM_LABEL } from "@/lib/xeroInvoice";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem,
@@ -82,7 +83,7 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   to_invoice: "To invoice", awaiting: "Awaiting payment", on_night: "Paying on the night", settled: "Fully settled",
 };
 
-const TABS = [["events", "Bookings"], ["deposits", "Deposits"], ["invoices", "Invoices sent"], ["received", "Received"]] as const;
+const TABS = [["events", "Bookings"], ["deposits", "Deposits"], ["invoices", "Invoices"], ["received", "Received"]] as const;
 type View = typeof TABS[number][0];
 
 export default function PaymentsBoard() {
@@ -333,7 +334,11 @@ export default function PaymentsBoard() {
         <DepositsSent rows={all} q={q} loading={isLoading}
           onOpen={r => navigate(`/event/${r.bookingId}`)} onRecord={r => navigate(recordUrl(r))} />
       ) : view === "invoices" ? (
-        <SentInvoices rows={all} q={q} loading={isLoading} onOpen={r => setXeroFor(r)} />
+        // Connected: the event invoices exactly as Xero shows them, live.
+        // Not connected: VenueFlow's own record of what it sent.
+        xeroStatus?.connected
+          ? <XeroEventInvoices q={q} />
+          : <SentInvoices rows={all} q={q} loading={isLoading} onOpen={r => setXeroFor(r)} />
       ) : (<>
 
       {/* Summary — a funnel across every booking (not the filtered list), so the

@@ -5287,6 +5287,28 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         await db.update(xeroConnections).set(updates).where(eq(xeroConnections.ownerId, ctx.user.id));
         return { success: true };
       }),
+    // Payments → Invoices: the venue's EVENT invoices exactly as Xero has them
+    // (status, sent, paid, due, overdue), read live. Non-event invoices in the
+    // same org are never returned. `fresh` skips the one-minute cache.
+    eventInvoices: protectedProcedure
+      .input(z.object({ fresh: z.boolean().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { xeroConnections } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return { connected: false as const, rows: [], error: null as string | null };
+        const [conn] = await db.select({ id: xeroConnections.id, tenantId: xeroConnections.tenantId })
+          .from(xeroConnections).where(eq(xeroConnections.ownerId, ctx.user.id)).limit(1);
+        if (!conn?.tenantId) return { connected: false as const, rows: [], error: null as string | null };
+        try {
+          const { listXeroEventInvoices } = await import('./xero');
+          return { connected: true as const, rows: await listXeroEventInvoices(ctx.user.id, { fresh: input?.fresh }), error: null as string | null };
+        } catch (err: any) {
+          console.error('[xero.eventInvoices] failed:', err?.message ?? err);
+          return { connected: true as const, rows: [], error: String(err?.message ?? 'Xero didn\'t answer') };
+        }
+      }),
     invoicesForBooking: protectedProcedure
       .input(z.object({ bookingId: z.number() }))
       .query(async ({ input, ctx }) => {
