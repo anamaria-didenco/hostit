@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { CheckCircle, MapPin, Phone, Mail, Clock, Calendar as CalendarIcon, CalendarPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle, MapPin, Phone, Mail, Clock, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { combineLocalDateTime, toLocalDateInput } from "@/lib/dateTime";
 import { toast } from "sonner";
@@ -444,100 +444,87 @@ function TurnstileBox({ siteKey, onToken, resetKey }: { siteKey: string; onToken
   return <div ref={ref} className="flex justify-center min-h-0" />;
 }
 
-/* ── Post-submit walkthrough booking ───────────────────────────────────────
-   Real slots from the server (leads.walkthroughSlots, Pacific/Auckland),
-   re-checked when booked so nobody gets a time someone else just took.
-   Booking creates a task for the venue and emails the client a calendar
-   invite when the venue's email is set up — the confirmation says which. ── */
-function WalkthroughPicker({ ownerId, leadId, leadToken, clientEmail, big, accentColor, accentTextColor, onBooked }: {
+/* ── Post-submit walkthrough request ───────────────────────────────────────
+   The client says which days and what time of day suit them; the venue
+   confirms a real time later, once they know someone will be on site. So
+   nothing here is a booking, and the copy never says it is. ── */
+const WALKTHROUGH_TIME_OPTIONS = [
+  { key: 'morning', label: 'Morning' },
+  { key: 'afternoon', label: 'Afternoon' },
+  { key: 'evening', label: 'Evening' },
+  { key: 'any', label: 'Any time' },
+] as const;
+type WalkthroughTimeKey = typeof WALKTHROUGH_TIME_OPTIONS[number]['key'];
+const MAX_WALKTHROUGH_DAYS = 5;
+
+function WalkthroughRequest({ ownerId, leadId, leadToken, clientEmail, big, accentColor, accentTextColor, onRequested }: {
   ownerId: number; leadId: number; leadToken: string; clientEmail: string; big: boolean;
-  accentColor: string; accentTextColor: string; onBooked: (startIso: string) => void;
+  accentColor: string; accentTextColor: string; onRequested: () => void;
 }) {
-  const slotsQ = trpc.leads.walkthroughSlots.useQuery({ ownerId }, { staleTime: 30_000, refetchOnWindowFocus: false });
-  const [dayKey, setDayKey] = useState<string | null>(null);
-  const [booked, setBooked] = useState<{ label: string; emailed: boolean; ics: string | null } | null>(null);
+  const optionsQ = trpc.leads.walkthroughOptions.useQuery({ ownerId }, { staleTime: 60_000, refetchOnWindowFocus: false });
+  const [dates, setDates] = useState<string[]>([]);
+  const [timeOfDay, setTimeOfDay] = useState<WalkthroughTimeKey>('any');
+  const [note, setNote] = useState('');
+  const [done, setDone] = useState<{ summary: string; emailed: boolean } | null>(null);
   const [changing, setChanging] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingStart, setPendingStart] = useState<string | null>(null);
-  const book = trpc.leads.bookWalkthrough.useMutation({
-    onSuccess: (r, vars) => {
-      setBooked({ label: r.label, emailed: r.emailed, ics: r.ics ?? null });
-      setChanging(false); setError(null);
-      onBooked(vars.slotStart ?? '');
-      slotsQ.refetch();
-    },
-    onError: (e) => {
-      setError(e.data?.code === 'CONFLICT' ? e.message : "We couldn't book that just now — please try another time.");
-      slotsQ.refetch();
-    },
-    onSettled: () => setPendingStart(null),
+  const request = trpc.leads.requestWalkthrough.useMutation({
+    onSuccess: (r) => { setDone({ summary: r.summary, emailed: r.emailed }); setChanging(false); setError(null); onRequested(); },
+    onError: () => setError("We couldn't send that just now — please try again."),
   });
-  const days = slotsQ.data?.days ?? [];
-  const day = days.find(d => d.key === dayKey) ?? days[0];
-
-  const downloadIcs = () => {
-    if (!booked?.ics) return;
-    const url = URL.createObjectURL(new Blob([booked.ics], { type: 'text/calendar;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url; a.download = 'walkthrough.ics';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const days = optionsQ.data?.days ?? [];
+  const toggleDate = (key: string) => {
+    setError(null);
+    setDates(prev => prev.includes(key) ? prev.filter(d => d !== key) : prev.length >= MAX_WALKTHROUGH_DAYS ? prev : [...prev, key]);
   };
 
   if (skipped) return null;
   const wrap = `mt-6 ${big ? 'pt-6' : 'pt-5'} border-t border-gray-200 text-left`;
   const eyebrow = "font-bold text-[11px] tracking-[0.14em] uppercase";
+  const label = "block font-bold text-[11px] tracking-[0.12em] uppercase text-gray-600 mb-1.5";
 
-  if (booked && !changing) {
+  if (done && !changing) {
     return (
       <div className={wrap}>
-        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3.5">
-          <div className={eyebrow} style={{ color: accentColor }}>Walkthrough booked</div>
-          <div className={`font-semibold text-gray-900 mt-0.5 leading-snug ${big ? 'text-lg' : 'text-base'}`} style={{ fontFamily: HEADING_FONT }}>{booked.label}</div>
-          <p className="text-xs text-gray-600 mt-1 leading-snug">
-            {booked.emailed
-              ? <>We&rsquo;ve emailed a confirmation to <span className="font-medium text-gray-800 break-all">{clientEmail}</span>.</>
-              : <>The team has it. Add it to your calendar so it doesn&rsquo;t slip.</>}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-            {booked.ics ? (
-              <button type="button" onClick={downloadIcs}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold rounded-full border border-gray-300 px-3 py-1.5 text-gray-700 hover:border-gray-400 hover:bg-gray-50">
-                <CalendarPlus className="w-3.5 h-3.5" /> Add to calendar
-              </button>
-            ) : <span />}
-            <button type="button" onClick={() => setChanging(true)}
-              className="whitespace-nowrap font-bold text-[11px] tracking-wide uppercase text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline py-1.5">Change time</button>
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3.5" role="status">
+          <div className={eyebrow} style={{ color: accentColor }}>Walkthrough requested</div>
+          <div className={`font-semibold text-gray-900 mt-0.5 leading-snug ${big ? 'text-lg' : 'text-base'}`} style={{ fontFamily: HEADING_FONT }}>
+            We&rsquo;ll be in touch to confirm a time.
           </div>
+          <p className="text-xs text-gray-600 mt-1 leading-snug">
+            You suggested {done.summary}.{' '}
+            {done.emailed && <>We&rsquo;ve emailed a copy to <span className="font-medium text-gray-800 break-all">{clientEmail}</span>.</>}
+          </p>
+          <button type="button" onClick={() => setChanging(true)}
+            className="mt-2 whitespace-nowrap font-bold text-[11px] tracking-wide uppercase text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline py-1.5">Change my request</button>
         </div>
       </div>
     );
   }
 
-  if (slotsQ.isLoading) return null;
-  if (!slotsQ.data?.enabled || days.length === 0) {
-    // Nothing open — say so only if they were mid-change; otherwise stay quiet.
-    return changing ? <div className={wrap}><p className="text-xs text-gray-600">No other times are open right now — reply to our email and we&rsquo;ll find one.</p></div> : null;
-  }
+  if (optionsQ.isLoading || !optionsQ.data?.enabled) return null;
 
   return (
     <div className={wrap}>
       <div className={`font-semibold text-gray-900 ${big ? 'text-lg' : 'text-base'}`} style={{ fontFamily: HEADING_FONT }}>
-        {changing ? 'Pick a new time' : 'Want to see the space first?'}
+        {changing ? 'Update your walkthrough request' : 'Want to see the space first?'}
       </div>
       <p className={`text-gray-600 ${big ? 'text-sm' : 'text-xs'} mt-0.5 mb-3`}>
-        Book a {slotsQ.data.slotMinutes}-minute walkthrough with the team.
+        Tell us when suits and we&rsquo;ll confirm a time when the team is on site.
       </p>
+
+      <div id={`wt-days-${leadId}`} className={label}>Days that suit you <span className="normal-case tracking-normal font-normal text-gray-500">(pick a few)</span></div>
       {/* Day strip — scrolls sideways on a phone. */}
-      <div role="radiogroup" aria-label="Day" className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 pr-8 snap-x [mask-image:linear-gradient(to_right,black_calc(100%_-_32px),transparent)]">
+      <div role="group" aria-labelledby={`wt-days-${leadId}`} className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 pr-8 snap-x [mask-image:linear-gradient(to_right,black_calc(100%_-_32px),transparent)]">
         {days.map(d => {
-          const sel = d.key === day?.key;
+          const sel = dates.includes(d.key);
+          const full = !sel && dates.length >= MAX_WALKTHROUGH_DAYS;
           const [wd, ...rest] = d.label.split(' ');
           return (
-            <button key={d.key} type="button" role="radio" aria-checked={sel} aria-label={d.label}
-              onClick={() => { setDayKey(d.key); setError(null); }}
-              className={`snap-start shrink-0 w-[58px] rounded-lg border py-1.5 text-center transition-colors ${sel ? 'shadow-sm' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+            <button key={d.key} type="button" aria-pressed={sel} aria-label={d.label} disabled={full}
+              onClick={() => toggleDate(d.key)}
+              className={`snap-start shrink-0 w-[58px] rounded-lg border py-1.5 text-center transition-colors disabled:opacity-40 ${sel ? 'shadow-sm' : 'border-gray-200 bg-white hover:border-gray-300'}`}
               style={sel ? { backgroundColor: accentColor, borderColor: accentColor, color: accentTextColor } : undefined}>
               <span className={`block text-[11px] font-bold tracking-wider uppercase ${sel ? '' : 'text-gray-500'}`}>{wd}</span>
               <span className={`block text-sm font-semibold ${sel ? '' : 'text-gray-800'}`} style={{ fontFamily: HEADING_FONT }}>{rest.join(' ')}</span>
@@ -545,28 +532,48 @@ function WalkthroughPicker({ ownerId, leadId, leadToken, clientEmail, big, accen
           );
         })}
       </div>
-      {day && (
-        <div role="group" aria-label={`Times on ${day.label}`} className={`grid grid-cols-3 ${big ? 'sm:grid-cols-4' : ''} gap-1.5 mt-2.5`}>
-          {day.slots.map(s => (
-            <button key={s.start} type="button" disabled={book.isPending}
-              aria-label={`Book ${s.label}`}
-              onClick={() => {
-                setPendingStart(s.start); setError(null);
-                book.mutate({ ownerId, leadId, leadToken, slotStart: s.start });
-              }}
-              className="rounded-full border border-gray-200 bg-white py-1.5 text-xs text-gray-700 hover:border-gray-400 hover:bg-gray-50 transition-colors disabled:opacity-60 tabular-nums">
-              {pendingStart === s.start ? 'Booking…' : s.timeLabel}
+
+      <div id={`wt-time-${leadId}`} className={`${label} mt-3`}>Time of day</div>
+      <div role="radiogroup" aria-labelledby={`wt-time-${leadId}`} className="flex flex-wrap gap-1.5">
+        {WALKTHROUGH_TIME_OPTIONS.map(o => {
+          const sel = timeOfDay === o.key;
+          return (
+            <button key={o.key} type="button" role="radio" aria-checked={sel}
+              onClick={() => setTimeOfDay(o.key)}
+              className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${sel ? 'font-semibold shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'}`}
+              style={sel ? { backgroundColor: accentColor, borderColor: accentColor, color: accentTextColor } : undefined}>
+              {o.label}
             </button>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
+
+      <label htmlFor={`wt-note-${leadId}`} className={`${label} mt-3`}>Anything we should know? <span className="normal-case tracking-normal font-normal text-gray-500">(optional)</span></label>
+      <input id={`wt-note-${leadId}`} type="text" maxLength={300} value={note} onChange={e => setNote(e.target.value)}
+        placeholder="e.g. after 5pm on weekdays"
+        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-1"
+        style={{ ['--tw-ring-color' as any]: accentColor }} />
+
       {error && <p role="alert" className="text-xs text-red-700 mt-2">{error}</p>}
-      <button type="button" onClick={() => changing ? setChanging(false) : setSkipped(true)}
-        className="mt-3 text-xs text-gray-500 underline underline-offset-2 hover:text-gray-700">
-        {changing ? 'Keep my current time' : 'No thanks — email is fine'}
-      </button>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <button type="button" disabled={request.isPending}
+          onClick={() => request.mutate({ ownerId, leadId, leadToken, dates, timeOfDay, note: note.trim() || undefined })}
+          className="rounded-full px-4 py-2 text-xs font-bold tracking-wide uppercase shadow-sm disabled:opacity-60"
+          style={{ backgroundColor: accentColor, color: accentTextColor }}>
+          {request.isPending ? 'Sending…' : changing ? 'Update request' : 'Request a walkthrough'}
+        </button>
+        <button type="button" onClick={() => changing ? setChanging(false) : setSkipped(true)}
+          className="text-xs text-gray-500 underline underline-offset-2 hover:text-gray-700">
+          {changing ? 'Keep my request' : 'No thanks — email is fine'}
+        </button>
+      </div>
     </div>
   );
+}
+
+/** "E51F1A" → "#E51F1A"; anything else (already "#…", rgb(), names) unchanged. */
+function withHash(color: string): string {
+  return /^[0-9a-f]{3}([0-9a-f]{3})?$/i.test(color?.trim() ?? "") ? `#${color.trim()}` : color;
 }
 
 export default function LeadForm() {
@@ -623,7 +630,7 @@ export default function LeadForm() {
   // Every message to the host page goes through here so it always carries the
   // frameId and targets the parent's exact origin. Documented message names:
   // vf-embed-height, vf-step-changed, vf-partial-captured, vf-enquiry-submitted,
-  // vf-walkthrough-booked, vf-close-widget.
+  // vf-walkthrough-requested, vf-close-widget.
   const postToParent = (msg: Record<string, unknown>) => {
     try { window.parent?.postMessage({ ...msg, frameId }, paramParentOrigin); } catch { /* no parent / cross-origin */ }
   };
@@ -1123,7 +1130,9 @@ export default function LeadForm() {
   // a solid card can still set formCardBg or pass ?bg=<hex>. The full-page form
   // keeps its cream card.
   const formCardBg      = bgTransparent ? "transparent" : (bgOverride || (isEmbed ? "transparent" : ((venue as any)?.formCardBg || "#fffdf9")));
-  const formButtonColor = accentOverride || (venue as any)?.formButtonColor || primaryColor;
+  // A colour saved without its "#" (e.g. "E51F1A") isn't valid CSS and rendered
+  // the button and selected pills invisible — accept it either way.
+  const formButtonColor = withHash(accentOverride || (venue as any)?.formButtonColor || primaryColor);
   const textOnButton    = isLight(formButtonColor) ? "#1a1a1a" : "#ffffff";
 
   let galleryImages: string[] = [];
@@ -1465,16 +1474,16 @@ export default function LeadForm() {
     );
   }
 
-  /* ── Post-submit walkthrough booking — shared by both the embed and
-        full-page confirmation screens (see WalkthroughPicker). Needs the
+  /* ── Post-submit walkthrough request — shared by both the embed and
+        full-page confirmation screens (see WalkthroughRequest). Needs the
         lead submit() just created and its proof-of-ownership token. ───── */
   function renderWalkthroughStep(size: 'sm' | 'lg') {
     if (!venue?.ownerId || !submittedLeadId || !submittedLeadToken || formConfig?.walkthroughEnabled === false) return null;
     return (
-      <WalkthroughPicker ownerId={venue.ownerId} leadId={submittedLeadId} leadToken={submittedLeadToken}
+      <WalkthroughRequest ownerId={venue.ownerId} leadId={submittedLeadId} leadToken={submittedLeadToken}
         clientEmail={(form.email ?? '').trim()} big={size === 'lg'}
         accentColor={formButtonColor} accentTextColor={textOnButton}
-        onBooked={start => postToParent({ type: "vf-walkthrough-booked", slot: start })} />
+        onRequested={() => postToParent({ type: "vf-walkthrough-requested" })} />
     );
   }
 

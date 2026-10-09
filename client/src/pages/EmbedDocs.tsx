@@ -41,7 +41,7 @@ const MESSAGES: Msg[] = [
   { name: "vf-step-changed", when: "When the wizard step changes (mount and each NEXT).", payload: "{ step }" },
   { name: "vf-partial-captured", when: "After a name + email are captured in step 1.", payload: "{}" },
   { name: "vf-enquiry-submitted", when: "On a completed enquiry.", payload: "{ eventType, guestCount, budgetRange, eventFormat, source }" },
-  { name: "vf-walkthrough-booked", when: "When a post-submit walkthrough slot is picked.", payload: "{ slot }" },
+  { name: "vf-walkthrough-requested", when: "When the enquirer asks for a walkthrough on the thank-you screen (the venue confirms the time later).", payload: "{}" },
   { name: "vf-close-widget", when: "Floating placement only — the card's × button.", payload: "{}" },
 ];
 

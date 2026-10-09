@@ -293,9 +293,12 @@ export const leads = pgTable("leads", {
   // Corporate enquiries only: where to send the invoice (accounts email or
   // PO number), separate from `message` for the same reason as eventDetail.
   invoicingNote: varchar("invoicingNote", { length: 255 }),
-  // The walkthrough the enquirer booked on the thank-you screen: the real
-  // start time (checked against other walkthroughs and events when booked)
-  // plus its display label (e.g. "Tue 14 Oct, 10:30am").
+  // Walkthroughs are requested, then confirmed by the venue. The request is
+  // what the client asked for on the thank-you screen ("Tue 14 Oct or Thu 16
+  // Oct · Morning"); walkthroughAt + walkthroughSlot (its label, e.g. "Tue 14
+  // Oct, 10:30am") are only set once staff confirm a real time.
+  walkthroughRequest: text("walkthroughRequest"),
+  walkthroughRequestedAt: timestamp("walkthroughRequestedAt"),
   walkthroughSlot: varchar("walkthroughSlot", { length: 60 }),
   walkthroughAt: timestamp("walkthroughAt"),
   spaceId: integer("spaceId"),
