@@ -54,7 +54,7 @@ import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabe
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
-import { beoUrl, getBeoHide } from "@/lib/beoUrl";
+import { downloadBeo } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
@@ -2493,7 +2493,6 @@ export default function Dashboard() {
         subject: weeklySubject,
         body: weeklyBody,
         beoAttach: beoAttach.length ? beoAttach : undefined,
-        beoHide: getBeoHide() || undefined,
         signatureId: weeklySigId || undefined,
       });
       // Report the count the SERVER actually attached (a BEO that fails to render
@@ -10454,15 +10453,15 @@ export default function Dashboard() {
 
                       {/* Documents */}
                       <div className="col-span-2 font-bebas text-[10px] tracking-widest text-ink/70 mt-1">DOCUMENTS</div>
-                      <button onClick={() => {
-                          const a = document.createElement('a');
-                          a.href = beoUrl(selectedBooking.id);
-                          a.download = `BEO-${selectedBooking.firstName}-${selectedBooking.lastName ?? ''}.pdf`;
-                          document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                          toast.success('Generating BEO PDF...');
-                        }}
+                      <button onClick={() => downloadBeo(selectedBooking.id)}
+                        title="The event order for the team: no prices or signature lines"
                         className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
                         <Printer className="w-3 h-3" /> BEO PDF
+                      </button>
+                      <button onClick={() => downloadBeo(selectedBooking.id, { copy: 'client' })}
+                        title="The event order with prices, totals and signature lines, to send to the client"
+                        className="flex items-center gap-2 px-3 py-2 rounded-sm border border-forest/30 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                        <Printer className="w-3 h-3" /> CLIENT COPY
                       </button>
                       <button
                         onClick={async () => {

@@ -146,6 +146,21 @@ function fmtDate(d: Date | null | undefined): string {
   });
 }
 
+// "2026-10-24 Engagement - Kylie Jackson - Event Order.pdf": starts with the
+// event date so a week of BEOs sorts in order in Downloads.
+export function beoFileName(opts: { eventDate: any; eventType?: string; clientName?: string; kind: string }): string {
+  const d = opts.eventDate ? new Date(opts.eventDate) : null;
+  // Same calendar day fmtDate prints in the header (server-local), so the
+  // file name and the document never disagree about the date.
+  const day = d && !isNaN(d.getTime())
+    ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    : "";
+  const parts = [[day, (opts.eventType ?? "").trim()].filter(Boolean).join(" "), (opts.clientName ?? "").trim(), opts.kind]
+    .filter(Boolean)
+    .map(p => p.replace(/[\\/:*?"<>|\r\n]+/g, " ").replace(/\s+/g, " ").trim());
+  return `${parts.join(" - ")}.pdf`;
+}
+
 function fmtCurrency(v: string | number | null | undefined): string {
   if (v === null || v === undefined || v === "") return "—";
   return `$${Number(v).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -475,18 +490,27 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     }
     const bookingId = booking.id;
 
+    const [venue] = await db.select().from(venueSettings)
+      .where(eq(venueSettings.ownerId, userId)).limit(1);
+
     // ── Print View hide list ───────────────────────────────────────
-    // Operator-controlled section toggles, sent as ?hide=key1,key2
-    // from the runsheet's Print View editor. Public event-pack route
-    // ignores them (guests always get the curated public view).
-    const hideRaw = mode === "auth" ? String((req.query.hide as string) || "") : "";
+    // Operator-controlled section toggles from "Choose print sections". They
+    // are saved on the venue so every device and every staff member gets the
+    // same document; an explicit ?hide=key1,key2 still wins (the emailed
+    // briefing passes one). The public event-pack ignores them (guests always
+    // get the curated public view).
+    const hideRaw = isPublic ? ""
+      : String((mode === "auth" ? (req.query.hide as string) : "") || (venue as any)?.beoPrintHide || "");
     const hideSet = new Set(
       hideRaw.split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
     );
     const show = (key: string, html: string) => hideSet.has(key) ? "" : html;
-
-    const [venue] = await db.select().from(venueSettings)
-      .where(eq(venueSettings.ownerId, userId)).limit(1);
+    // Two internal copies. The TEAM copy (default: downloads, staff link,
+    // emailed briefings) is what the floor and kitchen work from: no per-dish
+    // prices, no itemised money table, no signature lines. The CLIENT copy
+    // (?copy=client) keeps all of that for sending to the client to sign.
+    const clientCopy = mode === "auth" && String((req.query.copy as string) || "").toLowerCase() === "client";
+    const teamCopy = !isPublic && !clientCopy;
 
     // Lead contact info
     let leadPhone = "", leadEmail = "";
@@ -673,7 +697,10 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // Internal copies (staff runsheet / owner BEO) ALWAYS show prices — the
     // kitchen and floor need to know a grazing table is $1,800 and what the
     // fries cost. The operator toggles only govern the customer-facing pack.
-    const showItemPrice = !isPublic || fnbCols.price === true;
+    // The team copy leaves them off: on the food page the kitchen needs how
+    // many, and a bold "$360.00" beside every dish drowned out the quantity.
+    // The client copy shows them; the guest pack follows the PRICE toggle.
+    const showItemPrice = clientCopy || (isPublic && fnbCols.price === true);
     // Drinks pricing has its own independent toggle on the runsheet's DRINKS
     // tab (drinksData.showDrinkPrices). When the operator hasn't set it yet
     // (legacy runsheets), fall back to the food PRICE toggle so older events
@@ -1229,49 +1256,49 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const secLabel = (title: string, opts?: { red?: boolean; metaRight?: string }) => {
       const c = opts?.red ? "var(--red)" : "var(--green)";
       const h = opts?.red ? "2px" : "1.5px";
-      return `<div class="sec-label" style="display:flex;align-items:center;gap:9px;margin-bottom:4px"><span style="font-size:10px;letter-spacing:.2em;font-weight:800;color:${c};text-transform:uppercase;flex:none">${title}</span><span style="flex:1;height:${h};background:${c}"></span>${opts?.metaRight ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">${opts.metaRight}</span>` : ""}</div>`;
+      return `<div class="sec-label" style="display:flex;align-items:center;gap:9px;margin-bottom:4px"><span style="font-size:11px;letter-spacing:.18em;font-weight:800;color:${c};text-transform:uppercase;flex:none">${title}</span><span style="flex:1;height:${h};background:${c}"></span>${opts?.metaRight ? `<span style="font-size:11.5px;color:var(--gray);font-weight:600;flex:none">${opts.metaRight}</span>` : ""}</div>`;
     };
     const pageHeadR = (title: string, meta: string, anchorId?: string) =>
       `<header class="pagehead"${anchorId ? ` id="${anchorId}"` : ""} style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--green);padding-bottom:12px;margin-top:10px"><div style="font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink)">${title}</div><div style="font-size:11.5px;color:var(--gray);font-weight:600">${meta}</div></header>`;
 
     // ── PAGE 1 — masthead, booking band, client details, run of day, sig ──
     const statusPillHtml = isConfirmed
-      ? `<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--green);color:var(--on-green);font-size:10px;font-weight:800;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase"><span style="width:6px;height:6px;border-radius:50%;background:var(--on-green);opacity:.6"></span>Confirmed</div>`
-      : `<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--amber-tint);color:var(--amber);border:1px solid var(--change-line);font-size:10px;font-weight:800;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase"><span style="width:6px;height:6px;border-radius:50%;background:var(--amber)"></span>Not Final</div>`;
+      ? `<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--green);color:var(--on-green);font-size:11px;font-weight:800;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase"><span style="width:6px;height:6px;border-radius:50%;background:var(--on-green);opacity:.6"></span>Confirmed</div>`
+      : `<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:var(--amber-tint);color:var(--amber);border:1px solid var(--change-line);font-size:11px;font-weight:800;letter-spacing:.14em;padding:5px 11px;border-radius:3px;text-transform:uppercase"><span style="width:6px;height:6px;border-radius:50%;background:var(--amber)"></span>Not Final</div>`;
     // DF-2: the EVENT is the headline; "Bar Franco" (+ logo) sits at eyebrow
     // scale. Staff scan for which event this is, not which venue they work at.
     const mastHeadline = mastSub || escHtml(venueName);
     const mastEyebrow = [(mastSub ? escHtml(venueName) : ""), isPublic ? "Event Pack &middot; Function Sheet" : "Event Order &middot; Function Sheet"].filter(Boolean).join(" &middot; ");
     const p1Head = `<header style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid var(--green);padding-bottom:6px">
-      <div>${logoImg}<div style="font-size:10px;letter-spacing:.28em;font-weight:700;color:var(--green);text-transform:uppercase">${mastEyebrow}</div>
+      <div>${logoImg}<div style="font-size:11px;letter-spacing:.28em;font-weight:700;color:var(--green);text-transform:uppercase">${mastEyebrow}</div>
         <div style="font-family:var(--serif);font-size:21px;font-weight:600;line-height:1.06;margin-top:4px;color:var(--ink);letter-spacing:-.01em">${mastHeadline}</div></div>
       <div style="text-align:right;flex:none;padding-left:18px"><div style="font-family:var(--serif);font-size:20px;font-weight:600;color:var(--ink);line-height:1">${isPublic ? "Event&nbsp;Pack" : `EO&nbsp;#${booking.id}`}</div>${statusPillHtml}</div>
     </header>`;
 
     const bandCell4 = (label: string, val: string, last: boolean) =>
-      `<div style="padding:5px 10px;${last ? "" : "border-right:1px solid var(--line);"}"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-size:12.5px;font-weight:600;margin-top:2px;line-height:1.2;color:var(--ink)">${val}</div></div>`;
+      `<div style="padding:5px 10px;${last ? "" : "border-right:1px solid var(--line);"}"><div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-size:12.5px;font-weight:600;margin-top:2px;line-height:1.2;color:var(--ink)">${val}</div></div>`;
     const bandData: Array<[string, string]> = [];
     if (eventDate) bandData.push(["Date", escHtml(eventDate)]);
     if (timeRange && timeRange !== "—") bandData.push(["Service", escHtml(timeRange)]);
     if (roomLabel || spaceName) bandData.push(["Space", escHtml(roomLabel || spaceName)]);
     if (!isPublic && clientName) bandData.push(["Onsite Contact", escHtml(clientName)]);
     const p1Band = `<div class="p1band" style="display:grid;grid-template-columns:auto repeat(${bandData.length},1fr);margin-top:5px;border:1px solid var(--line);border-radius:6px;overflow:hidden">
-      <div style="padding:5px 10px;border-right:1px solid var(--line);background:var(--green);color:var(--on-green)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--on-green);opacity:.75;text-transform:uppercase">Guests</div><div style="font-family:var(--serif);font-size:30px;font-weight:600;line-height:1;margin-top:4px">${guestCount ? escHtml(String(guestCount)) : "&mdash;"}</div></div>
+      <div style="padding:5px 10px;border-right:1px solid var(--line);background:var(--green);color:var(--on-green)"><div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--on-green);opacity:.75;text-transform:uppercase">Guests</div><div style="font-family:var(--serif);font-size:30px;font-weight:600;line-height:1;margin-top:4px">${guestCount ? escHtml(String(guestCount)) : "&mdash;"}</div></div>
       ${bandData.map(([k, v], i) => bandCell4(k, v, i === bandData.length - 1)).join("")}
     </div>`;
 
     // DF-5: only render cells that actually have data — no bare "—" placeholders.
-    const cdCard = (label: string, valHtml: string, sub?: string) => `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:5px 9px"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-size:15px;font-weight:600;color:var(--ink);margin-top:5px;line-height:1.4;word-break:break-word">${valHtml}</div>${sub ? `<div style="font-size:11.5px;color:var(--gray);margin-top:3px">${sub}</div>` : ""}</div>`;
+    const cdCard = (label: string, valHtml: string, sub?: string) => `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:5px 9px"><div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-size:15px;font-weight:600;color:var(--ink);margin-top:5px;line-height:1.4;word-break:break-word">${valHtml}</div>${sub ? `<div style="font-size:11.5px;color:var(--gray);margin-top:3px">${sub}</div>` : ""}</div>`;
     const cdContactVal = escHtml(leadPhone || booking.phone);
     const cdCells: string[] = [];
-    if (clientName) cdCells.push(`<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:5px 9px"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">Client</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink);margin-top:4px">${escHtml(clientName)}</div>${clientOrg ? `<div style="font-size:11.5px;color:var(--gray);margin-top:3px">${clientOrg}</div>` : ""}</div>`);
+    if (clientName) cdCells.push(`<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:5px 9px"><div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase">Client</div><div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink);margin-top:4px">${escHtml(clientName)}</div>${clientOrg ? `<div style="font-size:11.5px;color:var(--gray);margin-top:3px">${clientOrg}</div>` : ""}</div>`);
     if (leadEmail) cdCells.push(cdCard("Email", escHtml(leadEmail)));
     if (cdContactVal) cdCells.push(cdCard("Contact", cdContactVal));
     const cdCols = cdCells.length >= 3 ? "1.4fr 1fr 1fr" : cdCells.length === 2 ? "1.4fr 1fr" : "1fr";
     const clientDetailsSection = (!isPublic && cdCells.length > 0) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Client Details")}<div class="cd-grid" style="display:grid;grid-template-columns:${cdCols};gap:10px">${cdCells.join("")}</div></div>` : "";
     // DF-5: the Set-up note lives on page 1 (under the band) instead of reserving
     // a standalone "External Hire & Suppliers" page for a lone note.
-    const setupNoteSection = (!hideSet.has('setup') && venueSetup && String(venueSetup).trim()) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Set-up")}<div style="font-size:11.5px;color:var(--ink2);line-height:1.55">${venueSetup}</div></div>` : "";
+    const setupNoteSection = (!hideSet.has('setup') && venueSetup && String(venueSetup).trim()) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Set-up")}<div style="font-size:13px;color:var(--ink2);line-height:1.5">${venueSetup}</div></div>` : "";
     // Event notes — the operator's free-text notes from the runsheet/booking.
     // Internal-only (rsNotes/bookingNotes are already blanked when isPublic).
     // Rendered verbatim (sanitised) to preserve rich formatting, styled like the
@@ -1281,7 +1308,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       .map(n => cleanRichHtml(String(n ?? "")))
       .filter(n => n.trim())
       .join('<div style="height:5px"></div>');
-    const eventNotesSection = (!hideSet.has('notes') && eventNotesHtml.trim()) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Notes")}<div style="font-size:11.5px;color:var(--ink2);line-height:1.55">${eventNotesHtml}</div></div>` : "";
+    const eventNotesSection = (!hideSet.has('notes') && eventNotesHtml.trim()) ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Notes")}<div style="font-size:13px;color:var(--ink2);line-height:1.5">${eventNotesHtml}</div></div>` : "";
 
     const rodItem = (item: any, last: boolean) => {
       const flag = TL_FLAG_RE.test(String(item.title || ""));
@@ -1289,31 +1316,36 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       // moments (arrival, dinner service…) are marked with a solid green dot and
       // everything else with a hollow ring — explained by the section legend.
       const dot = "var(--green)";
-      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:14px;padding-bottom:${last ? 0 : 6}px"><div style="width:80px;flex:none;text-align:right"><div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1">${fmt12(item.time) || "&mdash;"}</div>${item.duration ? `<div style="font-size:10px;color:var(--faint);font-weight:600;margin-top:3px">${escHtml(String(item.duration))} min</div>` : ""}</div><div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:11px;height:11px;border-radius:50%;background:${flag ? dot : "var(--cream)"};border:2px solid ${flag ? "var(--cream)" : dot};box-shadow:${flag ? `0 0 0 1.5px ${dot}` : "none"};margin-top:4px;flex:none"></span>${!last ? `<span style="width:2px;flex:1;background:var(--line);margin-top:3px;min-height:12px"></span>` : ""}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:14.5px;font-weight:700;color:var(--ink)">${escHtml(item.title || "&mdash;")}</span></div>${item.description ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.description)}</div>` : ""}${item.assignedTo ? `<div style="font-size:11.5px;color:#736a5d;margin-top:2px;line-height:1.4">${escHtml(item.assignedTo)}</div>` : ""}</div></div>`;
+      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:14px;padding-bottom:${last ? 0 : 6}px"><div style="width:80px;flex:none;text-align:right"><div style="font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1">${fmt12(item.time) || "&mdash;"}</div>${item.duration ? `<div style="font-size:11.5px;color:var(--gray);font-weight:700;margin-top:3px">${escHtml(String(item.duration))} min</div>` : ""}</div><div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:11px;height:11px;border-radius:50%;background:${flag ? dot : "var(--cream)"};border:2px solid ${flag ? "var(--cream)" : dot};box-shadow:${flag ? `0 0 0 1.5px ${dot}` : "none"};margin-top:4px;flex:none"></span>${!last ? `<span style="width:2px;flex:1;background:var(--line);margin-top:3px;min-height:12px"></span>` : ""}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:15px;font-weight:700;color:var(--ink)">${escHtml(item.title || "&mdash;")}</span></div>${item.description ? `<div style="font-size:13px;color:var(--ink2);margin-top:2px;line-height:1.4">${escHtml(item.description)}</div>` : ""}${item.assignedTo ? `<div style="font-size:12px;color:var(--green);font-weight:700;margin-top:2px;line-height:1.4">${escHtml(item.assignedTo)}</div>` : ""}</div></div>`;
     };
-    const runOfDaySection = healedTimeline.length > 0 ? `<div id="beo-run" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Run of Day", { metaRight: [healedTimeline.some((it: any) => TL_FLAG_RE.test(String(it.title || ""))) ? `<span style="color:var(--green)">&#9679;</span> key moment` : "", (timeRange && timeRange !== "—") ? escHtml(timeRange) : ""].filter(Boolean).join(" &nbsp;&middot;&nbsp; ") || undefined })}
+    const runOfDaySection = healedTimeline.length > 0 ? `<div id="beo-run" style="margin-top:5px">${secLabel("Run of Day", { metaRight: [healedTimeline.some((it: any) => TL_FLAG_RE.test(String(it.title || ""))) ? `<span style="color:var(--green)">&#9679;</span> key moment` : "", (timeRange && timeRange !== "—") ? escHtml(timeRange) : ""].filter(Boolean).join(" &nbsp;&middot;&nbsp; ") || undefined })}
       <div>${healedTimeline.map((it: any, i: number) => rodItem(it, i === healedTimeline.length - 1)).join("")}</div></div>` : "";
 
     const sigStrip = (top: boolean) => `<div class="sig-grid" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:8px;border-top:1px solid var(--line)">${["Name", "Signature", "Date"].map(l => top
-      ? `<div><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:8px">${l}</div><div style="border-bottom:1.5px solid var(--gray2)"></div></div>`
-      : `<div><div style="border-bottom:1.5px solid var(--gray2)"></div><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-top:6px">${l}</div></div>`).join("")}</div>`;
+      ? `<div><div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:8px">${l}</div><div style="border-bottom:1.5px solid var(--gray2)"></div></div>`
+      : `<div><div style="border-bottom:1.5px solid var(--gray2)"></div><div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-top:6px">${l}</div></div>`).join("")}</div>`;
 
     // ── PAGE 2 — food (cover-count cards), dietary, beverage ──
-    const foodQtyList = foodItems.map((i: any) => (Number(i.qty) > 0 ? Number(i.qty) : (Number(guestCount) || 0)));
-    const foodQtyUniform = !embeddedMenu && foodQtyList.length > 0 && foodQtyList.every(q => q === foodQtyList[0]);
-    const foodQtyNote = (foodQtyUniform && foodQtyList[0] > 0) ? `<span style="font-size:11px;color:var(--gray2);font-weight:600;flex:none">${escHtml(String(foodQtyList[0]))} of each</span>` : "";
+    // How many of each dish. Every dish carries its own large ×N (the kitchen
+    // reads down the column), even when they're all the same: a single "40 of
+    // each" in the heading corner was the only number on the page and nobody
+    // saw it. When nothing on the sheet has a real quantity (all ×1), the
+    // guest count is the portion count.
+    const allQtyOne = foodItems.length > 0 && foodItems.every((i: any) => !(Number(i.qty) > 1));
+    const dishQty = (f: any): number => {
+      const n = Number(f.qty);
+      if (n > 0 && !allQtyOne) return n;
+      return Number(guestCount) || (n > 0 ? n : 0);
+    };
     const foodCardHtml = (title: string, its: any[]) => {
       // Plain course title, then each dish on its own line prefixed with its
       // own ×N quantity (e.g. "×54 Crudo"). The ×N sits in a small serif column
       // so the quantities line up down the list.
       const dishRow = (f: any) => {
-        const q = Number(f.qty) > 0 ? Number(f.qty) : (Number(guestCount) || 0);
-        // "×120" on every line of a menu where every dish is ×120 is just the
-        // guest count repeated; it's stated once in the Food heading instead
-        // (see foodQtyNote) and only shown per dish when quantities differ.
-        const qHtml = (q > 0 && !foodQtyUniform)
-          ? `<span style="font-family:var(--serif);font-size:11.5px;font-weight:600;color:var(--green);min-width:30px;text-align:right;flex:none;line-height:1.35">&times;${escHtml(String(q))}</span>`
-          : "";
+        const q = dishQty(f);
+        const qHtml = q > 0
+          ? `<span class="dish-qty"><span class="x">&times;</span>${escHtml(String(q))}</span>`
+          : `<span class="dish-qty"></span>`;
         // Price column (internal copies): line total in serif with the unit
         // price beneath, so the kitchen can see both "what this dish costs"
         // and "what the whole line is worth".
@@ -1323,14 +1355,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         const priceHtml = (showItemPrice && hasPrice)
           ? `<span class="dish-price"><b>${fmtCurrency(lineTotal)}</b>${q > 1 ? `<span class="ea">${fmtCurrency(unit)} ea</span>` : ""}</span>`
           : "";
-        return `<div class="dish-row" style="display:flex;gap:8px;margin-top:1px;line-height:1.3;align-items:baseline">${qHtml}<span style="flex:1;min-width:0"><span style="font-size:12.5px;font-weight:600;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` <span style="font-size:11.5px;color:var(--gray)">&mdash; ${escHtml(f.description)}</span>` : ""}</span>${priceHtml}</div>`;
+        return `<div class="dish-row" style="display:flex;gap:10px;padding:3px 0;line-height:1.3;align-items:baseline;border-top:1px solid var(--hair)">${qHtml}<span style="flex:1;min-width:0"><span style="font-size:14px;font-weight:700;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` <span style="font-size:12.5px;color:var(--gray)">&mdash; ${escHtml(f.description)}</span>` : ""}</span>${priceHtml}</div>`;
       };
-      return `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:6px 10px;background:var(--cream)"><div style="font-family:var(--serif);font-style:italic;font-size:14px;font-weight:500;color:var(--green)">${escHtml(title)}</div><div style="margin-top:3px">${its.map(dishRow).join("")}</div></div>`;
+      return `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:6px 10px;background:var(--cream)"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:var(--serif);font-style:italic;font-size:15px;font-weight:600;color:var(--green)">${escHtml(title)}</span><span style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase">How many</span></div><div style="margin-top:3px">${its.map(dishRow).join("")}</div></div>`;
     };
     const foodCards = (embeddedMenu
       ? embeddedMenu.map(c => foodCardHtml(c.label, c.dishes.map(d => ({ dishName: d.name, description: d.det }))))
       : foodCourses.map(course => foodCardHtml(course, foodGrouped[course] ?? []))).join("");
-    const foodSection = foodItems.length > 0 ? `<div id="beo-food" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><span style="font-size:10px;letter-spacing:.2em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span>${foodQtyNote}</div><div style="display:grid;grid-template-columns:1fr;gap:8px">${foodCards}</div></div>` : "";
+    const foodSection = foodItems.length > 0 ? `<div id="beo-food" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><span style="font-size:11px;letter-spacing:.18em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span></div><div style="display:grid;grid-template-columns:1fr;gap:8px">${foodCards}</div></div>` : "";
 
     // Tally-ledger: one sorted list (severe/allergy first via orderedDiet), a
     // big serif ×N count column and a severity dot (red = severe allergy,
@@ -1341,14 +1373,14 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       const severe = isSevere(d);
       const dot = severe ? "var(--red)" : "var(--amber)";
       const n = Number(d.count) > 0 ? Number(d.count) : 1;
-      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;align-items:center;gap:10px;padding:3px 10px;${first ? "" : "border-top:1px solid var(--hair);"}">`
-        + `<span style="font-family:var(--serif);font-size:16px;font-weight:600;color:var(--ink);min-width:32px;text-align:right;line-height:1;flex:none">&times;${escHtml(String(n))}</span>`
+      return `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;align-items:center;gap:10px;padding:5px 10px;${first ? "" : "border-top:1px solid var(--hair);"}">`
+        + `<span style="font-family:var(--serif);font-size:19px;font-weight:700;color:var(--ink);min-width:40px;text-align:right;line-height:1;flex:none">&times;${escHtml(String(n))}</span>`
         + `<span style="width:9px;height:9px;border-radius:50%;background:${dot};flex:none" aria-hidden></span>`
-        + `<span style="flex:1;min-width:0"><span style="font-size:12.5px;font-weight:600;color:var(--ink)">${escHtml(d.name)}</span>${severe ? ` <span style="font-size:9px;letter-spacing:.14em;font-weight:800;color:var(--red);text-transform:uppercase">Severe</span>` : ""}${d.notes ? `<span style="font-size:12.5px;color:var(--gray)"> &mdash; ${escHtml(d.notes)}</span>` : ""}`
-        + `${(Array.isArray(d.names) && d.names.length) ? `<div style="font-size:11px;color:var(--gray);margin-top:1px">${d.names.map((nm: any) => escHtml(String(nm))).join(" &middot; ")}</div>` : ""}</span>`
+        + `<span style="flex:1;min-width:0"><span style="font-size:14px;font-weight:700;color:${severe ? "var(--red)" : "var(--ink)"}">${escHtml(d.name)}</span>${severe && !/severe/i.test(String(d.name)) ? ` <span style="font-size:10.5px;letter-spacing:.12em;font-weight:800;color:#fff;background:var(--red);padding:1px 5px;border-radius:2px;text-transform:uppercase">Severe</span>` : ""}${d.notes ? `<span style="font-size:13px;color:var(--ink2)"> &mdash; ${escHtml(d.notes)}</span>` : ""}`
+        + `${(Array.isArray(d.names) && d.names.length) ? `<div style="font-size:12px;color:var(--gray);margin-top:1px">${d.names.map((nm: any) => escHtml(String(nm))).join(" &middot; ")}</div>` : ""}</span>`
         + `</div>`;
     };
-    const dietarySectionNew = dietaries.length > 0 ? `<div id="beo-dietary" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("&#9888; Dietary &amp; Allergies", { red: true })}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden">${orderedDiet.map((d, i) => dietRow(d, i === 0)).join("")}</div></div>` : "";
+    const dietarySectionNew = dietaries.length > 0 ? `<div id="beo-dietary" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("&#9888; Read first &middot; Dietary &amp; Allergies", { red: true })}<div style="border:2px solid var(--red);border-radius:6px;overflow:hidden">${orderedDiet.map((d, i) => dietRow(d, i === 0)).join("")}</div></div>` : "";
 
     const bevItems2: Array<{ name: string; desc?: string; price?: any }> = hasDrinkSelection
       ? [
@@ -1412,7 +1444,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       const drinksState = ((booking as any).drinksStatus as string | null)
         ?? ((barOpt === "cash_bar" || barOpt === "bar_tab_then_cash") ? "on_night" : "to_invoice");
       const pill = (txt: string, good: boolean) =>
-        `<span style="background:${good ? "var(--brand-tint)" : "var(--amber-tint)"};color:${good ? "var(--green)" : "var(--amber)"};font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:6px;white-space:nowrap">${txt}</span>`;
+        `<span style="background:${good ? "var(--brand-tint)" : "var(--amber-tint)"};color:${good ? "var(--green)" : "var(--amber)"};font-size:11px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:6px;white-space:nowrap">${txt}</span>`;
       const step = (n: number, title: string, body: string, pillHtml: string) =>
         `<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:9px;padding:9px 14px;border-top:1px solid var(--hair);align-items:flex-start">`
         + `<span style="font-family:var(--serif);font-size:13px;font-weight:600;color:var(--green);flex:none;line-height:1.3">${n}</span>`
@@ -1458,13 +1490,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // the closing NOTE. Staff had to read four blocks and reconcile them.
     // One card now runs: what happens → what it comes to → how to pay.
     const bandLabel = (txt: string, meta?: string) =>
-      `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:9px;background:var(--fill);padding:7px 14px;border-top:1.5px solid var(--line2);font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>${txt}</span>${meta ? `<span style="letter-spacing:.04em;font-weight:600;text-transform:none;color:var(--gray)">${meta}</span>` : ""}</div>`;
-    const howToPayBand = (!isPublic && !noFinancials && !hideSet.has('payment') && paymentInstr.trim())
+      `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:9px;background:var(--fill);padding:7px 14px;border-top:1.5px solid var(--line2);font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>${txt}</span>${meta ? `<span style="letter-spacing:.04em;font-weight:600;text-transform:none;color:var(--gray)">${meta}</span>` : ""}</div>`;
+    const howToPayBand = (clientCopy && !noFinancials && !hideSet.has('payment') && paymentInstr.trim())
       ? bandLabel("How to pay") + `<div style="break-inside:avoid;page-break-inside:avoid;padding:11px 15px;font-size:11.5px;color:var(--ink2);line-height:1.45">${escHtml(paymentInstr).replace(/\n/g, "<br>")}</div>`
       : "";
 
     // ── PAGE 4 — summary stat cards, itemised billing, acceptance ──
-    const statCard = (label: string, big: string, sub: string) => `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:5px 9px"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink);margin-top:2px;line-height:1.1">${big}</div>${sub ? `<div style="font-size:11.5px;color:var(--gray);margin-top:3px">${sub}</div>` : ""}</div>`;
+    const statCard = (label: string, big: string, sub: string) => `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:5px 9px"><div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase">${label}</div><div style="font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink);margin-top:2px;line-height:1.1">${big}</div>${sub ? `<div style="font-size:11.5px;color:var(--gray);margin-top:3px">${sub}</div>` : ""}</div>`;
     const statCards = [
       (timeRange && timeRange !== "—") ? statCard(escHtml(eventType || "Event"), escHtml(timeRange), guestCount ? `Attendees: ${escHtml(String(guestCount))}` : "") : "",
       (roomLabel || spaceName) ? statCard("Space", escHtml(roomLabel || spaceName), "") : "",
@@ -1495,12 +1527,12 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       ? summaryRow("Less deposit received", `&minus;${fmtCurrency(depAmt)}`)
         + `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:9px 16px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink)"><span style="text-align:right;font-weight:700">Balance to collect</span><span style="text-align:right;font-family:var(--serif);font-size:15px;font-weight:600">${fmtCurrency(Math.max(0, totalInclGst - depAmt))}</span></div>`
       : "";
-    const moneyBand = (!isPublic && !noFinancials && (fnbFoodLines.length > 0 || billCostList.length > 0 || minSpendAmt > 0 || depAmt > 0))
+    const moneyBand = (clientCopy && !noFinancials && (fnbFoodLines.length > 0 || billCostList.length > 0 || minSpendAmt > 0 || depAmt > 0))
       ? bandLabel("What it comes to", escHtml(eventDate))
         // Column headings only when there are lines under them; an empty
         // Item/Price/Qty header over a bare total reads as missing data.
         + ((foodBillRows || costBillRows)
-            ? `<div class="bill-row bill-head" style="display:grid;grid-template-columns:1fr 90px 60px 110px;padding:5px 14px;border-top:1px solid var(--hair);font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>`
+            ? `<div class="bill-row bill-head" style="display:grid;grid-template-columns:1fr 90px 60px 110px;padding:5px 14px;border-top:1px solid var(--hair);font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase"><span>Item</span><span style="text-align:right">Price</span><span style="text-align:right">Qty</span><span style="text-align:right">Sub-total</span></div>`
             : "")
         + foodBillRows + costBillRows + minSpendRow + strayDepositRow + billingTotalRows + balanceRows
         // The bar is not in this table. Without saying so, a total sitting under
@@ -1523,7 +1555,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const noteAlreadyInBilling = Boolean(billStepsBand) && footerKey.length > 0 && notesKey.length > 0
       && (notesKey.includes(footerKey) || footerKey.includes(notesKey));
     const closingNote = (!hideSet.has('footer') && footerNote.trim() && !noteAlreadyInBilling) ? `<div style="margin-top:5px">${secLabel("Note")}<div style="font-size:11.5px;line-height:1.5;color:#332e26">${footerNote.replace(/\n/g, "<br>")}</div></div>` : "";
-    const acceptanceBlk = `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:10px;padding-top:16px;border-top:1px solid var(--line)"><div style="font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:4px">Client Acceptance</div><div style="font-size:11.5px;color:var(--gray);margin-bottom:20px;line-height:1.5;max-width:80%">By signing below the client confirms the details, catering, beverages and estimated charges set out in this event order are correct.</div>${sigStrip(false)}</div>`;
+    const acceptanceBlk = teamCopy ? "" : `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:10px;padding-top:16px;border-top:1px solid var(--line)"><div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase;margin-bottom:4px">Client Acceptance</div><div style="font-size:11.5px;color:var(--gray);margin-bottom:20px;line-height:1.5;max-width:80%">By signing below the client confirms the details, catering, beverages and estimated charges set out in this event order are correct.</div>${sigStrip(false)}</div>`;
     // Condense: the Event Summary stat cards duplicated the page-1 info band
     // (date / service / space / attendees), so they're dropped to save a block.
     const billingCard = [billStepsBand, moneyBand, howToPayBand].filter(Boolean).join("");
@@ -1534,18 +1566,22 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
       ? `<div style="margin-top:9px">${secLabel("How This Event Is Billed")}<div style="border:1.5px solid var(--line2);border-radius:6px;overflow:hidden;background:var(--cream)">${billingCard}</div></div>`
       : "";
     const page4Inner = `${billingSection}${closingNote}${acceptanceBlk}`;
-    const page4Content = (statCards.length > 0 || billingCard.trim()) ? `${pageHeadR("Event Summary", escHtml(eventDate), "beo-billing")}${page4Inner}` : "";
+    const page4Content = page4Inner.trim() ? `${pageHeadR("Event Summary", escHtml(eventDate), "beo-billing")}${page4Inner}` : "";
 
     // ── Assemble pages; collapse empties; number "Page N of N" dynamically ──
     const p2Food = show('food', foodSection), p2Diet = show('dietary', dietarySectionNew), p2Bev = show('drinks', beverageSectionNew);
     const p2Menu = show('food', linkedMenuSection);
     const kitchenNoteSection = kitchenNotesText.trim()
-      ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Kitchen Notes")}<div style="font-size:11.5px;color:var(--ink2);line-height:1.5">${escHtml(kitchenNotesText).replace(/\n/g, "<br>")}</div></div>`
+      ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Kitchen Notes")}<div style="font-size:13px;color:var(--ink2);line-height:1.5">${escHtml(kitchenNotesText).replace(/\n/g, "<br>")}</div></div>`
       : "";
     // DF-5: exactly one signature strip in the document — the formal Client
     // Acceptance block on the Event Summary page. No page-1 sign-off strip.
-    const page1Content = `${p1Head}${p1Band}${clientDetailsSection}${setupNoteSection}${eventNotesSection}${show('timeline', runOfDaySection)}`;
-    const page2Content = (p2Food.trim() || p2Menu.trim() || p2Diet.trim() || p2Bev.trim() || kitchenNoteSection.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${p2Menu}${kitchenNoteSection}${p2Diet}${p2Bev}` : "";
+    // Read-first order: allergies are the only part of the document that can
+    // hurt someone, so they sit straight under the event band, then the notes
+    // (surprises, access needs), set-up and the run of day. Client contact
+    // details come last on the page; the onsite contact is already in the band.
+    const page1Content = `${p1Head}${p1Band}${p2Diet}${eventNotesSection}${setupNoteSection}${show('timeline', runOfDaySection)}${clientDetailsSection}`;
+    const page2Content = (p2Food.trim() || p2Menu.trim() || p2Bev.trim() || kitchenNoteSection.trim()) ? `${pageHeadR("Food &amp; Beverage", footerBiz)}${p2Food}${p2Menu}${kitchenNoteSection}${p2Bev}` : "";
     // One continuous flow: sections condense onto as few physical A4 pages as
     // the content needs (no reserved page per section). Empty sections still
     // collapse. Page numbering is applied by the running PDF footer below; the
@@ -1571,8 +1607,9 @@ ${pageContents.join("\n")}
        the venue's Brand Pack colour, defaulting to VenueFlow deep blue.
        --on-green is the readable text colour for surfaces filled with it. */
     --cream:#fffdf9; --ink:#16140f; --ink2:#211d18; --green:${brandAccent}; --on-green:${onAccent}; --red:#c0392b;
-    --gray:#6a6256; --gray2:#8a8073; --faint:#a39684;
-    --line:#e3ddd0; --line2:#e6dccb; --hair:#eee6d8; --amber:#b07c25;
+    /* Greys and amber darkened so every text colour passes 4.5:1 on cream. */
+    --gray:#5c5449; --gray2:#665e52; --faint:#6a6256;
+    --line:#e3ddd0; --line2:#e6dccb; --hair:#eee6d8; --amber:#8a5f18;
     --fill:#f4efe6; --change-fill:#fbf3e8; --change-line:#e6d9bf;
     --paper-edge:#ddd8cf;
     /* Light tints derived from the brand accent / amber so pills + fills follow
@@ -1594,12 +1631,12 @@ ${pageContents.join("\n")}
   /* ── Masthead (page 1) ── */
   .mast{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid var(--green);padding-bottom:7px;}
   .mast-logo{display:block;max-width:190px;object-fit:contain;margin-bottom:4px;}
-  .eyebrow{font-size:10px;letter-spacing:.32em;font-weight:700;color:var(--green);text-transform:uppercase;}
+  .eyebrow{font-size:11px;letter-spacing:.32em;font-weight:700;color:var(--green);text-transform:uppercase;}
   .venue{font-family:var(--serif);font-size:24px;font-weight:600;line-height:1.05;margin-top:4px;color:var(--ink);}
   .mast-sub{font-size:11.5px;color:var(--gray);margin-top:2px;}
   .mast-right{text-align:right;flex:none;padding-left:18px;}
   .beo-num{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);line-height:1;}
-  .pill{display:inline-flex;align-items:center;gap:6px;margin-top:6px;background:var(--green);color:var(--on-green);font-size:10px;font-weight:700;letter-spacing:.14em;padding:4px 10px;border-radius:3px;text-transform:uppercase;}
+  .pill{display:inline-flex;align-items:center;gap:6px;margin-top:6px;background:var(--green);color:var(--on-green);font-size:11px;font-weight:700;letter-spacing:.14em;padding:4px 10px;border-radius:3px;text-transform:uppercase;}
   .pill .dot{width:6px;height:6px;border-radius:50%;background:var(--on-green);opacity:.55;}
   .pill.is-muted{background:var(--gray2);color:#fff;}
 
@@ -1607,7 +1644,7 @@ ${pageContents.join("\n")}
   .band{display:grid;margin-top:5px;border:1px solid var(--line);border-radius:6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;}
   .band-cell{padding:5px 10px;border-right:1px solid var(--line);}
   .band-cell:last-child{border-right:0;}
-  .blabel{font-size:10px;letter-spacing:.16em;font-weight:700;color:var(--gray2);text-transform:uppercase;}
+  .blabel{font-size:11px;letter-spacing:.14em;font-weight:700;color:var(--gray2);text-transform:uppercase;}
   .band-val{font-size:12.5px;font-weight:600;margin-top:2px;line-height:1.2;}
   .band-guests{background:var(--green);color:var(--on-green);}
   .band-guests .blabel{color:var(--on-green);opacity:.75;}
@@ -1626,7 +1663,7 @@ ${pageContents.join("\n")}
   /* ── Dietary ── */
   .diet-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
   .diet-card{background:#fff;border:1.5px solid var(--line2);border-radius:6px;padding:8px 12px;break-inside:avoid;page-break-inside:avoid;}
-  .diet-card .dlabel{font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--amber);text-transform:uppercase;}
+  .diet-card .dlabel{font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--amber);text-transform:uppercase;}
   .diet-card .dname{font-family:var(--serif);font-size:16px;font-weight:600;margin-top:4px;color:var(--ink);line-height:1.05;}
   .diet-card .dcount{font-size:11.5px;color:var(--gray);margin-top:3px;font-weight:500;}
   .diet-card .dnote{font-size:11.5px;color:var(--gray);margin-top:3px;font-weight:500;line-height:1.35;}
@@ -1650,7 +1687,7 @@ ${pageContents.join("\n")}
   .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px 18px;margin-top:1px;}
   .course{break-inside:avoid;page-break-inside:avoid;margin-bottom:4px;}
   .course-title{font-family:var(--serif);font-style:italic;font-size:14.5px;font-weight:500;color:var(--green);border-bottom:1px solid var(--line);padding-bottom:2px;margin-bottom:4px;}
-  .course-note{font-family:var(--sans);font-style:normal;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--gray2);text-transform:uppercase;}
+  .course-note{font-family:var(--sans);font-style:normal;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--gray2);text-transform:uppercase;}
   .dish{display:flex;gap:8px;padding:0.5px 0;align-items:baseline;}
   .dish .em{color:var(--red);font-size:11.5px;line-height:1.35;flex:none;}
   .dish .body{flex:1;}
@@ -1719,13 +1756,13 @@ ${pageContents.join("\n")}
   .cost-row.balance .k{color:var(--on-green);font-size:11.5px;font-weight:700;}
   .cost-row.balance .k-sub{display:block;font-size:9px;font-weight:600;color:var(--on-green);opacity:.65;letter-spacing:.04em;margin-top:1px;}
   .cost-row.balance .v{color:var(--on-green);font-size:15.5px;}
-  .out-tag{background:var(--red);color:#fff;font-size:8px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:7px;}
+  .out-tag{background:var(--red);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:3px;text-transform:uppercase;margin-left:7px;}
 
   /* ── Beverages ── */
   .bev{margin-top:6px;break-inside:avoid;page-break-inside:avoid;}
   .bev-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px 14px;}
   .bev-row{display:flex;gap:10px;align-items:baseline;border-bottom:1px solid var(--hair);padding-bottom:3px;}
-  .bev-tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:#fff;padding:3px 6px;border-radius:3px;flex:none;text-transform:uppercase;}
+  .bev-tag{font-size:11px;font-weight:800;letter-spacing:.08em;color:#fff;padding:3px 6px;border-radius:3px;flex:none;text-transform:uppercase;}
   .bev-name{font-size:11.5px;font-weight:600;color:var(--ink);}
   .bev-desc{font-size:11.5px;color:#736a5d;font-weight:400;}
   .bev-price{margin-left:auto;padding-left:8px;font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;}
@@ -1754,9 +1791,12 @@ ${pageContents.join("\n")}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
   /* Per-dish price column (internal copies) — line total over unit price. */
+  /* How many: the biggest figure in each dish row, in one aligned column. */
+  .dish-qty{flex:none;min-width:48px;text-align:right;font-family:var(--serif);font-size:19px;font-weight:700;color:var(--ink);line-height:1.1;font-variant-numeric:tabular-nums lining-nums;}
+  .dish-qty .x{font-size:12px;font-weight:600;color:var(--gray);margin-right:1px;}
   .dish-price{flex:none;margin-left:10px;text-align:right;white-space:nowrap;}
   .dish-price b{font-family:var(--serif);font-size:12.5px;font-weight:600;color:var(--ink);}
-  .dish-price .ea{display:block;font-size:10px;color:var(--faint);line-height:1.25;font-weight:500;}
+  .dish-price .ea{display:block;font-size:11px;color:var(--faint);line-height:1.25;font-weight:500;}
 
   @media screen{
     html,body{background:var(--paper-edge);}
@@ -1830,6 +1870,13 @@ ${sheetsHtml}
       // launch) — degrade to HTML rather than a hard 500 so the operator can
       // still view/print the document via the browser's own print dialog.
       console.error("BEO PDF: failed to launch Chromium", err);
+      // In the app the download button reports this and offers the printable
+      // page; sending HTML here used to land in Downloads as a "PDF" that
+      // wouldn't open. Guest and staff links still get the page to read.
+      if (mode === "auth") {
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(503).type("text/plain").send("The PDF maker isn't available right now. Open the printable page instead, or try again in a minute.");
+      }
       res.setHeader("Content-Type", "text/html");
       return res.send(html);
     }
@@ -1843,7 +1890,7 @@ ${sheetsHtml}
       // A running footer carries the biz name + "Page N of N", so the page
       // count is computed by Chromium from the actual flow rather than baked in.
       const footerTemplate =
-        `<div style="width:100%;font-family:'Helvetica Neue',Arial,sans-serif;font-size:8px;color:#8a8073;letter-spacing:.04em;padding:0 15mm;display:flex;justify-content:space-between;-webkit-print-color-adjust:exact;print-color-adjust:exact">` +
+        `<div style="width:100%;font-family:'Helvetica Neue',Arial,sans-serif;font-size:10.5px;color:#5c5449;letter-spacing:.02em;padding:0 15mm;display:flex;justify-content:space-between;-webkit-print-color-adjust:exact;print-color-adjust:exact">` +
         `<span style="font-weight:700;color:${brandAccent}">${footerBiz}</span>` +
         `<span>Printed ${todayPrinted} &middot; Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>` +
         `</div>`;
@@ -1854,6 +1901,9 @@ ${sheetsHtml}
         headerTemplate: "<div></div>",
         footerTemplate,
         margin: { top: "10mm", right: "13mm", bottom: "11mm", left: "13mm" },
+        // Print 10% larger than the on-screen preview. The smallest print was
+        // 7.5pt and most of the page under 9pt: too small to read on the pass.
+        scale: 1.1,
       });
 
       // Append linked menu PDFs (chef-facing) to the end of the internal
@@ -1883,8 +1933,12 @@ ${sheetsHtml}
       // so customers click the link and see it; internal BEO PDF still
       // downloads as a file.
       const disposition = isPublic ? "inline" : "attachment";
+      const fileName = beoFileName({
+        eventDate: booking.eventDate, eventType, clientName,
+        kind: isPublic ? "Event Pack" : clientCopy ? "Client Copy" : "Event Order",
+      });
       res.setHeader("Content-Disposition",
-        `${disposition}; filename="${isPublic ? "Event-Pack" : "BEO"}-${booking.id}-${clientName.replace(/\s+/g, "-")}.pdf"`);
+        `${disposition}; filename="${fileName.replace(/[^\x20-\x7e]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
       res.send(Buffer.from(finalPdf));
     } finally {
       await browser.close();
