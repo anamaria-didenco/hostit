@@ -15,7 +15,7 @@ import {
   BarChart2, DollarSign, X, MapPin, LayoutGrid, Camera, Eye, EyeOff, Grid, Image as ImageIcon, Edit2,
   ArrowUpDown, CreditCard, AlertCircle, Upload, List, Columns, MoveUp, MoveDown, Lock, Type,
   SlidersHorizontal, GripVertical, Bell, Paperclip, Download, Printer, CheckSquare,
-  Link as LinkIcon, LogOut, MoreHorizontal, Ban, RotateCcw
+  Link as LinkIcon, LogOut, MoreHorizontal, Ban, RotateCcw, ArrowLeft
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { AccountLoginsSection } from "@/components/AccountLoginsSection";
@@ -54,7 +54,7 @@ import { signatureProfiles, defaultSignatureId, effectiveFromName, signatureLabe
 import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCTION_PACK_STATUS, TASK_RULE_TRIGGERS } from "@shared/automatedTasks";
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
-import { downloadBeo } from "@/lib/beoUrl";
+import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
@@ -1536,6 +1536,18 @@ export default function Dashboard() {
   const setAllDrawerSections = (open: boolean) => setDrawerSections(saveDrawerSections(Object.fromEntries(DRAWER_SECTION_IDS.map(id => [id, open]))));
   // Fullscreen-ish BEO preview layered over the side panel.
   const [beoPreview, setBeoPreview] = React.useState<{ id: number; name: string } | null>(null);
+  // A booking's side panel opens on its BEO: the quickest way to read an
+  // event. "Status, payments & more" switches to the editable details.
+  const [drawerView, setDrawerView] = React.useState<'beo' | 'details'>('beo');
+  const [drawerBeoNonce, setDrawerBeoNonce] = React.useState(0);
+  const [drawerBeoLoaded, setDrawerBeoLoaded] = React.useState(false);
+  const [drawerShowEnd, setDrawerShowEnd] = React.useState(false);
+  React.useEffect(() => {
+    setDrawerView('beo');
+    setDrawerBeoNonce(Date.now());
+    setDrawerBeoLoaded(false);
+    setDrawerShowEnd(false);
+  }, [selectedBooking?.id, selectedBooking?._isLead]);
   React.useEffect(() => { setDrawerPaymentsOpen(false); }, [selectedBooking?.id, selectedBooking?._isLead]);
   const drawerBookingId = !selectedBooking?._isLead ? selectedBooking?.id ?? null : null;
   const { data: drawerPayments, refetch: refetchDrawerPayments } = trpc.payments.list.useQuery(
@@ -9808,7 +9820,7 @@ export default function Dashboard() {
             aria-modal="true"
             aria-labelledby="event-drawer-title"
             tabIndex={-1}
-            className="w-full md:max-w-lg bg-cream md:border-l border-gold/20 flex flex-col h-full overflow-y-auto shadow-2xl outline-none"
+            className={`w-full ${!selectedBooking._isLead && drawerView === 'beo' ? 'md:max-w-[880px] overflow-hidden' : 'md:max-w-lg overflow-y-auto'} bg-cream md:border-l border-gold/20 flex flex-col h-full shadow-2xl outline-none`}
           >
             {/* Header — sticky, so the name, the when/who summary and the close
                 button stay in view however far down the panel you scroll. */}
@@ -9837,6 +9849,44 @@ export default function Dashboard() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+            {!selectedBooking._isLead && drawerView === 'beo' ? (
+              <>
+                {/* Two jobs only: change it, or take the PDF. Everything else
+                    (status, payments, Xero, cancel) is one tap further in. */}
+                <div className="flex-shrink-0 px-4 md:px-5 py-3 flex items-center gap-2 flex-wrap border-b border-gold bg-cream">
+                  <button
+                    onClick={() => { const id = selectedBooking.id; setSelectedBooking(null); setLocation(`/runsheet?bookingId=${id}`); }}
+                    title="Change anything on the BEO: times, food, drinks, dietaries, notes"
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-widest text-sm">
+                    <Edit2 className="w-4 h-4" /> EDIT
+                  </button>
+                  <button
+                    onClick={() => downloadBeo(selectedBooking.id)}
+                    title="Download the BEO as a PDF"
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-sm border border-forest text-forest hover:bg-blue-50 transition-colors font-bebas tracking-widest text-sm">
+                    <Download className="w-4 h-4" /> PDF
+                  </button>
+                  <button
+                    onClick={() => setDrawerView('details')}
+                    className="ml-auto font-dm text-sm font-semibold text-forest underline underline-offset-4 hover:no-underline px-1 py-2">
+                    Status, payments &amp; more
+                  </button>
+                </div>
+                <div className="relative flex-1 min-h-0 bg-linen">
+                  {!drawerBeoLoaded && (
+                    <p className="absolute inset-0 flex items-center justify-center font-dm text-sm text-ink" role="status">Loading the BEO…</p>
+                  )}
+                  <iframe
+                    key={`${selectedBooking.id}-${drawerBeoNonce}`}
+                    title={`BEO for ${`${selectedBooking.firstName ?? ''} ${selectedBooking.lastName ?? ''}`.trim() || 'this event'}`}
+                    src={beoUrl(selectedBooking.id, { format: 'html', nonce: drawerBeoNonce })}
+                    onLoad={() => setDrawerBeoLoaded(true)}
+                    className={`absolute inset-0 w-full h-full border-0 bg-cream transition-opacity ${drawerBeoLoaded ? 'opacity-100' : 'opacity-0'}`}
+                  />
+                </div>
+              </>
+            ) : (
+            <>
             {/* Body */}
             <div className="p-4 md:p-5 space-y-3.5 flex-1">
               {/* Quick access (bookings): the three things you actually open an
@@ -9846,10 +9896,10 @@ export default function Dashboard() {
               {!selectedBooking._isLead && (
                 <div className="flex items-stretch gap-2 flex-wrap">
                   <button
-                    onClick={() => setBeoPreview({ id: selectedBooking.id, name: `${selectedBooking.firstName ?? ''} ${selectedBooking.lastName ?? ''}`.trim() || 'Event' })}
-                    title="Read the full BEO (run of day, menu, dietaries) without leaving the dashboard"
+                    onClick={() => setDrawerView('beo')}
+                    title="Back to the BEO"
                     className="flex-[2] min-w-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-wider sm:tracking-widest text-xs">
-                    <Eye className="w-3.5 h-3.5" /> PREVIEW BEO
+                    <ArrowLeft className="w-3.5 h-3.5" /> BACK TO BEO
                   </button>
                   <button
                     onClick={() => { const id = selectedBooking.id; setSelectedBooking(null); setLocation(`/runsheet?bookingId=${id}`); }}
@@ -10057,6 +10107,7 @@ export default function Dashboard() {
                               className="h-7 text-xs px-2 w-[124px] flex-shrink-0"
                             />
                           </div>
+                          {(selectedBooking.eventEndDate || drawerShowEnd) ? (
                           <div className="flex items-center gap-1.5 flex-shrink-0">
                             <span className={DRAWER_LABEL}>End</span>
                             <Input
@@ -10075,6 +10126,13 @@ export default function Dashboard() {
                               className="h-7 text-xs px-2 w-[124px] flex-shrink-0"
                             />
                           </div>
+                          ) : selectedBooking.eventDate ? (
+                            // No end time set: keep it off the panel, one tap to add.
+                            <button type="button" onClick={() => setDrawerShowEnd(true)}
+                              className="font-dm text-xs font-semibold text-forest underline underline-offset-2 hover:no-underline">
+                              + End time
+                            </button>
+                          ) : null}
                         </div>
                       </>
                     )}
@@ -10799,6 +10857,8 @@ export default function Dashboard() {
                 </DrawerSection>
               )}
             </div>
+            </>
+            )}
           </div>
         </div>
       , document.body)}

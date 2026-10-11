@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { RichTextarea } from "@/components/ui/RichTextarea";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
+import { DRINK_GROUPS, DRINK_GROUP_LABEL, drinkGroupOf, groupDrinks } from "@shared/drinkGroups";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
@@ -122,11 +123,6 @@ function rodOwnerFor(cat?: string): StaffRole {
   return CATEGORY_OWNER[cat ?? "other"] ?? "foh";
 }
 
-// Human labels for the drink "type" codes stored on each selected drink,
-// used by the print-only drinks summary.
-const DRINK_TYPE_LABEL: Record<string, string> = {
-  spark: "Bubbles", white: "White", red: "Red", beer: "Beer", other: "Other",
-};
 
 const COMMON_DIETARIES = [
   "Vegetarian", "Vegan", "Gluten Free", "Dairy Free", "Nut Allergy",
@@ -486,12 +482,18 @@ export default function RunsheetBuilder() {
   // user clears them.
   const [rsSelectedDrinks, setRsSelectedDrinks] = useState<string[]>([]);
   const [rsCustomDrinks, setRsCustomDrinks] = useState<{ name: string; description?: string; price?: number }[]>([]);
-  // Beverage type per selected drink, keyed by drink name → 'spark' | 'white' | 'red' | 'beer' | 'other'
+  // Drink type picked per drink, keyed by drink name: a DRINK_GROUPS key
+  // (shared/drinkGroups). Unset means work it out from the menu and name.
   const [rsDrinkTypes, setRsDrinkTypes] = useState<Record<string, string>>({});
   // Per-drink price (the single-serve / till amount), keyed by drink name.
   // Auto-filled from the catalogue where available; editable. Shown on the BEO
   // when the DRINKS "SHOW PRICES" toggle below is on.
   const [rsDrinkPrices, setRsDrinkPrices] = useState<Record<string, number>>({});
+  // Menu picks and custom drinks as one list, so they can be grouped by type.
+  const drinkEntries: Array<{ key: string; name: string; custom?: { name: string; description?: string; price?: number }; index: number }> = [
+    ...rsSelectedDrinks.map((k, i) => ({ key: `m:${k}`, name: k, index: i })),
+    ...rsCustomDrinks.map((d, i) => ({ key: `c:${i}`, name: d.name, custom: d, index: i })),
+  ];
   // Independent "show drink prices on the BEO" toggle (separate from the food
   // PRICE column). Defaults ON so priced drinks appear; persisted per runsheet.
   const [showDrinkPrices, setShowDrinkPrices] = useState(true);
@@ -4831,24 +4833,22 @@ export default function RunsheetBuilder() {
               })()}
               {(rsSelectedDrinks.length + rsCustomDrinks.length) > 0 && (
                 <div>
-                  <div className="font-bebas tracking-widest text-[10px] text-ink/60 mb-1">DRINKS</div>
-                  <ul className="font-dm text-sm text-ink space-y-0.5">
-                    {rsSelectedDrinks.map(k => (
-                      <li key={k} className="flex justify-between gap-3">
-                        <span>{k}{rsDrinkTypes[k] ? ` · ${DRINK_TYPE_LABEL[rsDrinkTypes[k]] ?? rsDrinkTypes[k]}` : ''}</span>
-                        {showDrinkPrices && rsDrinkPrices[k] != null && <span className="text-ink/70">${rsDrinkPrices[k]}</span>}
-                      </li>
-                    ))}
-                    {rsCustomDrinks.map((d, i) => {
-                      const price = rsDrinkPrices[d.name] ?? d.price;
-                      return (
-                        <li key={`c${i}`} className="flex justify-between gap-3">
-                          <span>{d.name}{d.description ? ` — ${d.description}` : ''}{rsDrinkTypes[d.name] ? ` · ${DRINK_TYPE_LABEL[rsDrinkTypes[d.name]] ?? rsDrinkTypes[d.name]}` : ''}</span>
-                          {showDrinkPrices && price != null && <span className="text-ink/70">${price}</span>}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  {groupDrinks(drinkEntries, e => e.name, e => rsDrinkTypes[e.name]).map(g => (
+                    <div key={g.key} className="mb-2">
+                      <div className="font-bebas tracking-widest text-[11px] text-ink/70 mb-0.5">{g.label.toUpperCase()}</div>
+                      <ul className="font-dm text-sm text-ink space-y-0.5">
+                        {g.items.map(e => {
+                          const price = e.custom ? (rsDrinkPrices[e.name] ?? e.custom.price) : rsDrinkPrices[e.name];
+                          return (
+                            <li key={e.key} className="flex justify-between gap-3">
+                              <span>{e.name}{e.custom?.description ? ` — ${e.custom.description}` : ''}</span>
+                              {showDrinkPrices && price != null && <span className="text-ink/70">${price}</span>}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
               )}
               {rsBarNotes && (
@@ -4908,64 +4908,44 @@ export default function RunsheetBuilder() {
                     No drinks selected yet. Click <span className="font-dm font-semibold text-forest">+ Pick drinks</span> to choose from your saved drinks menu.
                   </div>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {rsSelectedDrinks.map(k => (
-                      <span key={k} className="inline-flex flex-wrap items-center gap-1.5 max-w-full bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
-                        <span className="min-w-0 break-words">{k}</span>
-                        <select
-                          value={rsDrinkTypes[k] ?? ''}
-                          onChange={e => setRsDrinkTypes(prev => ({ ...prev, [k]: e.target.value }))}
-                          className="border border-gold/20 rounded-sm px-1 py-1 text-[10px] font-dm focus:outline-none focus:border-forest bg-white min-h-[32px]"
-                          title={`Beverage type for ${k}`}
-                          aria-label={`Beverage type for ${k}`}
-                        >
-                          <option value="">Type…</option>
-                          <option value="spark">Bubbles</option>
-                          <option value="white">White</option>
-                          <option value="red">Red</option>
-                          <option value="beer">Beer</option>
-                          <option value="other">Other</option>
-                        </select>
-                        {/* Only offered when prices are actually going to be
-                            shown — otherwise it's a field with no effect. */}
-                        {showDrinkPrices && (
-                          <span className="inline-flex items-center text-[10px] text-ink/70">$
-                            <input type="number" min={0} step={0.5} value={rsDrinkPrices[k] ?? ''}
-                              onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[k]; else n[k] = Number(e.target.value); return n; })}
-                              placeholder="—" title={`Price per ${k} (till amount)`} aria-label={`Price per ${k}`}
-                              className="w-12 border border-gold/20 rounded-sm px-1 py-1 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5 min-h-[32px]" />
-                          </span>
-                        )}
-                        <button type="button" onClick={() => setRsSelectedDrinks(prev => prev.filter(x => x !== k))} title={`Remove ${k}`} aria-label={`Remove ${k}`} className="w-8 h-8 -my-1 inline-flex items-center justify-center text-ink/55 hover:text-[#b3261e] rounded-sm">×</button>
-                      </span>
-                    ))}
-                    {rsCustomDrinks.map((d, i) => (
-                      <span key={`c${i}`} className="inline-flex flex-wrap items-center gap-1.5 max-w-full bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
-                        <span className="min-w-0 break-words">{d.name}</span>
-                        <select
-                          value={rsDrinkTypes[d.name] ?? ''}
-                          onChange={e => setRsDrinkTypes(prev => ({ ...prev, [d.name]: e.target.value }))}
-                          className="border border-gold/20 rounded-sm px-1 py-1 text-[10px] font-dm focus:outline-none focus:border-forest bg-white min-h-[32px]"
-                          title={`Beverage type for ${d.name}`}
-                          aria-label={`Beverage type for ${d.name}`}
-                        >
-                          <option value="">Type…</option>
-                          <option value="spark">Bubbles</option>
-                          <option value="white">White</option>
-                          <option value="red">Red</option>
-                          <option value="beer">Beer</option>
-                          <option value="other">Other</option>
-                        </select>
-                        {showDrinkPrices && (
-                          <span className="inline-flex items-center text-[10px] text-ink/70">$
-                            <input type="number" min={0} step={0.5} value={rsDrinkPrices[d.name] ?? (d.price ?? '')}
-                              onChange={e => setRsDrinkPrices(prev => { const n = { ...prev }; if (e.target.value === '') delete n[d.name]; else n[d.name] = Number(e.target.value); return n; })}
-                              placeholder="—" title={`Price per ${d.name} (till amount)`} aria-label={`Price per ${d.name}`}
-                              className="w-12 border border-gold/20 rounded-sm px-1 py-1 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5 min-h-[32px]" />
-                          </span>
-                        )}
-                        <button type="button" onClick={() => setRsCustomDrinks(prev => prev.filter((_, j) => j !== i))} title={`Remove ${d.name}`} aria-label={`Remove ${d.name}`} className="w-8 h-8 -my-1 inline-flex items-center justify-center text-ink/55 hover:text-[#b3261e] rounded-sm">×</button>
-                      </span>
+                  <div className="space-y-3">
+                    {groupDrinks(drinkEntries, e => e.name, e => rsDrinkTypes[e.name]).map(g => (
+                      <div key={g.key}>
+                        <div className="font-bebas tracking-widest text-[11px] text-forest mb-1">{g.label.toUpperCase()} · {g.items.length}</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {g.items.map(e => {
+                            const price = e.custom ? (rsDrinkPrices[e.name] ?? e.custom.price) : rsDrinkPrices[e.name];
+                            return (
+                              <span key={e.key} className="inline-flex flex-wrap items-center gap-1.5 max-w-full bg-cream text-ink text-xs px-2 py-1 font-dm border border-gold/30">
+                                <span className="min-w-0 break-words">{e.name}</span>
+                                <select
+                                  value={rsDrinkTypes[e.name] ?? ''}
+                                  onChange={ev => setRsDrinkTypes(prev => { const n = { ...prev }; if (ev.target.value) n[e.name] = ev.target.value; else delete n[e.name]; return n; })}
+                                  className="border border-gold/20 rounded-sm px-1 py-1 text-[11px] font-dm focus:outline-none focus:border-forest bg-white min-h-[32px]"
+                                  title={`Drink type for ${e.name}`}
+                                  aria-label={`Drink type for ${e.name}`}
+                                >
+                                  <option value="">Auto: {DRINK_GROUP_LABEL[drinkGroupOf(e.name)]}</option>
+                                  {DRINK_GROUPS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                                </select>
+                                {/* Only offered when prices are actually going to be
+                                    shown — otherwise it's a field with no effect. */}
+                                {showDrinkPrices && (
+                                  <span className="inline-flex items-center text-[10px] text-ink/70">$
+                                    <input type="number" min={0} step={0.5} value={price ?? ''}
+                                      onChange={ev => setRsDrinkPrices(prev => { const n = { ...prev }; if (ev.target.value === '') delete n[e.name]; else n[e.name] = Number(ev.target.value); return n; })}
+                                      placeholder="—" title={`Price per ${e.name} (till amount)`} aria-label={`Price per ${e.name}`}
+                                      className="w-12 border border-gold/20 rounded-sm px-1 py-1 text-[10px] font-dm focus:outline-none focus:border-forest bg-white ml-0.5 min-h-[32px]" />
+                                  </span>
+                                )}
+                                <button type="button"
+                                  onClick={() => e.custom ? setRsCustomDrinks(prev => prev.filter((_, j) => j !== e.index)) : setRsSelectedDrinks(prev => prev.filter(x => x !== e.name))}
+                                  title={`Remove ${e.name}`} aria-label={`Remove ${e.name}`} className="w-8 h-8 -my-1 inline-flex items-center justify-center text-ink/55 hover:text-[#b3261e] rounded-sm">×</button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}

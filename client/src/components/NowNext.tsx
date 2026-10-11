@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
+import { groupDrinks } from "@shared/drinkGroups";
 import {
   clockStepIndex, dishQuantity, isSevereDietary, type BillingStep,
 } from "@shared/nowNext";
@@ -108,7 +109,10 @@ export default function NowNext({
     ...((Array.isArray(dd.selectedDrinks) ? dd.selectedDrinks : []) as any[]).map(d => (typeof d === "string" ? d : d?.name)),
     ...((Array.isArray(dd.customDrinks) ? dd.customDrinks : []) as any[]).map(d => (typeof d === "string" ? d : d?.name)),
   ].filter(Boolean);
-  const drinks = drinkNames.length ? drinkNames : fnb.filter(f => f.section === "foh" && f.course === "Drinks").map(f => f.dishName || "").filter(Boolean);
+  const drinkGroups = groupDrinks(
+    drinkNames.length ? drinkNames : fnb.filter(f => f.section === "foh" && f.course === "Drinks").map(f => f.dishName || "").filter(Boolean),
+    n => n, n => dd.drinkTypes?.[n],
+  );
 
   // ── Dietaries, dangerous ones first ──
   const dietaries = groupDietaries(((runsheet?.dietaries ?? []) as any[]).map(d => (looksSwapped(d) ? unswap(d) : d)));
@@ -233,10 +237,17 @@ export default function NowNext({
                 </ul>
               </section>
             ))}
-            {drinks.length > 0 && (
+            {drinkGroups.length > 0 && (
               <section aria-label="Drinks" className="bg-white border border-gold px-4 py-3">
                 <h2 className="font-cormorant italic text-[22px] text-forest mb-1">Drinks</h2>
-                <ul className="font-dm text-[17px] text-ink space-y-1">{drinks.map((d, i) => <li key={i}>{d}</li>)}</ul>
+                <div className="space-y-3">
+                  {drinkGroups.map(g => (
+                    <div key={g.key}>
+                      <h3 className="font-bebas tracking-widest text-[12px] text-stone">{g.label}</h3>
+                      <ul className="font-dm text-[17px] text-ink">{g.items.map((d, i) => <li key={i}>{d}</li>)}</ul>
+                    </div>
+                  ))}
+                </div>
                 {dd.barNotes && <p className="font-dm text-[16px] text-ink mt-2 pt-2 border-t border-gold">{dd.barNotes}</p>}
               </section>
             )}

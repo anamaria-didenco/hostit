@@ -40,6 +40,7 @@ import {
 } from "../drizzle/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
+import { groupDrinks } from "@shared/drinkGroups";
 import {
   foodBillingSentence,
   drinksBillingSentence,
@@ -1393,10 +1394,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // untyped as "Other"). The per-row colour chip is dropped — the category
     // heading is the label now. Groups flow across two balanced columns and
     // each group is kept intact across page breaks.
-    const BEV_GROUPS: Array<[string, string]> = [
-      ["COCKTAIL", "Cocktails"], ["SPARK", "Sparkling"], ["WHITE", "White"],
-      ["RED", "Red"], ["ROSE", "Ros&eacute;"], ["BEER", "Beer &amp; Cider"], ["", "Other"],
-    ];
+    // Groups come from shared/drinkGroups (picked type, then the drinks menu,
+    // then the name), the same rule the runsheet and staff phone view use.
+    const bevGroups = groupDrinks(bevItems2, it => it.name, it => drinkTypesMap[it.name]);
     const bevGroupRow = (it: { name: string; desc?: string; price?: any }) => {
       const unit = (it.price === null || it.price === undefined || it.price === "") ? null : Number(it.price);
       const priceHtml = (showDrinkPrice && unit !== null && !isNaN(unit) && unit > 0)
@@ -1407,7 +1407,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // old two-column flow stacked uneven groups ("Sparkling" over "Beer & Cider"
     // on the left, "Other" alone on the right) and read as lopsided.
     const bevGroupBlock = (label: string, items: Array<{ name: string; desc?: string }>) => items.length
-      ? `<div class="bev-row" style="display:flex;gap:14px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);break-inside:avoid;page-break-inside:avoid"><div style="width:96px;flex:none;font-family:var(--serif);font-style:italic;font-size:12.5px;font-weight:500;color:var(--green)">${label}</div><div style="flex:1;min-width:0">${items.map(bevGroupRow).join("")}</div></div>` : "";
+      ? `<div class="bev-row" style="display:flex;gap:14px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);break-inside:avoid;page-break-inside:avoid"><div style="width:110px;flex:none;font-family:var(--serif);font-style:italic;font-size:12.5px;font-weight:500;color:var(--green)">${label}</div><div style="flex:1;min-width:0">${items.map(bevGroupRow).join("")}</div></div>` : "";
     // Bar arrangement callout — bar option, tab limit and billing notes. The
     // legacy barArrangementSection stopped rendering in the condensed layout,
     // which silently dropped the Tab $X limit from the PDF; it lives here now.
@@ -1419,7 +1419,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const bevBillingCallout = bevCalloutBits.length ? `<div style="break-inside:avoid;page-break-inside:avoid;margin-top:9px;background:var(--change-fill);border:1.5px solid var(--change-line);border-radius:6px;padding:9px 13px;font-size:11.5px;color:#5b4a2b;line-height:1.5"><b style="font-weight:700;color:var(--amber)">Bar &mdash;</b> ${bevCalloutBits.join(" &middot; ")}</div>` : "";
     // Render whenever there are drinks OR a bar arrangement (option/tab/notes),
     // so a tab limit still prints when no drink list was selected.
-    const beverageSectionNew = (bevItems2.length > 0 || bevBillingCallout) ? `${bevItems2.length > 0 ? `<div id="beo-bev" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Beverage")}<div class="bev-cols" style="border-top:1px solid var(--line)">${BEV_GROUPS.map(([k, lbl]) => bevGroupBlock(lbl, bevItems2.filter(it => drinkType(it.name) === k))).join("")}</div></div>` : `<div style="margin-top:5px">${secLabel("Beverage")}</div>`}${bevBillingCallout}` : "";
+    const beverageSectionNew = (bevItems2.length > 0 || bevBillingCallout) ? `${bevItems2.length > 0 ? `<div id="beo-bev" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px">${secLabel("Beverage")}<div class="bev-cols" style="border-top:1px solid var(--line)">${bevGroups.map(g => bevGroupBlock(escHtml(g.label), g.items)).join("")}</div></div>` : `<div style="margin-top:5px">${secLabel("Beverage")}</div>`}${bevBillingCallout}` : "";
 
     // ── PAGE 3 — billing instructions, onsite contact, set-up ──
     const noFinancials = hideSet.has('financials');
