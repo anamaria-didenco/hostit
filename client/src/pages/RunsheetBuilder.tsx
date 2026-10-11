@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { RichTextarea } from "@/components/ui/RichTextarea";
-import { beoUrl, getBeoHide } from "@/lib/beoUrl";
+import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
@@ -616,7 +616,11 @@ export default function RunsheetBuilder() {
     { key: 'footer',   label: 'Footer note / message' },
     { key: 'menus',    label: 'Linked menu PDFs (chef appendix)', beoOnly: true },
   ];
+  // Which sections print is saved on the venue (beoPrintHide), so everyone
+  // downloading a BEO gets the same document. The old per-browser copy is only
+  // read as a starting point, and moved onto the venue the first time.
   const PRINT_PREFS_KEY = 'vf:printHide:v1';
+  const printHideDirty = useRef(false);
   const [printHide, setPrintHide] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem(PRINT_PREFS_KEY);
@@ -652,14 +656,12 @@ export default function RunsheetBuilder() {
   // the iframe to reload after a save so edits show up immediately.
   const [beoPreviewOpen, setBeoPreviewOpen] = useState(false);
   const [previewNonce, setPreviewNonce] = useState(0);
-  useEffect(() => {
-    try { localStorage.setItem(PRINT_PREFS_KEY, JSON.stringify(Array.from(printHide))); } catch {}
-  }, [printHide]);
-  const togglePrintSection = (key: string) => setPrintHide(prev => {
+  const resetPrintHide = () => { printHideDirty.current = true; setPrintHide(new Set()); };
+  const togglePrintSection = (key: string) => { printHideDirty.current = true; setPrintHide(prev => {
     const next = new Set(prev);
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
-  });
+  }); };
   // Drive the in-app print view: when the user fires window.print(),
   // inject a <style> tag that hides every section marked
   // [data-print-section="..."] for keys in `printHide`. Cleaned up
@@ -1095,6 +1097,26 @@ export default function RunsheetBuilder() {
     onSuccess: () => { toast.success('Options saved'); refetchVenueSettings(); },
     onError: () => toast.error('Failed to save options'),
   });
+  const savePrintHide = trpc.venue.update.useMutation({
+    onError: () => toast.error("Couldn't save your print sections. Check your connection and try again."),
+  });
+  const venueBeoPrintHide = (venueSettings as any)?.beoPrintHide as string | null | undefined;
+  useEffect(() => {
+    if (!venueSettings || printHideDirty.current) return;
+    if (venueBeoPrintHide == null) {
+      // Never saved on the venue yet: carry this browser's old choice over.
+      if (printHide.size > 0) savePrintHide.mutate({ beoPrintHide: Array.from(printHide).join(',') });
+      return;
+    }
+    setPrintHide(new Set(venueBeoPrintHide.split(',').map(k => k.trim()).filter(Boolean)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [venueSettings, venueBeoPrintHide]);
+  useEffect(() => {
+    if (!printHideDirty.current) return;
+    const t = setTimeout(() => savePrintHide.mutate({ beoPrintHide: Array.from(printHide).join(',') }), 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printHide]);
 
   // Parsed dietary options from venue settings (with fallback)
   const activeDietaryOptions: string[] = (() => {
@@ -2643,7 +2665,7 @@ export default function RunsheetBuilder() {
                   <div className="px-4 py-3 border-b border-gold/20 flex items-center justify-between">
                     <span className="font-bebas tracking-widest text-xs text-forest">PRINT VIEW EDITOR</span>
                     <button
-                      onClick={() => setPrintHide(new Set())}
+                      onClick={resetPrintHide}
                       className="font-bebas tracking-widest text-[10px] text-ink/65 hover:text-forest"
                       title="Show all sections"
                     >RESET</button>
@@ -2903,7 +2925,7 @@ export default function RunsheetBuilder() {
           </div>
           <iframe
             title="Runsheet preview"
-            src={beoUrl(effectiveBookingId, { format: 'html', nonce: previewNonce })}
+            src={beoUrl(effectiveBookingId, { format: 'html', nonce: previewNonce, hide: Array.from(printHide) })}
             className="w-full bg-white border border-gold/20 rounded shadow-sm"
             style={{ height: 'calc(100vh - 220px)' }}
           />
@@ -6173,7 +6195,7 @@ export default function RunsheetBuilder() {
                     </label>
                   );
                 })}
-                <button onClick={() => setPrintHide(new Set())} className="mt-2 font-bebas tracking-widest text-[10px] text-ink/65 hover:text-forest transition-colors">RESET — SHOW EVERYTHING</button>
+                <button onClick={resetPrintHide} className="mt-2 font-bebas tracking-widest text-[10px] text-ink/65 hover:text-forest transition-colors">RESET — SHOW EVERYTHING</button>
               </div>
               {/* Footer note editor */}
               <div className="px-4 py-3">
@@ -6197,7 +6219,7 @@ export default function RunsheetBuilder() {
                 id="vf-beo-frame"
                 key={previewNonce}
                 title="BEO preview"
-                src={beoUrl(effectiveBookingId, { format: 'html', nonce: previewNonce })}
+                src={beoUrl(effectiveBookingId, { format: 'html', nonce: previewNonce, hide: Array.from(printHide) })}
                 className="bg-white shadow-2xl w-full max-w-[820px] h-full border-0 rounded-sm"
               />
             </div>
@@ -6208,9 +6230,16 @@ export default function RunsheetBuilder() {
             <button onClick={() => setBeoPreviewOpen(false)} className="font-bebas tracking-widest text-xs text-ink/70 hover:text-ink px-3 py-2 transition-colors">CLOSE</button>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => window.open(beoUrl(effectiveBookingId), '_blank')}
+                onClick={() => downloadBeo(effectiveBookingId, { copy: 'client' })}
                 className="font-bebas tracking-widest text-xs border border-forest/30 text-forest hover:bg-forest/5 px-4 py-2 flex items-center gap-1.5 transition-colors"
-                title="Download the BEO as a PDF file"
+                title="With prices, totals and signature lines, to send to the client"
+              >
+                <Download className="w-3.5 h-3.5" /> CLIENT COPY
+              </button>
+              <button
+                onClick={() => downloadBeo(effectiveBookingId)}
+                className="font-bebas tracking-widest text-xs border border-forest/30 text-forest hover:bg-forest/5 px-4 py-2 flex items-center gap-1.5 transition-colors"
+                title="The event order for the team: no prices or signature lines"
               >
                 <Download className="w-3.5 h-3.5" /> DOWNLOAD PDF
               </button>
@@ -7008,7 +7037,6 @@ export default function RunsheetBuilder() {
               body,
               bookingId: effectiveBookingId,
               beoAttach: [{ bookingId: effectiveBookingId, filename }],
-              beoHide: getBeoHide() || undefined,
               signatureId: staffSigId || undefined,
             });
             toast.success(`Staff briefing sent to ${allRecipients.length} recipient${allRecipients.length !== 1 ? 's' : ''}`, { id: tId });

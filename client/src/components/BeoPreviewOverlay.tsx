@@ -1,6 +1,6 @@
 import React from "react";
 import { Download, ExternalLink, X } from "lucide-react";
-import { beoUrl } from "@/lib/beoUrl";
+import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 
 /**
  * In-app BEO preview: the same HTML the Runsheet Builder shows, opened over the
@@ -18,7 +18,7 @@ export default function BeoPreviewOverlay({ bookingId, name, onClose }: { bookin
   // read and scroll it directly.
   const [anchors, setAnchors] = React.useState<{ id: string; label: string }[]>([]);
   const BEO_SECTIONS: Array<[string, string]> = [
-    ['beo-run', 'Run of day'], ['beo-food', 'Food'], ['beo-dietary', 'Dietary'], ['beo-bev', 'Drinks'], ['beo-billing', 'Billing'],
+    ['beo-dietary', 'Dietary'], ['beo-run', 'Run of day'], ['beo-food', 'Food'], ['beo-bev', 'Drinks'], ['beo-billing', 'Billing'],
   ];
   const onFrameLoad = () => {
     setLoaded(true);
@@ -55,9 +55,12 @@ export default function BeoPreviewOverlay({ bookingId, name, onClose }: { bookin
             <div className="font-bebas tracking-widest text-[10px] text-cream">BEO PREVIEW</div>
             <div className="font-cormorant text-cream font-semibold text-lg leading-tight truncate">{name}</div>
           </div>
-          <a className={btn} href={beoUrl(bookingId)} download>
+          <button type="button" className={btn} onClick={() => downloadBeo(bookingId)} title="The event order for the team: no prices or signature lines">
             <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PDF</span><span className="sr-only sm:hidden">Download PDF</span>
-          </a>
+          </button>
+          <button type="button" className={btn} onClick={() => downloadBeo(bookingId, { copy: 'client' })} title="With prices, totals and signature lines, to send to the client">
+            <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">CLIENT COPY</span><span className="sr-only sm:hidden">Download client copy</span>
+          </button>
           <a className={btn} href={beoUrl(bookingId, { format: 'html' })} target="_blank" rel="noreferrer">
             <ExternalLink className="w-3.5 h-3.5" /> <span className="hidden sm:inline">NEW TAB</span><span className="sr-only sm:hidden">Open in new tab</span>
           </a>

@@ -266,6 +266,7 @@ export const appRouter = router({
         customCourses: z.string().optional(),
         shiftSections: z.string().optional(),
         paymentInstructions: z.string().optional(),
+        beoPrintHide: z.string().max(500).optional(),
         staffBriefingSubject: z.string().optional(),
         staffBriefingBody: z.string().optional(),
       }))

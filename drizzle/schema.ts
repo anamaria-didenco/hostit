@@ -199,6 +199,10 @@ export const venueSettings = pgTable("venue_settings", {
   // block, the live staff shift link, and the BEO PDF so everyone sees the
   // same instructions (e.g. "Bank transfer to 12-3456-7890123-00 by event date").
   paymentInstructions: text("paymentInstructions"),
+  // BEO sections the venue has switched off in "Choose print sections"
+  // (comma-separated keys, e.g. "financials,menus"). Stored on the venue, not
+  // in one browser, so everyone who downloads a BEO gets the same document.
+  beoPrintHide: text("beoPrintHide"),
   // Editable template for the bulk "Email staff briefing" send from the
   // runsheet. Body supports {eventTitle}, {eventDate}, {runsheetUrl},
   // {venueName} placeholders. Null = fall back to the built-in default.

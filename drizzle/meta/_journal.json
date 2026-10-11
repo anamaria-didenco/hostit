@@ -553,6 +553,13 @@
       "when": 1779801512078,
       "tag": "0078_data_updates",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1779801512079,
+      "tag": "0079_beo_print_hide",
+      "breakpoints": true
     }
   ]
 }

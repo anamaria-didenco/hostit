@@ -1,0 +1,21 @@
+import { describe, expect, it } from "vitest";
+import { beoFileName } from "./beoPdf";
+
+describe("beoFileName", () => {
+  it("starts with the event date so a week of BEOs sorts in order", () => {
+    const d = new Date(2026, 9, 24, 18, 30);
+    expect(beoFileName({ eventDate: d, eventType: "Engagement", clientName: "Kylie Jackson", kind: "Event Order" }))
+      .toBe("2026-10-24 Engagement - Kylie Jackson - Event Order.pdf");
+  });
+
+  it("names the client copy", () => {
+    const d = new Date(2026, 9, 24, 12);
+    expect(beoFileName({ eventDate: d, eventType: "Wedding", clientName: "Ana Smith", kind: "Client Copy" }))
+      .toBe("2026-10-24 Wedding - Ana Smith - Client Copy.pdf");
+  });
+
+  it("strips characters a file name can't hold and skips missing parts", () => {
+    expect(beoFileName({ eventDate: null, eventType: "", clientName: 'Sam "Jo" / Lee', kind: "Event Order" }))
+      .toBe("Sam Jo Lee - Event Order.pdf");
+  });
+});

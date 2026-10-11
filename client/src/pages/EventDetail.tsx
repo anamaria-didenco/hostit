@@ -19,7 +19,7 @@ import {
 import { COLOR_PRESETS, parseCustomStatuses } from "@/components/StatusManager";
 import { fmtEventTime, extractEventTimeHHMM, toLocalDateInput, combineLocalDateTime } from "@/lib/dateTime";
 import EventSpendSection from "@/components/EventSpendSection";
-import { beoUrl } from "@/lib/beoUrl";
+import { downloadBeo } from "@/lib/beoUrl";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
@@ -524,18 +524,18 @@ export default function EventDetail() {
                 PREVIEW BEO
               </button>
               <button
-                onClick={() => {
-                  const a = document.createElement('a');
-                  a.href = beoUrl(booking.id);
-                  a.download = `BEO-${booking.id}-${booking.firstName}-${booking.lastName ?? ''}.pdf`;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  toast.success('Generating BEO PDF...');
-                }}
+                onClick={() => downloadBeo(booking.id)}
+                title="The event order for the team: no prices or signature lines"
                 className="w-full flex items-center gap-3 px-4 py-3 border border-amber-700 text-amber-700 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs">
                 <Printer className="w-4 h-4" />
                 DOWNLOAD BEO PDF
+              </button>
+              <button
+                onClick={() => downloadBeo(booking.id, { copy: 'client' })}
+                title="The event order with prices, totals and signature lines, to send to the client"
+                className="w-full flex items-center gap-3 px-4 py-3 border border-amber-700 text-amber-700 hover:bg-amber-50 transition-colors font-bebas tracking-widest text-xs">
+                <Printer className="w-4 h-4" />
+                DOWNLOAD CLIENT COPY
               </button>
               <button
                 onClick={() => getBeoToken.mutate({ id: booking.id })}
