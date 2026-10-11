@@ -7659,7 +7659,39 @@ Return ONLY valid JSON.`;
           venueSetup: cleanRichHtml((runsheet as any).venueSetup),
           footerText: cleanRichHtml((runsheet as any).footerText),
         };
-        return { link, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null };
+        // Billing instructions for the Now & Next phone view: the same
+        // "How this event is billed" steps the BEO prints, plus how to pay.
+        let billing: { steps: import('@shared/nowNext').BillingStep[]; howToPay: string | null } | null = null;
+        if (runsheet.bookingId) {
+          const { bookings, venueSettings } = await import('../drizzle/schema');
+          const [bk] = await db.select().from(bookings).where(eq(bookings.id, runsheet.bookingId)).limit(1);
+          if (bk) {
+            const { eventBillingSteps } = await import('@shared/nowNext');
+            const dd: any = (runsheet as any).drinksData ?? {};
+            const [vs] = await db.select({ pi: venueSettings.paymentInstructions }).from(venueSettings)
+              .where(eq(venueSettings.ownerId, link.ownerId)).limit(1);
+            const b: any = bk;
+            billing = {
+              steps: eventBillingSteps({
+                depositRequired: b.depositRequired,
+                depositAmount: b.depositNzd,
+                depositPaid: b.depositPaid,
+                billingFood: b.billingFood,
+                billingDrinks: b.billingDrinks,
+                billingDepositApplied: b.billingDepositApplied,
+                billingNote: b.billingNote,
+                foodStatus: b.foodStatus,
+                drinksStatus: b.drinksStatus,
+                barOption: dd.barOption,
+                tabAmount: dd.tabAmount,
+                barNotes: dd.barNotes,
+                paymentNotes: (runsheet as any).paymentNotes,
+              }),
+              howToPay: (((runsheet as any).paymentInstructions ?? '').toString().trim() || (vs?.pi ?? '').toString().trim()) || null,
+            };
+          }
+        }
+        return { link, runsheet: safeRunsheet, items, fnb, contactName, contactEmail, contactPhone, payments: paymentsData, checklist: checklistInstance ?? null, billing };
       }),
 
     // Protected: create a new staff portal link
