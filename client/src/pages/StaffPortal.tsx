@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { currency } from "@/lib/money";
 import NowNext from "@/components/NowNext";
+import { groupDrinks } from "@shared/drinkGroups";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
 const CATEGORIES: Record<string, { label: string; color: string; dot: string }> = {
@@ -545,14 +546,15 @@ export default function StaffPortal() {
                   </div>
                 )}
                 {(dd.selectedDrinks?.length > 0 || dd.customDrinks?.length > 0) && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {dd.selectedDrinks?.map((k: string) => (
-                      <span key={k} className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 font-dm border border-blue-200">
-                        {k.replace(/_/g, ' ')}
-                      </span>
-                    ))}
-                    {dd.customDrinks?.map((d: any, i: number) => (
-                      <span key={i} className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 font-dm border border-amber-200">{d.name}</span>
+                  <div className="space-y-2 pt-1">
+                    {groupDrinks(
+                      [...(dd.selectedDrinks ?? []).map((k: string) => k.replace(/_/g, ' ')), ...(dd.customDrinks ?? []).map((d: any) => d.name)].filter(Boolean) as string[],
+                      n => n, n => dd.drinkTypes?.[n],
+                    ).map(g => (
+                      <div key={g.key}>
+                        <p className="font-bebas tracking-widest text-[11px] text-ink/70 mb-0.5">{g.label.toUpperCase()}</p>
+                        <p className="font-dm text-sm text-ink">{g.items.join(' · ')}</p>
+                      </div>
                     ))}
                   </div>
                 )}
