@@ -7,6 +7,7 @@ import {
   Building2, DollarSign, CheckSquare, Square, ClipboardCheck, FileText, Printer, Wine,
 } from "lucide-react";
 import { currency } from "@/lib/money";
+import NowNext from "@/components/NowNext";
 
 // ─── Categories (matches RunsheetBuilder exactly) ────────────────────────────
 const CATEGORIES: Record<string, { label: string; color: string; dot: string }> = {
@@ -84,7 +85,9 @@ export default function StaffPortal() {
   const checklist: any = (data as any)?.checklist ?? null;
   const [localItems, setLocalItems] = useState<any[]>([]);
   const pendingToggles = useRef<Set<string>>(new Set());
-  const [activePortalTab, setActivePortalTab] = useState<'runsheet' | 'checklist'>('runsheet');
+  // Now & Next is the default: on a phone mid-service, one step at a time
+  // reads far better than the full BEO document.
+  const [activePortalTab, setActivePortalTab] = useState<'now' | 'runsheet' | 'checklist'>('now');
 
   // Sync from server whenever checklist data changes, but preserve in-flight toggle state
   useEffect(() => {
@@ -243,14 +246,28 @@ export default function StaffPortal() {
         </div>
         {/* Tab bar — a real tablist so a screen reader announces which of the
             two views is showing, not just "button, button". */}
-        <div role="tablist" aria-label="Staff portal view" className="max-w-4xl mx-auto px-4 flex border-t border-white/10">
+        <div role="tablist" aria-label="Staff portal view" className="max-w-4xl mx-auto px-4 flex border-t border-white/10 overflow-x-auto">
+          <button
+            id="vf-tab-now"
+            role="tab"
+            aria-selected={activePortalTab === 'now'}
+            aria-controls="vf-tabpanel-now"
+            onClick={() => setActivePortalTab('now')}
+            className={`font-bebas tracking-wide text-[13px] px-2.5 py-2 transition-colors border-b-2 whitespace-nowrap ${
+              activePortalTab === 'now'
+                ? 'text-white border-white'
+                : 'text-white/70 border-transparent hover:text-white/90'
+            }`}
+          >
+            NOW &amp; NEXT
+          </button>
           <button
             id="vf-tab-runsheet"
             role="tab"
             aria-selected={activePortalTab === 'runsheet'}
             aria-controls="vf-tabpanel-runsheet"
             onClick={() => setActivePortalTab('runsheet')}
-            className={`font-bebas tracking-widest text-sm px-5 py-2 transition-colors border-b-2 ${
+            className={`font-bebas tracking-wide text-[13px] px-2.5 py-2 transition-colors border-b-2 whitespace-nowrap ${
               activePortalTab === 'runsheet'
                 ? 'text-white border-white'
                 : 'text-white/70 border-transparent hover:text-white/90'
@@ -264,7 +281,7 @@ export default function StaffPortal() {
             aria-selected={activePortalTab === 'checklist'}
             aria-controls="vf-tabpanel-checklist"
             onClick={() => setActivePortalTab('checklist')}
-            className={`font-bebas tracking-widest text-sm px-5 py-2 transition-colors border-b-2 flex items-center gap-2 ${
+            className={`font-bebas tracking-wide text-[13px] px-2.5 py-2 transition-colors border-b-2 whitespace-nowrap flex items-center gap-2 ${
               activePortalTab === 'checklist'
                 ? 'text-white border-white'
                 : 'text-white/70 border-transparent hover:text-white/90'
@@ -289,6 +306,21 @@ export default function StaffPortal() {
 
       <main className="max-w-4xl mx-auto px-4 py-5 space-y-4">
         <div aria-live="polite" className="sr-only">{liveAnnouncement}</div>
+
+        {activePortalTab === 'now' && (
+          <div id="vf-tabpanel-now" role="tabpanel" aria-labelledby="vf-tab-now">
+            <NowNext
+              token={token}
+              runsheet={runsheet}
+              items={items as any[]}
+              fnb={fnb as any[]}
+              contactName={contactName}
+              contactPhone={contactPhone}
+              billing={(data as any).billing ?? null}
+              payments={payments}
+            />
+          </div>
+        )}
 
         <div id="vf-tabpanel-runsheet" role="tabpanel" tabIndex={0} aria-labelledby="vf-tab-runsheet" hidden={activePortalTab !== 'runsheet'} className={activePortalTab === 'runsheet' ? 'space-y-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest' : undefined}>
 
