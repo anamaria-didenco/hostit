@@ -810,6 +810,9 @@ async function compressToDataUrl(file: File, maxW: number, maxH: number, quality
 // The pencil gets padding (and matching negative margin, so layout doesn't
 // shift) to lift its hit area from 12px to the 24px minimum.
 const DRAWER_LABEL = "font-dm text-xs font-medium text-ink/60";
+// A side-panel field counts as filled in when it has a real value (0 guests or
+// a $0 minimum spend count as not set).
+const hasDrawerValue = (v: unknown) => v !== null && v !== undefined && v !== "" && Number(v) !== 0;
 const DRAWER_PENCIL = "p-1.5 -m-1.5 rounded text-ink/55 hover:text-forest hover:bg-linen";
 const DRAWER_VALUE_BTN = "text-left rounded-sm hover:bg-linen/70 -mx-1 px-1 transition-colors";
 
@@ -1542,11 +1545,14 @@ export default function Dashboard() {
   const [drawerBeoNonce, setDrawerBeoNonce] = React.useState(0);
   const [drawerBeoLoaded, setDrawerBeoLoaded] = React.useState(false);
   const [drawerShowEnd, setDrawerShowEnd] = React.useState(false);
+  // Empty fields stay off the details view; "+ Field" brings one back to fill in.
+  const [drawerAddFields, setDrawerAddFields] = React.useState<Set<string>>(new Set());
   React.useEffect(() => {
     setDrawerView('beo');
     setDrawerBeoNonce(Date.now());
     setDrawerBeoLoaded(false);
     setDrawerShowEnd(false);
+    setDrawerAddFields(new Set());
   }, [selectedBooking?.id, selectedBooking?._isLead]);
   React.useEffect(() => { setDrawerPaymentsOpen(false); }, [selectedBooking?.id, selectedBooking?._isLead]);
   const drawerBookingId = !selectedBooking?._isLead ? selectedBooking?.id ?? null : null;
@@ -9898,19 +9904,21 @@ export default function Dashboard() {
                   <button
                     onClick={() => setDrawerView('beo')}
                     title="Back to the BEO"
-                    className="flex-[2] min-w-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-wider sm:tracking-widest text-xs">
+                    className="flex-auto whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm bg-forest-dark text-cream hover:bg-forest transition-colors font-bebas tracking-wider sm:tracking-widest text-xs">
                     <ArrowLeft className="w-3.5 h-3.5" /> BACK TO BEO
                   </button>
+                  {/* EDIT means the runsheet builder everywhere in this panel. */}
                   <button
                     onClick={() => { const id = selectedBooking.id; setSelectedBooking(null); setLocation(`/runsheet?bookingId=${id}`); }}
-                    className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                    <Clock className="w-3.5 h-3.5" /> RUNSHEET
+                    title="Change anything on the BEO: times, food, drinks, dietaries, notes"
+                    className="flex-auto whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
+                    <Edit2 className="w-3.5 h-3.5" /> EDIT
                   </button>
                   <button
                     onClick={() => { const id = selectedBooking.id; setSelectedBooking(null); setLocation(`/event/${id}`); }}
-                    title="Open the full event page to edit everything"
-                    className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-widest text-xs">
-                    <Edit2 className="w-3.5 h-3.5" /> EDIT
+                    title="Open the event page: floor plan, checklists, documents"
+                    className="flex-auto whitespace-nowrap flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-sm border border-forest/40 text-forest hover:bg-forest/10 transition-colors font-bebas tracking-wide sm:tracking-widest text-xs">
+                    <ExternalLink className="hidden sm:block w-3.5 h-3.5" /> EVENT PAGE
                   </button>
                 </div>
               )}
@@ -9928,7 +9936,8 @@ export default function Dashboard() {
                     // can move into a live state (booked/confirmed/tentative).
                     const needsSpace = ['booked', 'confirmed', 'tentative'].includes(newStatus);
                     if (needsSpace && !selectedBooking.spaceName?.trim()) {
-                      toast.error('Pick a space in the SPACE field above first — it\'s the row with the pin icon.', { duration: 5000 });
+                      setDrawerAddFields(prev => new Set(prev).add('space'));
+                      toast.error('Pick a space first. The Space field is now showing under Details.', { duration: 5000 });
                       return;
                     }
                     if (selectedBooking._isLead) {
@@ -10057,6 +10066,7 @@ export default function Dashboard() {
                 open={secOpen('details')} onToggle={() => toggleDrawerSection('details')}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                 {/* DATE */}
+                {(selectedBooking.eventDate || drawerEdit?.field === "eventDate") && (
                 <div className="flex items-start gap-3">
                   <Calendar className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -10138,7 +10148,9 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+                )}
                 {/* GUESTS */}
+                {(hasDrawerValue(selectedBooking.guestCount) || drawerEdit?.field === "guestCount") && (
                 <div className="flex items-start gap-3">
                   <Users className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -10165,11 +10177,13 @@ export default function Dashboard() {
                     ) : (
                       <button type="button" tabIndex={-1}
                         onClick={() => setDrawerEdit({ field: "guestCount", value: selectedBooking.guestCount?.toString() ?? "" })}
-                        className={`${DRAWER_VALUE_BTN} font-dm text-sm text-ink`}>{selectedBooking.guestCount ?? '—'}</button>
+                        className={`${DRAWER_VALUE_BTN} font-dm text-sm text-ink`}>{selectedBooking.guestCount}</button>
                     )}
                   </div>
                 </div>
-                {/* MINIMUM SPEND — customisable; hidden when empty unless editing */}
+                )}
+                {/* MINIMUM SPEND — hidden when empty unless editing */}
+                {(hasDrawerValue(selectedBooking.minimumSpend) || drawerEdit?.field === "minimumSpend") && (
                 <div className="flex items-start gap-3">
                   <DollarSign className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -10187,7 +10201,7 @@ export default function Dashboard() {
                         <Input type="number" min="0" step="0.01" value={drawerEdit.value}
                           onChange={e => setDrawerEdit({ field: "minimumSpend", value: e.target.value })}
                           onKeyDown={drawerEditKeys("minimumSpend")}
-                          placeholder="e.g. 2500" className="h-8 text-xs flex-1" autoFocus />
+                          placeholder="e.g. 2500" className="h-8 text-xs flex-1 min-w-[7rem]" autoFocus />
                         <button onClick={() => saveDrawerField("minimumSpend", drawerEdit.value)}
                           className="px-2.5 py-1 rounded-sm bg-forest text-cream text-xs">Save</button>
                         <button onClick={() => setDrawerEdit(null)}
@@ -10197,18 +10211,18 @@ export default function Dashboard() {
                       <button type="button" tabIndex={-1}
                         onClick={() => setDrawerEdit({ field: "minimumSpend", value: selectedBooking.minimumSpend != null ? String(selectedBooking.minimumSpend) : "" })}
                         className={`${DRAWER_VALUE_BTN} font-dm text-sm text-ink`}>
-                        {selectedBooking.minimumSpend != null && selectedBooking.minimumSpend !== ""
-                          ? `${currency(Number(selectedBooking.minimumSpend))}`
-                          : <span className="text-ink/55">Add a minimum spend</span>}
+                        {currency(Number(selectedBooking.minimumSpend))}
                       </button>
                     )}
                   </div>
                 </div>
+                )}
                 {/* SPACE — shown for both leads and bookings. Leads must be
                     able to pick a space too, otherwise the "set status to
                     Tentative/Confirmed" path is blocked with no way to fix
                     it from the side drawer. leads.update accepts spaceName,
                     so saveDrawerField handles both paths automatically. */}
+                {(selectedBooking.spaceName?.trim() || drawerAddFields.has('space')) && (
                 <div className="flex items-start gap-3 sm:col-span-2">
                   <MapPin className={`w-4 h-4 mt-0.5 flex-shrink-0 ${!selectedBooking.spaceName?.trim() ? 'text-amber-600' : 'text-gold'}`} />
                   <div className="flex-1 min-w-0">
@@ -10223,10 +10237,13 @@ export default function Dashboard() {
                         invalid={!selectedBooking.spaceName?.trim()}
                       />
                     ) : (
-                      <div className="text-xs text-ink/60 italic">No spaces yet — add one in Settings → Spaces</div>
+                      selectedBooking.spaceName?.trim()
+                        ? <div className="font-dm text-sm text-ink">{selectedBooking.spaceName}</div>
+                        : <div className="text-xs text-ink/60 italic">No spaces yet — add one in Settings → Spaces</div>
                     )}
                   </div>
                 </div>
+                )}
                 {/* WALKTHROUGH — requested by the client on the enquiry form;
                     staff confirm a real time once someone's on site. */}
                 {selectedBooking._isLead && !isStaff && (
@@ -10239,6 +10256,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 {/* EMAIL */}
+                {(selectedBooking.email || drawerEdit?.field === "email") && (
                 <div className="flex items-start gap-3 sm:col-span-2">
                   <Mail className="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -10262,16 +10280,35 @@ export default function Dashboard() {
                         <button onClick={() => setDrawerEdit(null)}
                           className="px-2.5 py-1 rounded-sm border border-ink/20 text-xs">Cancel</button>
                       </div>
-                    ) : selectedBooking.email ? (
+                    ) : (
                       <a href={`mailto:${selectedBooking.email}`}
                         className="block font-dm text-sm text-forest underline decoration-forest/30 underline-offset-2 hover:decoration-forest truncate">
                         {selectedBooking.email}
                       </a>
-                    ) : (
-                      <div className="font-dm text-sm text-ink">—</div>
                     )}
                   </div>
                 </div>
+                )}
+                {/* Fields not filled in yet: one "+" each, nothing else. */}
+                {(() => {
+                  const missing: Array<[string, () => void]> = [];
+                  if (!selectedBooking.eventDate && drawerEdit?.field !== "eventDate") missing.push(["Date", () => setDrawerEdit({ field: "eventDate", value: "" })]);
+                  if (!hasDrawerValue(selectedBooking.guestCount) && drawerEdit?.field !== "guestCount") missing.push(["Guests", () => setDrawerEdit({ field: "guestCount", value: "" })]);
+                  if (!selectedBooking.spaceName?.trim() && !drawerAddFields.has('space')) missing.push(["Space", () => setDrawerAddFields(prev => new Set(prev).add('space'))]);
+                  if (!hasDrawerValue(selectedBooking.minimumSpend) && drawerEdit?.field !== "minimumSpend") missing.push(["Minimum spend", () => setDrawerEdit({ field: "minimumSpend", value: "" })]);
+                  if (!selectedBooking.email && drawerEdit?.field !== "email") missing.push(["Email", () => setDrawerEdit({ field: "email", value: "" })]);
+                  return missing.length > 0 ? (
+                    <div className="sm:col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 border-t border-gold/20">
+                      <span className={DRAWER_LABEL}>Add</span>
+                      {missing.map(([label, onAdd]) => (
+                        <button key={label} type="button" onClick={onAdd}
+                          className="font-dm text-xs font-semibold text-forest underline underline-offset-2 hover:no-underline py-1">
+                          + {label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
               </div>
               </DrawerSection>
               {/* Financials + billing terms — bookings only, one collapsible block. */}
