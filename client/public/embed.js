@@ -38,6 +38,25 @@
   // its own iframe posts vf-close-widget (the card's × button).
   var closers = [];
 
+  var countedEnquiries = {};
+
+  function cleanEmail(raw) {
+    var e = String(raw || "").trim().toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : null;
+  }
+  // E.164, with NZ as the home country: "021 123 4567" → "+64211234567".
+  function toE164(raw) {
+    if (!raw) return null;
+    var s = String(raw).trim();
+    var d = s.replace(/\D/g, "");
+    if (!d) return null;
+    if (s.charAt(0) === "+") { /* already international */ }
+    else if (d.indexOf("00") === 0) d = d.slice(2);
+    else if (d.charAt(0) === "0") d = "64" + d.slice(1);
+    else if (d.indexOf("64") !== 0) d = "64" + d;
+    return /^\+[1-9]\d{7,14}$/.test("+" + d) ? "+" + d : null;
+  }
+
   function originOf(url) {
     try { return new URL(url, window.location.href).origin; } catch (e) { return null; }
   }
@@ -111,10 +130,17 @@
       if (v) iframeParams.set(k, v);
     });
 
+    var hasClick = false;
     CLICK_ID_PARAMS.forEach(function (p) {
       var v = parentParams.get(p);
-      if (v) iframeParams.set(p, v);
+      if (v) { iframeParams.set(p, v); hasClick = true; }
     });
+    // The ad click is happening now (it's in this page's address), so pass
+    // its time and landing page — the booking export needs both.
+    if (hasClick) {
+      iframeParams.set("vf_click_ts", String(Date.now()));
+      iframeParams.set("vf_landing", window.location.origin + window.location.pathname);
+    }
     UTM_PARAMS.forEach(function (p) {
       var v = parentParams.get(p);
       if (v) iframeParams.set(p, v);
@@ -323,7 +349,14 @@
     }
 
     if (data.type === "vf-enquiry-submitted") {
+      // One conversion per enquiry, even if the message arrives twice.
+      var enquiryId = data.enquiryId != null && data.enquiryId !== "" ? String(data.enquiryId) : null;
+      if (enquiryId) {
+        if (countedEnquiries[enquiryId]) return;
+        countedEnquiries[enquiryId] = true;
+      }
       var payload = {
+        enquiry_id: enquiryId,
         event_type: data.eventType || null,
         guest_count: data.guestCount || null,
         budget_range: data.budgetRange || null,
@@ -339,7 +372,17 @@
       if (typeof window.gtag === "function") {
         window.gtag("event", "generate_lead", payload);
         if (inst.gadsLabel) {
-          window.gtag("event", "conversion", { send_to: inst.gadsLabel });
+          // Enhanced conversions: Google hashes these. They only arrive when
+          // this page is the venue's own website, and never go in dataLayer.
+          var userData = {};
+          var email = cleanEmail(data.email);
+          var phone = toE164(data.phone);
+          if (email) userData.email = email;
+          if (phone) userData.phone_number = phone;
+          if (email || phone) window.gtag("set", "user_data", userData);
+          var conv = { send_to: inst.gadsLabel };
+          if (enquiryId) conv.transaction_id = "vf-" + enquiryId;
+          window.gtag("event", "conversion", conv);
         }
       }
 

@@ -416,6 +416,7 @@ export default function Reports() {
               <div className="h-64 flex items-center justify-center text-sage font-dm text-sm">No revenue data yet</div>
             )}
           </div>
+          <GoogleAdsBookingExport />
           <div className="dante-card overflow-hidden">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <h2 className="font-cormorant text-lg font-semibold text-ink">Revenue by Booking</h2>
@@ -563,6 +564,62 @@ export default function Reports() {
         </div>
         );
       })()}
+    </div>
+  );
+}
+
+/**
+ * Google Ads offline conversions: confirmed bookings whose enquiry came from
+ * an ad click, as Google's upload CSV, so Google Ads learns which clicks turn
+ * into bookings, not just enquiries.
+ */
+function GoogleAdsBookingExport() {
+  const utils = trpc.useUtils();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ included: number; skipped: number; confirmed: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const download = async () => {
+    setBusy(true); setError(null);
+    try {
+      const r = await utils.reports.googleAdsConversions.fetch({ days: 90 });
+      setResult({ included: r.included, skipped: r.skipped.length, confirmed: r.confirmedBookings });
+      if (r.included > 0) {
+        const url = URL.createObjectURL(new Blob([r.csv], { type: "text/csv" }));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `google-ads-booking-conversions-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e: any) {
+      setError(e?.message || "Couldn't build the file. Try again.");
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="dante-card p-5 space-y-2">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h2 className="font-cormorant text-lg font-semibold text-ink">Google Ads: confirmed bookings</h2>
+          <p className="font-dm text-sm text-ink max-w-[60ch]">
+            Bookings confirmed in the last 90 days whose enquiry came from a Google Ads click, as an upload file for the
+            {" "}<b>Booking confirmed (VenueFlow)</b> conversion. Upload it in Google Ads under Goals → Conversions → Uploads.
+          </p>
+        </div>
+        <button type="button" onClick={download} disabled={busy}
+          className="flex items-center gap-1.5 text-sm font-dm font-semibold text-white bg-forest px-3 py-2 rounded-sm hover:opacity-90 disabled:opacity-60">
+          <Download className="w-4 h-4" /> {busy ? "Building…" : "Download CSV"}
+        </button>
+      </div>
+      {result && (
+        <p className="font-dm text-sm text-ink" role="status">
+          {result.included > 0
+            ? `Downloaded ${result.included} conversion${result.included === 1 ? "" : "s"}.`
+            : "No confirmed bookings from ad clicks in the last 90 days, so there's nothing to upload yet."}
+          {result.skipped > 0 && ` ${result.skipped} left out (no usable click, or the click was over 90 days before the booking).`}
+          {` ${result.confirmed} confirmed booking${result.confirmed === 1 ? "" : "s"} in total in that time.`}
+        </p>
+      )}
+      {error && <p className="font-dm text-sm text-red-700" role="alert">{error}</p>}
     </div>
   );
 }

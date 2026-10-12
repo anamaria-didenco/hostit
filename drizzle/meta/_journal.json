@@ -567,6 +567,20 @@
       "when": 1779801512080,
       "tag": "0080_runsheet_dates_follow_booking",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1779801512081,
+      "tag": "0081_lead_landing_page",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1779801512082,
+      "tag": "0082_booking_confirmed_at",
+      "breakpoints": true
     }
   ]
 }
