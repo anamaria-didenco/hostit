@@ -34,6 +34,7 @@ const AUTOCOMPLETE: Record<string, string> = {
 
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE } from "@shared/enquiryCopy";
 import { DEFAULT_FORM_FIELDS, mergeFormFields, EVENT_FORMAT_OPTIONS, BUDGET_RANGE_OPTIONS, eventFormatLabel, budgetRangeLabel, type FormFieldDef } from "@shared/formFields";
+import { isVenueSiteOrigin, originOf } from "@shared/adAttribution";
 
 const FONT_MAP: Record<string, string> = {
   inter: "'Inter', system-ui, sans-serif",
@@ -622,11 +623,20 @@ export default function LeadForm() {
   // target that exact origin instead of "*". Validated, not trusted as-is:
   // a malformed value falls back to "*" rather than silently going dark, so
   // a hand-pasted old-style iframe (no embed.js, no param) still works.
-  const paramParentOrigin = (() => {
-    const raw = sp.get("parentOrigin");
-    if (!raw) return "*";
-    try { return new URL(raw).origin; } catch { return "*"; }
+  //
+  // The real parent origin, best source first: the browser's own
+  // ancestorOrigins (can't be faked by the page), then the parentOrigin param,
+  // then the referrer (an iframe's referrer is the page that embeds it).
+  // null when none is known.
+  const parentOrigin: string | null = (() => {
+    if (!isEmbed) return null;
+    try {
+      const ao = (window.location as any).ancestorOrigins;
+      if (ao && ao.length > 0) { const o = originOf(ao[0]); if (o) return o; }
+    } catch { /* not supported */ }
+    return originOf(sp.get("parentOrigin")) ?? originOf(document.referrer);
   })();
+  const paramParentOrigin = parentOrigin ?? "*";
   // Every message to the host page goes through here so it always carries the
   // frameId and targets the parent's exact origin. Documented message names:
   // vf-embed-height, vf-step-changed, vf-partial-captured, vf-enquiry-submitted,
@@ -657,6 +667,10 @@ export default function LeadForm() {
     gbraid: sp.get("gbraid") || undefined,
     wbraid: sp.get("wbraid") || undefined,
     fbclid: sp.get("fbclid") || undefined,
+    // Where the ad click landed and when, kept by the venue's own page
+    // (barfranco.nz stores them in a first-party cookie for 90 days).
+    landingPage: sp.get("vf_landing") || (isEmbed ? document.referrer || undefined : undefined),
+    adClickAt: sp.get("vf_click_ts") || undefined,
     utmSource: sp.get("utm_source") || undefined,
     utmMedium: sp.get("utm_medium") || undefined,
     utmCampaign: sp.get("utm_campaign") || undefined,
@@ -931,14 +945,28 @@ export default function LeadForm() {
       // happened — Google Ads conversion tracking can't see inside the
       // iframe. Fired on BOTH modes; deliberately carries NO personal data,
       // only the qualifiers useful for value-based bidding.
-      postToParent({
-        type: "vf-enquiry-submitted",
-        eventType: form.eventType || null,
-        guestCount: form.guestCount ? parseInt(form.guestCount) : null,
-        budgetRange: form.budgetRange || null,
-        eventFormat: form.eventFormat || null,
-        source: clickAttribution.utmSource || (isEmbed ? "embed" : "web"),
-      });
+      //
+      // Only ever to the parent's exact origin, never "*". The enquiry id lets
+      // the page count each enquiry once (Google Ads transaction_id). Email
+      // and phone, for Google's enhanced conversions, go only to the venue's
+      // own website (its domain over https); any other page gets the message
+      // without them.
+      if (parentOrigin) {
+        const toVenueSite = isVenueSiteOrigin(parentOrigin, (venue as any)?.website);
+        try {
+          window.parent?.postMessage({
+            type: "vf-enquiry-submitted",
+            frameId,
+            enquiryId: data?.id ?? null,
+            eventType: form.eventType || null,
+            guestCount: form.guestCount ? parseInt(form.guestCount) : null,
+            budgetRange: form.budgetRange || null,
+            eventFormat: form.eventFormat || null,
+            source: clickAttribution.utmSource || (isEmbed ? "embed" : "web"),
+            ...(toVenueSite ? { email: (form.email ?? "").trim() || null, phone: (form.phone ?? "").trim() || null } : {}),
+          }, parentOrigin);
+        } catch { /* no parent */ }
+      }
       // ── Optional thank-you redirect (?redirect=…) ───────────────────────
       // Full-page mode only (navigating inside the iframe helps nobody). To
       // keep this from being an open-redirect lure, the target must be https

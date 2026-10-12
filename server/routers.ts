@@ -47,6 +47,7 @@ import {
   syncDepositPaidFlag,
 } from "./db";
 import { DEFAULT_VENUE_TZ, formatEventDate } from "@shared/eventDate";
+import { cleanLandingPage, parseAdClickAt } from "@shared/adAttribution";
 
 /**
  * Format a stored event timestamp into the venue's local date + time strings
@@ -630,6 +631,8 @@ export const appRouter = router({
         gbraid: z.string().max(255).optional(),
         wbraid: z.string().max(255).optional(),
         fbclid: z.string().max(255).optional(),
+        landingPage: z.string().max(2000).optional(),
+        adClickAt: z.string().max(40).optional(),
         utmSource: z.string().max(255).optional(),
         utmMedium: z.string().max(255).optional(),
         utmCampaign: z.string().max(255).optional(),
@@ -660,6 +663,8 @@ export const appRouter = router({
           gclid: input.gclid,
           gbraid: input.gbraid,
           wbraid: input.wbraid,
+          landingPage: cleanLandingPage(input.landingPage),
+          adClickAt: parseAdClickAt(input.adClickAt),
           fbclid: input.fbclid,
           utmSource: input.utmSource,
           utmMedium: input.utmMedium,
@@ -714,6 +719,8 @@ export const appRouter = router({
         gbraid: z.string().max(255).optional(),
         wbraid: z.string().max(255).optional(),
         fbclid: z.string().max(255).optional(),
+        landingPage: z.string().max(2000).optional(),
+        adClickAt: z.string().max(40).optional(),
         utmSource: z.string().max(255).optional(),
         utmMedium: z.string().max(255).optional(),
         utmCampaign: z.string().max(255).optional(),
@@ -768,6 +775,8 @@ export const appRouter = router({
           gclid: input.gclid,
           gbraid: input.gbraid,
           wbraid: input.wbraid,
+          landingPage: cleanLandingPage(input.landingPage),
+          adClickAt: parseAdClickAt(input.adClickAt),
           fbclid: input.fbclid,
           utmSource: input.utmSource,
           utmMedium: input.utmMedium,
@@ -5804,6 +5813,31 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     }),
     // Conversion picture for one NZ-calendar period (shared definition in
     // shared/conversion.ts). Under `reports.` so staff logins can't read it.
+    // Google Ads offline conversion upload: confirmed bookings whose enquiry
+    // came from an ad click, so Google learns which clicks became bookings,
+    // not just enquiries. Under `reports.` so staff logins can't read it.
+    googleAdsConversions: protectedProcedure
+      .input(z.object({ days: z.number().int().min(1).max(365).default(90) }).optional())
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { bookings, leads, venueSettings } = await import('../drizzle/schema');
+        const { and, eq, gte, inArray } = await import('drizzle-orm');
+        const { buildGoogleAdsConversionCsv } = await import('@shared/adAttribution');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const since = new Date(Date.now() - (input?.days ?? 90) * 86_400_000);
+        const rows = await db.select({
+          bookingId: bookings.id, confirmedAt: bookings.createdAt, value: bookings.totalNzd,
+          gclid: leads.gclid, gbraid: leads.gbraid, wbraid: leads.wbraid, adClickAt: leads.adClickAt,
+        }).from(bookings)
+          .innerJoin(leads, and(eq(leads.id, bookings.leadId), eq(leads.ownerId, ctx.user.id)))
+          .where(and(eq(bookings.ownerId, ctx.user.id), inArray(bookings.status, ['confirmed', 'finished']), gte(bookings.createdAt, since)))
+          .orderBy(bookings.createdAt);
+        const [vs] = await db.select({ tz: venueSettings.timezone }).from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        const withClick = rows.filter(r => r.gclid || r.gbraid || r.wbraid);
+        const result = buildGoogleAdsConversionCsv(withClick, vs?.tz || undefined);
+        return { ...result, confirmedBookings: rows.length };
+      }),
     conversion: protectedProcedure
       .input(z.object({
         preset: z.enum(['month', '3m', '12m']).optional(),

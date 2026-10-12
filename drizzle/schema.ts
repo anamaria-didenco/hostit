@@ -320,6 +320,11 @@ export const leads = pgTable("leads", {
   gclid: varchar("gclid", { length: 255 }),
   gbraid: varchar("gbraid", { length: 255 }),
   wbraid: varchar("wbraid", { length: 255 }),
+  // Where the ad click landed on the venue's site (origin + path only) and
+  // when, passed in by the venue's page. Used for the Google Ads booking
+  // conversion export (shared/adAttribution.ts).
+  landingPage: varchar("landingPage", { length: 500 }),
+  adClickAt: timestamp("adClickAt"),
   fbclid: varchar("fbclid", { length: 255 }),
   utmSource: varchar("utmSource", { length: 255 }),
   utmMedium: varchar("utmMedium", { length: 255 }),
