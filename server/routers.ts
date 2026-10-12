@@ -46,6 +46,7 @@ import {
   getDashboardStats,
   syncDepositPaidFlag,
 } from "./db";
+import { DEFAULT_VENUE_TZ, formatEventDate } from "@shared/eventDate";
 
 /**
  * Format a stored event timestamp into the venue's local date + time strings
@@ -838,9 +839,8 @@ export const appRouter = router({
                     // input.eventDate may be either "YYYY-MM-DD" or a full ISO timestamp.
                     // For bare dates, anchor to local midnight to avoid UTC-shift; for ISO,
                     // use as-is (stored time is already meaningful).
-                    const raw = String(input.eventDate);
-                    const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(raw + 'T00:00:00') : new Date(raw);
-                    return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                    // A bare "YYYY-MM-DD" parses as date-only; a timestamp is shown in NZ time.
+                    return formatEventDate(String(input.eventDate), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, DEFAULT_VENUE_TZ);
                   })()
                 : null;
 
@@ -1013,9 +1013,7 @@ export const appRouter = router({
                 const intro = introRaw ? esc(introRaw) : DEFAULT_AUTO_REPLY_INTRO;
                 const fmtDate = input.eventDate
                   ? (() => {
-                      const raw = String(input.eventDate);
-                      const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(raw + 'T00:00:00') : new Date(raw);
-                      return d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                      return formatEventDate(String(input.eventDate), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, DEFAULT_VENUE_TZ);
                     })()
                   : null;
                 const details = [
@@ -2556,6 +2554,13 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (rest.billingDepositApplied !== undefined) updates.billingDepositApplied = rest.billingDepositApplied;
         if (rest.billingNote !== undefined) updates.billingNote = rest.billingNote?.trim() || null;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
+        // The runsheet keeps its own copy of the date (staff link, runsheet
+        // header). Keep it in step so the event never shows two dates.
+        if (updates.eventDate !== undefined) {
+          const { runsheets } = await import('../drizzle/schema');
+          await db.update(runsheets).set({ eventDate: updates.eventDate as Date })
+            .where(and(eq(runsheets.bookingId, id), eq(runsheets.ownerId, ctx.user.id)));
+        }
         // A cancelled event's draft invoices must not sit in Xero waiting to
         // be approved by accident. Best-effort: drafts are deleted in Xero and
         // dropped from our ledger; an approved or paid invoice is left alone
@@ -4531,6 +4536,15 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.eventType !== undefined) updateData.eventType = fields.eventType;
         if (fields.notes !== undefined) updateData.notes = fields.notes;
         if (fields.eventDate !== undefined) updateData.eventDate = fields.eventDate ? new Date(fields.eventDate) : null;
+        // Whether this save actually moves the event to another day (the
+        // builder sends the date on every save, so compare with what's stored).
+        let movedToDay: Date | null = null;
+        if (updateData.eventDate) {
+          const [before] = await db.select({ eventDate: runsheets.eventDate }).from(runsheets)
+            .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id))).limit(1);
+          const { eventDayKey, DEFAULT_VENUE_TZ: TZ } = await import('@shared/eventDate');
+          if (eventDayKey(updateData.eventDate, TZ) !== eventDayKey(before?.eventDate ?? null, TZ)) movedToDay = updateData.eventDate;
+        }
         if (fields.dietaries !== undefined) updateData.dietaries = fields.dietaries;
         if (fields.venueSetup !== undefined) updateData.venueSetup = fields.venueSetup;
         if (fields.setupSummary !== undefined) updateData.setupSummary = fields.setupSummary;
@@ -4557,6 +4571,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         if (fields.guestCount !== undefined) { sharedBooking.guestCount = fields.guestCount; sharedLead.guestCount = fields.guestCount; }
         if (fields.eventType !== undefined) { sharedBooking.eventType = fields.eventType; sharedLead.eventType = fields.eventType; }
         if (fields.spaceName !== undefined) { sharedBooking.spaceName = fields.spaceName; sharedLead.spaceName = fields.spaceName; }
+        if (movedToDay) sharedBooking._movedToDay = movedToDay;
         if (Object.keys(sharedBooking).length > 0) {
           const { bookings, leads } = await import('../drizzle/schema');
           const [rs] = await db.select({ bookingId: runsheets.bookingId, leadId: runsheets.leadId })
@@ -4564,7 +4579,20 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             .where(and(eq(runsheets.id, id), eq(runsheets.ownerId, ctx.user.id)))
             .limit(1);
           if (rs?.bookingId) {
-            await db.update(bookings).set({ ...sharedBooking, updatedAt: new Date() })
+            const { _movedToDay, ...bookingFields } = sharedBooking;
+            if (_movedToDay) {
+              // Moving the day in the runsheet moves the event, keeping its start time.
+              const { dayWithTimeFrom } = await import('@shared/eventDate');
+              const [cur] = await db.select({ eventDate: bookings.eventDate }).from(bookings)
+                .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id))).limit(1);
+              const next = dayWithTimeFrom(_movedToDay, cur?.eventDate ?? null);
+              if (next) {
+                bookingFields.eventDate = next;
+                await db.update(runsheets).set({ eventDate: next })
+                  .where(and(eq(runsheets.bookingId, rs.bookingId), eq(runsheets.ownerId, ctx.user.id)));
+              }
+            }
+            await db.update(bookings).set({ ...bookingFields, updatedAt: new Date() })
               .where(and(eq(bookings.id, rs.bookingId), eq(bookings.ownerId, ctx.user.id)));
           }
           if (rs?.leadId) {
@@ -4909,7 +4937,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const htmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const TYPE_LABEL: Record<string, string> = { deposit: 'deposit', partial: 'payment', final: 'final payment', refund: 'refund', other: 'payment' };
         const kind = TYPE_LABEL[pmt.type] ?? 'payment';
-        const paidOn = new Date(pmt.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
+        const paidOn = new Date(pmt.paidAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric', timeZone: DEFAULT_VENUE_TZ });
         const amountLine = pmt.type === 'refund'
           ? `We've refunded <strong>${fmtNzd(Number(pmt.amount))}</strong> on ${paidOn}.`
           : `We've received your ${kind} of <strong>${fmtNzd(Number(pmt.amount))}</strong> on ${paidOn}. Thank you!`;
@@ -5543,7 +5571,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         const { createXeroDraftInvoice } = await import('./xero');
         const clientName = `${booking.firstName ?? ''}${booking.lastName ? ' ' + booking.lastName : ''}`.trim() || 'Client';
         const evDate = booking.eventDate
-          ? new Date(booking.eventDate as any).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
+          ? formatEventDate(booking.eventDate as any, { day: 'numeric', month: 'short', year: 'numeric' }, DEFAULT_VENUE_TZ)
           : '';
         // Per-stream revenue account, falling back to the venue default.
         const { getDb: _g } = await import('./db');
@@ -7664,13 +7692,17 @@ Return ONLY valid JSON.`;
         let billing: { steps: import('@shared/nowNext').BillingStep[]; howToPay: string | null } | null = null;
         if (runsheet.bookingId) {
           const { bookings, venueSettings } = await import('../drizzle/schema');
-          const [bk] = await db.select().from(bookings).where(eq(bookings.id, runsheet.bookingId)).limit(1);
+          const { and: andOp } = await import('drizzle-orm');
+          const [bk] = await db.select().from(bookings)
+            .where(andOp(eq(bookings.id, runsheet.bookingId), eq(bookings.ownerId, link.ownerId))).limit(1);
           if (bk) {
             const { eventBillingSteps } = await import('@shared/nowNext');
             const dd: any = (runsheet as any).drinksData ?? {};
             const [vs] = await db.select({ pi: venueSettings.paymentInstructions }).from(venueSettings)
               .where(eq(venueSettings.ownerId, link.ownerId)).limit(1);
             const b: any = bk;
+            // One date for the event: the booking's, not the runsheet's copy.
+            if (b.eventDate) (safeRunsheet as any).eventDate = b.eventDate;
             billing = {
               steps: eventBillingSteps({
                 depositRequired: b.depositRequired,

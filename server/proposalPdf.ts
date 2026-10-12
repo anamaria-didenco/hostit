@@ -17,6 +17,7 @@ import {
 import { eq } from "drizzle-orm";
 import { selectedDrinkItems, drinkPriceLabel } from "../shared/drinksMenu";
 import { selectedSharedMenuSections } from "../shared/proposalSharedMenu";
+import { DEFAULT_VENUE_TZ, formatEventDate } from "@shared/eventDate";
 
 // Bar option labels
 const BAR_LABELS: Record<string, string> = {
@@ -49,11 +50,12 @@ export function buildHtml(data: {
   const taxPct = Number(proposal.taxPercent ?? 15);
   const depositPct = Number(proposal.depositPercent ?? 25);
 
+  const venueTz = venue?.timezone || DEFAULT_VENUE_TZ;
   const eventDate = proposal.eventDate
-    ? new Date(proposal.eventDate).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    ? formatEventDate(proposal.eventDate, { weekday: "long", day: "numeric", month: "long", year: "numeric" }, venueTz)
     : null;
   const expiresAt = proposal.expiresAt
-    ? new Date(proposal.expiresAt).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })
+    ? formatEventDate(proposal.expiresAt, { day: "numeric", month: "long", year: "numeric" }, venueTz)
     : null;
 
   const venueName = venue?.name ?? "The Venue";
@@ -329,7 +331,7 @@ export function buildHtml(data: {
 <!-- Footer -->
 <div class="footer">
   <div><strong>${venueName}</strong>${venueAddress ? ` · ${venueAddress}` : ""}</div>
-  <div>Generated ${new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })}</div>
+  <div>Generated ${new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric", timeZone: venueTz })}</div>
 </div>
 
 </body>

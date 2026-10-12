@@ -49,6 +49,7 @@ import {
   billingStageLabel,
 } from "@shared/billingTerms";
 import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost } from "@shared/eventBilling";
+import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
 
 const VENUE_AREA_LABELS: Record<string, string> = {
   bar: "Bar",
@@ -140,22 +141,18 @@ function fmt12(t: string | null | undefined): string {
   return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-function fmtDate(d: Date | null | undefined): string {
+function fmtDate(d: Date | null | undefined, tz?: string | null): string {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-NZ", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
+  // Venue time zone (the server runs on UTC); date-only values keep their day.
+  return formatEventDate(d, { weekday: "long", day: "numeric", month: "long", year: "numeric" }, tz || DEFAULT_VENUE_TZ);
 }
 
 // "2026-10-24 Engagement - Kylie Jackson - Event Order.pdf": starts with the
 // event date so a week of BEOs sorts in order in Downloads.
-export function beoFileName(opts: { eventDate: any; eventType?: string; clientName?: string; kind: string }): string {
-  const d = opts.eventDate ? new Date(opts.eventDate) : null;
-  // Same calendar day fmtDate prints in the header (server-local), so the
-  // file name and the document never disagree about the date.
-  const day = d && !isNaN(d.getTime())
-    ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-    : "";
+export function beoFileName(opts: { eventDate: any; eventType?: string; clientName?: string; kind: string; tz?: string | null }): string {
+  // Same calendar day fmtDate prints in the header, so the file name and the
+  // document never disagree about the date.
+  const day = eventDayKey(opts.eventDate, opts.tz || DEFAULT_VENUE_TZ);
   const parts = [[day, (opts.eventType ?? "").trim()].filter(Boolean).join(" "), (opts.clientName ?? "").trim(), opts.kind]
     .filter(Boolean)
     .map(p => p.replace(/[\\/:*?"<>|\r\n]+/g, " ").replace(/\s+/g, " ").trim());
@@ -640,7 +637,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const logoScalePct = Math.max(40, Math.min(160, Number((venue as any)?.logoScale ?? 100) || 100));
     const logoMaxH = Math.round(46 * logoScalePct / 100);
     const clientName = `${booking.firstName}${booking.lastName ? " " + booking.lastName : ""}`;
-    const eventDate = fmtDate(booking.eventDate);
+    const venueTz = ((venue as any)?.timezone as string | undefined) || DEFAULT_VENUE_TZ;
+    const eventDate = fmtDate(booking.eventDate, venueTz);
     const eventTime = booking.eventDate ? fmt12(new Date(booking.eventDate).toTimeString().slice(0,5)) : "";
     const endTimeRaw = booking.eventEndDate ? new Date(booking.eventEndDate).toTimeString().slice(0,5) : "";
     const endTime = endTimeRaw ? fmt12(endTimeRaw) : "";
@@ -1241,7 +1239,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // so white-labeling still works; each section collapses when its data is
     // empty and the whole page collapses when all its sections are empty.
     // ══════════════════════════════════════════════════════════════════════
-    const todayPrinted = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" });
+    const todayPrinted = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: venueTz });
     const footerBiz = [escHtml(venueName), escHtml(eventType || clientName), escHtml(eventDate)].filter(Boolean).join(" &middot; ");
     const clientOrg = escHtml((booking as any).company ?? (booking as any).organisation ?? (booking as any).organisationName ?? "");
     // Per-event override wins; the venue default is the fallback. Trimmed
@@ -1934,7 +1932,7 @@ ${sheetsHtml}
       // downloads as a file.
       const disposition = isPublic ? "inline" : "attachment";
       const fileName = beoFileName({
-        eventDate: booking.eventDate, eventType, clientName,
+        eventDate: booking.eventDate, eventType, clientName, tz: venueTz,
         kind: isPublic ? "Event Pack" : clientCopy ? "Client Copy" : "Event Order",
       });
       res.setHeader("Content-Disposition",

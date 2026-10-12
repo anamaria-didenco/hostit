@@ -15,6 +15,7 @@ import { notifyVenue, bookingLink } from "./notify";
 import { buildVenueMailer, fmtNzd } from "./paymentsEmail";
 import { escapeHtml } from "./sanitizeHtml";
 import { publicBaseUrl } from "./publicUrl";
+import { dayWithTimeFrom } from "@shared/eventDate";
 
 const NZ_TZ = "Pacific/Auckland";
 
@@ -288,7 +289,8 @@ export async function respondToProposal(input: {
       lastName: lead.lastName ?? undefined,
       email: lead.email,
       eventType: lead.eventType ?? undefined,
-      eventDate: proposal.eventDate ?? lead.eventDate ?? new Date(),
+      // The proposal holds the day only; keep the start time the enquiry had.
+      eventDate: dayWithTimeFrom(proposal.eventDate, lead.eventDate) ?? new Date(),
       eventEndDate: proposal.eventEndDate ?? undefined,
       guestCount: proposal.guestCount ?? lead.guestCount ?? undefined,
       spaceName: resolvedSpace,
