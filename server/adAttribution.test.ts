@@ -9,6 +9,8 @@ const NZ = "Pacific/Auckland";
 describe("ad attribution", () => {
   it("recognises the venue's own website only", () => {
     expect(isVenueSiteOrigin("https://www.barfranco.nz", "barfranco.nz")).toBe(true);
+    // Bar Franco's live setting is the bare host, no scheme.
+    expect(isVenueSiteOrigin("https://www.barfranco.nz", "www.barfranco.nz")).toBe(true);
     expect(isVenueSiteOrigin("https://barfranco.nz", "https://www.barfranco.nz")).toBe(true);
     expect(isVenueSiteOrigin("https://events.barfranco.nz", "barfranco.nz")).toBe(true);
     expect(isVenueSiteOrigin("http://www.barfranco.nz", "barfranco.nz")).toBe(false);
