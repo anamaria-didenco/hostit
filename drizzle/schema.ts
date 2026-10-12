@@ -468,6 +468,9 @@ export const bookings = pgTable("bookings", {
   // One optional sentence for the event that fits none of the presets.
   billingNote: text("billingNote"),
   status: bookingStatusEnum("status").default("confirmed").notNull(),
+  // First time the booking became confirmed. Set by a database trigger
+  // (migration 0082) so every way of confirming a booking records it.
+  confirmedAt: timestamp("confirmedAt"),
   notes: text("notes"),
   nbiBookingId: varchar("nbiBookingId", { length: 100 }),
   actualSpend: decimal("actualSpend", { precision: 10, scale: 2 }),

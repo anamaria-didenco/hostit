@@ -5821,18 +5821,23 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
       .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
         const { bookings, leads, venueSettings } = await import('../drizzle/schema');
-        const { and, eq, gte, inArray } = await import('drizzle-orm');
+        const { and, eq, gte, inArray, sql } = await import('drizzle-orm');
         const { buildGoogleAdsConversionCsv } = await import('@shared/adAttribution');
         const db = await getDb();
         if (!db) throw new Error('DB not available');
         const since = new Date(Date.now() - (input?.days ?? 90) * 86_400_000);
+        // The time it was confirmed, not created: a tentative booking
+        // confirmed weeks later converts on the day it's confirmed. Bookings
+        // confirmed before 0082 fall back to when they were created.
+        const confirmedAt = sql<Date>`coalesce(${bookings.confirmedAt}, ${bookings.createdAt})`.mapWith(bookings.createdAt);
         const rows = await db.select({
-          bookingId: bookings.id, confirmedAt: bookings.createdAt, value: bookings.totalNzd,
+          bookingId: bookings.id, confirmedAt, value: bookings.totalNzd,
           gclid: leads.gclid, gbraid: leads.gbraid, wbraid: leads.wbraid, adClickAt: leads.adClickAt,
+          enquiredAt: leads.createdAt,
         }).from(bookings)
           .innerJoin(leads, and(eq(leads.id, bookings.leadId), eq(leads.ownerId, ctx.user.id)))
-          .where(and(eq(bookings.ownerId, ctx.user.id), inArray(bookings.status, ['confirmed', 'finished']), gte(bookings.createdAt, since)))
-          .orderBy(bookings.createdAt);
+          .where(and(eq(bookings.ownerId, ctx.user.id), inArray(bookings.status, ['confirmed', 'finished']), gte(confirmedAt, since)))
+          .orderBy(confirmedAt);
         const [vs] = await db.select({ tz: venueSettings.timezone }).from(venueSettings).where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
         const withClick = rows.filter(r => r.gclid || r.gbraid || r.wbraid);
         const result = buildGoogleAdsConversionCsv(withClick, vs?.tz || undefined);

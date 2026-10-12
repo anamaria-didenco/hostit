@@ -46,6 +46,8 @@ describe("ad attribution", () => {
       { wbraid: "WB-1", confirmedAt: confirmed, value: 1200 },
       { confirmedAt: confirmed, value: 99 },
       { gclid: "late", confirmedAt: confirmed, adClickAt: new Date(confirmed.getTime() - 91 * 86_400_000) },
+      // No click time passed: the enquiry date stands in (the click came first).
+      { gclid: "late-enquiry", confirmedAt: confirmed, enquiredAt: new Date(confirmed.getTime() - 100 * 86_400_000) },
     ], NZ);
     expect(csv.split("\n")).toEqual([
       "Google Click ID,GBRAID,WBRAID,Conversion Name,Conversion Time,Conversion Value,Conversion Currency",
@@ -55,6 +57,6 @@ describe("ad attribution", () => {
       "",
     ]);
     expect(included).toBe(3);
-    expect(skipped.map(s => s.reason)).toEqual(["no click ID", "click over 90 days before the booking"]);
+    expect(skipped.map(s => s.reason)).toEqual(["no click ID", "click over 90 days before the booking", "click over 90 days before the booking"]);
   });
 });

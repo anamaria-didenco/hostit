@@ -62,6 +62,9 @@ export type ConfirmedBookingRow = {
   confirmedAt: Date | string;
   value?: number | string | null;
   adClickAt?: Date | string | null;
+  /** When the enquiry arrived. The click was on or before this, so it's a
+   *  safe stand-in for the 90-day check when the click time wasn't passed. */
+  enquiredAt?: Date | string | null;
 };
 
 function offsetFor(d: Date, tz: string): string {
@@ -114,11 +117,10 @@ export function buildGoogleAdsConversionCsv(rows: ConfirmedBookingRow[], tz: str
     if (!gclid && !gbraid && !wbraid) { skipped.push({ reason: "no click ID" }); continue; }
     const confirmed = r.confirmedAt instanceof Date ? r.confirmedAt : new Date(r.confirmedAt);
     if (isNaN(confirmed.getTime())) { skipped.push({ reason: "no confirmation time" }); continue; }
-    if (r.adClickAt) {
-      const click = new Date(r.adClickAt).getTime();
-      if (confirmed.getTime() < click) { skipped.push({ reason: "confirmed before the click" }); continue; }
-      if (confirmed.getTime() - click > 90 * 86_400_000) { skipped.push({ reason: "click over 90 days before the booking" }); continue; }
-    }
+    const click = r.adClickAt ? new Date(r.adClickAt).getTime() : NaN;
+    if (!isNaN(click) && confirmed.getTime() < click) { skipped.push({ reason: "confirmed before the click" }); continue; }
+    const latestClick = !isNaN(click) ? click : (r.enquiredAt ? new Date(r.enquiredAt).getTime() : NaN);
+    if (!isNaN(latestClick) && confirmed.getTime() - latestClick > 90 * 86_400_000) { skipped.push({ reason: "click over 90 days before the booking" }); continue; }
     const value = Number(r.value ?? 0);
     out.push([
       gclid, gbraid, wbraid, BOOKING_CONVERSION_NAME, googleAdsTime(confirmed, tz),

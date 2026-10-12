@@ -238,7 +238,7 @@ export default function EmbedDocs() {
         <section className="mb-10">
           <h2 className="text-lg font-bold mb-2">Attribution &amp; tracking</h2>
           <p className="text-sm text-gray-600">
-            <Code>embed.js</Code> reads <Code>gclid</Code>, <Code>gbraid</Code>, <Code>wbraid</Code>, <Code>fbclid</Code> and the <Code>utm_*</Code> params off the host page's URL and stores them on the enquiry — shown in the CRM and the notification email. On a completed enquiry it pushes a <Code>vf_enquiry_submitted</Code> <Code>dataLayer</Code> event, calls <Code>gtag('event','generate_lead')</Code>, and fires <Code>data-gads-label</Code> as a conversion if set. Define <Code>window.VenueFlow.onSubmit</Code> to run your own code on submit.
+            <Code>embed.js</Code> reads <Code>gclid</Code>, <Code>gbraid</Code>, <Code>wbraid</Code>, <Code>fbclid</Code> and the <Code>utm_*</Code> params off the host page's URL and stores them on the enquiry — shown in the CRM and the notification email. On a completed enquiry it pushes a <Code>vf_enquiry_submitted</Code> <Code>dataLayer</Code> event, calls <Code>gtag('event','generate_lead')</Code>, and fires <Code>data-gads-label</Code> as a conversion if set — once per enquiry, with the enquiry ID as <Code>transaction_id</Code> and, on the venue's own website, enhanced-conversion email and phone. Define <Code>window.VenueFlow.onSubmit</Code> to run your own code on submit.
           </p>
         </section>
 
