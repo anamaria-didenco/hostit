@@ -48,7 +48,9 @@ describe("ad attribution", () => {
       { gclid: "late", confirmedAt: confirmed, adClickAt: new Date(confirmed.getTime() - 91 * 86_400_000) },
       // No click time passed: the enquiry date stands in (the click came first).
       { gclid: "late-enquiry", confirmedAt: confirmed, enquiredAt: new Date(confirmed.getTime() - 100 * 86_400_000) },
-    ], NZ);
+      // Confirmed 80 days ago after a 20-day sales cycle: the click is 100 days old at upload.
+      { gclid: "expired-at-upload", confirmedAt: new Date(confirmed.getTime() - 79 * 86_400_000), adClickAt: new Date(confirmed.getTime() - 99 * 86_400_000) },
+    ], NZ, confirmed.getTime() + 86_400_000);
     expect(csv.split("\n")).toEqual([
       "Google Click ID,GBRAID,WBRAID,Conversion Name,Conversion Time,Conversion Value,Conversion Currency",
       "Cj0KCQ-gclid,,,Booking confirmed (VenueFlow),2026-10-09 14:05:00+13:00,4140.00,NZD",
@@ -57,6 +59,6 @@ describe("ad attribution", () => {
       "",
     ]);
     expect(included).toBe(3);
-    expect(skipped.map(s => s.reason)).toEqual(["no click ID", "click over 90 days before the booking", "click over 90 days before the booking"]);
+    expect(skipped.map(s => s.reason)).toEqual(["no click ID", "click over 90 days ago", "click over 90 days ago", "click over 90 days ago"]);
   });
 });

@@ -101,10 +101,10 @@ const csvCell = (v: unknown) => {
 /**
  * The upload file. One click ID per row (gclid preferred, then gbraid, then
  * wbraid). Rows are skipped, with a reason, when there's no click ID, the
- * booking was confirmed before the click, or the click is over 90 days older
- * than the booking (Google rejects those).
+ * booking was confirmed before the click, or the click is over 90 days old
+ * at upload time (`now`) — Google rejects uploads past that.
  */
-export function buildGoogleAdsConversionCsv(rows: ConfirmedBookingRow[], tz: string = DEFAULT_VENUE_TZ): {
+export function buildGoogleAdsConversionCsv(rows: ConfirmedBookingRow[], tz: string = DEFAULT_VENUE_TZ, now: number = Date.now()): {
   csv: string; included: number; skipped: Array<{ reason: string }>;
 } {
   const header = ["Google Click ID", "GBRAID", "WBRAID", "Conversion Name", "Conversion Time", "Conversion Value", "Conversion Currency"];
@@ -120,7 +120,7 @@ export function buildGoogleAdsConversionCsv(rows: ConfirmedBookingRow[], tz: str
     const click = r.adClickAt ? new Date(r.adClickAt).getTime() : NaN;
     if (!isNaN(click) && confirmed.getTime() < click) { skipped.push({ reason: "confirmed before the click" }); continue; }
     const latestClick = !isNaN(click) ? click : (r.enquiredAt ? new Date(r.enquiredAt).getTime() : NaN);
-    if (!isNaN(latestClick) && confirmed.getTime() - latestClick > 90 * 86_400_000) { skipped.push({ reason: "click over 90 days before the booking" }); continue; }
+    if (!isNaN(latestClick) && now - latestClick > 90 * 86_400_000) { skipped.push({ reason: "click over 90 days ago" }); continue; }
     const value = Number(r.value ?? 0);
     out.push([
       gclid, gbraid, wbraid, BOOKING_CONVERSION_NAME, googleAdsTime(confirmed, tz),
