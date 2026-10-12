@@ -965,14 +965,14 @@ export default function LeadForm() {
       if (parentOrigin) {
         const toVenueSite = isVenueSiteOrigin(parentOrigin, (venue as any)?.website);
         postEnquiryToParent({
-            type: "vf-enquiry-submitted",
-            enquiryId: data?.id ?? null,
-            eventType: form.eventType || null,
-            guestCount: form.guestCount ? parseInt(form.guestCount) : null,
-            budgetRange: form.budgetRange || null,
-            eventFormat: form.eventFormat || null,
-            source: clickAttribution.utmSource || (isEmbed ? "embed" : "web"),
-            ...(toVenueSite ? { email: (form.email ?? "").trim() || null, phone: (form.phone ?? "").trim() || null } : {}),
+          type: "vf-enquiry-submitted",
+          enquiryId: data?.id ?? null,
+          eventType: form.eventType || null,
+          guestCount: form.guestCount ? parseInt(form.guestCount) : null,
+          budgetRange: form.budgetRange || null,
+          eventFormat: form.eventFormat || null,
+          source: clickAttribution.utmSource || (isEmbed ? "embed" : "web"),
+          ...(toVenueSite ? { email: (form.email ?? "").trim() || null, phone: (form.phone ?? "").trim() || null } : {}),
         });
       }
       // ── Optional thank-you redirect (?redirect=…) ───────────────────────
