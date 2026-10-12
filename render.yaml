@@ -16,13 +16,14 @@ services:
     region: singapore           # closest Render region to NZ (change in dashboard if preferred)
     branch: main
     autoDeploy: true            # redeploy automatically on every push to main → real "push = live"
-    # --include=dev is required: the build uses vite + esbuild (devDependencies),
-    # and NODE_ENV=production would otherwise make npm skip them → build fails.
-    # `npx puppeteer browsers install chrome` is belt-and-braces for PDF
-    # generation: it's idempotent (skips if already downloaded by puppeteer's
-    # postinstall) and guarantees Chromium lands in PUPPETEER_CACHE_DIR even
-    # if the postinstall step was skipped for any reason.
-    buildCommand: npm install --include=dev && npx puppeteer browsers install chrome && npm run build
+    # Install exactly the versions in pnpm-lock.yaml (the lock file the
+    # project and its tests use). `npm install` re-resolved every version on
+    # each deploy, so live code could differ from what was tested.
+    # NODE_ENV=development for the install only: the build needs vite +
+    # esbuild (devDependencies), which a production install would skip.
+    # `npx puppeteer browsers install chrome` puts Chromium (for PDFs) in
+    # PUPPETEER_CACHE_DIR; it's idempotent.
+    buildCommand: NODE_ENV=development npx --yes pnpm@10.4.1 install --frozen-lockfile && npx puppeteer browsers install chrome && npx --yes pnpm@10.4.1 run build
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:

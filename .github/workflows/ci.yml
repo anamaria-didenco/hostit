@@ -1,0 +1,42 @@
+# Type-check and run the full test suite (against a real Postgres built from
+# the migrations) on every pull request and every push to main.
+# To stop Render deploying code that fails here: Render dashboard → the
+# venueflowhq service → Settings → Auto-Deploy → "After CI Checks Pass".
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: venueflow_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/venueflow_ci
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Type-check
+        run: pnpm exec tsc --noEmit -p .
+      - name: Build the database from the migrations
+        run: pnpm exec drizzle-kit migrate
+      - name: Tests
+        run: pnpm exec vitest run
