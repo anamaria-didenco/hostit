@@ -15,6 +15,7 @@ import { DRINKS_MENU, DRINKS_BY_KEY, drinkPriceLabel } from "@shared/drinksMenu"
 import { SHARED_MENU_SECTIONS, selectedSharedMenuSections } from "@shared/proposalSharedMenu";
 import { catalogueDefaultQty, catalogueLineDescription, cataloguePriceLabel } from "@shared/menuCatalogue";
 import { toLocalDateInput } from "@/lib/dateTime";
+import { duplicatePackageLines, isPackageLine, packageLineDescription, packageNameFromLine, withoutDuplicatePackageLines } from "@shared/proposalPackages";
 
 interface LineItem {
   description: string;
@@ -112,7 +113,6 @@ export default function ProposalBuilder() {
 
   // Menu packages
   const { data: menuPackages } = trpc.menu.listPackages.useQuery(undefined, { enabled: !!user });
-  const [selectedMenuPackageIds, setSelectedMenuPackageIds] = useState<number[]>([]);
   const [menuSectionOpen, setMenuSectionOpen] = useState(true);
 
   // ── Live food + drink catalogue (kept in sync as menus are updated) ───────
@@ -229,15 +229,35 @@ export default function ProposalBuilder() {
   const _minSpendNum = () => minimumSpend ? parseFloat(minimumSpend) : 0;
   const autoBarTabAmount = autoBarTab && _minSpendNum() > _foodBase() ? _minSpendNum() - _foodBase() : 0;
 
+  // A package is picked when its pricing line is on the proposal. Picking adds
+  // the line straight away (so the total updates as you pick) and unpicking
+  // removes it. Saving used to append picked packages to lines that already
+  // held them, so a package could be charged twice.
+  const selectedMenuPackageIds = (menuPackages ?? [])
+    .filter(p => lineDescriptions.has(packageLineDescription(p)))
+    .map(p => p.id);
   const toggleMenuPackage = (id: number) => {
-    setSelectedMenuPackageIds(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    );
+    const pkg = (menuPackages ?? []).find(p => p.id === id);
+    if (!pkg) return;
+    const description = packageLineDescription(pkg);
+    if (lineDescriptions.has(description)) {
+      setLineItems(prev => prev.filter(li => li.description !== description));
+    } else {
+      addPricingLine(description, covers || 1, pkg.pricePerHead ? Number(pkg.pricePerHead) : 0);
+    }
   };
-
-  const selectedPackages = (menuPackages ?? []).filter(p => selectedMenuPackageIds.includes(p.id));
   // Retired packages stay on file for past events but aren't offered.
   const offeredPackages = (menuPackages ?? []).filter(p => p.isActive || selectedMenuPackageIds.includes(p.id));
+  // Proposals saved before the fix can hold a package twice.
+  const doubledPackages = duplicatePackageLines(lineItems);
+  // Packages are priced per head: keep their quantity on the guest count, as
+  // the old save step did.
+  useEffect(() => {
+    if (!covers) return;
+    setLineItems(prev => prev.some(li => isPackageLine(li.description) && li.qty !== covers)
+      ? prev.map(li => isPackageLine(li.description) ? { ...li, qty: covers, total: covers * Number(li.unitPrice) } : li)
+      : prev);
+  }, [covers]);
   const PACKAGE_GROUPS = [
     { type: 'food', label: 'FOOD PACKAGES', icon: UtensilsCrossed, text: 'text-primary', on: 'border-primary bg-primary/5', hover: 'hover:border-primary/40' },
     { type: 'beverages', label: 'BEVERAGES PACKAGES', icon: Wine, text: 'text-sage-green', on: 'border-sage-green bg-sage-tint/50', hover: 'hover:border-sage-green/40' },
@@ -358,14 +378,8 @@ export default function ProposalBuilder() {
   /** Save the proposal (create the first time, update after). Returns the saved row, or null. */
   const handleSave = async (opts: { quiet?: boolean } = {}): Promise<any | null> => {
     if (!leadId) { toast.error("No enquiry selected"); return null; }
-    // Build enriched line items: include selected menu packages as line items
-    const menuLineItems = selectedPackages.map(pkg => ({
-      description: `${pkg.type === 'food' ? '🍽 Food Package' : pkg.type === 'beverages' ? '🍷 Beverages Package' : '🍽🍷 Food & Beverages Package'}: ${pkg.name}`,
-      qty: guestCount ? parseInt(guestCount) : 1,
-      unitPrice: pkg.pricePerHead ? Number(pkg.pricePerHead) : 0,
-      total: pkg.pricePerHead ? Number(pkg.pricePerHead) * (guestCount ? parseInt(guestCount) : 1) : 0,
-    }));
-    const allLineItems = [...lineItems, ...menuLineItems];
+    // Picked packages are already pricing lines (see toggleMenuPackage).
+    const allLineItems = lineItems;
     const allSubtotal = allLineItems.reduce((s, i) => s + i.total, 0);
     const allTax = (allSubtotal * taxPercent) / 100;
     const allTotal = allSubtotal + allTax;
@@ -663,6 +677,20 @@ export default function ProposalBuilder() {
               <div className="col-span-1" />
             </div>
 
+            {doubledPackages.length > 0 && (
+              <div role="alert" className="mb-4 border-2 border-red-700 bg-red-50 p-3 space-y-2">
+                <p className="font-dm text-sm text-red-900">
+                  <b>{doubledPackages.map(d => packageNameFromLine(d.description)).join(" and ")}</b>{" "}
+                  {doubledPackages.length === 1 ? "is" : "are"} on this proposal twice, so the total is too high. An earlier bug caused this; it's fixed now.
+                  {(status === "accepted") && " The client has already accepted this total, so check with them before you change it."}
+                </p>
+                <button type="button" onClick={() => setLineItems(prev => withoutDuplicatePackageLines(prev))}
+                  className="bg-red-800 text-white font-dm text-sm font-semibold px-3 py-2 hover:bg-red-900">
+                  Remove the extra {doubledPackages.reduce((n, d) => n + d.extra, 0) === 1 ? "line" : "lines"}
+                </button>
+                <span className="font-dm text-xs text-red-900 ml-2">Then save.</span>
+              </div>
+            )}
             <div className="space-y-2 mb-4">
               {lineItems.map((item, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center">
