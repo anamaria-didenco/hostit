@@ -55,6 +55,7 @@ import { parseTaskRules, describeTaskRule, newTaskRuleId, BOOKED_STATUSES, FUNCT
 import { DEFAULT_FORM_SUCCESS_MESSAGE, DEFAULT_LEAD_FORM_SUBTITLE, DEFAULT_AUTO_REPLY_INTRO } from "@shared/enquiryCopy";
 import { FollowUpDateControl } from "@/components/FollowUpDateControl";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
+import { formatEventDate } from "@shared/eventDate";
 import BeoPreviewOverlay from "@/components/BeoPreviewOverlay";
 import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
@@ -3537,7 +3538,7 @@ export default function Dashboard() {
                                 <div className="w-1 min-h-[32px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: getStatusInfo(e.status).swatch }} aria-hidden="true" />
                                 <div className="flex-1 min-w-0">
                                   <div className="font-serif text-sm font-semibold text-foreground truncate tracking-[-0.01em]">{e.firstName} {e.lastName}</div>
-                                  <div className="font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(e.status).label}{' · '}{new Date(e.eventDate).toLocaleDateString('en-NZ', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
+                                  <div className="font-sans text-xs text-muted-foreground [font-variant-numeric:tabular-nums_lining-nums]">{getStatusInfo(e.status).label}{' · '}{formatEventDate(e.eventDate, { weekday: 'short', day: 'numeric', month: 'short' })}{fmtEventTime(e.eventDate) ? ` · ${fmtEventTime(e.eventDate)}` : ''}{e.guestCount ? ` · ${e.guestCount}` : ''}</div>
                                 </div>
                               </button>
                             );

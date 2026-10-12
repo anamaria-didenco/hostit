@@ -104,7 +104,7 @@ function buildHtml(plan: any): string {
   const { width, height, elements } = normalizeCanvasData(plan.canvasData);
   const totalSeats = elements.reduce((s: number, el: any) => s + (el.seats ?? 0), 0);
   const tableCount = elements.filter((el: any) => el.type.includes("table")).length;
-  const today = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" });
+  const today = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric", timeZone: "Pacific/Auckland" });
 
   const svgElements = (elements as any[]).map(elementToSvg).join("\n");
 
