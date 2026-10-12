@@ -21,7 +21,6 @@ import { upsertUser, pingDb } from "../db";
 import { ENV } from "./env";
 import { getSessionCookieOptions } from "./cookies";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { handleGithubWebhook } from "../githubWebhook";
 import { handleNbiWebhook } from "../nbiWebhook";
 import { startEnquiryReportScheduler } from "../enquiryReport";
 import { startXeroSyncScheduler } from "../xeroSync";
@@ -76,33 +75,48 @@ async function runMigrations() {
         .split('--> statement-breakpoint')
         .map(s => s.trim())
         .filter(Boolean);
-      let success = true;
-      for (const stmt of statements) {
-        try {
-          await pool.query(stmt);
-        } catch (err: any) {
-          const code = err?.code;
-          if (code && benignCodes.has(code)) {
-            // Object already exists from an earlier out-of-band schema
-            // creation — safe to treat as no-op and continue.
-            console.log(`[DB] ${entry.tag}: object already exists, skipping statement (code ${code})`);
-          } else {
-            success = false;
-            console.error(`[DB] migration ${entry.tag} FAILED on statement:`, stmt.slice(0, 120), err?.message);
-            break;
+      // All or nothing: a migration runs in one transaction, so a failure
+      // can't leave the schema half-changed. Each statement gets a savepoint
+      // so an "already exists" error (from a DB set up out-of-band) can be
+      // skipped without aborting the transaction.
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const stmt of statements) {
+          await client.query('SAVEPOINT vf_stmt');
+          try {
+            await client.query(stmt);
+            await client.query('RELEASE SAVEPOINT vf_stmt');
+          } catch (err: any) {
+            const code = err?.code;
+            if (code && benignCodes.has(code)) {
+              await client.query('ROLLBACK TO SAVEPOINT vf_stmt');
+              await client.query('RELEASE SAVEPOINT vf_stmt');
+              console.log(`[DB] ${entry.tag}: object already exists, skipping statement (code ${code})`);
+            } else {
+              throw Object.assign(new Error(`migration ${entry.tag} failed: ${err?.message}`), { statement: stmt.slice(0, 200), cause: err });
+            }
           }
         }
-      }
-      if (success) {
-        await pool.query(
+        await client.query(
           `INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ($1, $2)`,
           [hash, entry.when],
         );
+        await client.query('COMMIT');
         console.log(`[DB] applied migration ${entry.tag}`);
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
       }
     }
-  } catch (err) {
-    console.error('[DB] migration runner crashed (non-fatal):', err);
+  } catch (err: any) {
+    // Stop here. Later migrations may depend on this one, and serving a
+    // half-migrated schema corrupts data quietly. On Render a failed boot
+    // fails the deploy and the previous version keeps serving.
+    console.error('[DB] migration failed — not starting:', err?.message, err?.statement ?? '');
+    throw err;
   } finally {
     await pool.end();
   }
@@ -167,11 +181,6 @@ async function startServer() {
   });
 
   const server = createServer(app);
-  // GitHub webhook — must capture raw body BEFORE json middleware for HMAC verification
-  app.post("/api/webhook/github", express.raw({ type: "application/json" }), (req, res) => {
-    try { req.body = JSON.parse((req.body as Buffer).toString()); } catch { req.body = {}; }
-    handleGithubWebhook(req, res);
-  });
 
   // Deep health check — actually pings the DB, so Render marks the instance
   // unhealthy (and restarts / stops routing to it) when Postgres is down,
@@ -493,6 +502,17 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      // Unexpected failures used to leave no trace at all. Expected outcomes
+      // (bad input, not found, not allowed) aren't errors worth logging.
+      onError({ error, path, type, ctx }) {
+        if (["BAD_REQUEST", "NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN", "CONFLICT", "PRECONDITION_FAILED", "TOO_MANY_REQUESTS"].includes(error.code)) return;
+        console.error(JSON.stringify({
+          level: "error", source: "trpc", path, type, code: error.code,
+          ownerId: (ctx as any)?.user?.id ?? null,
+          message: error.message,
+          stack: (error.cause as any)?.stack ?? error.stack,
+        }));
+      },
     })
   );
   // development mode uses Vite, production mode uses static files
