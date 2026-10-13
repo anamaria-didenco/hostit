@@ -45,6 +45,7 @@ export type RunSheetData = {
     total?: string;
     totalNote?: string;
     deposit?: { label: string; amount: string };
+    minimum?: { label: string; amount: string };
     balance?: { label: string; amount: string };
     /** How the event is billed: one line per step, plain text. */
     howBilled: { title: string; body: string; status?: string }[];
@@ -144,11 +145,12 @@ function billingSection(b: NonNullable<RunSheetData["billing"]>): string {
   if (b.note?.length) {
     rows.push(`<div class="row top"><div class="lbl">Note</div><div class="entry">${b.note.map(n => `<div>${esc(n)}</div>`).join("")}</div></div>`);
   }
-  const hasSummary = b.total || b.deposit || b.balance;
+  const hasSummary = b.total || b.deposit || b.minimum || b.balance;
   if (b.lines.length || hasSummary) {
     const left = b.lines.map(l => `<div class="bill-line"><b>${esc(l.label)}</b><span class="d">${esc(l.detail ?? "")}</span><b class="amt">${esc(l.amount)}</b></div>`).join("");
     const sum = [
       b.total ? `<div class="sum-row"><span>Total${b.totalNote ? ` <small>${esc(b.totalNote)}</small>` : ""}</span><b>${esc(b.total)}</b></div>` : "",
+      b.minimum ? `<div class="sum-row"><span>${esc(b.minimum.label)}</span><b>${esc(b.minimum.amount)}</b></div>` : "",
       b.deposit ? `<div class="sum-row"><span>${esc(b.deposit.label)}</span><b>${esc(b.deposit.amount)}</b></div>` : "",
       b.balance ? `<div class="balance"><span>${esc(b.balance.label)}</span><b>${esc(b.balance.amount)}</b></div>` : "",
     ].join("");
@@ -228,7 +230,7 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
 .notes-row .lbl{padding-top:8px}
 .notes-text{font-size:13px;line-height:24px;color:var(--vf-ink-2);padding-top:2px}
 .notes-lines{height:48px;background:repeating-linear-gradient(to bottom,transparent 0 23px,var(--vf-line-2) 23px 24px)}
-.band{display:grid;grid-template-columns:40px 1fr}
+.band{display:grid;grid-template-columns:40px 1fr;min-height:84px}
 .rail{background:var(--role);color:#fff;display:flex;align-items:center;justify-content:center}
 .rail span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:.24em;font-weight:800;text-transform:uppercase}
 .rail.sm span{font-size:12px;letter-spacing:.16em}
@@ -276,7 +278,7 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
 .sum-row{display:flex;justify-content:space-between;align-items:baseline;color:var(--vf-gray)}
 .sum-row small{font-size:11px}
 .sum-row b{font-family:var(--font-display);font-size:15px;color:var(--vf-ink)}
-.balance{display:flex;justify-content:space-between;align-items:baseline;background:var(--vf-blue-deep);color:#fff;padding:4px 10px;border-radius:3px;font-weight:700;margin-top:2px;white-space:nowrap}
+.balance{display:flex;justify-content:space-between;align-items:baseline;gap:12px;background:var(--vf-blue-deep);color:#fff;padding:4px 10px;border-radius:3px;font-weight:700;margin-top:2px;white-space:nowrap}
 .balance b{font-family:var(--font-display);font-size:16px}
 .cont-head{position:absolute;left:36px;right:36px;top:30px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--vf-blue-deep);padding-bottom:6px}
 .cont-head .n{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--vf-ink)}

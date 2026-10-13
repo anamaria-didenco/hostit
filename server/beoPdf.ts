@@ -1955,7 +1955,10 @@ ${sheetsHtml}
           const it = (healedTimeline as any[]).find(x => re.test(tlTitle(x)));
           if (it) return fmt12(it.time) || undefined;
         }
-        return undefined;
+        // Any other course (Lunch, Morning Tea, Cheese…): a step that names it.
+        const key = plainKey(name);
+        const named = key ? (healedTimeline as any[]).find(x => plainKey(tlTitle(x)).includes(key)) : null;
+        return named ? fmt12(named.time) || undefined : undefined;
       };
       // "Grazing table, $1,000 set amount" → Grazing table + a $1,000 table tag.
       const pkgOf = (name: string): { name: string; pkg?: string } => {
@@ -1972,7 +1975,9 @@ ${sheetsHtml}
         else if (f.fromMenu && !desc && / \(([^)]+)\)$/.test(name)) { const i = name.lastIndexOf(" ("); desc = name.slice(i + 1); name = name.slice(0, i); }
         const pk = pkgOf(name);
         const q = shared ? 0 : dishQty(f);
-        return { qty: q > 0 ? q : undefined, name: pk.name, pkg: pk.pkg, desc: desc || undefined, was: f.previousDishName || undefined };
+        // Chef's prep and plating notes ride with the dish.
+        const detail = [desc, f.prepNotes, f.platingNotes].map(x => String(x ?? "").trim()).filter(Boolean).join(" · ");
+        return { qty: q > 0 ? q : undefined, name: pk.name, pkg: pk.pkg, desc: detail || undefined, was: f.previousDishName || undefined };
       };
       const courseEntry = (name: string, items: any[]) => {
         const allSh = items.length > 0 && items.every(sharedFood);
@@ -2007,10 +2012,25 @@ ${sheetsHtml}
           const lines = body.split(/\n+/).map(l => l.trim()).filter(Boolean);
           return lines.length ? [{ name: String(pkg.name), items: lines.map(l => ({ name: l })) }] : [];
         });
+      // The F&B line that just names a package ("Shared Franco") is replaced
+      // by that package's courses above, not printed twice.
+      const expanded = new Set(linkedMenus
+        .filter(pkg => !printedNames.has(String(pkg.name ?? "").trim().toLowerCase()))
+        .map(pkg => String(pkg.name ?? "").trim().toLowerCase()));
+      const coursesShown = linkedCourses.length
+        ? courses.map(c => ({ ...c, items: c.items.filter(d => !expanded.has(d.name.trim().toLowerCase())) })).filter(c => c.items.length)
+        : courses;
       const kitchen: RunSheetData["kitchen"] = {
         dietary,
         serviceNote: (!hideSet.has("food") && sharedDetected) ? `Shared to the table${Number(guestCount) > 0 ? ` · for ${guestCount} guests` : ""}` : undefined,
-        courses: [...courses, ...linkedCourses],
+        courses: [
+          ...coursesShown, ...linkedCourses,
+          // F&B rows filed under "Kitchen — prep & production".
+          ...(hideSet.has("kitchen") ? [] : orderFoodCourses(kitchenGrouped).map(course => {
+            const c = courseEntry(course, kitchenGrouped[course] ?? []);
+            return { ...c, note: ["Prep", c.note].filter(Boolean).join(" · ") };
+          })),
+        ],
         notes: hideSet.has("kitchen") ? [] : String(kitchenNotesText).split(/\n+/).map((l: string) => l.trim()).filter(Boolean),
       };
 
@@ -2026,8 +2046,12 @@ ${sheetsHtml}
       // "Running totals" / "Financials" hide the money, never the client's
       // contact; Financials also hides how the event is billed.
       const hideMoney = noFinancials || hideSet.has("totals");
+      const bookingTotalNum = Number(booking.totalNzd ?? 0) || 0;
+      const contractTotal = Math.max(bookingTotalNum, minSpendAmt, totalInclGst);
+      const contractBasis = contractTotal <= 0 || (contractTotal === totalInclGst && totalInclGst > 0) ? ""
+        : contractTotal === minSpendAmt ? "minimum spend" : "booking total";
       const billingFull: NonNullable<RunSheetData["billing"]> = {
-        client: { name: clientName, phone: leadPhone || undefined, email: leadEmail || undefined },
+        client: { name: clientName, phone: leadPhone || (booking as any).phone || undefined, email: leadEmail || undefined },
         howBilled: noFinancials ? [] : eventBillingSteps({
           depositRequired: (booking as any).depositRequired, depositAmount: depAmt, depositPaid: booking.depositPaid,
           billingFood: termsFood, billingDrinks: termsDrinks, billingDepositApplied: termsDeposit, billingNote: termsNote,
@@ -2052,16 +2076,24 @@ ${sheetsHtml}
           label: booking.depositPaid ? (depositOffThisBill ? "Deposit paid" : "Deposit paid · off the drinks bill") : "Deposit due",
           amount: depositOffThisBill ? `− ${money0(depAmt)}` : money0(depAmt),
         } : undefined,
-        balance: totalInclGst > 0 ? {
+        // What staff collect is owed on the contract: the larger of the
+        // booking total, the minimum spend and what's itemised — the same
+        // basis as the runsheet's Balance to collect. Drinks are billed
+        // separately (see How it's billed).
+        // The figure the balance is worked from is marked "applies".
+        minimum: contractBasis === "booking total"
+          ? { label: "Booking total · applies", amount: money0(bookingTotalNum) }
+          : minSpendAmt > 0 ? { label: `Minimum spend${contractBasis === "minimum spend" ? " · applies" : ""}`, amount: money0(minSpendAmt) } : undefined,
+        balance: contractTotal > 0 ? {
           label: "Balance to collect",
-          amount: money0(Math.round(Math.max(0, totalInclGst - (depositOffThisBill ? depAmt : 0)) * 100) / 100),
+          amount: money0(Math.round(Math.max(0, contractTotal - (depositOffThisBill ? depAmt : 0)) * 100) / 100),
         } : undefined,
         // The footer note (thank-you, payment terms) — once, unless it only
         // repeats the billing notes.
         note: (hideSet.has("footer") || noteAlreadyInBilling) ? [] : plainLines(footerNote),
       };
       const billing: RunSheetData["billing"] = hideMoney
-        ? { ...billingFull, lines: [], total: undefined, totalNote: undefined, deposit: undefined, balance: undefined }
+        ? { ...billingFull, lines: [], total: undefined, totalNote: undefined, deposit: undefined, minimum: undefined, balance: undefined }
         : billingFull;
 
       runSheetHtml = renderRunSheetHtml({
