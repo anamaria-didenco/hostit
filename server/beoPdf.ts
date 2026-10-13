@@ -2068,6 +2068,10 @@ ${sheetsHtml}
           billingFood: termsFood, billingDrinks: termsDrinks, billingDepositApplied: termsDeposit, billingNote: termsNote,
           foodStatus: (booking as any).foodStatus, drinksStatus: (booking as any).drinksStatus,
           barOption: barOpt ?? null,
+          // With the Bar band hidden, the tab limit and bar notes travel in
+          // the billing steps instead (never both, so nothing prints twice).
+          tabAmount: hideSet.has("drinks") ? barTabVal : null,
+          barNotes: hideSet.has("drinks") ? barNotesText : null,
           paymentNotes: hideSet.has("payment") ? null : paymentNotesTxt,
         }).map(st => ({ title: st.title, body: [st.body, ...(st.lines ?? [])].join(" "), status: st.status?.label })),
         lines: [
