@@ -150,7 +150,7 @@ function billingSection(b: NonNullable<RunSheetData["billing"]>): string {
   }
   const hasSummary = b.total || b.deposit || b.minimum || b.balance;
   if (b.lines.length || hasSummary) {
-    const left = b.lines.map(l => `<div class="bill-line"><b>${esc(l.label)}</b><span class="d">${esc(l.detail ?? "")}</span><b class="amt">${esc(l.amount)}</b></div>`).join("");
+    const left = b.lines.map(l => `<div class="bill-line"><b class="l">${esc(l.label)}</b><span class="d">${esc(l.detail ?? "")}</span><b class="amt">${esc(l.amount)}</b></div>`).join("");
     const sum = [
       b.total ? `<div class="sum-row"><span>Total${b.totalNote ? ` <small>${esc(b.totalNote)}</small>` : ""}</span><b>${esc(b.total)}</b></div>` : "",
       b.minimum ? `<div class="sum-row"><span>${esc(b.minimum.label)}</span><b>${esc(b.minimum.amount)}</b></div>` : "",
@@ -273,16 +273,21 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
 .dish .was{font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--vf-red);text-transform:uppercase;margin-left:3px}
 .pours{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 14px;font-size:13px;line-height:1.5;font-weight:600;color:var(--vf-ink)}
 .pours div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.billing{display:grid;grid-template-columns:1.35fr 1fr;gap:22px;align-items:start}
-.bill-line{display:flex;align-items:baseline;gap:7px;white-space:nowrap;border-bottom:1px dotted var(--vf-line-2);font-size:13px;line-height:1.5}
-.bill-line b{color:var(--vf-ink);flex:none}
-.bill-line .d{color:var(--vf-gray);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.bill-line .amt{font-family:var(--font-display);font-size:14px}
+/* minmax(0,…): a long line name must wrap inside its column, never widen it
+   and push the totals off the sheet. */
+.billing{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:22px;align-items:start}
+.bill-line{display:flex;align-items:baseline;gap:7px;border-bottom:1px dotted var(--vf-line-2);font-size:13px;line-height:1.5}
+.bill-line b{color:var(--vf-ink)}
+.bill-line .l{flex:0 1 auto;min-width:0}
+.bill-line .d{color:var(--vf-gray);flex:none;white-space:nowrap}
+.bill-line .amt{flex:none;margin-left:auto;white-space:nowrap;font-family:var(--font-display);font-size:14px}
 .sum{display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.5}
-.sum-row{display:flex;justify-content:space-between;align-items:baseline;color:var(--vf-gray)}
+.sum-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;color:var(--vf-gray)}
+.sum-row b{flex:none;white-space:nowrap}
 .sum-row small{font-size:11px}
 .sum-row b{font-family:var(--font-display);font-size:15px;color:var(--vf-ink)}
-.balance{display:flex;justify-content:space-between;align-items:baseline;gap:12px;background:var(--vf-blue-deep);color:#fff;padding:4px 10px;border-radius:3px;font-weight:700;margin-top:2px;white-space:nowrap}
+.balance{display:flex;justify-content:space-between;align-items:baseline;gap:12px;background:var(--vf-blue-deep);color:#fff;padding:4px 10px;border-radius:3px;font-weight:700;margin-top:2px}
+.balance b{flex:none;white-space:nowrap}
 .balance b{font-family:var(--font-display);font-size:16px}
 .cont-head{position:absolute;left:36px;right:36px;top:30px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--vf-blue-deep);padding-bottom:6px}
 .cont-head .n{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--vf-ink)}
