@@ -644,6 +644,12 @@ export default function LeadForm() {
   const postToParent = (msg: Record<string, unknown>) => {
     try { window.parent?.postMessage({ ...msg, frameId }, paramParentOrigin); } catch { /* no parent / cross-origin */ }
   };
+  // Messages that carry an enquiry (submitted, partial) only ever go to the
+  // parent's exact origin — never "*". Unknown parent → not sent at all.
+  const postEnquiryToParent = (msg: Record<string, unknown>) => {
+    if (!parentOrigin) return;
+    try { window.parent?.postMessage({ ...msg, frameId }, parentOrigin); } catch { /* no parent */ }
+  };
   // Embed styling overrides, derived from URL params only, so the scoped-style
   // effect below can run before the venue data has loaded. Validate a hex param
   // (3–8 hex digits) → "#rrggbb", else null.
@@ -923,11 +929,16 @@ export default function LeadForm() {
   // complete — firstName + email are always required by then. Without this,
   // everyone who taps an ad, gets as far as typing their name and email, then
   // bails on the event questions, simply vanishes: no record, no follow-up.
+  // Enquiries already announced as partial, so each is sent once at most.
+  const partialPostedRef = useRef<Set<number>>(new Set());
   const startCapture = trpc.leads.startCapture.useMutation({
     onSuccess: (data) => {
       setCapturedLeadId(data.leadId);
       setCapturedLeadToken(data.leadToken);
-      postToParent({ type: 'vf-partial-captured' });
+      if (data.leadId && !partialPostedRef.current.has(data.leadId)) {
+        partialPostedRef.current.add(data.leadId);
+        postEnquiryToParent({ type: 'vf-partial-captured', enquiryId: data.leadId, budgetRange: form.budgetRange || null });
+      }
     },
     // No error toast — this is a background nicety. If it fails, submit()
     // just falls back to a normal insert; the visitor never sees a hiccup.
@@ -953,19 +964,16 @@ export default function LeadForm() {
       // without them.
       if (parentOrigin) {
         const toVenueSite = isVenueSiteOrigin(parentOrigin, (venue as any)?.website);
-        try {
-          window.parent?.postMessage({
-            type: "vf-enquiry-submitted",
-            frameId,
-            enquiryId: data?.id ?? null,
-            eventType: form.eventType || null,
-            guestCount: form.guestCount ? parseInt(form.guestCount) : null,
-            budgetRange: form.budgetRange || null,
-            eventFormat: form.eventFormat || null,
-            source: clickAttribution.utmSource || (isEmbed ? "embed" : "web"),
-            ...(toVenueSite ? { email: (form.email ?? "").trim() || null, phone: (form.phone ?? "").trim() || null } : {}),
-          }, parentOrigin);
-        } catch { /* no parent */ }
+        postEnquiryToParent({
+          type: "vf-enquiry-submitted",
+          enquiryId: data?.id ?? null,
+          eventType: form.eventType || null,
+          guestCount: form.guestCount ? parseInt(form.guestCount) : null,
+          budgetRange: form.budgetRange || null,
+          eventFormat: form.eventFormat || null,
+          source: clickAttribution.utmSource || (isEmbed ? "embed" : "web"),
+          ...(toVenueSite ? { email: (form.email ?? "").trim() || null, phone: (form.phone ?? "").trim() || null } : {}),
+        });
       }
       // ── Optional thank-you redirect (?redirect=…) ───────────────────────
       // Full-page mode only (navigating inside the iframe helps nobody). To
@@ -1714,8 +1722,9 @@ export default function LeadForm() {
                   <button type="button" disabled={!detailsValid} onClick={() => {
                     // Autosave a contactable lead the moment we have a name
                     // + email — once per visit, so going Back then Next
-                    // again doesn't create a second partial row.
-                    if (!capturedLeadId && venue?.ownerId) {
+                    // again doesn't create a second partial row (nor while
+                    // the first save is still on its way).
+                    if (!capturedLeadId && !startCapture.isPending && venue?.ownerId) {
                       startCapture.mutate({
                         ownerId: venue.ownerId,
                         firstName: (form.firstName ?? '').trim(),
