@@ -52,6 +52,16 @@ describe("BEO run sheet (6a)", () => {
     expect(html).not.toContain(`Breakdown`);
   });
 
+  it("flags an unconfirmed event and shows step durations", () => {
+    const d = base();
+    d.event.notFinal = true;
+    d.floor = { rows: [{ kind: "step", time: "12:30 PM", duration: "45 min", title: "Lunch service" }], remember: [] };
+    const html = renderRunSheetHtml(d, { title: "t" });
+    expect(html).toContain(`<b class="not-final">Not final</b>`);
+    expect(html).toContain(`<div class="lbl-time">12:30 PM</div><div class="lbl-sub">45 min</div>`);
+    expect(renderRunSheetHtml(base(), { title: "t" })).not.toContain(`class="not-final"`);
+  });
+
   it("escapes what people type, including into the page script", () => {
     const d = base();
     d.event.name = `Ana's <b>party</b></script><script>alert(1)</script>`;

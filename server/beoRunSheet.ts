@@ -12,7 +12,7 @@
  */
 
 export type RunSheetFloorRow =
-  | { kind: "step" | "check"; time?: string; title: string; detail?: string; who?: string }
+  | { kind: "step" | "check"; time?: string; duration?: string; title: string; detail?: string; who?: string }
   | { kind: "setup"; time?: string; lines: { title?: string; detail?: string }[]; writeLines?: number };
 
 export type RunSheetDish = {
@@ -27,7 +27,7 @@ export type RunSheetDish = {
 };
 
 export type RunSheetData = {
-  event: { name: string; dateLabel: string; dateLong: string; time: string; room: string; guests: string };
+  event: { name: string; dateLabel: string; dateLong: string; time: string; room: string; guests: string; notFinal?: boolean };
   /** Typed notes and set-up, printed above the ruled write-in lines. */
   notes: string[];
   floor: { rows: RunSheetFloorRow[]; remember: { title: string; detail?: string }[] } | null;
@@ -78,7 +78,9 @@ function floorSection(floor: NonNullable<RunSheetData["floor"]>): string {
       return `<div class="row top"><div>${r.time ? `<div class="lbl-time">${esc(r.time)}</div>` : ""}<div class="lbl lbl-blue">Setup</div></div><div class="entry">${lines}${write}</div></div>`;
     }
     const who = r.who ? ` <span class="who">${esc(r.who)}</span>` : "";
-    const timeCell = r.time ? `<div class="lbl-time">${esc(r.time)}</div>` : `<div></div>`;
+    const timeCell = r.time || r.duration
+      ? `<div>${r.time ? `<div class="lbl-time">${esc(r.time)}</div>` : ""}${r.duration ? `<div class="lbl-sub">${esc(r.duration)}</div>` : ""}</div>`
+      : `<div></div>`;
     if (r.kind === "check") {
       return `<div class="row center">${timeCell}<div class="entry tick-row">${tick()}<span>${lead(r.title, r.detail)}${who}</span></div></div>`;
     }
@@ -179,7 +181,7 @@ export function renderRunSheetHtml(data: RunSheetData, opts: RunSheetOptions): s
     `<div class="fact${i === facts.length - 1 ? " last" : ""}"><div class="fact-lbl">${l}</div><div class="fact-val${fig ? " fig" : ""}">${esc(v)}</div></div>`).join("");
   const notesText = data.notes.length ? `<div class="notes-text">${data.notes.map(n => `<div>${esc(n)}</div>`).join("")}</div>` : "";
   const sections = [
-    `<section class="sec event" data-sec="event"><div class="event-head"><div class="event-name"><span>${esc(e.name)}</span></div>${factsHtml}</div><div class="notes-row"><div class="lbl">Notes &amp; set up</div><div>${notesText}<div class="notes-lines" id="notesLines"></div></div></div></section>`,
+    `<section class="sec event" data-sec="event"><div class="event-head"><div class="event-name"><span>${esc(e.name)}</span>${e.notFinal ? `<b class="not-final">Not final</b>` : ""}</div>${factsHtml}</div><div class="notes-row"><div class="lbl">Notes &amp; set up</div><div>${notesText}<div class="notes-lines" id="notesLines"></div></div></div></section>`,
     data.floor && (data.floor.rows.length || data.floor.remember.length) ? floorSection(data.floor) : "",
     data.kitchen && (data.kitchen.dietary.length || data.kitchen.courses.length || data.kitchen.notes.length) ? kitchenSection(data.kitchen) : "",
     data.bar && (data.bar.tab || data.bar.tabDetail || data.bar.pours.length) ? barSection(data.bar) : "",
@@ -220,7 +222,8 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
 .event{padding:2px 14px 6px}
 .event-head{display:flex;align-items:stretch;padding:8px 0 7px;border-bottom:2px solid var(--vf-blue-deep)}
 .event-name{flex:1;min-width:0;display:flex;align-items:center;padding-right:14px}
-.event-name span{font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--vf-blue-deep);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.event-name span{min-width:0;font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--vf-blue-deep);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.not-final{flex:none;margin-left:10px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--vf-gray);padding:3px 7px;border-radius:3px}
 .fact{flex:none;padding:0 12px;border-left:1px solid var(--vf-line-2)}
 .fact.last{padding:0 0 0 12px}
 .fact-lbl{font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--vf-green);text-transform:uppercase;line-height:1.3}

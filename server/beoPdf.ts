@@ -1921,6 +1921,7 @@ ${sheetsHtml}
           floorRows.push({
             kind: /^(rain call|wet weather|check|confirm)\b/i.test(title) ? "check" : "step",
             time: fmt12(it.time) || undefined, title,
+            duration: Number(it.duration) > 0 ? `${Number(it.duration)} min` : undefined,
             detail: it.description ? String(it.description) : undefined,
             who: it.assignedTo ? String(it.assignedTo) : undefined,
           });
@@ -1997,7 +1998,7 @@ ${sheetsHtml}
         .filter(pkg => !printedNames.has(String(pkg.name ?? "").trim().toLowerCase()))
         .flatMap(pkg => {
           const setMenu = SET_MENUS.find(m => m.name.toLowerCase() === String(pkg.name ?? "").trim().toLowerCase());
-          const body = setMenu ? setMenuCoursesText(setMenu) : String(pkg.chefNotes ?? "").trim();
+          const body = setMenu ? setMenuCoursesText(setMenu) : (String(pkg.chefNotes ?? "").trim() || String(pkg.description ?? "").trim());
           const parsed = body && countMenuHeadings(body) >= 2 ? parseMenuBlob(body) : [];
           const shared = isSharedMenu(pkg.name, pkg.description);
           const cs = parsed.filter(c => c.label !== "Menu" || parsed.length === 1);
@@ -2103,6 +2104,8 @@ ${sheetsHtml}
           time: timeRange !== "—" ? timeRange : "",
           room: roomLabel,
           guests: guestCount ? String(guestCount) : "",
+          // Anything not confirmed (tentative, enquiry) is flagged "Not final".
+          notFinal: !["confirmed", "finished"].includes(String(booking.status ?? "").toLowerCase()),
         },
         notes: hideSet.has("notes") ? [] : [rsNotes, bookingNotes].filter(Boolean).flatMap(plainLines),
         floor: { rows: floorRows, remember },
