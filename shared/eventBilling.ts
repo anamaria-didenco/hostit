@@ -61,7 +61,9 @@ export function isFoodBeverageCost(ci: CostLineInput): boolean {
  * bill the client twice for one grazing table.
  */
 export function fnbFoodLines(fnb: FnbLineInput[], costItems: CostLineInput[]): FnbLineInput[] {
-  const costLabels = new Set((costItems ?? []).map(ci => normBillName(ci.label)).filter(Boolean));
+  // Only a BILLED cost line (food/beverage) can stand in for a food line;
+  // matching an unbilled one ("Other", AV…) would drop the charge entirely.
+  const costLabels = new Set((costItems ?? []).filter(isFoodBeverageCost).map(ci => normBillName(ci.label)).filter(Boolean));
   return (Array.isArray(fnb) ? fnb : []).filter(
     i =>
       i.section === "foh" &&

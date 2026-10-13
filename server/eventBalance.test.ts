@@ -25,6 +25,15 @@ describe("eventBalance (run sheet and runsheet screen)", () => {
     expect(eventBalance({ ...base, depositApplied: "total", depositPaid: false })).toMatchObject({ balance: 5000 });
   });
 
+  it("keeps a food line whose name matches only an unbilled cost line", () => {
+    const b = eventBalance({
+      fnb: [{ section: "foh", course: "Main", dishName: "Grazing table", qty: 1, unitPrice: 1000 }],
+      costItems: [{ label: "Grazing table", qty: 1, unitPrice: 300, category: "Other" }],
+      gstInclusive: true,
+    });
+    expect(b.itemisedInclGst).toBe(1000);
+  });
+
   it("counts food/beverage cost lines, not drinks rows or other costs", () => {
     const b = eventBalance({
       fnb: [...fnb, { section: "foh", course: "Drinks", dishName: "Prosecco", qty: 10, unitPrice: 60 }],
