@@ -23,6 +23,7 @@ describe("BEO: shared set menus", () => {
     expect(parseMenuBlob("ANTIPASTO\nBurrata\nSECONDI\nPorchetta").map(c => c.label)).toEqual(["Entrée", "Main"]);
     expect(parseMenuBlob("Antipasto: Burrata\nMains — Porchetta").map(c => [c.label, c.dishes[0].name])).toEqual([["Entrée", "Burrata"], ["Main", "Porchetta"]]);
     expect(parseMenuBlob("Entrée to share Burrata\nDessert\nTiramisu").map(c => [c.label, c.note])).toEqual([["Entrée", "To share"], ["Dessert", ""]]);
+    expect(parseMenuBlob("Starters\nBurrata\nMain Course\nPorchetta\nMain Course: Fish").map(c => [c.label, c.dishes.map(d => d.name)])).toEqual([["Entrée", ["Burrata"]], ["Main", ["Porchetta"]], ["Main", ["Fish"]]]);
   });
 
   it("knows which food is shared", () => {

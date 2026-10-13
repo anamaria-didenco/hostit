@@ -210,7 +210,10 @@ const MENU_COURSE_MAP: { kw: string; label: string }[] = [
   { kw: "cheeses?", label: "Cheese" },
 ];
 const MENU_HEADING_WORDS = MENU_COURSE_MAP.map(c => c.kw).join("|");
-const menuStartRe = (kw: string) => new RegExp("^(?:" + kw + ")\\b", "i");
+// Longest alternative first, so "Main Course" matches as a whole heading
+// rather than stopping at "Main".
+const longestFirst = (kw: string) => kw.split("|").sort((a, b) => b.length - a.length).join("|");
+const menuStartRe = (kw: string) => new RegExp("^(?:" + longestFirst(kw) + ")\\b", "i");
 const menuAnywhereRe = (kw: string) => new RegExp("(?:^|[\\s\\n])(?:" + kw + ")\\b", "i");
 const CONNECTOR_RE = /^(to share|to start|shared|for the table|served shared)\b[\s—\-:·,]*/i;
 
@@ -1369,9 +1372,12 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         // and "what the whole line is worth".
         const unit = (f.unitPrice === null || f.unitPrice === undefined || f.unitPrice === "") ? null : Number(f.unitPrice);
         const hasPrice = unit !== null && !isNaN(unit) && unit > 0;
-        const lineTotal = hasPrice ? unit * (q > 0 ? q : 1) : 0;
+        // Shared food hides its count from the kitchen, but the price still
+        // follows what was ordered (3 platters at $1,000 is $3,000).
+        const priceQty = q > 0 ? q : (Number(f.qty) > 0 ? Number(f.qty) : 1);
+        const lineTotal = hasPrice ? unit * priceQty : 0;
         const priceHtml = (showItemPrice && hasPrice)
-          ? `<span class="dish-price"><b>${fmtCurrency(lineTotal)}</b>${q > 1 ? `<span class="ea">${fmtCurrency(unit)} ea</span>` : ""}</span>`
+          ? `<span class="dish-price"><b>${fmtCurrency(lineTotal)}</b>${priceQty > 1 ? `<span class="ea">${fmtCurrency(unit)} ea</span>` : ""}</span>`
           : "";
         return `<div class="dish-row" style="display:flex;gap:10px;padding:3px 0;line-height:1.3;align-items:baseline;border-top:1px solid var(--hair)">${qHtml}<span style="flex:1;min-width:0"><span style="font-size:14px;font-weight:700;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` <span style="font-size:12.5px;color:var(--gray)">&mdash; ${escHtml(f.description)}</span>` : ""}</span>${priceHtml}</div>`;
       };
