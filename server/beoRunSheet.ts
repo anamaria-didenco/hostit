@@ -332,13 +332,26 @@ ${sections}
       var cells = row.children;
       if (cells.length < 2) return false;
       var cell = cells[1], items = slice(cell.children);
-      if (items.length < 2) return false;
-      var top = row.getBoundingClientRect().top, n = 0;
-      while (n < items.length && items[n].getBoundingClientRect().bottom - top + 6 <= limit) n++;
-      if (n === 0 || n === items.length) return false;
+      var top = row.getBoundingClientRect().top;
+      var fits = function (el) { return el.getBoundingClientRect().bottom - top + 6 <= limit; };
+      var n = 0;
+      while (n < items.length && fits(items[n])) n++;
       var rest = row.cloneNode(false), restCell = cell.cloneNode(false);
       rest.appendChild(cells[0].cloneNode(true));
-      items.slice(n).forEach(function (it) { restCell.appendChild(it); });
+      if (n === 0 && items.length && items[0].children.length >= 2) {
+        // One level deeper (the Billing breakdown keeps its lines inside
+        // a column): split that block's lines, the other blocks follow.
+        var inner = slice(items[0].children), m = 0;
+        while (m < inner.length && fits(inner[m])) m++;
+        if (m === 0 || m === inner.length) return false;
+        var restBlock = items[0].cloneNode(false);
+        inner.slice(m).forEach(function (it) { restBlock.appendChild(it); });
+        restCell.appendChild(restBlock);
+        items.slice(1).forEach(function (it) { restCell.appendChild(it); });
+      } else {
+        if (n === 0 || n === items.length) return false;
+        items.slice(n).forEach(function (it) { restCell.appendChild(it); });
+      }
       rest.appendChild(restCell);
       row.parentNode.insertBefore(rest, row.nextSibling);
       return true;
