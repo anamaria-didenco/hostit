@@ -23,6 +23,7 @@ import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { PrintWeekModal } from "@/components/PrintWeekModal";
+import { useDayTitles, DayTitleText, DayTitleAddButton, DayTitleModal, ymdLocal as ymdLocalD } from "@/components/DayTitle";
 import { Spinner } from "@/components/ui/spinner";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
@@ -1699,6 +1700,11 @@ export default function Dashboard() {
     { year: adjPrevMonthDate.getFullYear(), month: adjPrevMonthDate.getMonth() + 1 },
     { enabled: !!user?.id && calendarView === 'week' }
   );
+  // Titles for days, not events ("Robbie Williams concert day"). Staff see
+  // them; only the venue's own logins can add or change them.
+  const dayTitles = useDayTitles(calDate, !!user?.id);
+  const [editingDayTitle, setEditingDayTitle] = React.useState<string | null>(null);
+  const editDayTitle = isStaff ? undefined : (dateStr: string) => setEditingDayTitle(dateStr);
 
 
   // ── Widget layout preferences ──────────────────────────────────────────
@@ -3177,6 +3183,10 @@ export default function Dashboard() {
                                     isToday ? 'w-7 h-7 bg-primary text-primary-foreground font-semibold rounded-full inline-flex items-center justify-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-primary font-semibold' : 'text-foreground/70 font-medium'
                                   }`}>{day}</span>
                                   {!isOverflow && (
+                                    <span className="flex items-center">
+                                    {editDayTitle && !dayTitles.get(dateStr) && (
+                                      <DayTitleAddButton dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
+                                    )}
                                     <button
                                       onClick={() => { setQuickCreateDate(dateStr); setQuickCreateForm({ firstName: '', lastName: '', eventType: '', eventTime: '', guestCount: '', notes: '', status: 'new', spaceName: '' }); }}
                                       className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity p-1.5 hover:bg-linen rounded focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-forest"
@@ -3184,8 +3194,10 @@ export default function Dashboard() {
                                       title="Add event">
                                       <Plus className="w-3 h-3 text-forest" />
                                     </button>
+                                    </span>
                                   )}
                                 </div>
+                                <DayTitleText title={dayTitles.get(dateStr)} onEdit={editDayTitle ? () => editDayTitle(dateStr) : undefined} className="mb-0.5" />
                                 {dayBookings.slice(0, 2).map((b: any) => (
                                   <button key={b.id}
                                     draggable
@@ -5179,7 +5191,7 @@ export default function Dashboard() {
                         return (
                           <div key={di}
                             aria-current={isToday ? "date" : undefined}
-                            className={`border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
+                            className={`group border-r border-border/40 last:border-r-0 p-1 flex flex-col gap-0.5 ${
                             isOverflow ? 'bg-[#f4efe6]/40' : isWeekend ? 'bg-[#f4efe6]/60' : 'bg-card'
                           } ${dragOverDate === dateStr ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
                             onDragOver={!isOverflow ? (e) => { e.preventDefault(); setDragOverDate(dateStr); } : undefined}
@@ -5188,9 +5200,15 @@ export default function Dashboard() {
                               e.preventDefault(); setDragOverDate(null);
                               try { const data = JSON.parse(e.dataTransfer.getData('application/json')); handleEventDrop(data, dateStr); } catch {}
                             } : undefined}>
+                            <div className="flex items-center justify-between">
                             <span aria-hidden={isOverflow ? true : undefined} className={`font-serif text-sm leading-none mb-0.5 self-start [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em] ${
                               isToday ? 'bg-primary text-primary-foreground font-semibold rounded-full w-6 h-6 inline-grid place-items-center' : isOverflow ? 'text-muted-foreground font-medium' : isWeekend ? 'text-foreground/70 font-semibold' : 'text-foreground/80 font-medium'
                             }`}>{day}</span>
+                            {editDayTitle && !isOverflow && !dayTitles.get(dateStr) && (
+                              <DayTitleAddButton dateLabel={new Date(cellYear, cellMonth, day).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} onClick={() => editDayTitle(dateStr)} />
+                            )}
+                            </div>
+                            <DayTitleText title={dayTitles.get(dateStr)} onEdit={editDayTitle ? () => editDayTitle(dateStr) : undefined} className="mb-0.5" />
                             {/* Space-split stripe — one coloured segment per distinct space
                                 booked that day (bookings + live leads), widths proportional
                                 to the event count. So a day with 1 bar event and 1 restaurant
@@ -5318,7 +5336,9 @@ export default function Dashboard() {
                       ...((monthLeadEvents ?? []).filter(Boolean) as any[]).filter((l: any) => !bookedLeadIds.has(l.id) && l.status !== 'lost').map((l: any) => ({ ...l, _kind: 'lead' as const })),
                     ].filter(e => e.eventDate)
                       .sort((a: any, b: any) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
-                    if (allEvents.length === 0) {
+                    const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}-`;
+                    const titledDays = Array.from(dayTitles.keys()).filter(k => k.startsWith(monthPrefix));
+                    if (allEvents.length === 0 && titledDays.length === 0) {
                       return (
                         <div className="border border-dashed border-gold/30 p-8 text-center bg-white">
                           <Calendar className="w-8 h-8 text-sage/40 mx-auto mb-2" />
@@ -5334,8 +5354,10 @@ export default function Dashboard() {
                       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
                       (grouped[key] ||= []).push(e);
                     });
+                    // A titled day shows even with no events on it.
+                    titledDays.forEach(k => { grouped[k] ||= []; });
                     const todayKey = (() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })();
-                    return Object.entries(grouped).map(([key, events]) => {
+                    return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([key, events]) => {
                       const d = new Date(key + 'T00:00:00');
                       const isToday = key === todayKey;
                       return (
@@ -5347,6 +5369,9 @@ export default function Dashboard() {
                             </div>
                             <div className={`text-[10px] font-dm ${isToday ? 'opacity-80' : 'text-ink/65'}`}>{events.length} event{events.length !== 1 ? 's' : ''}</div>
                           </div>
+                          {dayTitles.get(key) && (
+                            <div className="px-3 pt-1.5 pb-1"><DayTitleText title={dayTitles.get(key)} onEdit={editDayTitle ? () => editDayTitle(key) : undefined} className="!text-xs" /></div>
+                          )}
                           <div className="divide-y divide-gold/10">
                             {events.map((e: any) => (
                               <button key={`${e._kind}-${e.id}`}
@@ -5692,6 +5717,9 @@ export default function Dashboard() {
                           }`}>
                             {d.getDate()}
                           </div>
+                          {dayTitles.get(ymdLocalD(d)) && (
+                            <div className="px-1 mt-0.5"><DayTitleText title={dayTitles.get(ymdLocalD(d))} className="text-center" /></div>
+                          )}
                         </button>
                       );
                     })}
@@ -5793,6 +5821,11 @@ export default function Dashboard() {
                           {calDate.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' })}
                         </div>
                         {isToday && <div className="font-bebas tracking-widest text-[10px] text-forest mt-0.5">TODAY</div>}
+                        {dayTitles.get(ds) ? (
+                          <DayTitleText title={dayTitles.get(ds)} onEdit={editDayTitle ? () => editDayTitle(ds) : undefined} className="!text-sm mt-1" />
+                        ) : editDayTitle ? (
+                          <button onClick={() => editDayTitle(ds)} className="mt-1 font-dm text-xs text-[#7a5a12] hover:underline min-h-[32px]">+ Add a title for this day</button>
+                        ) : null}
                       </div>
                       <div className="ml-auto flex items-center gap-3">
                         <div className="text-right">
@@ -11268,6 +11301,7 @@ export default function Dashboard() {
 
       {/* ── Weekly Staff Runsheets Modal ───────────────────────────────────── */}
       <PrintWeekModal open={showPrintWeek} onClose={() => setShowPrintWeek(false)} initialDate={calDate} />
+      <DayTitleModal date={editingDayTitle} current={editingDayTitle ? dayTitles.get(editingDayTitle) : undefined} onClose={() => setEditingDayTitle(null)} />
       {showWeeklyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
           <div role="dialog" aria-modal="true" className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>

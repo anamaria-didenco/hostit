@@ -1091,6 +1091,21 @@ export const dataUpdates = pgTable("data_updates", {
   ownerKeyUnique: uniqueIndex("data_updates_owner_key_idx").on(t.ownerId, t.key),
 }));
 
+// ─── Day titles ───────────────────────────────────────────────────────────────
+// A name for a calendar DAY rather than an event ("Robbie Williams concert
+// day", "Christmas Eve"), shown under the date. One per venue per date.
+export const dayNotes = pgTable("day_notes", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  /** The calendar date, YYYY-MM-DD — a day, not an instant, so no time zone. */
+  date: varchar("date", { length: 10 }).notNull(),
+  title: varchar("title", { length: 120 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+}, (t) => ({
+  ownerDateUnique: uniqueIndex("day_notes_owner_date_idx").on(t.ownerId, t.date),
+}));
+
 // ─── Contracts ────────────────────────────────────────────────────────────────
 export const contracts = pgTable("contracts", {
   id: serial("id").primaryKey(),

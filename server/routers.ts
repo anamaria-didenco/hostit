@@ -2274,6 +2274,46 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
   }),
 
   // ─── Bookings ──────────────────────────────────────────────────────────────
+  // Titles for calendar DAYS, not events ("Robbie Williams concert day").
+  dayNotes: router({
+    list: protectedProcedure
+      .input(z.object({
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { dayNotes } = await import('../drizzle/schema');
+        const { eq, and, gte, lte } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) return [];
+        return db.select({ date: dayNotes.date, title: dayNotes.title }).from(dayNotes)
+          .where(and(eq(dayNotes.ownerId, ctx.user.id), gte(dayNotes.date, input.from), lte(dayNotes.date, input.to)))
+          .orderBy(dayNotes.date);
+      }),
+    /** Set a day's title; an empty title removes it. */
+    set: protectedProcedure
+      .input(z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        title: z.string().max(120),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { dayNotes } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const title = input.title.replace(/\s+/g, ' ').trim();
+        if (!title) {
+          await db.delete(dayNotes).where(and(eq(dayNotes.ownerId, ctx.user.id), eq(dayNotes.date, input.date)));
+          return { date: input.date, title: null };
+        }
+        await db.insert(dayNotes).values({ ownerId: ctx.user.id, date: input.date, title })
+          .onConflictDoUpdate({ target: [dayNotes.ownerId, dayNotes.date], set: { title, updatedAt: new Date() } });
+        return { date: input.date, title };
+      }),
+  }),
+
   bookings: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return getBookings(ctx.user.id);

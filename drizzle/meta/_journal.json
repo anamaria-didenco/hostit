@@ -588,6 +588,13 @@
       "when": 1779801512083,
       "tag": "0083_custom_billing_terms",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1779801512084,
+      "tag": "0084_day_titles",
+      "breakpoints": true
     }
   ]
 }
