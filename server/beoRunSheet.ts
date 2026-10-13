@@ -287,15 +287,12 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
 .cont-head .n{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--vf-ink)}
 .cont-head .m{font-size:12px;font-weight:600;color:var(--vf-gray)}
 .foot{position:absolute;left:36px;right:36px;bottom:22px;display:flex;justify-content:space-between;font-size:11px;color:var(--vf-gray);font-weight:600;padding-top:7px;border-top:1px solid var(--vf-line)}
-/* A section taller than a page on its own breaks between its rows. */
-.sec.tall .row{break-inside:avoid;page-break-inside:avoid}
 @page{size:A4;margin:0}
 @media print{
   html,body{background:none}.stage{padding:0;transform:none!important;width:auto!important;margin-left:0!important}
   #fitbox{height:auto!important;overflow:visible!important}
   .sheet{width:210mm;height:297mm;margin:0;box-shadow:none;break-after:page}
   .sheet:last-child{break-after:auto}
-  .sheet.tall{height:auto;min-height:297mm;overflow:visible}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
@@ -312,23 +309,59 @@ ${sections}
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function paginate() {
     var measure = document.getElementById('measure'), stage = document.getElementById('stage');
-    var secs = Array.prototype.slice.call(measure.querySelectorAll('.sec'));
     var notes = document.getElementById('notesLines');
     notes.style.height = LINES_MIN + 'px';
-    var hs = secs.map(function (s) { return s.getBoundingClientRect().height; });
     var cap = function (p, padB) { return H - PAD_T - padB - (p > 0 ? CONT : 0); };
-    var allocate = function (padB) {
+    // Edge case: a band taller than a whole page (a 70-step timeline) is the
+    // only thing ever split, and only between its rows: it starts in the
+    // space left on the current page and continues on the next, each piece
+    // a section of its own, so every printed page keeps its header, footer
+    // and the right "Page n of N".
+    var slice = function (l) { return Array.prototype.slice.call(l); };
+    var hOf = function (n) { return n.getBoundingClientRect().height; };
+    var maxH = cap(1, PAD_B_MULTI);
+    var oversized = slice(measure.querySelectorAll('.sec')).some(function (s) { return hOf(s) > maxH; });
+    function splitBand(sec, limit) {
+      var body = sec.querySelector('.band-body');
+      if (!body) return null;
+      var rows = slice(body.children);
+      if (rows.length < 2) return null;
+      var rowH = rows.map(hOf);
+      var overhead = hOf(sec) - rowH.reduce(function (x, y) { return x + y; }, 0);
+      var used = 0, n = 0;
+      while (n < rows.length && used + rowH[n] <= limit - overhead) { used += rowH[n]; n++; }
+      if (n === 0 || n === rows.length) return null;
+      var piece = sec.cloneNode(false);
+      piece.appendChild(sec.querySelector('.rail').cloneNode(true));
+      var b = body.cloneNode(false);
+      rows.slice(0, n).forEach(function (r) { b.appendChild(r); });
+      piece.appendChild(b);
+      sec.parentNode.insertBefore(piece, sec);
+      return piece;
+    }
+    var allocate = function (padB, split) {
       var pages = [{ items: [], used: 0 }];
-      secs.forEach(function (s, i) {
-        var pg = pages[pages.length - 1];
-        var need = (pg.items.length ? GAP : 0) + hs[i];
-        if (pg.items.length && pg.used + need > cap(pages.length - 1, padB)) { pg = { items: [], used: 0 }; pages.push(pg); }
-        pg.used += (pg.items.length ? GAP : 0) + hs[i]; pg.items.push(s);
-      });
-      return pages;
+      var queue = slice(measure.querySelectorAll('.sec'));
+      for (var i = 0; i < queue.length; i++) {
+        var s = queue[i], pg = pages[pages.length - 1], h = hOf(s);
+        var gap = pg.items.length ? GAP : 0;
+        var room = cap(pages.length - 1, padB) - pg.used - gap;
+        if (split && h > room && h > maxH && s.classList.contains('band')) {
+          if (room < 120 && pg.items.length) { pages.push({ items: [], used: 0 }); i--; continue; }
+          var piece = splitBand(s, room);
+          if (piece) { pg.used += gap + hOf(piece); pg.items.push(piece); pages.push({ items: [], used: 0 }); i--; continue; }
+        }
+        if (pg.items.length && pg.used + gap + h > cap(pages.length - 1, padB)) { pg = { items: [], used: 0 }; pages.push(pg); gap = 0; }
+        pg.used += gap + h; pg.items.push(s);
+      }
+      return pages.filter(function (pg) { return pg.items.length; });
     };
-    var padB = PAD_B_SINGLE, pages = allocate(padB);
-    if (pages.length > 1) { padB = PAD_B_MULTI; pages = allocate(padB); }
+    var padB, pages;
+    if (oversized) { padB = PAD_B_MULTI; pages = allocate(padB, true); }
+    else {
+      padB = PAD_B_SINGLE; pages = allocate(padB, false);
+      if (pages.length > 1) { padB = PAD_B_MULTI; pages = allocate(padB, false); }
+    }
     var leftover = Math.max(0, Math.floor(cap(0, padB) - pages[0].used));
     if (pages[0].items.indexOf(notes.closest('.sec')) !== -1) notes.style.height = (LINES_MIN + leftover) + 'px';
     stage.innerHTML = '';
@@ -336,9 +369,6 @@ ${sections}
       var sheet = el('div', 'sheet'), content = el('div', 'content');
       content.style.top = (PAD_T + (p > 0 ? CONT : 0)) + 'px';
       pg.items.forEach(function (s) { content.appendChild(s); });
-      // Edge case: one section taller than a page. Let that sheet grow and
-      // break between rows instead of clipping.
-      if (pg.used > cap(p, padB)) { sheet.className += ' tall'; sheet.style.height = 'auto'; content.style.position = 'relative'; pg.items.forEach(function (s) { s.className += ' tall'; }); }
       sheet.appendChild(content);
       if (pages.length > 1) {
         if (p > 0) {
