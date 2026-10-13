@@ -48,7 +48,7 @@ import {
   depositComesOffDrinks,
   billingStageLabel,
 } from "@shared/billingTerms";
-import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost } from "@shared/eventBilling";
+import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost, eventBalance } from "@shared/eventBilling";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
 import { isSharedMenu, SET_MENUS, setMenuCoursesText } from "@shared/eventMenus2026";
 import { eventBillingSteps } from "@shared/nowNext";
@@ -2058,9 +2058,12 @@ ${sheetsHtml}
       // contact; Financials also hides how the event is billed.
       const hideMoney = noFinancials || hideSet.has("totals");
       const bookingTotalNum = Number(booking.totalNzd ?? 0) || 0;
-      const contractTotal = Math.max(bookingTotalNum, minSpendAmt, totalInclGst);
-      const contractBasis = contractTotal <= 0 || (contractTotal === totalInclGst && totalInclGst > 0) ? ""
-        : contractTotal === minSpendAmt ? "minimum spend" : "booking total";
+      // Same rule as the runsheet screen (shared/eventBilling): no bar tab.
+      const bal = eventBalance({
+        fnb: fnbList as any, costItems: costList, gstInclusive: gstInclusiveFlag,
+        bookingTotal: bookingTotalNum, minimumSpend: minSpendAmt,
+        depositAmount: depAmt, depositPaid: booking.depositPaid, depositApplied: termsDeposit,
+      });
       const billingFull: NonNullable<RunSheetData["billing"]> = {
         client: { name: clientName, phone: leadPhone || (booking as any).phone || undefined, email: leadEmail || undefined },
         howBilled: noFinancials ? [] : eventBillingSteps({
@@ -2085,24 +2088,21 @@ ${sheetsHtml}
             amount: money0(lineAmt(ci)),
           })),
         ],
-        total: totalInclGst > 0 ? money0(Math.round(totalInclGst * 100) / 100) : undefined,
-        totalNote: totalInclGst > 0 ? "incl. GST" : undefined,
+        total: bal.itemisedInclGst > 0 ? money0(Math.round(bal.itemisedInclGst * 100) / 100) : undefined,
+        totalNote: bal.itemisedInclGst > 0 ? "incl. GST" : undefined,
         deposit: depAmt > 0 ? {
-          label: booking.depositPaid ? (depositOffThisBill ? "Deposit paid" : "Deposit paid · off the drinks bill") : "Deposit due",
-          amount: depositOffThisBill ? `− ${money0(depAmt)}` : money0(depAmt),
+          label: booking.depositPaid ? (bal.depositOffThisBill ? "Deposit paid" : "Deposit paid · off the drinks bill") : "Deposit due",
+          amount: bal.depositOffThisBill ? `− ${money0(depAmt)}` : money0(depAmt),
         } : undefined,
         // What staff collect is owed on the contract: the larger of the
         // booking total, the minimum spend and what's itemised — the same
         // basis as the runsheet's Balance to collect. Drinks are billed
         // separately (see How it's billed).
         // The figure the balance is worked from is marked "applies".
-        minimum: contractBasis === "booking total"
+        minimum: bal.basis === "booking total"
           ? { label: "Booking total · applies", amount: money0(bookingTotalNum) }
-          : minSpendAmt > 0 ? { label: `Minimum spend${contractBasis === "minimum spend" ? " · applies" : ""}`, amount: money0(minSpendAmt) } : undefined,
-        balance: contractTotal > 0 ? {
-          label: "Balance to collect",
-          amount: money0(Math.round(Math.max(0, contractTotal - (depositOffThisBill ? depAmt : 0)) * 100) / 100),
-        } : undefined,
+          : minSpendAmt > 0 ? { label: `Minimum spend${bal.basis === "minimum spend" ? " · applies" : ""}`, amount: money0(minSpendAmt) } : undefined,
+        balance: bal.contractTotal > 0 ? { label: "Balance to collect", amount: money0(bal.balance) } : undefined,
         // The footer note (thank-you, payment terms) — once, unless it only
         // repeats the billing notes.
         note: (hideSet.has("footer") || noteAlreadyInBilling) ? [] : plainLines(footerNote),

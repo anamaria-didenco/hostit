@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { RichTextarea } from "@/components/ui/RichTextarea";
 import { beoUrl, downloadBeo } from "@/lib/beoUrl";
 import { DRINK_GROUPS, DRINK_GROUP_LABEL, drinkGroupOf, groupDrinks } from "@shared/drinkGroups";
+import { eventBalance } from "@shared/eventBilling";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import {
   Plus, Trash2, ArrowLeft, Printer, Clock, ChevronDown, ChevronUp, ChevronRight,
@@ -3161,24 +3162,18 @@ export default function RunsheetBuilder() {
               const dep = Number((booking as any).depositNzd ?? 0);
               const paid = !!(booking as any).depositPaid;
               if (!(dep > 0 || paid)) return null;
-              // Balance is based on the ACTUAL event total — F&B sheet + Costs-tab
-              // food/beverage items + bar tab — not just the minimum spend, so it
-              // reflects what's really been quoted. Falls back to the booking total
-              // or minimum spend when nothing's itemised yet.
-              const fnbFood = fnbItems
-                .filter(it => (it.course ?? '') !== 'Drinks')
-                .reduce((s, it) => s + Number(it.qty || 0) * Number(it.unitPrice ?? 0), 0);
-              const costFb = costItems
-                .filter(ci => (ci.category || '').toLowerCase().includes('food') || (ci.category || '').toLowerCase().includes('beverage'))
-                .reduce((s, ci) => s + Number(ci.qty) * Number(ci.unitPrice), 0);
-              const tab = rsTabAmount ? Number(rsTabAmount) : 0;
-              const actualTotal = fnbFood + costFb + tab;
-              const totalRef = Math.max(
-                Number((booking as any).totalNzd ?? 0),
-                Number((booking as any).minimumSpend ?? 0),
-                actualTotal,
-              );
-              const balance = totalRef > 0 ? Math.max(0, totalRef - (paid ? dep : 0)) : null;
+              // The same balance the run sheet PDF prints (shared/eventBilling):
+              // the larger of the booking total, minimum spend and the itemised
+              // F&B + costs (incl. GST). No bar tab — drinks are billed on
+              // consumption, on their own bill. The deposit comes off only when
+              // it's applied to food or the total; by default it comes off drinks.
+              const bal = eventBalance({
+                fnb: fnbItems as any, costItems, gstInclusive,
+                bookingTotal: (booking as any).totalNzd, minimumSpend: (booking as any).minimumSpend,
+                depositAmount: dep, depositPaid: paid, depositApplied: (booking as any).billingDepositApplied,
+              });
+              const totalRef = bal.contractTotal;
+              const balance = totalRef > 0 ? bal.balance : null;
               return (
                 <div className={`mt-4 px-4 py-3 rounded border ${paid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-300'}`}>
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
@@ -3191,16 +3186,12 @@ export default function RunsheetBuilder() {
                       // balance means something different depending on which did.
                       // Naming the basis is what stops this figure reading as a
                       // contradiction of the Costs total further down the page.
-                      const basis = totalRef === actualTotal && actualTotal > 0
-                        ? 'itemised F&B + costs + bar tab'
-                        : totalRef === Number((booking as any).minimumSpend ?? 0)
-                          ? 'minimum spend'
-                          : 'booking total';
+                      const basis = bal.basis || 'itemised F&B + costs, incl. GST';
                       return (
                         <div>
                           <div className="font-bebas tracking-widest text-[10px] text-ink/65">BALANCE TO COLLECT</div>
                           <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{currency(balance)}</div>
-                          <div className="font-dm text-[10px] text-ink/45 mt-0.5">of {currency(totalRef)} — {basis}</div>
+                          <div className="font-dm text-[10px] text-ink/45 mt-0.5">of {currency(totalRef)} — {basis}{paid && dep > 0 && !bal.depositOffThisBill ? ' · deposit comes off the drinks bill' : ''}</div>
                         </div>
                       );
                     })()}
