@@ -50,7 +50,9 @@ import {
 } from "@shared/billingTerms";
 import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost } from "@shared/eventBilling";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
-import { isSharedMenu } from "@shared/eventMenus2026";
+import { isSharedMenu, SET_MENUS, setMenuCoursesText } from "@shared/eventMenus2026";
+import { eventBillingSteps } from "@shared/nowNext";
+import { renderRunSheetHtml, type RunSheetData, type RunSheetDish, type RunSheetFloorRow } from "./beoRunSheet";
 
 const VENUE_AREA_LABELS: Record<string, string> = {
   bar: "Bar",
@@ -1882,6 +1884,253 @@ ${sheetsHtml}
 </body>
 </html>`;
 
+    // ── BEO run sheet, design 6a ─────────────────────────────────────────
+    // The team copy (downloads, the run sheet preview, the staff link and
+    // emailed briefings) is the one-page run sheet: Event & Notes, Floor,
+    // Kitchen, Bar, Billing. The client copy (to sign) and the public event
+    // pack keep the document above. Same data, same print-section toggles.
+    let runSheetHtml: string | null = null;
+    if (teamCopy) {
+      const money0 = (v: number) => `$${Number(v).toLocaleString("en-NZ", { minimumFractionDigits: Number.isInteger(Number(v)) ? 0 : 2, maximumFractionDigits: 2 })}`;
+      const dayKey = booking.eventDate ? eventDayKey(booking.eventDate, venueTz) : "";
+      const dayDate = dayKey ? new Date(`${dayKey}T00:00:00Z`) : null;
+      const fmtDay = (o: Intl.DateTimeFormatOptions) => dayDate ? new Intl.DateTimeFormat("en-NZ", { ...o, timeZone: "UTC" }).formatToParts(dayDate) : [];
+      const part = (ps: Intl.DateTimeFormatPart[], t: string) => ps.find(x => x.type === t)?.value ?? "";
+      const shortParts = fmtDay({ weekday: "short", day: "numeric", month: "short", year: "numeric" });
+      const longParts = fmtDay({ weekday: "short", day: "numeric", month: "long", year: "numeric" });
+      const dateLabel = dayDate ? `${part(shortParts, "weekday")} ${part(shortParts, "day")} ${part(shortParts, "month")}` : "";
+      const dateLong = dayDate ? `${part(longParts, "weekday")} ${part(longParts, "day")} ${part(longParts, "month")} ${part(longParts, "year")}` : "";
+      const plainLines = (htmlText: string) => htmlNotesToLines(htmlText).map(l => l.trim()).filter(Boolean);
+      const tlTitle = (it: any) => String(it.title ?? "").trim();
+
+      // Floor: set-up, then the run of the day.
+      const setupItem = healedTimeline.find((it: any) => /\bset ?-?up\b/i.test(tlTitle(it)));
+      const floorRows: RunSheetFloorRow[] = [];
+      const setupLines: { title?: string; detail?: string }[] = hideSet.has("setup") ? [] : [
+        ...(setupSummary ? [{ title: setupSummary }] : []),
+        ...plainLines(venueSetup).map(l => ({ detail: l })),
+      ];
+      if (setupLines.length) {
+        if (setupItem?.description) setupLines.push({ detail: String(setupItem.description) });
+        floorRows.push({
+          kind: "setup", time: setupItem ? fmt12(setupItem.time) : undefined, lines: setupLines, writeLines: 1,
+          duration: Number(setupItem?.duration) > 0 ? `${Number(setupItem.duration)} min` : undefined,
+          who: setupItem?.assignedTo ? String(setupItem.assignedTo) : undefined,
+        });
+      }
+      if (!hideSet.has("timeline")) {
+        for (const it of healedTimeline as any[]) {
+          if (setupLines.length && it === setupItem) continue;
+          const title = tlTitle(it) || "—";
+          floorRows.push({
+            kind: /^(rain call|wet weather|check|confirm)\b/i.test(title) ? "check" : "step",
+            time: fmt12(it.time) || undefined, title,
+            duration: Number(it.duration) > 0 ? `${Number(it.duration)} min` : undefined,
+            detail: it.description ? String(it.description) : undefined,
+            who: it.assignedTo ? String(it.assignedTo) : undefined,
+          });
+        }
+      }
+      // No event-level "remember" data yet (the runsheet contact is the
+      // client, not the venue), so the row only prints when there is some.
+      const remember: { title: string; detail?: string }[] = [];
+
+      // Kitchen: dietary first (severe in red), then each course.
+      const dietary = hideSet.has("dietary") ? [] : orderedDiet.map(d => ({
+        qty: Number(d.count) > 0 ? Number(d.count) : 1,
+        label: d.name,
+        detail: [d.notes, Array.isArray((d as any).names) && (d as any).names.length ? (d as any).names.join(", ") : ""].filter(Boolean).join(" · ") || undefined,
+        severe: isSevere(d),
+      }));
+      // Course names arrive as "Canapes"/"Entree" (F&B sheet) or "Canapés"/
+      // "Entrée" (parsed menus): compare without accents.
+      const plainKey = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      // Best match first: a step that names the course, then a looser one
+      // ("Guests arrive" for canapés — not "Photographer arrives").
+      const CANAPE_RE = [/canap/i, /guests? arriv|welcome/i];
+      const ENTREE_RE = [/entr[eé]e|starter|antipast/i];
+      const MAIN_RE = [/\bmains?\b/i];
+      const DESSERT_RE = [/dessert|dolc/i, /\bcake\b/i];
+      const COURSE_TIME_RE: Record<string, RegExp[]> = {
+        canapes: CANAPE_RE, entree: ENTREE_RE, entrees: ENTREE_RE,
+        main: MAIN_RE, mains: MAIN_RE, dessert: DESSERT_RE, desserts: DESSERT_RE,
+      };
+      const courseTime = (name: string) => {
+        for (const re of COURSE_TIME_RE[plainKey(name)] ?? []) {
+          const it = (healedTimeline as any[]).find(x => re.test(tlTitle(x)));
+          if (it) return fmt12(it.time) || undefined;
+        }
+        // Any other course (Lunch, Morning Tea, Cheese…): a step that names it.
+        const key = plainKey(name);
+        const named = key ? (healedTimeline as any[]).find(x => plainKey(tlTitle(x)).includes(key)) : null;
+        return named ? fmt12(named.time) || undefined : undefined;
+      };
+      // "Grazing table, $1,000 set amount" → Grazing table + a $1,000 table tag.
+      const pkgOf = (name: string): { name: string; pkg?: string } => {
+        const m = name.match(/^(.*?),\s*(\$[\d,]+(?:\.\d\d)?)\s+set amount$/i);
+        return m ? { name: m[1], pkg: `${m[2]} table` } : { name };
+      };
+      const toDish = (f: any): RunSheetDish => {
+        const shared = sharedFood(f);
+        let name = String(f.dishName ?? "").trim();
+        let desc = f.description ? String(f.description).trim() : "";
+        // A set-menu line reads "Antipasto misto, cured meats, …": the dish,
+        // then what's in it.
+        if (f.fromMenu && !desc && name.includes(", ")) { desc = name.slice(name.indexOf(", ") + 2); name = name.slice(0, name.indexOf(", ")); }
+        else if (f.fromMenu && !desc && / \(([^)]+)\)$/.test(name)) { const i = name.lastIndexOf(" ("); desc = name.slice(i + 1); name = name.slice(0, i); }
+        const pk = pkgOf(name);
+        const q = shared ? 0 : dishQty(f);
+        // Chef's prep and plating notes ride with the dish.
+        const detail = [desc, f.prepNotes, f.platingNotes].map(x => String(x ?? "").trim()).filter(Boolean).join(" · ");
+        return { qty: q > 0 ? q : undefined, name: pk.name, pkg: pk.pkg, desc: detail || undefined, was: f.previousDishName || undefined };
+      };
+      // The run of day names the course's time; failing that, the earliest
+      // service time entered against its dishes on the F&B sheet.
+      const enteredTime = (items: any[]) => {
+        const ts = items.map(i => String(i.serviceTime ?? "").trim()).filter(t => /^\d{1,2}:\d{2}/.test(t)).sort();
+        return ts.length ? fmt12(ts[0]) || undefined : undefined;
+      };
+      const courseEntry = (name: string, items: any[]) => {
+        const allSh = items.length > 0 && items.every(sharedFood);
+        return { name, time: courseTime(name) ?? enteredTime(items), note: allSh ? (/canap/i.test(name) ? "Passed" : "To share") : undefined, items: items.map(toDish) };
+      };
+      const courses = hideSet.has("food") ? [] : (embeddedMenu
+        ? [
+            ...menuCourses.map(c => courseEntry(c.label, c.dishes.map(d => ({ dishName: d.name, description: d.det, fromMenu: true })))),
+            ...orderFoodCourses(extraGrouped).map(course => courseEntry(course, extraGrouped[course] ?? [])),
+          ]
+        : foodCourses.map(course => courseEntry(course, foodGrouped[course] ?? [])));
+      // A menu package matched by dish name (e.g. the F&B sheet just says
+      // "Shared Franco") prints its own courses, so the kitchen knows what's
+      // in it. Skipped when that menu is already printed from its item.
+      const printedNames = new Set(menuBlobItems.map((i: any) => String(i.dishName ?? "").trim().toLowerCase()));
+      const linkedCourses = hideSet.has("food") ? [] : linkedMenus
+        .filter(pkg => !printedNames.has(String(pkg.name ?? "").trim().toLowerCase()))
+        .flatMap(pkg => {
+          const setMenu = SET_MENUS.find(m => m.name.toLowerCase() === String(pkg.name ?? "").trim().toLowerCase());
+          const body = setMenu ? setMenuCoursesText(setMenu) : (String(pkg.chefNotes ?? "").trim() || String(pkg.description ?? "").trim());
+          const parsed = body && countMenuHeadings(body) >= 2 ? parseMenuBlob(body) : [];
+          const shared = isSharedMenu(pkg.name, pkg.description);
+          const cs = parsed.filter(c => c.label !== "Menu" || parsed.length === 1);
+          if (cs.length) {
+            return cs.map(c => ({
+              name: c.label,
+              note: [pkg.name, shared ? (/canap/i.test(c.label) ? "Passed" : "To share") : ""].filter(Boolean).join(" · "),
+              time: courseTime(c.label),
+              items: c.dishes.map(d => { const x = toDish({ dishName: d.name, description: d.det, fromMenu: true }); return { ...x, qty: undefined }; }),
+            }));
+          }
+          const lines = body.split(/\n+/).map(l => l.trim()).filter(Boolean);
+          return lines.length ? [{ name: String(pkg.name), items: lines.map(l => ({ name: l })) }] : [];
+        });
+      // The F&B line that just names a package ("Shared Franco") is replaced
+      // by that package's courses above, not printed twice.
+      const expanded = new Set(linkedMenus
+        .filter(pkg => !printedNames.has(String(pkg.name ?? "").trim().toLowerCase()))
+        .map(pkg => String(pkg.name ?? "").trim().toLowerCase()));
+      const coursesShown = linkedCourses.length
+        ? courses.map(c => ({ ...c, items: c.items.filter(d => !expanded.has(d.name.trim().toLowerCase())) })).filter(c => c.items.length)
+        : courses;
+      const kitchen: RunSheetData["kitchen"] = {
+        dietary,
+        serviceNote: (!hideSet.has("food") && sharedDetected) ? `Shared to the table${Number(guestCount) > 0 ? ` · for ${guestCount} guests` : ""}` : undefined,
+        courses: [
+          ...coursesShown, ...linkedCourses,
+          // F&B rows filed under "Kitchen — prep & production".
+          ...(hideSet.has("kitchen") ? [] : orderFoodCourses(kitchenGrouped).map(course => {
+            const c = courseEntry(course, kitchenGrouped[course] ?? []);
+            return { ...c, note: ["Prep", c.note].filter(Boolean).join(" · ") };
+          })),
+        ],
+        notes: hideSet.has("kitchen") ? [] : String(kitchenNotesText).split(/\n+/).map((l: string) => l.trim()).filter(Boolean),
+      };
+
+      // Bar: the tab and what's poured (names only).
+      const tabNum = Number(barTabVal ?? 0) || 0;
+      const bar: RunSheetData["bar"] = hideSet.has("drinks") ? null : {
+        tab: tabNum > 0 ? money0(tabNum) : undefined,
+        tabDetail: [barTagLabel, barNotesText.trim()].filter(Boolean).join(". ") || undefined,
+        pours: bevItems2.map(d => d.name).filter(Boolean),
+      };
+
+      // Billing: client, how it's billed, then the money.
+      // "Running totals" / "Financials" hide the money, never the client's
+      // contact; Financials also hides how the event is billed.
+      const hideMoney = noFinancials || hideSet.has("totals");
+      const bookingTotalNum = Number(booking.totalNzd ?? 0) || 0;
+      const contractTotal = Math.max(bookingTotalNum, minSpendAmt, totalInclGst);
+      const contractBasis = contractTotal <= 0 || (contractTotal === totalInclGst && totalInclGst > 0) ? ""
+        : contractTotal === minSpendAmt ? "minimum spend" : "booking total";
+      const billingFull: NonNullable<RunSheetData["billing"]> = {
+        client: { name: clientName, phone: leadPhone || (booking as any).phone || undefined, email: leadEmail || undefined },
+        howBilled: noFinancials ? [] : eventBillingSteps({
+          depositRequired: (booking as any).depositRequired, depositAmount: depAmt, depositPaid: booking.depositPaid,
+          billingFood: termsFood, billingDrinks: termsDrinks, billingDepositApplied: termsDeposit, billingNote: termsNote,
+          foodStatus: (booking as any).foodStatus, drinksStatus: (booking as any).drinksStatus,
+          barOption: barOpt ?? null,
+          // With the Bar band hidden, the tab limit and bar notes travel in
+          // the billing steps instead (never both, so nothing prints twice).
+          tabAmount: hideSet.has("drinks") ? barTabVal : null,
+          barNotes: hideSet.has("drinks") ? barNotesText : null,
+          paymentNotes: hideSet.has("payment") ? null : paymentNotesTxt,
+        }).map(st => ({ title: st.title, body: [st.body, ...(st.lines ?? [])].join(" "), status: st.status?.label })),
+        lines: [
+          ...fnbFoodLines.map((i: any) => {
+            const pk = pkgOf(String(i.dishName ?? "Item"));
+            return { label: `${Number(i.qty) || 1}× ${pk.name}`, detail: `${money0(Number(i.unitPrice) || 0)} each`, amount: money0((Number(i.qty) || 0) * (Number(i.unitPrice) || 0)) };
+          }),
+          ...billCostList.filter(ci => (ci.label ?? "").toString().trim() || lineAmt(ci) > 0).map(ci => ({
+            label: String(ci.label ?? "Item"),
+            detail: Number(ci.qty) > 1 ? `${Number(ci.qty)} × ${money0(Number(ci.unitPrice) || 0)}` : undefined,
+            amount: money0(lineAmt(ci)),
+          })),
+        ],
+        total: totalInclGst > 0 ? money0(Math.round(totalInclGst * 100) / 100) : undefined,
+        totalNote: totalInclGst > 0 ? "incl. GST" : undefined,
+        deposit: depAmt > 0 ? {
+          label: booking.depositPaid ? (depositOffThisBill ? "Deposit paid" : "Deposit paid · off the drinks bill") : "Deposit due",
+          amount: depositOffThisBill ? `− ${money0(depAmt)}` : money0(depAmt),
+        } : undefined,
+        // What staff collect is owed on the contract: the larger of the
+        // booking total, the minimum spend and what's itemised — the same
+        // basis as the runsheet's Balance to collect. Drinks are billed
+        // separately (see How it's billed).
+        // The figure the balance is worked from is marked "applies".
+        minimum: contractBasis === "booking total"
+          ? { label: "Booking total · applies", amount: money0(bookingTotalNum) }
+          : minSpendAmt > 0 ? { label: `Minimum spend${contractBasis === "minimum spend" ? " · applies" : ""}`, amount: money0(minSpendAmt) } : undefined,
+        balance: contractTotal > 0 ? {
+          label: "Balance to collect",
+          amount: money0(Math.round(Math.max(0, contractTotal - (depositOffThisBill ? depAmt : 0)) * 100) / 100),
+        } : undefined,
+        // The footer note (thank-you, payment terms) — once, unless it only
+        // repeats the billing notes.
+        note: (hideSet.has("footer") || noteAlreadyInBilling) ? [] : plainLines(footerNote),
+      };
+      const billing: RunSheetData["billing"] = hideMoney
+        ? { ...billingFull, lines: [], total: undefined, totalNote: undefined, deposit: undefined, minimum: undefined, balance: undefined }
+        : billingFull;
+
+      runSheetHtml = renderRunSheetHtml({
+        event: {
+          name: String((runsheet as any)?.title ?? "").trim() || [clientName, eventType].filter(Boolean).join(" · "),
+          dateLabel, dateLong,
+          time: timeRange !== "—" ? timeRange : "",
+          room: roomLabel,
+          guests: guestCount ? String(guestCount) : "",
+          // Anything not confirmed (tentative, enquiry) is flagged "Not final".
+          notFinal: !["confirmed", "finished"].includes(String(booking.status ?? "").toLowerCase()),
+        },
+        notes: hideSet.has("notes") ? [] : [rsNotes, bookingNotes].filter(Boolean).flatMap(plainLines),
+        floor: { rows: floorRows, remember },
+        kitchen, bar, billing,
+      }, {
+        title: `BEO #${booking.id} · ${venueName} · ${clientName}`,
+        accent: brandAccent, serif: fontPair.serif, sans: fontPair.sans, fontLink: fontPair.link,
+      });
+    }
+
+
     // ── Live in-app / staff HTML preview ─────────────────────────────
     // The "Preview & Print BEO" modal (auth) and the live staff link (staff)
     // load this exact HTML in an iframe (?format=html), so the on-screen view
@@ -1890,7 +2139,7 @@ ${sheetsHtml}
     if ((mode === "auth" || mode === "staff") && String((req.query.format as string) || "").toLowerCase() === "html") {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-store");
-      return res.send(html);
+      return res.send(runSheetHtml ?? html);
     }
 
     let browser: any;
@@ -1913,12 +2162,12 @@ ${sheetsHtml}
         return res.status(503).type("text/plain").send("The PDF maker isn't available right now. Open the printable page instead, or try again in a minute.");
       }
       res.setHeader("Content-Type", "text/html");
-      return res.send(html);
+      return res.send(runSheetHtml ?? html);
     }
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
+      await page.setContent(runSheetHtml ?? html, { waitUntil: "networkidle0" });
       // Continuous-flow layout: content condenses onto as few A4 pages as it
       // needs. Repeating page margins inset every physical page; the cream
       // bleeds to the edge via the propagated page background (printBackground).
@@ -1929,7 +2178,15 @@ ${sheetsHtml}
         `<span style="font-weight:700;color:${brandAccent}">${footerBiz}</span>` +
         `<span>Printed ${todayPrinted} &middot; Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>` +
         `</div>`;
-      const pdf = await page.pdf({
+      // The run sheet lays out its own A4 pages (and footer) in the browser:
+      // wait for it, then print each sheet edge to edge at 100%.
+      if (runSheetHtml) await page.waitForFunction("window.__vfRunSheetReady === true", { timeout: 10000 });
+      const pdf = runSheetHtml ? await page.pdf({
+        printBackground: true,
+        preferCSSPageSize: true,
+        displayHeaderFooter: false,
+        margin: { top: "0", right: "0", bottom: "0", left: "0" },
+      }) : await page.pdf({
         printBackground: true,
         format: "A4",
         displayHeaderFooter: true,
