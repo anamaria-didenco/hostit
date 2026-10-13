@@ -38,6 +38,9 @@ interface Row {
   onNightSignal: boolean;
   foodStatus: FoodStatus;
   drinksStatus: DrinksStatus;
+  /** Billed as contra (no charge) — nothing to invoice on this stream. */
+  foodContra?: boolean;
+  drinksContra?: boolean;
   drinksInferred: boolean;
   invoices: SentInvoice[];
 }
@@ -803,14 +806,14 @@ function EventRow({ row, onFood, onDrinks, onDeposit, onOpen, onRecord, onXero, 
   const stateFor = (s: string): keyof typeof CHIP =>
     s === "paid" ? "paid" : s === "invoiced" ? "invoiced" : s === "on_night" ? "night" : "todo";
   const foodChip = (
-    <StatusChip label={`Food · ${labelFor(row.foodStatus)}`} state={stateFor(row.foodStatus)}
+    <StatusChip label={`Food · ${row.foodContra && row.foodStatus === "paid" ? "Contra" : labelFor(row.foodStatus)}`} state={stateFor(row.foodStatus)}
       value={row.foodStatus} disabled={busy} title="Choose the food payment status"
       options={STREAM_STATES} onChange={v => onFood(v as FoodStatus)} />
   );
   // An inferred drinks status is spelled out ("suggested"), not a bare "?".
   const suggested = row.drinksInferred && row.drinksStatus !== "paid";
   const drinksChip = (
-    <StatusChip label={`Drinks · ${labelFor(row.drinksStatus)}${suggested ? " (suggested)" : ""}`} state={stateFor(row.drinksStatus)}
+    <StatusChip label={`Drinks · ${row.drinksContra && row.drinksStatus === "paid" ? "Contra" : labelFor(row.drinksStatus)}${suggested ? " (suggested)" : ""}`} state={stateFor(row.drinksStatus)}
       value={row.drinksStatus} disabled={busy}
       title={suggested ? "Suggested from the bar setup — choose to confirm or change it" : "Choose the drinks payment status"}
       options={STREAM_STATES} onChange={v => onDrinks(v as DrinksStatus)} />

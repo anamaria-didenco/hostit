@@ -2454,8 +2454,11 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         drinksStatus: z.enum(['on_night', 'to_invoice', 'invoiced', 'paid']).nullable().optional(),
         // Billing TERMS — how the event is charged, printed on the BEO.
         // Separate from the statuses above, which track whether it's been paid.
-        billingFood: z.enum(['invoiced_prior', 'on_night', 'in_minimum', 'none']).nullable().optional(),
-        billingDrinks: z.enum(['invoiced_after', 'on_night', 'prepaid_tab', 'cash_bar', 'tab_then_cash']).nullable().optional(),
+        billingFood: z.enum(['invoiced_prior', 'on_night', 'in_minimum', 'none', 'contra', 'custom']).nullable().optional(),
+        billingDrinks: z.enum(['invoiced_after', 'on_night', 'prepaid_tab', 'cash_bar', 'tab_then_cash', 'contra', 'custom']).nullable().optional(),
+        // The sentence printed when food / drinks billing is "custom".
+        billingFoodCustom: z.string().max(300).nullable().optional(),
+        billingDrinksCustom: z.string().max(300).nullable().optional(),
         billingDepositApplied: z.enum(['drinks', 'food', 'total', 'none']).nullable().optional(),
         billingNote: z.string().nullable().optional(),
         // The user has seen the date-clash warning and chosen to go ahead.
@@ -2562,6 +2565,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
         }
         if (rest.billingDepositApplied !== undefined) updates.billingDepositApplied = rest.billingDepositApplied;
         if (rest.billingNote !== undefined) updates.billingNote = rest.billingNote?.trim() || null;
+        if (rest.billingFoodCustom !== undefined) updates.billingFoodCustom = rest.billingFoodCustom?.trim() || null;
+        if (rest.billingDrinksCustom !== undefined) updates.billingDrinksCustom = rest.billingDrinksCustom?.trim() || null;
         await db.update(bookings).set(updates).where(and(eq(bookings.id, id), eq(bookings.ownerId, ctx.user.id)));
         // The runsheet keeps its own copy of the date (staff link, runsheet
         // header). Keep it in step so the event never shows two dates.
@@ -5168,6 +5173,12 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
             const hasLive = (stream: string) => liveInv.some((i: any) => i.stream === stream && i.status !== 'VOIDED');
             if (hasLive('food') && (foodStatus === 'to_invoice' || foodStatus === 'on_night')) foodStatus = 'invoiced';
             if (hasLive('drinks') && (drinksStatus === 'to_invoice' || drinksStatus === 'on_night')) drinksStatus = 'invoiced';
+            // Contra: given in kind, so there's nothing to invoice or collect.
+            // Shown as settled unless an invoice really did go out.
+            const foodContra = (b as any).billingFood === 'contra';
+            const drinksContra = (b as any).billingDrinks === 'contra';
+            if (foodContra && (foodStatus === 'to_invoice' || foodStatus === 'on_night')) foodStatus = 'paid';
+            if (drinksContra && (drinksStatus === 'to_invoice' || drinksStatus === 'on_night')) drinksStatus = 'paid';
 
             return {
               bookingId: b.id,
@@ -5180,7 +5191,7 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               total,
               hasPrice,
               paidToDate: net,
-              outstanding,
+              outstanding: foodContra && outstanding != null ? 0 : outstanding,
               depositNzd: depAmt,
               depositPaid: Boolean(b.depositPaid),
               depositRequired: (b as any).depositRequired !== false,
@@ -5189,6 +5200,8 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
               stage,
               foodStatus,
               drinksStatus,
+              foodContra,
+              drinksContra,
               // true when drinks mode was inferred (not explicitly set) — the UI
               // can show it as a suggestion the team can confirm/override.
               drinksInferred: (b as any).drinksStatus == null && !hasLive('drinks'),
@@ -6860,7 +6873,7 @@ Return a JSON object with any of these sections that have data in the text:
 
 Rules:
 - Only include sections for data actually present in the text
-- Estimate durations if not stated; estimate times from context if missing
+- Use duration 0 unless the text states how long something takes; estimate times from context if missing
 - For dietary counts, use the number mentioned or 1 if unspecified
 - Event type context: ${input.eventType ?? 'general event'}
 
@@ -6868,7 +6881,7 @@ Text to parse:
 ${input.text}
 
 Return ONLY valid JSON. Example structure:
-{"eventDetails":{"eventDate":"2026-06-15","guestCount":80,"eventType":"Wedding","contactName":"Jane Smith"},"dietaries":[{"name":"Vegetarian","count":2,"names":["Jane Smith","Tom Ellis"],"notes":"one also vegan"},{"name":"Allergic to shellfish","count":1,"names":["Anne Douglas"]}],"fnbItems":[{"course":"Canapes","dishName":"Smoked salmon blini","qty":80,"serviceTime":"17:00"}],"timelineItems":[{"time":"16:00","duration":60,"title":"Venue setup","category":"setup"}]}`;
+{"eventDetails":{"eventDate":"2026-06-15","guestCount":80,"eventType":"Wedding","contactName":"Jane Smith"},"dietaries":[{"name":"Vegetarian","count":2,"names":["Jane Smith","Tom Ellis"],"notes":"one also vegan"},{"name":"Allergic to shellfish","count":1,"names":["Anne Douglas"]}],"fnbItems":[{"course":"Canapes","dishName":"Smoked salmon blini","qty":80,"serviceTime":"17:00"}],"timelineItems":[{"time":"16:00","duration":0,"title":"Venue setup","category":"setup"}]}`;
         const response = await invokeLLM({
           messages: [
             { role: 'system', content: 'You are a helpful assistant that outputs valid JSON only.' },
@@ -7749,6 +7762,8 @@ Return ONLY valid JSON.`;
                 depositPaid: b.depositPaid,
                 billingFood: b.billingFood,
                 billingDrinks: b.billingDrinks,
+                billingFoodCustom: b.billingFoodCustom,
+                billingDrinksCustom: b.billingDrinksCustom,
                 billingDepositApplied: b.billingDepositApplied,
                 billingNote: b.billingNote,
                 foodStatus: b.foodStatus,

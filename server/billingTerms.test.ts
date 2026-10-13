@@ -119,3 +119,27 @@ describe("the chip beside a billing step", () => {
     expect(new Set(food).size).toBe(FOOD_BILLING_OPTIONS.length);
   });
 });
+
+describe("contra and custom billing", () => {
+  it("contra says not to charge, and counts as settled", () => {
+    expect(foodBillingSentence("contra")).toMatch(/not charged/i);
+    expect(drinksBillingSentence("contra", {})).toMatch(/not charged/i);
+    expect(billingStageLabel("food", "to_invoice", "contra")).toEqual({ label: "Contra — no charge", settled: true });
+    expect(billingStageLabel("drinks", "to_invoice", "contra").settled).toBe(true);
+  });
+
+  it("custom prints the sentence written for the event", () => {
+    expect(foodBillingSentence("custom", "Client pays for the cake only.")).toBe("Client pays for the cake only.");
+    expect(drinksBillingSentence("custom", {}, "  First $500 contra, then tab.  ")).toBe("First $500 contra, then tab.");
+  });
+
+  it("custom with nothing written falls back to a pointer, never another term", () => {
+    expect(foodBillingSentence("custom", "")).toMatch(/as arranged/);
+    expect(drinksBillingSentence("custom", { barOption: "cash_bar" }, null)).toMatch(/as arranged/);
+  });
+
+  it("custom shows how far the money has got", () => {
+    expect(billingStageLabel("food", "invoiced", "custom").label).toMatch(/Invoiced/);
+    expect(billingStageLabel("food", null, "custom").label).toBe("To invoice");
+  });
+});

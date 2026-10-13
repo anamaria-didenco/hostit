@@ -124,8 +124,9 @@ export interface EventBalance {
   /** What the event is owed on: the larger of the booking total, the
    *  minimum spend and the itemised total. */
   contractTotal: number;
-  /** Which of the three set contractTotal; "" when it's the itemised total. */
-  basis: "" | "minimum spend" | "booking total";
+  /** Which of the three set contractTotal; "" when it's the itemised total,
+   *  "contra" when the food bill isn't charged at all. */
+  basis: "" | "minimum spend" | "booking total" | "contra";
   /** True when the paid deposit comes off this bill (applied to food or the
    *  total). Applied to drinks — the default — it comes off the bar bill. */
   depositOffThisBill: boolean;
@@ -148,11 +149,18 @@ export function eventBalance(o: {
   depositAmount?: number | string | null;
   depositPaid?: boolean | null;
   depositApplied?: string | null;
+  /** The food billing term. "contra" means nothing is owed on this bill. */
+  billingFood?: string | null;
 }): EventBalance {
   const food = fnbFoodLines(o.fnb, o.costItems).reduce((s, i) => s + num(i.qty) * num(i.unitPrice), 0);
   const costs = (o.costItems ?? []).filter(isFoodBeverageCost).reduce((s, ci) => s + num(ci.qty) * num(ci.unitPrice), 0);
   const itemised = food + costs;
   const itemisedInclGst = o.gstInclusive ? itemised : itemised * 1.15;
+  // A contra event is given in kind: the itemised figure is still its value,
+  // but no minimum spend or booking total is owed and there's nothing to collect.
+  if (o.billingFood === "contra") {
+    return { itemisedInclGst, contractTotal: 0, basis: "contra", depositOffThisBill: false, balance: 0 };
+  }
   const bookingTotal = num(o.bookingTotal);
   const minimumSpend = num(o.minimumSpend);
   const contractTotal = Math.max(bookingTotal, minimumSpend, itemisedInclGst);

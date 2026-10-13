@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useId } from "react";
+import React, { Fragment, useState, useMemo, useRef, useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,7 @@ import { currency } from "@/lib/money";
 import LeadProposals from "@/components/LeadProposals";
 import WalkthroughPanel from "@/components/WalkthroughPanel";
 import ProposalEmailSettings from "@/components/ProposalEmailSettings";
-import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS } from "@shared/billingTerms";
+import { FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX } from "@shared/billingTerms";
 import { ClashDialogHost, promptClashOverride, getClashes } from "@/components/ClashDialog";
 import { HoldPanel, HoldTag, DateClashChip, holdState, fmtHoldDay } from "@/components/DateHold";
 
@@ -10418,8 +10418,12 @@ export default function Dashboard() {
                     ] as const).map(row => {
                       const current = (selectedBooking as any)[row.key] ?? row.fallback;
                       const chosen = row.opts.find(o => o.value === current) ?? row.opts[0];
+                      // "Custom" prints a sentence written for this event.
+                      const customKey = row.key === 'billingFood' ? 'billingFoodCustom' : row.key === 'billingDrinks' ? 'billingDrinksCustom' : null;
+                      const customText: string = customKey ? ((selectedBooking as any)[customKey] ?? '') : '';
                       return (
-                        <div key={row.key} className="flex items-center gap-3">
+                        <Fragment key={row.key}>
+                        <div className="flex items-center gap-3">
                           <label htmlFor={isStaff ? undefined : `drawer-${row.key}`} className="font-dm text-xs text-ink/60 w-24 flex-none">{row.label}</label>
                           {isStaff ? (
                             <span className="flex-1 min-w-0 font-dm text-sm text-ink">{chosen.label}</span>
@@ -10438,6 +10442,27 @@ export default function Dashboard() {
                             </select>
                           )}
                         </div>
+                        {customKey && current === 'custom' && (
+                          isStaff ? (
+                            customText.trim() ? <p className="font-dm text-sm text-ink pl-[108px]">{customText}</p> : null
+                          ) : (
+                            <input
+                              aria-label={`How ${row.label.toLowerCase()} is billed`}
+                              defaultValue={customText}
+                              key={`${customKey}-${selectedBooking.id}-${customText}`}
+                              maxLength={BILLING_CUSTOM_MAX}
+                              onBlur={e => {
+                                const v = e.target.value;
+                                if (v === customText) return;
+                                setSelectedBooking((prev: any) => prev ? { ...prev, [customKey]: v } : prev);
+                                rescheduleBooking.mutate({ id: selectedBooking.id, [customKey]: v } as any);
+                              }}
+                              placeholder={row.key === 'billingFood' ? 'e.g. Food is contra; client pays for the cake only' : 'e.g. First $500 of drinks contra, then bar tab'}
+                              className="w-full border border-gold/25 rounded-sm px-3 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+                            />
+                          )
+                        )}
+                        </Fragment>
                       );
                     })}
                     <p className="font-dm text-[11px] text-ink/45 leading-relaxed pt-0.5">

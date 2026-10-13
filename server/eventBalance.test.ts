@@ -43,3 +43,18 @@ describe("eventBalance (run sheet and runsheet screen)", () => {
     expect(b.itemisedInclGst).toBe(2000);
   });
 });
+
+describe("eventBalance — contra", () => {
+  it("owes nothing on a contra event, whatever the minimum spend, but keeps its value", () => {
+    const b = eventBalance({
+      fnb: [{ section: "foh", course: "Main", dishName: "Panini platter", qty: 20, unitPrice: 50 }],
+      costItems: [], minimumSpend: 3000, bookingTotal: 2500,
+      depositAmount: 500, depositPaid: true, depositApplied: "total", billingFood: "contra",
+    });
+    expect(b.itemisedInclGst).toBeCloseTo(1150);
+    expect(b.basis).toBe("contra");
+    expect(b.contractTotal).toBe(0);
+    expect(b.balance).toBe(0);
+    expect(b.depositOffThisBill).toBe(false);
+  });
+});
