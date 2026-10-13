@@ -119,7 +119,7 @@ export function PrintWeekModal({ open, onClose, initialDate }: { open: boolean; 
                       <input type="checkbox" checked={!skipped.has(e.id)} onChange={() => toggle(e.id)} disabled={busy}
                         className="mt-1 w-4 h-4 accent-forest flex-none" />
                       <span className="min-w-0">
-                        <span className="block font-dm text-sm text-ink font-semibold truncate">{e.name}{e.eventType ? ` — ${e.eventType}` : ""}</span>
+                        <span className="block font-dm text-sm text-ink font-semibold break-words">{e.name}{e.eventType ? ` — ${e.eventType}` : ""}</span>
                         <span className="block font-dm text-xs text-ink/60">{meta}</span>
                       </span>
                     </label>

@@ -223,18 +223,20 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
 .event{padding:2px 14px 6px}
 .event-head{display:flex;align-items:stretch;padding:8px 0 7px;border-bottom:2px solid var(--vf-blue-deep)}
 .event-name{flex:1;min-width:0;display:flex;align-items:center;padding-right:14px}
-.event-name span{min-width:0;font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--vf-blue-deep);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The whole name, wrapping onto a second line when it's long — staff need
+   to see which event this is, so it's never cut short with "…". */
+.event-name span{min-width:0;font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--vf-blue-deep);line-height:1.15;overflow-wrap:anywhere}
 .not-final{flex:none;margin-left:10px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--vf-gray);padding:3px 7px;border-radius:3px}
 .fact{flex:none;padding:0 12px;border-left:1px solid var(--vf-line-2)}
 .fact.last{padding:0 0 0 12px}
 .fact-lbl{font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--vf-green);text-transform:uppercase;line-height:1.3}
 .fact-val{font-size:13.5px;font-weight:600;color:var(--vf-ink);white-space:nowrap;line-height:1.4;margin-top:1px}
 .fact-val.fig{font-family:var(--font-display);font-size:17px;line-height:1.15}
-.notes-row{display:grid;grid-template-columns:128px 1fr;gap:14px;padding-top:2px}
+.notes-row{display:grid;grid-template-columns:128px minmax(0,1fr);gap:14px;padding-top:2px}
 .notes-row .lbl{padding-top:8px}
 .notes-text{font-size:13px;line-height:24px;color:var(--vf-ink-2);padding-top:2px}
 .notes-lines{height:48px;background:repeating-linear-gradient(to bottom,transparent 0 23px,var(--vf-line-2) 23px 24px)}
-.band{display:grid;grid-template-columns:40px 1fr;min-height:84px}
+.band{display:grid;grid-template-columns:40px minmax(0,1fr);min-height:84px}
 .rail{background:var(--role);color:#fff;display:flex;align-items:center;justify-content:center}
 .rail span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:.24em;font-weight:800;text-transform:uppercase}
 .rail.sm span{font-size:12px;letter-spacing:.16em}
@@ -250,7 +252,7 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
 .lbl-time{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--vf-ink);line-height:1.3}
 .lbl-course{font-family:var(--font-display);font-style:italic;font-size:15px;font-weight:500;color:var(--vf-blue-deep);line-height:1.3}
 .lbl-sub{font-size:12px;font-weight:700;color:var(--vf-gray)}
-.entry{font-size:13px;line-height:1.5}
+.entry{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .entry b{color:var(--vf-ink)}
 .muted{color:var(--vf-gray)}
 .who{font-size:12px;font-weight:700;color:var(--vf-blue-deep)}
@@ -290,8 +292,8 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
 .balance b{flex:none;white-space:nowrap}
 .balance b{font-family:var(--font-display);font-size:16px}
 .cont-head{position:absolute;left:36px;right:36px;top:30px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--vf-blue-deep);padding-bottom:6px}
-.cont-head .n{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--vf-ink)}
-.cont-head .m{font-size:12px;font-weight:600;color:var(--vf-gray)}
+.cont-head .n{min-width:0;font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--vf-ink);overflow-wrap:anywhere}
+.cont-head .m{flex:none;margin-left:14px;font-size:12px;font-weight:600;color:var(--vf-gray)}
 .sheet.tall{height:auto;min-height:1123px;overflow:visible;padding-bottom:80px}
 .sheet.tall .content{position:relative}
 .foot{position:absolute;left:36px;right:36px;bottom:22px;display:flex;justify-content:space-between;font-size:11px;color:var(--vf-gray);font-weight:600;padding-top:7px;border-top:1px solid var(--vf-line)}
