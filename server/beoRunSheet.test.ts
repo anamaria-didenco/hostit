@@ -70,6 +70,14 @@ describe("BEO run sheet (6a)", () => {
     expect(html).toContain(`<span class="who">Floor team</span>`);
   });
 
+  it("prints notes only when there are some, with no filler lines", () => {
+    expect(renderRunSheetHtml(base(), { title: "t" })).not.toContain(`Notes &amp; set up`);
+    const d = base(); d.notes = ["Candles on every table"];
+    const html = renderRunSheetHtml(d, { title: "t" });
+    expect(html).toContain(`<div class="notes-text"><div>Candles on every table</div></div>`);
+    expect(html).not.toContain(`id="notesLines"`);
+  });
+
   it("escapes what people type, including into the page script", () => {
     const d = base();
     d.event.name = `Ana's <b>party</b></script><script>alert(1)</script>`;

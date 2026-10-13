@@ -90,6 +90,8 @@ export type SetMenu = {
   arrival?: SetMenuCourse;
   courses: SetMenuCourse[];
   footnote?: string;
+  /** One-line summary for the run sheet: "15× Tutto Franco · …". */
+  runSheetLine?: string;
 };
 
 const SHARED_FRANCO_COURSES: SetMenuCourse[] = [
@@ -116,6 +118,7 @@ export const SHARED_FRANCO: SetMenu = {
   summary: "Three courses down the middle of the table, served family-style.",
   courses: SHARED_FRANCO_COURSES,
   footnote: "Vegetarian and dairy-free swaps are built in",
+  runSheetLine: "Shared Menu",
 };
 
 export const TUTTO_FRANCO: SetMenu = {
@@ -126,9 +129,16 @@ export const TUTTO_FRANCO: SetMenu = {
   arrival: { name: "Canapés", dishes: [{ name: "Chef’s-choice trio from the canapés list", description: "as guests arrive" }] },
   courses: SHARED_FRANCO_COURSES,
   footnote: "Vegetarian and dairy-free swaps are built in",
+  runSheetLine: "Shared Menu & Chef’s choice of 3 canapés",
 };
 
 export const SET_MENUS: SetMenu[] = [SHARED_FRANCO, TUTTO_FRANCO];
+
+/** The run-sheet summary for a set menu by name ("Shared Menu & …"), or null. */
+export function setMenuSummary(name: unknown): string | null {
+  const n = String(name ?? "").trim().toLowerCase();
+  return SET_MENUS.find(m => m.name.toLowerCase() === n)?.runSheetLine ?? null;
+}
 
 /**
  * A menu served to share down the table — one of the set menus above, or

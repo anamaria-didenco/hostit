@@ -50,7 +50,7 @@ import {
 } from "@shared/billingTerms";
 import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost, eventBalance } from "@shared/eventBilling";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
-import { isSharedMenu, SET_MENUS, setMenuCoursesText } from "@shared/eventMenus2026";
+import { isSharedMenu, SET_MENUS, setMenuCoursesText, setMenuSummary } from "@shared/eventMenus2026";
 import { eventBillingSteps } from "@shared/nowNext";
 import { renderRunSheetHtml, type RunSheetData, type RunSheetDish, type RunSheetFloorRow } from "./beoRunSheet";
 
@@ -1913,7 +1913,7 @@ ${sheetsHtml}
       if (setupLines.length) {
         if (setupItem?.description) setupLines.push({ detail: String(setupItem.description) });
         floorRows.push({
-          kind: "setup", time: setupItem ? fmt12(setupItem.time) : undefined, lines: setupLines, writeLines: 1,
+          kind: "setup", time: setupItem ? fmt12(setupItem.time) : undefined, lines: setupLines, writeLines: 0,
           duration: Number(setupItem?.duration) > 0 ? `${Number(setupItem.duration)} min` : undefined,
           who: setupItem?.assignedTo ? String(setupItem.assignedTo) : undefined,
         });
@@ -1980,6 +1980,13 @@ ${sheetsHtml}
         else if (f.fromMenu && !desc && / \(([^)]+)\)$/.test(name)) { const i = name.lastIndexOf(" ("); desc = name.slice(i + 1); name = name.slice(0, i); }
         const pk = pkgOf(name);
         const q = shared ? 0 : dishQty(f);
+        // A grazing table shows what it costs: per person (with the total)
+        // or the set amount the chef builds to.
+        if (!pk.pkg && /grazing/i.test(name) && Number(f.unitPrice) > 0) {
+          const unit = Number(f.unitPrice);
+          const n = Number(f.qty) > 0 ? Number(f.qty) : 1;
+          pk.pkg = unit >= 500 && n === 1 ? `${money0(unit)} table` : `${money0(unit)} pp · ${money0(unit * n)}`;
+        }
         // Chef's prep and plating notes ride with the dish.
         const detail = [desc, f.prepNotes, f.platingNotes].map(x => String(x ?? "").trim()).filter(Boolean).join(" · ");
         return { qty: q > 0 ? q : undefined, name: pk.name, pkg: pk.pkg, desc: detail || undefined, was: f.previousDishName || undefined };
@@ -1990,11 +1997,24 @@ ${sheetsHtml}
         const ts = items.map(i => String(i.serviceTime ?? "").trim()).filter(t => /^\d{1,2}:\d{2}/.test(t)).sort();
         return ts.length ? fmt12(ts[0]) || undefined : undefined;
       };
-      const courseEntry = (name: string, items: any[]) => {
-        const allSh = items.length > 0 && items.every(sharedFood);
-        return { name, time: courseTime(name) ?? enteredTime(items), note: allSh ? (/canap/i.test(name) ? "Passed" : "To share") : undefined, items: items.map(toDish) };
+      // A set or shared menu prints as one summary line, its covers first:
+      // "15× Tutto Franco · Shared Menu & Chef's choice of 3 canapés".
+      const blobShared = menuBlobItems.length > 0 && menuBlobItems.every((i: any) => sharedDetected || isSharedMenu(i.dishName, i.description));
+      const isSummarised = (f: any) => !f.fromMenu && (setMenuSummary(f.dishName) !== null || (blobShared && menuBlobItems.includes(f)));
+      const summaryDish = (f: any): RunSheetDish => {
+        const q = Number(f.qty) > 0 ? Number(f.qty) : (Number(guestCount) || 0);
+        return { qty: q > 0 ? q : undefined, name: String(f.dishName ?? "").trim(), desc: setMenuSummary(f.dishName) ?? "Shared Menu" };
       };
-      const courses = hideSet.has("food") ? [] : (embeddedMenu
+      const courseEntry = (name: string, items: any[]) => {
+        const rest = items.filter(f => !isSummarised(f));
+        const allSh = rest.length > 0 && rest.every(sharedFood);
+        return {
+          name, time: courseTime(name) ?? enteredTime(items),
+          note: allSh ? (/canap/i.test(name) ? "Passed" : "To share") : undefined,
+          items: items.map(f => (isSummarised(f) ? summaryDish(f) : toDish(f))),
+        };
+      };
+      const courses = hideSet.has("food") ? [] : (embeddedMenu && !blobShared
         ? [
             ...menuCourses.map(c => courseEntry(c.label, c.dishes.map(d => ({ dishName: d.name, description: d.det, fromMenu: true })))),
             ...orderFoodCourses(extraGrouped).map(course => courseEntry(course, extraGrouped[course] ?? [])),
@@ -2004,7 +2024,9 @@ ${sheetsHtml}
       // "Shared Franco") prints its own courses, so the kitchen knows what's
       // in it. Skipped when that menu is already printed from its item.
       const printedNames = new Set(menuBlobItems.map((i: any) => String(i.dishName ?? "").trim().toLowerCase()));
-      const linkedCourses = hideSet.has("food") ? [] : linkedMenus
+      // Shared / set menus are summarised on their F&B line instead.
+      const expandable = linkedMenus.filter(pkg => setMenuSummary(pkg.name) === null && !isSharedMenu(pkg.name, pkg.description));
+      const linkedCourses = hideSet.has("food") ? [] : expandable
         .filter(pkg => !printedNames.has(String(pkg.name ?? "").trim().toLowerCase()))
         .flatMap(pkg => {
           const setMenu = SET_MENUS.find(m => m.name.toLowerCase() === String(pkg.name ?? "").trim().toLowerCase());
@@ -2025,7 +2047,7 @@ ${sheetsHtml}
         });
       // The F&B line that just names a package ("Shared Franco") is replaced
       // by that package's courses above, not printed twice.
-      const expanded = new Set(linkedMenus
+      const expanded = new Set(expandable
         .filter(pkg => !printedNames.has(String(pkg.name ?? "").trim().toLowerCase()))
         .map(pkg => String(pkg.name ?? "").trim().toLowerCase()));
       const coursesShown = linkedCourses.length
@@ -2033,7 +2055,8 @@ ${sheetsHtml}
         : courses;
       const kitchen: RunSheetData["kitchen"] = {
         dietary,
-        serviceNote: (!hideSet.has("food") && sharedDetected) ? `Shared to the table${Number(guestCount) > 0 ? ` · for ${guestCount} guests` : ""}` : undefined,
+        // Not needed when a summary line already says "Shared Menu".
+        serviceNote: (!hideSet.has("food") && sharedDetected && !foodItems.some(isSummarised)) ? `Shared to the table${Number(guestCount) > 0 ? ` · for ${guestCount} guests` : ""}` : undefined,
         courses: [
           ...coursesShown, ...linkedCourses,
           // F&B rows filed under "Kitchen — prep & production".
