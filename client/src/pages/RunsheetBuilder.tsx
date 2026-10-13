@@ -36,9 +36,29 @@ import { currency } from "@/lib/money";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { catalogueDefaultQty } from "@shared/menuCatalogue";
 import {
-  FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS,
+  FOOD_BILLING_OPTIONS, DRINKS_BILLING_OPTIONS, DEPOSIT_APPLIED_OPTIONS, BILLING_CUSTOM_MAX,
   foodBillingSentence, drinksBillingSentence, depositAppliedClause, billingStageLabel,
 } from "@shared/billingTerms";
+
+/** The sentence for a "Custom" billing term. Saves on blur, like the note. */
+function BillingCustomInput({ id, label, value, bookingId, placeholder, onSave }: {
+  id: string; label: string; value: string; bookingId: unknown; placeholder: string; onSave: (v: string) => void;
+}) {
+  return (
+    <>
+      <label htmlFor={id} className="sr-only">{label}</label>
+      <input
+        id={id}
+        defaultValue={value}
+        key={`${id}-${String(bookingId ?? 'x')}-${value}`}
+        maxLength={BILLING_CUSTOM_MAX}
+        onBlur={e => { if (e.target.value !== value) onSave(e.target.value); }}
+        placeholder={placeholder}
+        className="mt-2 w-full border border-gold/25 rounded-sm px-3 min-h-[44px] text-sm font-dm bg-white focus:outline-none focus:border-forest"
+      />
+    </>
+  );
+}
 
 /** The status chip a BEO billing step prints, shown while you pick the terms. */
 function StageChip({ stage }: { stage: { label: string; settled: boolean } }) {
@@ -979,7 +999,7 @@ export default function RunsheetBuilder() {
     if (includeTimeline && editedParsedTimeline.length > 0) {
       const newItems: Item[] = editedParsedTimeline.map((pi: any, i: number) => ({
         time: pi.time ?? '09:00',
-        duration: pi.duration ?? 30,
+        duration: pi.duration ?? 0,
         title: pi.title ?? 'Untitled',
         description: pi.description ?? '',
         assignedTo: pi.assignedTo ?? '',
@@ -1860,52 +1880,52 @@ export default function RunsheetBuilder() {
     const base: Item[] = [];
     if (t.includes("wedding") || t.includes("reception")) {
       base.push(
-        { time: "14:00", duration: 60, title: "Venue setup & decoration", category: "setup", sortOrder: 0, _tempId: "s0" },
-        { time: "15:00", duration: 30, title: "Staff briefing", category: "setup", sortOrder: 1, _tempId: "s1" },
-        { time: "16:00", duration: 30, title: "Guest arrival & welcome drinks", category: "beverage", sortOrder: 2, _tempId: "s2" },
-        { time: "16:30", duration: 60, title: "Ceremony", category: "entertainment", sortOrder: 3, _tempId: "s3" },
-        { time: "17:30", duration: 60, title: "Cocktail hour", category: "beverage", sortOrder: 4, _tempId: "s4" },
-        { time: "18:30", duration: 15, title: "Guests seated for dinner", category: "guest", sortOrder: 5, _tempId: "s5" },
-        { time: "18:45", duration: 60, title: "Entrée service", category: "food", sortOrder: 6, _tempId: "s6" },
-        { time: "19:45", duration: 30, title: "Speeches", category: "speech", sortOrder: 7, _tempId: "s7" },
-        { time: "20:15", duration: 60, title: "Main course service", category: "food", sortOrder: 8, _tempId: "s8" },
-        { time: "21:15", duration: 30, title: "Cake cutting", category: "entertainment", sortOrder: 9, _tempId: "s9" },
-        { time: "21:45", duration: 90, title: "Dancing & bar service", category: "entertainment", sortOrder: 10, _tempId: "s10" },
-        { time: "23:00", duration: 30, title: "Last drinks & farewell", category: "guest", sortOrder: 11, _tempId: "s11" },
-        { time: "23:30", duration: 60, title: "Packdown & cleanup", category: "packdown", sortOrder: 12, _tempId: "s12" },
+        { time: "14:00", duration: 0, title: "Venue setup & decoration", category: "setup", sortOrder: 0, _tempId: "s0" },
+        { time: "15:00", duration: 0, title: "Staff briefing", category: "setup", sortOrder: 1, _tempId: "s1" },
+        { time: "16:00", duration: 0, title: "Guest arrival & welcome drinks", category: "beverage", sortOrder: 2, _tempId: "s2" },
+        { time: "16:30", duration: 0, title: "Ceremony", category: "entertainment", sortOrder: 3, _tempId: "s3" },
+        { time: "17:30", duration: 0, title: "Cocktail hour", category: "beverage", sortOrder: 4, _tempId: "s4" },
+        { time: "18:30", duration: 0, title: "Guests seated for dinner", category: "guest", sortOrder: 5, _tempId: "s5" },
+        { time: "18:45", duration: 0, title: "Entrée service", category: "food", sortOrder: 6, _tempId: "s6" },
+        { time: "19:45", duration: 0, title: "Speeches", category: "speech", sortOrder: 7, _tempId: "s7" },
+        { time: "20:15", duration: 0, title: "Main course service", category: "food", sortOrder: 8, _tempId: "s8" },
+        { time: "21:15", duration: 0, title: "Cake cutting", category: "entertainment", sortOrder: 9, _tempId: "s9" },
+        { time: "21:45", duration: 0, title: "Dancing & bar service", category: "entertainment", sortOrder: 10, _tempId: "s10" },
+        { time: "23:00", duration: 0, title: "Last drinks & farewell", category: "guest", sortOrder: 11, _tempId: "s11" },
+        { time: "23:30", duration: 0, title: "Packdown & cleanup", category: "packdown", sortOrder: 12, _tempId: "s12" },
       );
     } else if (t.includes("birthday") || t.includes("party")) {
       base.push(
-        { time: "17:00", duration: 60, title: "Venue setup", category: "setup", sortOrder: 0, _tempId: "s0" },
-        { time: "18:00", duration: 30, title: "Guest arrival & welcome drinks", category: "beverage", sortOrder: 1, _tempId: "s1" },
-        { time: "18:30", duration: 90, title: "Cocktail hour & canapes", category: "food", sortOrder: 2, _tempId: "s2" },
-        { time: "20:00", duration: 60, title: "Dinner service", category: "food", sortOrder: 3, _tempId: "s3" },
-        { time: "21:00", duration: 15, title: "Cake & birthday speech", category: "speech", sortOrder: 4, _tempId: "s4" },
-        { time: "21:15", duration: 105, title: "Dancing & bar service", category: "entertainment", sortOrder: 5, _tempId: "s5" },
-        { time: "23:00", duration: 30, title: "Last drinks & farewell", category: "guest", sortOrder: 6, _tempId: "s6" },
-        { time: "23:30", duration: 60, title: "Packdown", category: "packdown", sortOrder: 7, _tempId: "s7" },
+        { time: "17:00", duration: 0, title: "Venue setup", category: "setup", sortOrder: 0, _tempId: "s0" },
+        { time: "18:00", duration: 0, title: "Guest arrival & welcome drinks", category: "beverage", sortOrder: 1, _tempId: "s1" },
+        { time: "18:30", duration: 0, title: "Cocktail hour & canapes", category: "food", sortOrder: 2, _tempId: "s2" },
+        { time: "20:00", duration: 0, title: "Dinner service", category: "food", sortOrder: 3, _tempId: "s3" },
+        { time: "21:00", duration: 0, title: "Cake & birthday speech", category: "speech", sortOrder: 4, _tempId: "s4" },
+        { time: "21:15", duration: 0, title: "Dancing & bar service", category: "entertainment", sortOrder: 5, _tempId: "s5" },
+        { time: "23:00", duration: 0, title: "Last drinks & farewell", category: "guest", sortOrder: 6, _tempId: "s6" },
+        { time: "23:30", duration: 0, title: "Packdown", category: "packdown", sortOrder: 7, _tempId: "s7" },
       );
     } else if (t.includes("corporate") || t.includes("conference") || t.includes("meeting")) {
       base.push(
-        { time: "07:30", duration: 60, title: "Venue setup & AV check", category: "setup", sortOrder: 0, _tempId: "s0" },
-        { time: "08:30", duration: 30, title: "Guest registration & coffee", category: "guest", sortOrder: 1, _tempId: "s1" },
-        { time: "09:00", duration: 120, title: "Morning session", category: "entertainment", sortOrder: 2, _tempId: "s2" },
-        { time: "11:00", duration: 30, title: "Morning tea", category: "food", sortOrder: 3, _tempId: "s3" },
-        { time: "11:30", duration: 90, title: "Afternoon session", category: "entertainment", sortOrder: 4, _tempId: "s4" },
-        { time: "13:00", duration: 60, title: "Lunch service", category: "food", sortOrder: 5, _tempId: "s5" },
-        { time: "14:00", duration: 120, title: "Post-lunch session", category: "entertainment", sortOrder: 6, _tempId: "s6" },
-        { time: "16:00", duration: 30, title: "Afternoon tea", category: "food", sortOrder: 7, _tempId: "s7" },
-        { time: "16:30", duration: 60, title: "Networking drinks", category: "beverage", sortOrder: 8, _tempId: "s8" },
-        { time: "17:30", duration: 30, title: "Packdown", category: "packdown", sortOrder: 9, _tempId: "s9" },
+        { time: "07:30", duration: 0, title: "Venue setup & AV check", category: "setup", sortOrder: 0, _tempId: "s0" },
+        { time: "08:30", duration: 0, title: "Guest registration & coffee", category: "guest", sortOrder: 1, _tempId: "s1" },
+        { time: "09:00", duration: 0, title: "Morning session", category: "entertainment", sortOrder: 2, _tempId: "s2" },
+        { time: "11:00", duration: 0, title: "Morning tea", category: "food", sortOrder: 3, _tempId: "s3" },
+        { time: "11:30", duration: 0, title: "Afternoon session", category: "entertainment", sortOrder: 4, _tempId: "s4" },
+        { time: "13:00", duration: 0, title: "Lunch service", category: "food", sortOrder: 5, _tempId: "s5" },
+        { time: "14:00", duration: 0, title: "Post-lunch session", category: "entertainment", sortOrder: 6, _tempId: "s6" },
+        { time: "16:00", duration: 0, title: "Afternoon tea", category: "food", sortOrder: 7, _tempId: "s7" },
+        { time: "16:30", duration: 0, title: "Networking drinks", category: "beverage", sortOrder: 8, _tempId: "s8" },
+        { time: "17:30", duration: 0, title: "Packdown", category: "packdown", sortOrder: 9, _tempId: "s9" },
       );
     } else {
       base.push(
-        { time: "16:00", duration: 60, title: "Venue setup", category: "setup", sortOrder: 0, _tempId: "s0" },
-        { time: "17:00", duration: 30, title: "Guest arrival", category: "guest", sortOrder: 1, _tempId: "s1" },
-        { time: "17:30", duration: 90, title: "Main event", category: "entertainment", sortOrder: 2, _tempId: "s2" },
-        { time: "19:00", duration: 60, title: "Dinner service", category: "food", sortOrder: 3, _tempId: "s3" },
-        { time: "20:00", duration: 60, title: "Bar service", category: "beverage", sortOrder: 4, _tempId: "s4" },
-        { time: "21:00", duration: 30, title: "Farewell & packdown", category: "packdown", sortOrder: 5, _tempId: "s5" },
+        { time: "16:00", duration: 0, title: "Venue setup", category: "setup", sortOrder: 0, _tempId: "s0" },
+        { time: "17:00", duration: 0, title: "Guest arrival", category: "guest", sortOrder: 1, _tempId: "s1" },
+        { time: "17:30", duration: 0, title: "Main event", category: "entertainment", sortOrder: 2, _tempId: "s2" },
+        { time: "19:00", duration: 0, title: "Dinner service", category: "food", sortOrder: 3, _tempId: "s3" },
+        { time: "20:00", duration: 0, title: "Bar service", category: "beverage", sortOrder: 4, _tempId: "s4" },
+        { time: "21:00", duration: 0, title: "Farewell & packdown", category: "packdown", sortOrder: 5, _tempId: "s5" },
       );
     }
     setItems(base);
@@ -2214,10 +2234,10 @@ export default function RunsheetBuilder() {
 
   function addItem() {
     const lastItem = items[items.length - 1];
-    const newTime = lastItem ? addMinutes(lastItem.time, lastItem.duration) : "09:00";
+    const newTime = lastItem ? addMinutes(lastItem.time, lastItem.duration || 30) : "09:00";
     const newItem: Item = {
       time: newTime,
-      duration: 30,
+      duration: 0,
       title: "",
       category: "other",
       sortOrder: items.length,
@@ -3171,9 +3191,10 @@ export default function RunsheetBuilder() {
                 fnb: fnbItems as any, costItems, gstInclusive,
                 bookingTotal: (booking as any).totalNzd, minimumSpend: (booking as any).minimumSpend,
                 depositAmount: dep, depositPaid: paid, depositApplied: (booking as any).billingDepositApplied,
+                billingFood: (booking as any).billingFood,
               });
               const totalRef = bal.contractTotal;
-              const balance = totalRef > 0 ? bal.balance : null;
+              const balance = totalRef > 0 || bal.basis === 'contra' ? bal.balance : null;
               return (
                 <div className={`mt-4 px-4 py-3 rounded border ${paid ? 'bg-forest/5 border-forest/40' : 'bg-amber-50 border-amber-300'}`}>
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
@@ -3191,7 +3212,9 @@ export default function RunsheetBuilder() {
                         <div>
                           <div className="font-bebas tracking-widest text-[10px] text-ink/65">BALANCE TO COLLECT</div>
                           <div className="font-serif text-xl font-semibold text-ink leading-tight [font-variant-numeric:tabular-nums_lining-nums] tracking-[-0.01em]">{currency(balance)}</div>
-                          <div className="font-dm text-[10px] text-ink/45 mt-0.5">of {currency(totalRef)} — {basis}{paid && dep > 0 && !bal.depositOffThisBill ? ' · deposit comes off the drinks bill' : ''}</div>
+                          <div className="font-dm text-[10px] text-ink/45 mt-0.5">{bal.basis === 'contra'
+                            ? 'Contra event — food is not charged'
+                            : <>of {currency(totalRef)} — {basis}{paid && dep > 0 && !bal.depositOffThisBill ? ' · deposit comes off the drinks bill' : ''}</>}</div>
                         </div>
                       );
                     })()}
@@ -5720,6 +5743,14 @@ export default function RunsheetBuilder() {
                     >
                       {FOOD_BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
+                    {(billingBooking as any)?.billingFood === 'custom' && (
+                      <BillingCustomInput
+                        id="rb-billing-food-custom" label="How food is billed"
+                        value={(billingBooking as any)?.billingFoodCustom ?? ''} bookingId={(billingBooking as any)?.id}
+                        placeholder="e.g. Food is contra; client pays for the cake only"
+                        onSave={v => setBillingTerm({ billingFoodCustom: v })}
+                      />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <label htmlFor="rb-billing-drinks" className="font-bebas tracking-widest text-[10px] text-ink/55 block mb-1">DRINKS / BAR</label>
@@ -5731,6 +5762,14 @@ export default function RunsheetBuilder() {
                     >
                       {DRINKS_BILLING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
+                    {(billingBooking as any)?.billingDrinks === 'custom' && (
+                      <BillingCustomInput
+                        id="rb-billing-drinks-custom" label="How drinks are billed"
+                        value={(billingBooking as any)?.billingDrinksCustom ?? ''} bookingId={(billingBooking as any)?.id}
+                        placeholder="e.g. First $500 of drinks contra, then bar tab"
+                        onSave={v => setBillingTerm({ billingDrinksCustom: v })}
+                      />
+                    )}
                     {/* Say it rather than doing it silently: these arrangements
                         are never invoiced ahead, so the Payments board stops
                         listing the event as one to invoice. */}
@@ -5763,12 +5802,12 @@ export default function RunsheetBuilder() {
                   <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
                     <b className="font-semibold">Food</b>
                     <StageChip stage={billingStageLabel('food', (billingBooking as any)?.foodStatus, (billingBooking as any)?.billingFood ?? 'invoiced_prior')} />
-                    <br />{foodBillingSentence((billingBooking as any)?.billingFood ?? 'invoiced_prior')}
+                    <br />{foodBillingSentence((billingBooking as any)?.billingFood ?? 'invoiced_prior', (billingBooking as any)?.billingFoodCustom)}
                   </p>
                   <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
                     <b className="font-semibold">Drinks</b>
                     <StageChip stage={billingStageLabel('drinks', (billingBooking as any)?.drinksStatus, (billingBooking as any)?.billingDrinks ?? 'invoiced_after')} />
-                    <br />{drinksBillingSentence((billingBooking as any)?.billingDrinks ?? 'invoiced_after', { barOption: rsBarOption, drinksStatus: null })}
+                    <br />{drinksBillingSentence((billingBooking as any)?.billingDrinks ?? 'invoiced_after', { barOption: rsBarOption, drinksStatus: null }, (billingBooking as any)?.billingDrinksCustom)}
                   </p>
                   <p className="font-dm text-[11px] text-ink/70 leading-relaxed">
                     <b className="font-semibold">Deposit —</b> {depositAppliedClause((billingBooking as any)?.billingDepositApplied ?? 'drinks')}.

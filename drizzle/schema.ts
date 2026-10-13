@@ -457,14 +457,17 @@ export const bookings = pgTable("bookings", {
   // They had to be separated: once drinksStatus was moved to 'invoiced', the
   // BEO could no longer tell anyone the bar was meant to be settled on the
   // night, so it printed the opposite of the payment note beside it.
-  //   billingFood:           'invoiced_prior' | 'on_night' | 'in_minimum' | 'none'
-  //   billingDrinks:         'invoiced_after' | 'on_night' | 'prepaid_tab' | 'cash_bar' | 'tab_then_cash'
+  //   billingFood:           'invoiced_prior' | 'on_night' | 'in_minimum' | 'none' | 'contra' | 'custom'
+  //   billingDrinks:         'invoiced_after' | 'on_night' | 'prepaid_tab' | 'cash_bar' | 'tab_then_cash' | 'contra' | 'custom'
   //   billingDepositApplied: 'drinks' | 'food' | 'total' | 'none'
   // Null means "not chosen yet" and falls back to the previous hardcoded
   // wording, so existing events read exactly as they did before.
   billingFood: varchar("billingFood", { length: 24 }),
   billingDrinks: varchar("billingDrinks", { length: 24 }),
   billingDepositApplied: varchar("billingDepositApplied", { length: 16 }),
+  // The sentence printed when food / drinks billing is 'custom'.
+  billingFoodCustom: text("billingFoodCustom"),
+  billingDrinksCustom: text("billingDrinksCustom"),
   // One optional sentence for the event that fits none of the presets.
   billingNote: text("billingNote"),
   status: bookingStatusEnum("status").default("confirmed").notNull(),

@@ -47,6 +47,7 @@ import {
   depositAppliedClause,
   depositComesOffDrinks,
   billingStageLabel,
+  isContra,
 } from "@shared/billingTerms";
 import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost, eventBalance } from "@shared/eventBilling";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
@@ -1182,7 +1183,9 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const subtotalExGst = gstInclusiveFlag ? enteredTotal / 1.15 : enteredTotal;
     const gstAmt = gstInclusiveFlag ? enteredTotal - subtotalExGst : enteredTotal * 0.15;
     const totalInclGst = subtotalExGst + gstAmt;
-    const balanceToCollect = totalInclGst > 0 ? Math.max(0, totalInclGst - (booking.depositPaid ? depAmt : 0)) : 0;
+    // Contra: given in kind, so there's nothing to collect on the food bill.
+    const contraFood = isContra((booking as any).billingFood);
+    const balanceToCollect = contraFood ? 0 : totalInclGst > 0 ? Math.max(0, totalInclGst - (booking.depositPaid ? depAmt : 0)) : 0;
     const showFinancials = !isPublic && (enteredTotal > 0 || minSpendAmt > 0 || depAmt > 0);
     const balanceOutstanding = !booking.depositPaid && balanceToCollect > 0;
     // Itemised breakdown — one row per priced line (food from the F&B sheet
@@ -1209,7 +1212,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
         ${enteredTotal > 0 ? `<div class="cost-row"><span class="k">GST (15%)</span><span class="v small">${fmtCurrency(gstAmt)}</span></div>` : ""}
         ${enteredTotal > 0 ? `<div class="cost-row"><span class="k">Total (incl. GST)</span><span class="v">${fmtCurrency(totalInclGst)}</span></div>` : ""}
         ${depAmt > 0 ? `<div class="cost-row"><span class="k">Deposit received</span><span class="v small">${fmtCurrency(depAmt)} ${booking.depositPaid ? "&middot; Paid" : "&middot; Outstanding"}</span></div>` : ""}
-        <div class="cost-row balance"><span class="k">Balance to collect <span class="k-sub">incl. GST</span></span><span class="v">${fmtCurrency(balanceToCollect)}${balanceOutstanding ? ` <span class="out-tag">Outstanding</span>` : ""}</span></div>
+        <div class="cost-row balance"><span class="k">Balance to collect <span class="k-sub">${contraFood ? "contra &middot; no charge" : "incl. GST"}</span></span><span class="v">${fmtCurrency(balanceToCollect)}${balanceOutstanding ? ` <span class="out-tag">Outstanding</span>` : ""}</span></div>
       </div>` : "";
 
     // Footer note (closing message) — shown to everyone, on page 2.
@@ -1472,6 +1475,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const termsDrinks = (booking as any).billingDrinks as string | null;
     const termsDeposit = (booking as any).billingDepositApplied as string | null;
     const termsNote = ((booking as any).billingNote as string | null) ?? "";
+    const termsFoodCustom = (booking as any).billingFoodCustom as string | null;
+    const termsDrinksCustom = (booking as any).billingDrinksCustom as string | null;
     // Which numbered step the drinks landed on, so the money band can point at
     // it rather than saying "above" and leaving staff to hunt.
     let drinksStepNo = 0;
@@ -1494,13 +1499,13 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
           pill(booking.depositPaid ? "Received" : "Outstanding", Boolean(booking.depositPaid))));
       }
       const foodStage = billingStageLabel("food", foodState, termsFood);
-      steps.push(step(++n, "Food", escHtml(foodBillingSentence(termsFood)),
+      steps.push(step(++n, "Food", escHtml(foodBillingSentence(termsFood, termsFoodCustom)),
         pill(escHtml(foodStage.label), foodStage.settled)));
       const barBits = [
         barTagLabel ? escHtml(barTagLabel) : "",
         barTabVal ? `tab limit ${fmtCurrency(barTabVal)}` : "",
       ].filter(Boolean).join(" &middot; ");
-      const drinksBody = escHtml(drinksBillingSentence(termsDrinks, { barOption: barOpt, drinksStatus: drinksState }))
+      const drinksBody = escHtml(drinksBillingSentence(termsDrinks, { barOption: barOpt, drinksStatus: drinksState }, termsDrinksCustom))
         + (depAmt > 0 && depositRequired && depositComesOffDrinks(termsDeposit)
             ? ` The ${fmtCurrency(depAmt)} deposit comes off this total.` : "")
         + (barBits ? `<div style="margin-top:2px"><b style="color:var(--amber);font-weight:700">Bar &mdash;</b> ${barBits}</div>` : "")
@@ -1560,7 +1565,8 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // would otherwise vanish with the old Billing Instructions block.
     const strayDepositRow = (!(depositRequired && depAmt > 0) && depAmt > 0)
       ? summaryRow(`Deposit &middot; ${booking.depositPaid ? "paid" : "due"}`, fmtCurrency(depAmt)) : "";
-    const balanceRows = depositOffThisBill && totalInclGst > 0
+    const balanceRows = contraFood ? summaryRow("Balance to collect &middot; contra, no charge", fmtCurrency(0), { strong: true })
+      : depositOffThisBill && totalInclGst > 0
       ? summaryRow("Less deposit received", `&minus;${fmtCurrency(depAmt)}`)
         + `<div class="bill-tot" style="display:grid;grid-template-columns:1fr 110px;padding:9px 16px;border-top:1px solid var(--hair);font-size:11.5px;color:var(--ink)"><span style="text-align:right;font-weight:700">Balance to collect</span><span style="text-align:right;font-family:var(--serif);font-size:15px;font-weight:600">${fmtCurrency(Math.max(0, totalInclGst - depAmt))}</span></div>`
       : "";
@@ -2086,12 +2092,15 @@ ${sheetsHtml}
         fnb: fnbList as any, costItems: costList, gstInclusive: gstInclusiveFlag,
         bookingTotal: bookingTotalNum, minimumSpend: minSpendAmt,
         depositAmount: depAmt, depositPaid: booking.depositPaid, depositApplied: termsDeposit,
+        billingFood: termsFood,
       });
+      const contra = bal.basis === "contra";
       const billingFull: NonNullable<RunSheetData["billing"]> = {
         client: { name: clientName, phone: leadPhone || (booking as any).phone || undefined, email: leadEmail || undefined },
         howBilled: noFinancials ? [] : eventBillingSteps({
           depositRequired: (booking as any).depositRequired, depositAmount: depAmt, depositPaid: booking.depositPaid,
           billingFood: termsFood, billingDrinks: termsDrinks, billingDepositApplied: termsDeposit, billingNote: termsNote,
+          billingFoodCustom: termsFoodCustom, billingDrinksCustom: termsDrinksCustom,
           foodStatus: (booking as any).foodStatus, drinksStatus: (booking as any).drinksStatus,
           barOption: barOpt ?? null,
           // With the Bar band hidden, the tab limit and bar notes travel in
@@ -2112,7 +2121,8 @@ ${sheetsHtml}
           })),
         ],
         total: bal.itemisedInclGst > 0 ? money0(Math.round(bal.itemisedInclGst * 100) / 100) : undefined,
-        totalNote: bal.itemisedInclGst > 0 ? "incl. GST" : undefined,
+        // On a contra event the itemised figure is its value, not a charge.
+        totalNote: bal.itemisedInclGst > 0 ? (contra ? "incl. GST · contra, not charged" : "incl. GST") : undefined,
         deposit: depAmt > 0 ? {
           label: booking.depositPaid ? (bal.depositOffThisBill ? "Deposit paid" : "Deposit paid · off the drinks bill") : "Deposit due",
           amount: bal.depositOffThisBill ? `− ${money0(depAmt)}` : money0(depAmt),
@@ -2122,10 +2132,11 @@ ${sheetsHtml}
         // basis as the runsheet's Balance to collect. Drinks are billed
         // separately (see How it's billed).
         // The figure the balance is worked from is marked "applies".
-        minimum: bal.basis === "booking total"
+        minimum: contra ? undefined : bal.basis === "booking total"
           ? { label: "Booking total · applies", amount: money0(bookingTotalNum) }
           : minSpendAmt > 0 ? { label: `Minimum spend${bal.basis === "minimum spend" ? " · applies" : ""}`, amount: money0(minSpendAmt) } : undefined,
-        balance: bal.contractTotal > 0 ? { label: "Balance to collect", amount: money0(bal.balance) } : undefined,
+        balance: contra ? { label: "Balance to collect · contra", amount: money0(0) }
+          : bal.contractTotal > 0 ? { label: "Balance to collect", amount: money0(bal.balance) } : undefined,
         // The footer note (thank-you, payment terms) — once, unless it only
         // repeats the billing notes.
         note: (hideSet.has("footer") || noteAlreadyInBilling) ? [] : plainLines(footerNote),

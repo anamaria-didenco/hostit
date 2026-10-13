@@ -110,6 +110,8 @@ export function eventBillingSteps(o: {
   depositPaid?: boolean | null;
   billingFood?: string | null;
   billingDrinks?: string | null;
+  billingFoodCustom?: string | null;
+  billingDrinksCustom?: string | null;
   billingDepositApplied?: string | null;
   billingNote?: string | null;
   foodStatus?: string | null;
@@ -131,7 +133,7 @@ export function eventBillingSteps(o: {
   }
   steps.push({
     title: "Food",
-    body: foodBillingSentence(o.billingFood),
+    body: foodBillingSentence(o.billingFood, o.billingFoodCustom),
     status: billingStageLabel("food", o.foodStatus || "to_invoice", o.billingFood),
   });
   const barOpt = o.barOption || null;
@@ -145,7 +147,7 @@ export function eventBillingSteps(o: {
   if ((o.barNotes ?? "").trim()) lines.push(o.barNotes!.trim());
   steps.push({
     title: "Drinks / bar",
-    body: drinksBillingSentence(o.billingDrinks, { barOption: barOpt, drinksStatus: drinksState })
+    body: drinksBillingSentence(o.billingDrinks, { barOption: barOpt, drinksStatus: drinksState }, o.billingDrinksCustom)
       + (depAmt > 0 && depositRequired && depositComesOffDrinks(o.billingDepositApplied)
         ? ` The ${money(depAmt)} deposit comes off this total.` : ""),
     status: billingStageLabel("drinks", drinksState, o.billingDrinks),
