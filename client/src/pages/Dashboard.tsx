@@ -22,6 +22,7 @@ import { AccountLoginsSection } from "@/components/AccountLoginsSection";
 import { fmtEventTime, combineLocalDateTime } from "@/lib/dateTime";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { PrintWeekModal } from "@/components/PrintWeekModal";
 import { Spinner } from "@/components/ui/spinner";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
@@ -2369,6 +2370,7 @@ export default function Dashboard() {
   });
   // ── Weekly runsheet email ─────────────────────────────────────────────────
   const [showWeeklyModal, setShowWeeklyModal] = React.useState(false);
+  const [showPrintWeek, setShowPrintWeek] = React.useState(false);
   const getMondayOfWeek = () => {
     const d = new Date();
     const day = d.getDay();
@@ -3113,6 +3115,8 @@ export default function Dashboard() {
                       </Popover>
                     </div>
                     <button onClick={() => setCalDate(new Date())} className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-border text-sage hover:bg-linen transition-colors">TODAY</button>
+                    <button onClick={() => setShowPrintWeek(true)} title="Print every event's run sheet for a week, in one PDF" aria-label="Print the week's run sheets"
+                      className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors inline-flex items-center gap-1"><Printer className="w-3 h-3" /><span className="hidden sm:inline">PRINT WEEK</span></button>
                     <button onClick={() => setTab('calendar' as any)} className="flex-shrink-0 whitespace-nowrap font-bebas tracking-widest text-xs px-2 sm:px-3 py-1.5 border border-forest/30 text-forest hover:bg-forest/5 transition-colors"><span className="hidden sm:inline">FULL </span>VIEW</button>
                   </div>
                   <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
@@ -5074,6 +5078,12 @@ export default function Dashboard() {
                         }`}>{v.toUpperCase()}</button>
                     ))}
                   </div>
+                  <button onClick={() => setShowPrintWeek(true)}
+                    title="Print every event's run sheet for a week, in one PDF"
+                    aria-label="Print the week's run sheets"
+                    className="border border-forest/40 text-forest hover:bg-forest/10 font-bebas tracking-widest text-xs px-3 py-2 flex items-center gap-1 flex-shrink-0 transition-colors">
+                    <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PRINT WEEK</span>
+                  </button>
                   <button onClick={() => setShowAddLead(true)}
                     className="btn-forest text-cream font-bebas tracking-widest text-xs px-3 md:px-4 py-2 flex items-center gap-1 flex-shrink-0">
                     <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">ADD ENQUIRY</span><span className="sm:hidden">ADD</span>
@@ -5379,6 +5389,13 @@ export default function Dashboard() {
                       title="Email this week's runsheets to staff"
                     >
                       <Mail className="w-3 h-3" /> SEND WEEK TO STAFF
+                    </button>
+                    <button
+                      onClick={() => setShowPrintWeek(true)}
+                      className="h-8 px-3 text-xs font-bebas tracking-widest rounded-lg border border-forest/40 bg-forest/5 text-forest hover:bg-forest/10 flex items-center gap-1.5 transition-colors"
+                      title="Print every event's run sheet for a week, in one PDF"
+                    >
+                      <Printer className="w-3 h-3" /> PRINT WEEK
                     </button>
                     {/* Upcoming-only toggle */}
                     <button
@@ -11250,6 +11267,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Weekly Staff Runsheets Modal ───────────────────────────────────── */}
+      <PrintWeekModal open={showPrintWeek} onClose={() => setShowPrintWeek(false)} initialDate={calDate} />
       {showWeeklyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4">
           <div role="dialog" aria-modal="true" className="bg-white w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>

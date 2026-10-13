@@ -2280,6 +2280,44 @@ Return ONLY valid JSON. Example: {"firstName":"Jane","lastName":"Smith","email":
     }),
 
     /**
+     * The events between two dates (inclusive, in the venue's time zone), for
+     * printing their run sheets in one go. Cancelled events are left out.
+     */
+    forPrint: protectedProcedure
+      .input(z.object({
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      }))
+      .query(async ({ input, ctx }) => {
+        const { getDb } = await import('./db');
+        const { venueSettings, bookings: bookingsTable } = await import('../drizzle/schema');
+        const { eq, and, gte, lte, ne } = await import('drizzle-orm');
+        const { zonedDayBoundUtc } = await import('@shared/tz');
+        const db = await getDb();
+        if (!db) throw new Error('DB not available');
+        const [vs] = await db.select({ timezone: venueSettings.timezone }).from(venueSettings)
+          .where(eq(venueSettings.ownerId, ctx.user.id)).limit(1);
+        const tz = vs?.timezone || 'Pacific/Auckland';
+        const rows = await db.select().from(bookingsTable)
+          .where(and(
+            eq(bookingsTable.ownerId, ctx.user.id),
+            ne(bookingsTable.status, 'cancelled'),
+            gte(bookingsTable.eventDate, zonedDayBoundUtc(input.from, tz, 'start')),
+            lte(bookingsTable.eventDate, zonedDayBoundUtc(input.to, tz, 'end')),
+          ))
+          .orderBy(bookingsTable.eventDate);
+        return rows.map(b => ({
+          id: b.id,
+          name: [b.firstName, b.lastName].filter(Boolean).join(' ') || 'Unnamed event',
+          eventDate: b.eventDate,
+          eventType: b.eventType ?? null,
+          spaceName: b.spaceName ?? null,
+          guestCount: b.guestCount ?? null,
+          status: b.status,
+        }));
+      }),
+
+    /**
      * Returns the booking row for a given leadId. If the lead has status
      * "booked"/"confirmed" but no booking row exists yet (legacy leads), one
      * is auto-created so the rich event drawer can show full quick actions.

@@ -456,6 +456,61 @@ export async function renderBeoPdfBuffer(opts: {
   return body as Buffer;
 }
 
+/** Most events one batch PDF will take — about a busy fortnight. */
+const BATCH_MAX = 40;
+
+/**
+ * Several events' run sheets as ONE PDF, in date order — "print the week".
+ * Each is the same team copy the single download gives, rendered the same
+ * way, so a batch can never print something the event's own BEO wouldn't.
+ *
+ * `?ids=1,2,3` picks the events (they must belong to the signed-in venue;
+ * anything else is ignored). Linked menu PDFs are left off unless
+ * `?menus=1`: they'd repeat the same menu after every event that uses it.
+ * An event that fails to render is skipped and counted in X-Beo-Failed
+ * rather than sinking the whole week.
+ */
+export async function handleBeoBatchPdf(req: Request, res: Response) {
+  const user = (req as any).user;
+  if (!user?.id) return res.status(401).type("text/plain").send("Please sign in again.");
+  const ids = Array.from(new Set(String(req.query.ids ?? "").split(",").map(Number)))
+    .filter(n => Number.isInteger(n) && n > 0);
+  if (!ids.length) return res.status(400).type("text/plain").send("Pick at least one event.");
+  if (ids.length > BATCH_MAX) return res.status(400).type("text/plain").send(`At most ${BATCH_MAX} events at a time.`);
+  const db = await getDb();
+  if (!db) return res.status(503).type("text/plain").send("Database unavailable");
+  const rows = await db.select({ id: bookings.id, eventDate: bookings.eventDate }).from(bookings)
+    .where(and(eq(bookings.ownerId, user.id), inArray(bookings.id, ids)));
+  if (!rows.length) return res.status(404).type("text/plain").send("Those events weren't found.");
+  rows.sort((a, b) => new Date(a.eventDate as any).getTime() - new Date(b.eventDate as any).getTime());
+
+  const { PDFDocument } = await import("pdf-lib");
+  const out = await PDFDocument.create();
+  const withMenus = String(req.query.menus ?? "") === "1";
+  let failed = 0;
+  for (const r of rows) {
+    try {
+      const buf = await renderBeoPdfBuffer({ bookingId: r.id, userId: user.id, hide: withMenus ? undefined : "menus" });
+      const src = await PDFDocument.load(buf);
+      const pages = await out.copyPages(src, src.getPageIndices());
+      pages.forEach(pg => out.addPage(pg));
+    } catch (err) {
+      failed++;
+      console.error("[BEO batch] run sheet failed for booking", r.id, err);
+    }
+  }
+  if (out.getPageCount() === 0) {
+    return res.status(503).type("text/plain").send("The run sheets couldn't be made right now. Try again in a minute.");
+  }
+  const label = String(req.query.label ?? "").replace(/[^\w \-]/g, "").trim().slice(0, 60) || "Run sheets";
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Content-Disposition", `inline; filename="${label}.pdf"`);
+  res.setHeader("X-Beo-Count", String(rows.length - failed));
+  res.setHeader("X-Beo-Failed", String(failed));
+  return res.send(Buffer.from(await out.save()));
+}
+
 async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | "staff") {
   const isPublic = mode === "token";
   try {
