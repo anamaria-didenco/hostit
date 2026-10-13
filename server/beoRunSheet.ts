@@ -3,7 +3,7 @@
  * sections (Event & Notes → Floor → Kitchen → Bar → Billing). A section is
  * never split: if it doesn't fit on the page it moves whole to the next one.
  * The script at the bottom measures the sections (after web fonts load),
- * allocates them to pages and grows the notes lines into page 1's leftover
+ * allocates them to pages. Notes print as typed, with no filler
  * space. The PDF renderer waits for `window.__vfRunSheetReady`.
  *
  * Pure render-from-data: `beoPdf.ts` gathers the booking, runsheet, menu and
@@ -108,7 +108,7 @@ function kitchenSection(k: NonNullable<RunSheetData["kitchen"]>): string {
   const rows: string[] = [];
   if (k.dietary.length) {
     const lines = k.dietary.map(d => `<div class="tick-row${d.severe ? " severe" : ""}">${tick(d.severe)}<span><b class="qty-inline">${esc(d.qty)}&times;</b> <b>${esc(d.label)}</b>${d.detail ? (d.severe ? ` &middot; ${esc(d.detail)}` : ` <span class="muted">${esc(d.detail)}</span>`) : ""}</span></div>`).join("");
-    rows.push(`<div class="row top"><div><div class="lbl lbl-kitchen">Dietary</div><div class="lbl-note">Chef confirms before service</div></div><div class="entry">${lines}</div></div>`);
+    rows.push(`<div class="row top"><div><div class="lbl lbl-kitchen">Dietary</div></div><div class="entry">${lines}</div></div>`);
   }
   if (k.serviceNote) {
     rows.push(`<div class="row"><div class="lbl">Service</div><div class="entry"><b>${esc(k.serviceNote)}</b></div></div>`);
@@ -182,7 +182,7 @@ export function renderRunSheetHtml(data: RunSheetData, opts: RunSheetOptions): s
     `<div class="fact${i === facts.length - 1 ? " last" : ""}"><div class="fact-lbl">${l}</div><div class="fact-val${fig ? " fig" : ""}">${esc(v)}</div></div>`).join("");
   const notesText = data.notes.length ? `<div class="notes-text">${data.notes.map(n => `<div>${esc(n)}</div>`).join("")}</div>` : "";
   const sections = [
-    `<section class="sec event" data-sec="event"><div class="event-head"><div class="event-name"><span>${esc(e.name)}</span>${e.notFinal ? `<b class="not-final">Not final</b>` : ""}</div>${factsHtml}</div><div class="notes-row"><div class="lbl">Notes &amp; set up</div><div>${notesText}<div class="notes-lines" id="notesLines"></div></div></div></section>`,
+    `<section class="sec event" data-sec="event"><div class="event-head"><div class="event-name"><span>${esc(e.name)}</span>${e.notFinal ? `<b class="not-final">Not final</b>` : ""}</div>${factsHtml}</div>${notesText ? `<div class="notes-row"><div class="lbl">Notes &amp; set up</div><div>${notesText}</div></div>` : ""}</section>`,
     data.floor && (data.floor.rows.length || data.floor.remember.length) ? floorSection(data.floor) : "",
     data.kitchen && (data.kitchen.dietary.length || data.kitchen.courses.length || data.kitchen.notes.length) ? kitchenSection(data.kitchen) : "",
     data.bar && (data.bar.tab || data.bar.tabDetail || data.bar.pours.length) ? barSection(data.bar) : "",
@@ -309,13 +309,11 @@ ${sections}
 </div>
 <script>
 (function () {
-  var H = 1123, PAD_T = 30, PAD_B_SINGLE = 24, PAD_B_MULTI = 56, CONT = 44, GAP = 8, LINES_MIN = 48;
+  var H = 1123, PAD_T = 30, PAD_B_SINGLE = 24, PAD_B_MULTI = 56, CONT = 44, GAP = 8;
   var EVENT = ${chrome};
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function paginate() {
     var measure = document.getElementById('measure'), stage = document.getElementById('stage');
-    var notes = document.getElementById('notesLines');
-    notes.style.height = LINES_MIN + 'px';
     var cap = function (p, padB) { return H - PAD_T - padB - (p > 0 ? CONT : 0); };
     // Edge case: a band taller than a whole page (a 70-step timeline) is the
     // only thing ever split, and only between its rows: it starts in the
@@ -397,8 +395,6 @@ ${sections}
       padB = PAD_B_SINGLE; pages = allocate(padB, false);
       if (pages.length > 1) { padB = PAD_B_MULTI; pages = allocate(padB, false); }
     }
-    var leftover = Math.max(0, Math.floor(cap(0, padB) - pages[0].used));
-    if (pages[0].items.indexOf(notes.closest('.sec')) !== -1) notes.style.height = (LINES_MIN + leftover) + 'px';
     stage.innerHTML = '';
     pages.forEach(function (pg, p) {
       var sheet = el('div', 'sheet'), content = el('div', 'content');
