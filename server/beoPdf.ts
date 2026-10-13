@@ -1912,7 +1912,11 @@ ${sheetsHtml}
       ];
       if (setupLines.length) {
         if (setupItem?.description) setupLines.push({ detail: String(setupItem.description) });
-        floorRows.push({ kind: "setup", time: setupItem ? fmt12(setupItem.time) : undefined, lines: setupLines, writeLines: 1 });
+        floorRows.push({
+          kind: "setup", time: setupItem ? fmt12(setupItem.time) : undefined, lines: setupLines, writeLines: 1,
+          duration: Number(setupItem?.duration) > 0 ? `${Number(setupItem.duration)} min` : undefined,
+          who: setupItem?.assignedTo ? String(setupItem.assignedTo) : undefined,
+        });
       }
       if (!hideSet.has("timeline")) {
         for (const it of healedTimeline as any[]) {
@@ -1980,9 +1984,15 @@ ${sheetsHtml}
         const detail = [desc, f.prepNotes, f.platingNotes].map(x => String(x ?? "").trim()).filter(Boolean).join(" · ");
         return { qty: q > 0 ? q : undefined, name: pk.name, pkg: pk.pkg, desc: detail || undefined, was: f.previousDishName || undefined };
       };
+      // The run of day names the course's time; failing that, the earliest
+      // service time entered against its dishes on the F&B sheet.
+      const enteredTime = (items: any[]) => {
+        const ts = items.map(i => String(i.serviceTime ?? "").trim()).filter(t => /^\d{1,2}:\d{2}/.test(t)).sort();
+        return ts.length ? fmt12(ts[0]) || undefined : undefined;
+      };
       const courseEntry = (name: string, items: any[]) => {
         const allSh = items.length > 0 && items.every(sharedFood);
-        return { name, time: courseTime(name), note: allSh ? (/canap/i.test(name) ? "Passed" : "To share") : undefined, items: items.map(toDish) };
+        return { name, time: courseTime(name) ?? enteredTime(items), note: allSh ? (/canap/i.test(name) ? "Passed" : "To share") : undefined, items: items.map(toDish) };
       };
       const courses = hideSet.has("food") ? [] : (embeddedMenu
         ? [

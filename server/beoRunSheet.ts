@@ -13,7 +13,7 @@
 
 export type RunSheetFloorRow =
   | { kind: "step" | "check"; time?: string; duration?: string; title: string; detail?: string; who?: string }
-  | { kind: "setup"; time?: string; lines: { title?: string; detail?: string }[]; writeLines?: number };
+  | { kind: "setup"; time?: string; duration?: string; who?: string; lines: { title?: string; detail?: string }[]; writeLines?: number };
 
 export type RunSheetDish = {
   /** Omitted for shared menus: food for the table has no per-dish count. */
@@ -75,7 +75,8 @@ function floorSection(floor: NonNullable<RunSheetData["floor"]>): string {
     if (r.kind === "setup") {
       const lines = r.lines.map(l => `<div>${lead(l.title, l.detail)}</div>`).join("");
       const write = Array.from({ length: r.writeLines ?? 1 }, () => `<div class="write-line"></div>`).join("");
-      return `<div class="row top"><div>${r.time ? `<div class="lbl-time">${esc(r.time)}</div>` : ""}<div class="lbl lbl-blue">Setup</div></div><div class="entry">${lines}${write}</div></div>`;
+      const who = r.who ? `<div><span class="who">${esc(r.who)}</span></div>` : "";
+      return `<div class="row top"><div>${r.time ? `<div class="lbl-time">${esc(r.time)}</div>` : ""}<div class="lbl lbl-blue">Setup</div>${r.duration ? `<div class="lbl-sub">${esc(r.duration)}</div>` : ""}</div><div class="entry">${lines}${who}${write}</div></div>`;
     }
     const who = r.who ? ` <span class="who">${esc(r.who)}</span>` : "";
     const timeCell = r.time || r.duration
@@ -286,6 +287,8 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
 .cont-head{position:absolute;left:36px;right:36px;top:30px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid var(--vf-blue-deep);padding-bottom:6px}
 .cont-head .n{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--vf-ink)}
 .cont-head .m{font-size:12px;font-weight:600;color:var(--vf-gray)}
+.sheet.tall{height:auto;min-height:1123px;overflow:visible;padding-bottom:80px}
+.sheet.tall .content{position:relative}
 .foot{position:absolute;left:36px;right:36px;bottom:22px;display:flex;justify-content:space-between;font-size:11px;color:var(--vf-gray);font-weight:600;padding-top:7px;border-top:1px solid var(--vf-line)}
 @page{size:A4;margin:0}
 @media print{
@@ -293,6 +296,8 @@ html,body{margin:0;background:var(--vf-fill);font-family:var(--font-sans);color:
   #fitbox{height:auto!important;overflow:visible!important}
   .sheet{width:210mm;height:297mm;margin:0;box-shadow:none;break-after:page}
   .sheet:last-child{break-after:auto}
+  .sheet.tall{height:auto;min-height:297mm}
+  .sheet.tall .row{break-inside:avoid;page-break-inside:avoid}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
@@ -321,15 +326,32 @@ ${sections}
     var hOf = function (n) { return n.getBoundingClientRect().height; };
     var maxH = cap(1, PAD_B_MULTI);
     var oversized = slice(measure.querySelectorAll('.sec')).some(function (s) { return hOf(s) > maxH; });
+    // A single row taller than the space (one course with dozens of dishes)
+    // splits between its lines: the rest moves to a copy of the row.
+    function splitRow(row, limit) {
+      var cells = row.children;
+      if (cells.length < 2) return false;
+      var cell = cells[1], items = slice(cell.children);
+      if (items.length < 2) return false;
+      var top = row.getBoundingClientRect().top, n = 0;
+      while (n < items.length && items[n].getBoundingClientRect().bottom - top + 6 <= limit) n++;
+      if (n === 0 || n === items.length) return false;
+      var rest = row.cloneNode(false), restCell = cell.cloneNode(false);
+      rest.appendChild(cells[0].cloneNode(true));
+      items.slice(n).forEach(function (it) { restCell.appendChild(it); });
+      rest.appendChild(restCell);
+      row.parentNode.insertBefore(rest, row.nextSibling);
+      return true;
+    }
     function splitBand(sec, limit) {
       var body = sec.querySelector('.band-body');
       if (!body) return null;
       var rows = slice(body.children);
-      if (rows.length < 2) return null;
       var rowH = rows.map(hOf);
       var overhead = hOf(sec) - rowH.reduce(function (x, y) { return x + y; }, 0);
       var used = 0, n = 0;
       while (n < rows.length && used + rowH[n] <= limit - overhead) { used += rowH[n]; n++; }
+      if (n < rows.length && splitRow(rows[n], limit - overhead - used)) return splitBand(sec, limit);
       if (n === 0 || n === rows.length) return null;
       var piece = sec.cloneNode(false);
       piece.appendChild(sec.querySelector('.rail').cloneNode(true));
@@ -369,6 +391,9 @@ ${sections}
       var sheet = el('div', 'sheet'), content = el('div', 'content');
       content.style.top = (PAD_T + (p > 0 ? CONT : 0)) + 'px';
       pg.items.forEach(function (s) { content.appendChild(s); });
+      // Last resort (a row that can't be split): let the sheet grow rather
+      // than clip anything off the page.
+      if (pg.used > cap(p, padB)) { sheet.className += ' tall'; }
       sheet.appendChild(content);
       if (pages.length > 1) {
         if (p > 0) {

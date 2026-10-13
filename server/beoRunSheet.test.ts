@@ -62,6 +62,14 @@ describe("BEO run sheet (6a)", () => {
     expect(renderRunSheetHtml(base(), { title: "t" })).not.toContain(`class="not-final"`);
   });
 
+  it("keeps the set-up step's duration and who is on it", () => {
+    const d = base();
+    d.floor = { rows: [{ kind: "setup", time: "3:30 PM", duration: "90 min", who: "Floor team", lines: [{ title: "Long tables" }] }], remember: [] };
+    const html = renderRunSheetHtml(d, { title: "t" });
+    expect(html).toContain(`<div class="lbl lbl-blue">Setup</div><div class="lbl-sub">90 min</div>`);
+    expect(html).toContain(`<span class="who">Floor team</span>`);
+  });
+
   it("escapes what people type, including into the page script", () => {
     const d = base();
     d.event.name = `Ana's <b>party</b></script><script>alert(1)</script>`;
