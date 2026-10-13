@@ -50,6 +50,7 @@ import {
 } from "@shared/billingTerms";
 import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost } from "@shared/eventBilling";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
+import { isSharedMenu } from "@shared/eventMenus2026";
 
 const VENUE_AREA_LABELS: Record<string, string> = {
   bar: "Bar",
@@ -215,14 +216,23 @@ const CONNECTOR_RE = /^(to share|to start|shared|for the table|served shared)\b[
 
 function menuCourseFor(line: string): { label: string } | null {
   const t = line.trim();
-  for (const c of MENU_COURSE_MAP) if (menuStartRe(c.kw).test(t)) return { label: c.label };
+  for (const c of MENU_COURSE_MAP) {
+    const m = t.match(menuStartRe(c.kw));
+    if (!m) continue;
+    // A heading stands alone, is written in capitals, or runs into a
+    // separator or "to share". "Antipasto misto, cured meats…" is a dish on
+    // Shared Franco, not the start of an Antipasto course.
+    const rest = t.slice(m[0].length).trim();
+    if (!rest || m[0] === m[0].toUpperCase() || /^[—\-:·,]/.test(rest) || CONNECTOR_RE.test(rest)) return { label: c.label };
+    return null;
+  }
   return null;
 }
 function countMenuHeadings(text: string): number {
   return MENU_COURSE_MAP.reduce((n, c) => n + (menuAnywhereRe(c.kw).test(text) ? 1 : 0), 0);
 }
 type ParsedCourse = { label: string; note: string; dishes: { name: string; det: string }[] };
-function parseMenuBlob(raw: string): ParsedCourse[] {
+export function parseMenuBlob(raw: string): ParsedCourse[] {
   let text = String(raw || "").trim();
   if (!text) return [];
   // Single-line blob: insert breaks before each heading keyword and connector.
@@ -262,7 +272,7 @@ function parseMenuBlob(raw: string): ParsedCourse[] {
 }
 // Returns parsed courses when the food list is essentially one pasted menu
 // (≤3 items whose text carries ≥2 course headings); else null → normal path.
-function detectEmbeddedMenu(foodItems: any[]): ParsedCourse[] | null {
+export function detectEmbeddedMenu(foodItems: any[]): ParsedCourse[] | null {
   if (foodItems.length === 0 || foodItems.length > 3) return null;
   const descText = foodItems.map(i => i.description || "").filter(Boolean).join("\n");
   let parsed: ParsedCourse[] = [];
@@ -891,7 +901,7 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     const menuCourseLabels = embeddedMenu ? embeddedMenu.map(c => c.label) : foodCourses;
     const onlyCanapes = menuCourseLabels.length > 0 && menuCourseLabels.every(c => /canap/i.test(c));
     const sharedDetected = (embeddedMenu ?? []).some(c => c.note === "To share")
-      || foodItems.some((i: any) => /\bto share\b|\bshared\b/i.test(`${i.dishName ?? ""} ${i.description ?? ""}`));
+      || foodItems.some((i: any) => isSharedMenu(i.dishName, i.description));
     const menuTitleSuffix = onlyCanapes ? "Canap&eacute; Menu" : sharedDetected ? "Shared Menu" : "Menu";
     // "× N" is driven by the QUANTITIES the operator entered on the F&B
     // sheet, not the guest count — "40 of each canapé" for 35 guests must
@@ -1331,20 +1341,29 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
     // saw it. When nothing on the sheet has a real quantity (all ×1), the
     // guest count is the portion count.
     const allQtyOne = foodItems.length > 0 && foodItems.every((i: any) => !(Number(i.qty) > 1));
+    // Shared food (Shared Franco, Tutto Franco, anything "to share") goes down
+    // the middle of the table: no ×N per dish, just "to share" and the guest
+    // count once in the Food heading. A pasted shared menu's dishes are all
+    // shared; on a list of separate items only the shared ones lose their ×N,
+    // so 40 canapés ordered on top still read ×40.
+    const sharedFood = (f: any): boolean => (f.fromMenu ? sharedDetected : isSharedMenu(f.dishName, f.description));
     const dishQty = (f: any): number => {
+      if (sharedFood(f)) return 0;
       const n = Number(f.qty);
       if (n > 0 && !allQtyOne) return n;
       return Number(guestCount) || (n > 0 ? n : 0);
     };
     const foodCardHtml = (title: string, its: any[]) => {
+      const allShared = its.length > 0 && its.every(sharedFood);
       // Plain course title, then each dish on its own line prefixed with its
       // own ×N quantity (e.g. "×54 Crudo"). The ×N sits in a small serif column
       // so the quantities line up down the list.
       const dishRow = (f: any) => {
         const q = dishQty(f);
+        // Shared dishes drop the quantity column altogether (no empty indent).
         const qHtml = q > 0
           ? `<span class="dish-qty"><span class="x">&times;</span>${escHtml(String(q))}</span>`
-          : `<span class="dish-qty"></span>`;
+          : (allShared ? "" : `<span class="dish-qty"></span>`);
         // Price column (internal copies): line total in serif with the unit
         // price beneath, so the kitchen can see both "what this dish costs"
         // and "what the whole line is worth".
@@ -1356,12 +1375,24 @@ async function _renderBeo(req: Request, res: Response, mode: "auth" | "token" | 
           : "";
         return `<div class="dish-row" style="display:flex;gap:10px;padding:3px 0;line-height:1.3;align-items:baseline;border-top:1px solid var(--hair)">${qHtml}<span style="flex:1;min-width:0"><span style="font-size:14px;font-weight:700;color:var(--ink)">${escHtml(f.dishName)}</span>${f.description ? ` <span style="font-size:12.5px;color:var(--gray)">&mdash; ${escHtml(f.description)}</span>` : ""}</span>${priceHtml}</div>`;
       };
-      return `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:6px 10px;background:var(--cream)"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:var(--serif);font-style:italic;font-size:15px;font-weight:600;color:var(--green)">${escHtml(title)}</span><span style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase">How many</span></div><div style="margin-top:3px">${its.map(dishRow).join("")}</div></div>`;
+      return `<div style="break-inside:avoid;page-break-inside:avoid;border:1.5px solid var(--line2);border-radius:6px;padding:6px 10px;background:var(--cream)"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:var(--serif);font-style:italic;font-size:15px;font-weight:600;color:var(--green)">${escHtml(title)}</span><span style="font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gray2);text-transform:uppercase">${allShared ? (/canap/i.test(title) ? "Passed" : "To share") : "How many"}</span></div><div style="margin-top:3px">${its.map(dishRow).join("")}</div></div>`;
     };
+    // A set menu saved as one item (its courses in the description) prints as
+    // its courses. Anything ordered on top — 40 arancini with a Shared Franco
+    // — keeps its own line and quantity instead of being read into the menu.
+    const menuBlobItems = embeddedMenu ? foodItems.filter((i: any) => countMenuHeadings(String(i.description || "")) >= 2) : [];
+    const menuCourses = menuBlobItems.length > 0
+      ? parseMenuBlob(menuBlobItems.map((i: any) => i.description).join("\n"))
+      : (embeddedMenu ?? []);
+    const extraItems = menuBlobItems.length > 0 ? foodItems.filter((i: any) => !menuBlobItems.includes(i)) : [];
+    const extraGrouped = groupByCourse(extraItems);
     const foodCards = (embeddedMenu
-      ? embeddedMenu.map(c => foodCardHtml(c.label, c.dishes.map(d => ({ dishName: d.name, description: d.det }))))
+      ? [
+          ...menuCourses.map(c => foodCardHtml(c.label, c.dishes.map(d => ({ dishName: d.name, description: d.det, fromMenu: true })))),
+          ...orderFoodCourses(extraGrouped).map(course => foodCardHtml(course, extraGrouped[course] ?? [])),
+        ]
       : foodCourses.map(course => foodCardHtml(course, foodGrouped[course] ?? []))).join("");
-    const foodSection = foodItems.length > 0 ? `<div id="beo-food" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><span style="font-size:11px;letter-spacing:.18em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span></div><div style="display:grid;grid-template-columns:1fr;gap:8px">${foodCards}</div></div>` : "";
+    const foodSection = foodItems.length > 0 ? `<div id="beo-food" style="break-inside:avoid;page-break-inside:avoid;margin-top:5px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><span style="font-size:11px;letter-spacing:.18em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Food</span><span style="flex:1;height:1.5px;background:var(--green)"></span>${sharedDetected ? `<span style="font-size:12px;letter-spacing:.1em;font-weight:800;color:var(--green);text-transform:uppercase;flex:none">Shared to the table${Number(guestCount) > 0 ? ` &middot; for ${escHtml(String(guestCount))} guests` : ""}</span>` : ""}</div><div style="display:grid;grid-template-columns:1fr;gap:8px">${foodCards}</div></div>` : "";
 
     // Tally-ledger: one sorted list (severe/allergy first via orderedDiet), a
     // big serif ×N count column and a severity dot (red = severe allergy,
