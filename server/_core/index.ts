@@ -7,7 +7,7 @@ import multer from "multer";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { handleProposalPdf } from "../proposalPdf";
-import { handleBeoPdf, handleBeoPdfPublic, handleBeoPdfStaff } from "../beoPdf";
+import { handleBeoPdf, handleBeoPdfPublic, handleBeoPdfStaff, handleBeoBatchPdf } from "../beoPdf";
 import { handleXeroConnect, handleXeroCallback } from "../xero";
 import { handleXeroWebhook } from "../xeroWebhook";
 import { handleFloorPlanPdf } from "../floorPlanPdf";
@@ -391,6 +391,15 @@ async function startServer() {
 
   // Floor Plan PDF download (public — share token acts as auth)
   app.get("/api/floor-plan-pdf/:token", pdfPublicLimit, handleFloorPlanPdf);
+
+  // Several events' run sheets as one PDF ("print the week"). Registered
+  // before /api/beo/:bookingId so "batch" isn't read as a booking id.
+  app.get("/api/beo/batch", pdfAuthLimit, (req, res, next) => {
+    createContext({ req: req as any, res: res as any, info: {} as any }).then(ctx => {
+      (req as any).user = ctx.user;
+      handleBeoBatchPdf(req, res).catch(next);
+    }).catch(next);
+  });
 
   // BEO PDF download (requires session auth)
   app.get("/api/beo/:bookingId", pdfAuthLimit, (req, res, next) => {
