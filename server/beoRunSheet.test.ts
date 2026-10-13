@@ -43,6 +43,15 @@ describe("BEO run sheet (6a)", () => {
     expect(html).toContain(`<span class="desc">peperonata <span class="was">was burrata</span></span>`);
   });
 
+  it("keeps the client and the note when the money is hidden", () => {
+    const d = base();
+    d.billing = { client: { name: "Kylie", phone: "021 555 0101" }, lines: [], howBilled: [{ title: "Food", body: "Invoiced before the event.", status: "Paid" }], note: ["Thank you for choosing Bar Franco!"] };
+    const html = renderRunSheetHtml(d, { title: "t" });
+    expect(html).toContain(`<b>Kylie</b> <span class="muted">&middot; 021 555 0101</span>`);
+    expect(html).toContain(`<div class="lbl">Note</div><div class="entry"><div>Thank you for choosing Bar Franco!</div>`);
+    expect(html).not.toContain(`Breakdown`);
+  });
+
   it("escapes what people type, including into the page script", () => {
     const d = base();
     d.event.name = `Ana's <b>party</b></script><script>alert(1)</script>`;

@@ -50,7 +50,7 @@ import {
 } from "@shared/billingTerms";
 import { fnbFoodLines as pickFnbFoodLines, isFoodBeverageCost } from "@shared/eventBilling";
 import { DEFAULT_VENUE_TZ, eventDayKey, formatEventDate } from "@shared/eventDate";
-import { isSharedMenu } from "@shared/eventMenus2026";
+import { isSharedMenu, SET_MENUS, setMenuCoursesText } from "@shared/eventMenus2026";
 import { eventBillingSteps } from "@shared/nowNext";
 import { renderRunSheetHtml, type RunSheetData, type RunSheetDish, type RunSheetFloorRow } from "./beoRunSheet";
 
@@ -1937,14 +1937,25 @@ ${sheetsHtml}
         detail: [d.notes, Array.isArray((d as any).names) && (d as any).names.length ? (d as any).names.join(", ") : ""].filter(Boolean).join(" · ") || undefined,
         severe: isSevere(d),
       }));
-      const COURSE_TIME_RE: Record<string, RegExp> = {
-        "Canapés": /canap|arriv|welcome/i, "Entrée": /entr[eé]e|starter|antipast/i,
-        "Main": /\bmains?\b/i, "Dessert": /dessert|dolc|cake/i,
+      // Course names arrive as "Canapes"/"Entree" (F&B sheet) or "Canapés"/
+      // "Entrée" (parsed menus): compare without accents.
+      const plainKey = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      // Best match first: a step that names the course, then a looser one
+      // ("Guests arrive" for canapés — not "Photographer arrives").
+      const CANAPE_RE = [/canap/i, /guests? arriv|welcome/i];
+      const ENTREE_RE = [/entr[eé]e|starter|antipast/i];
+      const MAIN_RE = [/\bmains?\b/i];
+      const DESSERT_RE = [/dessert|dolc/i, /\bcake\b/i];
+      const COURSE_TIME_RE: Record<string, RegExp[]> = {
+        canapes: CANAPE_RE, entree: ENTREE_RE, entrees: ENTREE_RE,
+        main: MAIN_RE, mains: MAIN_RE, dessert: DESSERT_RE, desserts: DESSERT_RE,
       };
       const courseTime = (name: string) => {
-        const re = COURSE_TIME_RE[name];
-        const it = re ? (healedTimeline as any[]).find(x => re.test(tlTitle(x))) : null;
-        return it ? fmt12(it.time) : undefined;
+        for (const re of COURSE_TIME_RE[plainKey(name)] ?? []) {
+          const it = (healedTimeline as any[]).find(x => re.test(tlTitle(x)));
+          if (it) return fmt12(it.time) || undefined;
+        }
+        return undefined;
       };
       // "Grazing table, $1,000 set amount" → Grazing table + a $1,000 table tag.
       const pkgOf = (name: string): { name: string; pkg?: string } => {
@@ -1973,10 +1984,33 @@ ${sheetsHtml}
             ...orderFoodCourses(extraGrouped).map(course => courseEntry(course, extraGrouped[course] ?? [])),
           ]
         : foodCourses.map(course => courseEntry(course, foodGrouped[course] ?? [])));
+      // A menu package matched by dish name (e.g. the F&B sheet just says
+      // "Shared Franco") prints its own courses, so the kitchen knows what's
+      // in it. Skipped when that menu is already printed from its item.
+      const printedNames = new Set(menuBlobItems.map((i: any) => String(i.dishName ?? "").trim().toLowerCase()));
+      const linkedCourses = hideSet.has("food") ? [] : linkedMenus
+        .filter(pkg => !printedNames.has(String(pkg.name ?? "").trim().toLowerCase()))
+        .flatMap(pkg => {
+          const setMenu = SET_MENUS.find(m => m.name.toLowerCase() === String(pkg.name ?? "").trim().toLowerCase());
+          const body = setMenu ? setMenuCoursesText(setMenu) : String(pkg.chefNotes ?? "").trim();
+          const parsed = body && countMenuHeadings(body) >= 2 ? parseMenuBlob(body) : [];
+          const shared = isSharedMenu(pkg.name, pkg.description);
+          const cs = parsed.filter(c => c.label !== "Menu" || parsed.length === 1);
+          if (cs.length) {
+            return cs.map(c => ({
+              name: c.label,
+              note: [pkg.name, shared ? (/canap/i.test(c.label) ? "Passed" : "To share") : ""].filter(Boolean).join(" · "),
+              time: courseTime(c.label),
+              items: c.dishes.map(d => { const x = toDish({ dishName: d.name, description: d.det, fromMenu: true }); return { ...x, qty: undefined }; }),
+            }));
+          }
+          const lines = body.split(/\n+/).map(l => l.trim()).filter(Boolean);
+          return lines.length ? [{ name: String(pkg.name), items: lines.map(l => ({ name: l })) }] : [];
+        });
       const kitchen: RunSheetData["kitchen"] = {
         dietary,
         serviceNote: (!hideSet.has("food") && sharedDetected) ? `Shared to the table${Number(guestCount) > 0 ? ` · for ${guestCount} guests` : ""}` : undefined,
-        courses,
+        courses: [...courses, ...linkedCourses],
         notes: hideSet.has("kitchen") ? [] : String(kitchenNotesText).split(/\n+/).map((l: string) => l.trim()).filter(Boolean),
       };
 
@@ -1989,9 +2023,12 @@ ${sheetsHtml}
       };
 
       // Billing: client, how it's billed, then the money.
-      const billing: RunSheetData["billing"] = (noFinancials || hideSet.has("totals")) ? null : {
+      // "Running totals" / "Financials" hide the money, never the client's
+      // contact; Financials also hides how the event is billed.
+      const hideMoney = noFinancials || hideSet.has("totals");
+      const billingFull: NonNullable<RunSheetData["billing"]> = {
         client: { name: clientName, phone: leadPhone || undefined, email: leadEmail || undefined },
-        howBilled: eventBillingSteps({
+        howBilled: noFinancials ? [] : eventBillingSteps({
           depositRequired: (booking as any).depositRequired, depositAmount: depAmt, depositPaid: booking.depositPaid,
           billingFood: termsFood, billingDrinks: termsDrinks, billingDepositApplied: termsDeposit, billingNote: termsNote,
           foodStatus: (booking as any).foodStatus, drinksStatus: (booking as any).drinksStatus,
@@ -2019,7 +2056,13 @@ ${sheetsHtml}
           label: "Balance to collect",
           amount: money0(Math.round(Math.max(0, totalInclGst - (depositOffThisBill ? depAmt : 0)) * 100) / 100),
         } : undefined,
+        // The footer note (thank-you, payment terms) — once, unless it only
+        // repeats the billing notes.
+        note: (hideSet.has("footer") || noteAlreadyInBilling) ? [] : plainLines(footerNote),
       };
+      const billing: RunSheetData["billing"] = hideMoney
+        ? { ...billingFull, lines: [], total: undefined, totalNote: undefined, deposit: undefined, balance: undefined }
+        : billingFull;
 
       runSheetHtml = renderRunSheetHtml({
         event: {

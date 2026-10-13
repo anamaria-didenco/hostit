@@ -48,6 +48,8 @@ export type RunSheetData = {
     balance?: { label: string; amount: string };
     /** How the event is billed: one line per step, plain text. */
     howBilled: { title: string; body: string; status?: string }[];
+    /** The footer note / closing message. */
+    note?: string[];
   } | null;
 };
 
@@ -138,6 +140,9 @@ function billingSection(b: NonNullable<RunSheetData["billing"]>): string {
   if (b.howBilled.length) {
     rows.push(`<div class="row top"><div class="lbl" style="padding-top:3px">Billed</div><div class="entry">${b.howBilled
       .map(s => `<div><b>${esc(s.title)}</b> <span class="muted">${esc(s.body)}</span>${s.status ? ` <span class="status">${esc(s.status)}</span>` : ""}</div>`).join("")}</div></div>`);
+  }
+  if (b.note?.length) {
+    rows.push(`<div class="row top"><div class="lbl">Note</div><div class="entry">${b.note.map(n => `<div>${esc(n)}</div>`).join("")}</div></div>`);
   }
   const hasSummary = b.total || b.deposit || b.balance;
   if (b.lines.length || hasSummary) {
