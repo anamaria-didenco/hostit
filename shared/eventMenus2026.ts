@@ -130,6 +130,17 @@ export const TUTTO_FRANCO: SetMenu = {
 
 export const SET_MENUS: SetMenu[] = [SHARED_FRANCO, TUTTO_FRANCO];
 
+/**
+ * A menu served to share down the table — one of the set menus above, or
+ * food that says so ("to share", "shared", "family-style"). Shared food has
+ * no per-dish quantities: the kitchen cooks for the table, not ×N plates.
+ */
+export function isSharedMenu(name: unknown, description?: unknown): boolean {
+  const n = String(name ?? "").trim().toLowerCase();
+  if (SET_MENUS.some(m => m.name.toLowerCase() === n)) return true;
+  return /\bto share\b|\bshared\b|family[- ]style/i.test(`${name ?? ""} ${description ?? ""}`);
+}
+
 /** One dish as a menu line: "Porchetta, cannellini purée, gremolata (GFA · DFA · VA) — or eggplant involtini, dairy-free ricotta". */
 export function setMenuDishLine(d: MenuDish): string {
   const tags = formatDietary(d.tags);

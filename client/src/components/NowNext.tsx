@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { groupDietaries, looksSwapped, unswap } from "@shared/dietaries";
 import { groupDrinks } from "@shared/drinkGroups";
+import { isSharedMenu } from "@shared/eventMenus2026";
 import {
   clockStepIndex, dishQuantity, isSevereDietary, type BillingStep,
 } from "@shared/nowNext";
@@ -219,11 +220,12 @@ export default function NowNext({
               <section key={course} aria-label={course} className="bg-white border border-gold">
                 <div className="flex items-baseline justify-between px-4 pt-3 pb-1">
                   <h2 className="font-cormorant italic text-[22px] text-forest">{course}</h2>
-                  <span className={label}>How many</span>
+                  <span className={label}>{byCourse[course].every(f => isSharedMenu(f.dishName, f.description)) ? "To share" : "How many"}</span>
                 </div>
                 <ul className="divide-y divide-stone-200">
                   {byCourse[course].map((f, i) => {
-                    const q = dishQuantity(f.qty, allQtyOne, runsheet?.guestCount);
+                    // Shared menus go down the table: no ×N, as on the BEO.
+                    const q = isSharedMenu(f.dishName, f.description) ? 0 : dishQuantity(f.qty, allQtyOne, runsheet?.guestCount);
                     return (
                       <li key={i} className="grid grid-cols-[4.5rem_1fr] gap-3 px-4 py-3 items-baseline">
                         <span className="figure text-[30px] leading-none text-ink text-right">{q > 0 ? <><span className="text-[16px] text-stone">×</span>{q}</> : ""}</span>
