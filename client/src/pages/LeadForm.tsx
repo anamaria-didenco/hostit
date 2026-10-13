@@ -1722,8 +1722,9 @@ export default function LeadForm() {
                   <button type="button" disabled={!detailsValid} onClick={() => {
                     // Autosave a contactable lead the moment we have a name
                     // + email — once per visit, so going Back then Next
-                    // again doesn't create a second partial row.
-                    if (!capturedLeadId && venue?.ownerId) {
+                    // again doesn't create a second partial row (nor while
+                    // the first save is still on its way).
+                    if (!capturedLeadId && !startCapture.isPending && venue?.ownerId) {
                       startCapture.mutate({
                         ownerId: venue.ownerId,
                         firstName: (form.firstName ?? '').trim(),
