@@ -17,7 +17,6 @@ import Checklist from "./pages/Checklist";
 import RunsheetBuilder from "./pages/RunsheetBuilder";
 import PaymentTracker from "./pages/PaymentTracker";
 import Analytics from "./pages/Analytics";
-import ExpressBook from "./pages/ExpressBook";
 import EventDetail from "./pages/EventDetail";
 import ClientPortal from "./pages/ClientPortal";
 import StaffPortal from "./pages/StaffPortal";
@@ -48,7 +47,10 @@ function Router() {
       <Route path="/runsheet" component={RunsheetBuilder} />
       <Route path="/payments" component={PaymentTracker} />
       <Route path="/analytics" component={Analytics} />
-      <Route path="/book" component={ExpressBook} />
+      {/* Express Book is unfinished (it dropped the chosen space and package and
+          could default to the wrong venue) — send any old link to the real
+          enquiry form instead. */}
+      <Route path="/book"><Redirect to="/enquire" /></Route>
       <Route path="/event/:id" component={EventDetail} />
       <Route path="/portal/:token" component={ClientPortal} />
       <Route path="/staff/:token" component={StaffPortal} />

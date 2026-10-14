@@ -9241,12 +9241,13 @@ Return ONLY valid JSON.`;
       const { countUnreadNotifications } = await import('./notify');
       return countUnreadNotifications(ctx.user.id);
     }),
-    // No id = mark everything read.
+    // id = one alert; leadId = every alert about that enquiry (it's been
+    // opened, so they've been seen); neither = mark everything read.
     markRead: protectedProcedure
-      .input(z.object({ id: z.number().optional() }))
+      .input(z.object({ id: z.number().optional(), leadId: z.number().optional() }))
       .mutation(async ({ ctx, input }) => {
         const { markNotificationsRead } = await import('./notify');
-        await markNotificationsRead(ctx.user.id, input.id);
+        await markNotificationsRead(ctx.user.id, input.id, input.leadId);
         return { success: true };
       }),
   }),

@@ -13,6 +13,7 @@
  * Xero app's redirect URI set to `${PUBLIC_BASE_URL}/api/xero/callback`.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
+import { ymdInTz } from "@shared/automatedTasks";
 import type { Request, Response } from "express";
 import crypto from "crypto";
 import { ENV } from "./_core/env";
@@ -468,7 +469,7 @@ export async function createXeroDraftInvoice(ownerId: number, opts: {
       Contact: contactId
         ? { ContactID: contactId }
         : { Name: contactName, ...(opts.contactEmail ? { EmailAddress: opts.contactEmail } : {}) },
-      Date: new Date().toISOString().slice(0, 10),
+      Date: ymdInTz(Date.now()), // the NZ day — UTC is still yesterday on NZ mornings (wrong GST period on the 1st)
       ...(opts.dueDate ? { DueDate: opts.dueDate } : {}),
       Reference: opts.reference,
       // ALWAYS a draft: a mapping bug that posted AUTHORISED invoices would put
